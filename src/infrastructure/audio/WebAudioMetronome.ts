@@ -358,31 +358,42 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     const now = performance.now();
     const nought = now - context.currentTime * 1000;
     noteTheAudioNought(nought);
-    this.watchTheClockStand(nought);
+    this.followTheClockStanding(nought);
     this.earliestNought = Math.min(this.earliestNought ?? nought, nought);
     this.watchedSince ??= now;
     if (now - this.watchedSince < CLOCKS_WATCHED_MS) {
       return;
     }
     const apart = this.earliestNought - this.audioEpochMs;
-    if (Math.abs(apart) > CLOCKS_APART_MS) {
-      this.audioEpochMs = this.earliestNought;
-      this.reading.hold(this.audioEpochMs);
-      noteTheClocksReadAgain(apart);
-      noteAnEvent(`the clocks read again, ${String(Math.round(apart))} ms apart`);
-      timeTheStart('metronome: the clocks read again', () => `${String(Math.round(apart))} ms apart`);
-    }
     this.watchedSince = now;
     this.earliestNought = null;
+    if (Math.abs(apart) > CLOCKS_APART_MS) {
+      this.moveTheReading(apart);
+    }
   }
 
   /**
-   * Tells the timings where the audio clock stood and for how long. Looked at
-   * every few milliseconds, a stand shows as its nought rising a little at
-   * each look, so it is told once the rising stops: from where it had
-   * settled to where it got.
+   * Moves the clocks' reading by so much, for the ticks and the instruments
+   * alike, and watches the clocks afresh from it: the looks before it were
+   * taken against the reading it replaces.
    */
-  private watchTheClockStand(nought: number): void {
+  private moveTheReading(byMs: number): void {
+    this.audioEpochMs += byMs;
+    this.reading.hold(this.audioEpochMs);
+    this.watchedSince = null;
+    this.earliestNought = null;
+    noteTheClocksReadAgain(byMs);
+    noteAnEvent(`the clocks read again, ${String(Math.round(byMs))} ms apart`);
+    timeTheStart('metronome: the clocks read again', () => `${String(Math.round(byMs))} ms apart`);
+  }
+
+  /**
+   * Sees the audio clock stand, and moves the reading by as long as it stood.
+   * Looked at every few milliseconds, a stand shows as its nought rising a
+   * little at each look, so it is taken once the rising stops: from where it
+   * had settled to where it got.
+   */
+  private followTheClockStanding(nought: number): void {
     const settled = this.settledNought;
     if (settled === null) {
       this.settledNought = nought;
@@ -393,9 +404,15 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
         this.standingTo = nought;
         return;
       }
-      noteAnEvent(`the audio clock had stood ${String(Math.round(this.standingTo - settled))} ms`);
+      const stood = this.standingTo - settled;
+      noteAnEvent(`the audio clock had stood ${String(Math.round(stood))} ms`);
       this.settledNought = this.standingTo;
       this.standingTo = null;
+      // Read again at once, by as long as it stood, rather than at the end of
+      // the stretch: measured on his iPad, a stand of 70 ms just after the
+      // start left a second of notes placed 70 ms off, heard and seen as a
+      // stutter until the stretch came round.
+      this.moveTheReading(stood);
       return;
     }
     if (nought - settled > CLOCK_STOOD_MS) {

@@ -276,7 +276,8 @@ describe('WebAudioMetronome', () => {
       both(40);
       const read = reading.of(context as unknown as AudioContext);
       vi.advanceTimersByTime(92);
-      both(1_200);
+      // Taken again as soon as the clock moves on, not at the end of a stretch.
+      both(60);
       const moved = reading.of(context as unknown as AudioContext) - read;
       expect(moved).toBeGreaterThanOrEqual(75);
       expect(moved).toBeLessThanOrEqual(92);

@@ -1296,6 +1296,7 @@ describe('AppView', () => {
       expect(lines[0]).toBe('How the last playback kept time');
       expect(lines[1]).toContain(navigator.userAgent);
       expect(lines[1]).toContain('falling notes on');
+      expect(lines[1]).toContain('audio session not offered');
       const rows = lines
         .slice(lines.findIndex((line) => line.trim().startsWith('sec notes')) + 1)
         .map((line) => line.trim().split(/\s+/));

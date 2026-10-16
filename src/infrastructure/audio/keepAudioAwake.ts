@@ -14,6 +14,14 @@ export interface WakeableAudioContext {
   readonly destination: unknown;
 }
 
+/**
+ * The corner of `navigator.audioSession` this needs: which kind of audio the
+ * page makes, which a tablet takes to decide how its audio device is set up.
+ */
+export interface AudioSessionLike {
+  type: string;
+}
+
 /** Where the first touch of the page arrives, and where visibility changes. */
 export interface WakingTarget {
   addEventListener(type: string, listener: () => void, options?: unknown): void;
@@ -62,10 +70,20 @@ export function keepAudioAwake(
   contextFactory: () => WakeableAudioContext,
   page: WakingTarget,
   visibility: WakingTarget = page,
+  session: AudioSessionLike | null = null,
 ): ArmedWaking {
   let context: WakeableAudioContext | null = null;
 
   const wake = (): void => {
+    // A player from the first touch, not from the first playback. On his
+    // iPad the audio device stood about 70 ms just after the media keys'
+    // silence began to play: a page sounding only through Web Audio is put
+    // in another kind of audio session than a page with a player in it, and
+    // the device is switched between the two as the player starts - under
+    // the music it has just begun. Said once here, there is nothing to switch.
+    if (session !== null && session.type !== 'playback') {
+      session.type = 'playback';
+    }
     context ??= contextFactory();
     if (context.state !== 'running') {
       void context.resume().catch(() => undefined);

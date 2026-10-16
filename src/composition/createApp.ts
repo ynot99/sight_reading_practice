@@ -56,6 +56,7 @@ import { GoogleDrive, loadGoogleIdentity } from '../infrastructure/cloud/GoogleD
 import { LibrarySync } from '../application/LibrarySync.js';
 import { SettingsSync } from '../application/SettingsSync.js';
 import { DriveSync } from '../application/DriveSync.js';
+import { SketchSync } from '../application/SketchSync.js';
 import type { ICloudDrive } from '../application/ports/ICloudDrive.js';
 import type { ICodeSignIn } from '../application/ports/ICodeSignIn.js';
 
@@ -441,7 +442,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   const takeOnOffer = new TakeOnOffer(recorder, takes, () => Date.now());
   const sketchStore =
     options.sketchStore ?? new LocalStorageSettingsStore(browserStorage(), SKETCHES_STORAGE_KEY);
-  const sketches = new SketchLibrary(sketchStore);
+  const sketches = new SketchLibrary(sketchStore, () => Date.now());
   sketches.load();
 
   const historyStore =
@@ -562,6 +563,8 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   });
   const driveSync = new DriveSync({
     library: librarySync,
+    sketches: new SketchSync({ drive: cloudDrive, sketches }),
+    sketchesUnsentSinceMs: () => sketches.unsentSinceMs,
     settings: new SettingsSync({
       drive: cloudDrive,
       settings,

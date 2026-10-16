@@ -16,11 +16,19 @@ function device(scores: StoredScoreSummary[] = [], store = new InMemorySettingsS
   repository.load();
   let now = 10_000;
   const shelf = [...scores];
+  const sketches = { unsentSinceMs: null as number | null, open: [] as (string | null)[] };
   const sync = new DriveSync({
     library: {
       sync: () => Promise.resolve({ sent: 0, brought: 0, onlyOnTheDrive: [] }),
     },
     settings: { sync: () => Promise.resolve('same' as const) },
+    sketches: {
+      sync: (open) => {
+        sketches.open.push(open);
+        return Promise.resolve({ sent: 2, brought: 1, takenOff: 0, conflicts: 1 });
+      },
+    },
+    sketchesUnsentSinceMs: () => sketches.unsentSinceMs,
     scores: () => shelf,
     repository,
     now: () => now,
@@ -28,6 +36,7 @@ function device(scores: StoredScoreSummary[] = [], store = new InMemorySettingsS
   return {
     sync,
     shelf,
+    sketches,
     repository,
     store,
     later: (ms: number) => {
@@ -133,5 +142,33 @@ describe('when a sync nobody pressed for is due', () => {
     await pc.sync.sync();
 
     expect(pc.sync.dueAtMs).toBeNull();
+  });
+});
+
+describe('the sketches, synced with the rest', () => {
+  it('syncs them with the scores and the settings, leaving the one open on the page', async () => {
+    const pc = device([kept('Clair de Lune')]);
+
+    const outcome = await pc.sync.sync(undefined, 'sketch-open');
+    await pc.sync.sync();
+
+    expect(outcome.sketches).toEqual({ sent: 2, brought: 1, takenOff: 0, conflicts: 1 });
+    expect(pc.sketches.open).toEqual(['sketch-open', null]);
+  });
+
+  it('has something to sync while a sketch here is unsent, whatever the clocks say, and is due half a minute after it changed', async () => {
+    const pc = device([kept('Clair de Lune')]);
+    await pc.sync.sync();
+    expect(pc.sync.hasSomethingToSync).toBe(false);
+
+    // Changed by a clock behind the last sync's: still something to send.
+    pc.sketches.unsentSinceMs = 5_000;
+    expect(pc.sync.hasSomethingToSync).toBe(true);
+    pc.sketches.unsentSinceMs = 40_000;
+    expect(pc.sync.dueAtMs).toBe(40_000 + SYNC_AFTER_QUIET_MS);
+    expect(pc.sync.latestChangeAtMs).toBe(40_000);
+
+    pc.sketches.unsentSinceMs = null;
+    expect(pc.sync.hasSomethingToSync).toBe(false);
   });
 });

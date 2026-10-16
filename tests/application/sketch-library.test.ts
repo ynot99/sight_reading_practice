@@ -68,11 +68,11 @@ describe('a sketch of a score', () => {
 describe('the sketches being written', () => {
   it('begins one as a copy of what was played, kept across visits, newest first', () => {
     const store = new InMemorySettingsStore();
-    const library = new SketchLibrary(store);
+    const library = new SketchLibrary(store, () => 0);
     const first = library.begin({ events: PLAYED, beats: THREE }, 'An idea', 1_000);
     const second = library.begin({ events: PLAYED.slice(0, 2), beats: [] }, 'Another', 1_000);
 
-    const next = new SketchLibrary(store);
+    const next = new SketchLibrary(store, () => 0);
     next.load();
 
     expect(second.id).not.toBe(first.id);
@@ -85,7 +85,7 @@ describe('the sketches being written', () => {
   });
 
   it('puts the one begun last first', () => {
-    const library = new SketchLibrary(new InMemorySettingsStore());
+    const library = new SketchLibrary(new InMemorySettingsStore(), () => 0);
     library.begin({ events: PLAYED, beats: THREE }, 'Older', 1_000);
     library.begin({ events: PLAYED, beats: THREE }, 'Newer', 2_000);
 
@@ -94,11 +94,11 @@ describe('the sketches being written', () => {
 
   it('changes the notes of one in place, its name and bars kept, across visits', () => {
     const store = new InMemorySettingsStore();
-    const library = new SketchLibrary(store);
+    const library = new SketchLibrary(store, () => 0);
     const begun = library.begin({ events: PLAYED, beats: THREE }, 'An idea', 1_000);
 
     const changed = library.changeTheNotes(begun.id, PLAYED.slice(2));
-    const next = new SketchLibrary(store);
+    const next = new SketchLibrary(store, () => 0);
     next.load();
 
     for (const found of [changed, next.find(begun.id)]) {
@@ -111,8 +111,8 @@ describe('the sketches being written', () => {
   it('keeps the value of each beat across visits, and drops a click whose value is not one', () => {
     const store = new InMemorySettingsStore();
     const quavers = THREE.map((beat) => ({ ...beat, beatType: 8 }));
-    const begun = new SketchLibrary(store).begin({ events: PLAYED, beats: quavers }, 'In eights', 1_000);
-    const next = new SketchLibrary(store);
+    const begun = new SketchLibrary(store, () => 0).begin({ events: PLAYED, beats: quavers }, 'In eights', 1_000);
+    const next = new SketchLibrary(store, () => 0);
     next.load();
     expect(next.find(begun.id)?.beats).toEqual(quavers);
 
@@ -128,8 +128,8 @@ describe('the sketches being written', () => {
       { kind: 'noteOn', atMs: 0, midi: 48, velocity: 89 / 127, hand: 'right' },
       { kind: 'noteOn', atMs: 0, midi: 60, velocity: 89 / 127 },
     ];
-    const begun = new SketchLibrary(store).begin({ events: handed, beats: THREE }, 'Hands', 1);
-    const next = new SketchLibrary(store);
+    const begun = new SketchLibrary(store, () => 0).begin({ events: handed, beats: THREE }, 'Hands', 1);
+    const next = new SketchLibrary(store, () => 0);
     next.load();
     expect(next.find(begun.id)?.events).toEqual(handed);
 
@@ -140,19 +140,19 @@ describe('the sketches being written', () => {
 
   it('keeps the key a sketch is written in across visits, C major where none was given', () => {
     const store = new InMemorySettingsStore();
-    const library = new SketchLibrary(store);
+    const library = new SketchLibrary(store, () => 0);
     const plain = library.begin({ events: PLAYED, beats: THREE }, 'Plain', 1);
     const minor = library.begin({ events: PLAYED, beats: THREE }, 'Minor', 2, { fifths: -3, mode: 'minor' });
     expect([plain.key, minor.key]).toEqual([C_MAJOR, { fifths: -3, mode: 'minor' }]);
     expect(C_MAJOR).toEqual({ fifths: 0, mode: 'major' });
 
     expect(library.changeTheKey(plain.id, { fifths: 6, mode: 'major' })?.key).toEqual({ fifths: 6, mode: 'major' });
-    const between = new SketchLibrary(store);
+    const between = new SketchLibrary(store, () => 0);
     between.load();
     expect(between.find(plain.id)?.key).toEqual({ fifths: 6, mode: 'major' });
     expect(library.changeTheNotes(plain.id, PLAYED.slice(2))?.key).toEqual({ fifths: 6, mode: 'major' });
     expect(library.changeTheKey('sketch-nobody', C_MAJOR)).toBeNull();
-    const next = new SketchLibrary(store);
+    const next = new SketchLibrary(store, () => 0);
     next.load();
     expect([next.find(plain.id)?.key, next.find(minor.id)?.key]).toEqual([
       { fifths: 6, mode: 'major' },
@@ -168,7 +168,7 @@ describe('the sketches being written', () => {
 
   it('keeps the beats a sketch is counted in across visits, its notes as they were', () => {
     const store = new InMemorySettingsStore();
-    const library = new SketchLibrary(store);
+    const library = new SketchLibrary(store, () => 0);
     const sketch = library.begin({ events: PLAYED, beats: THREE }, 'Plain', 1);
     const inTwo: readonly HeardBeat[] = [
       { atMs: -100, beat: 0, beatsInBar: 2, beatType: 8 },
@@ -177,7 +177,7 @@ describe('the sketches being written', () => {
 
     expect(library.changeTheNotes(sketch.id, PLAYED, inTwo)?.beats).toEqual(inTwo);
     expect(library.changeTheNotes('sketch-nobody', PLAYED, inTwo)).toBeNull();
-    const next = new SketchLibrary(store);
+    const next = new SketchLibrary(store, () => 0);
     next.load();
     expect(next.find(sketch.id)?.beats).toEqual(inTwo);
     expect(next.find(sketch.id)?.events).toEqual(PLAYED);
@@ -185,25 +185,25 @@ describe('the sketches being written', () => {
 
   it('renames one, its music as it was, and keeps the name across visits', () => {
     const store = new InMemorySettingsStore();
-    const library = new SketchLibrary(store);
+    const library = new SketchLibrary(store, () => 0);
     const sketch = library.begin({ events: PLAYED, beats: THREE }, 'Sketch, 14.10.2026', 1, { fifths: 2, mode: 'major' });
 
     const renamed = library.rename(sketch.id, 'Waltz in A');
     expect(renamed).toEqual({ ...sketch, title: 'Waltz in A' });
     expect(library.rename('sketch-nobody', 'Nobody')).toBeNull();
-    const next = new SketchLibrary(store);
+    const next = new SketchLibrary(store, () => 0);
     next.load();
     expect(next.find(sketch.id)?.title).toBe('Waltz in A');
   });
 
   it('deletes one, and keeps that across visits', () => {
     const store = new InMemorySettingsStore();
-    const library = new SketchLibrary(store);
+    const library = new SketchLibrary(store, () => 0);
     const begun = library.begin({ events: PLAYED, beats: THREE }, 'An idea', 1_000);
     library.begin({ events: PLAYED, beats: THREE }, 'Another', 2_000);
 
     library.remove(begun.id);
-    const next = new SketchLibrary(store);
+    const next = new SketchLibrary(store, () => 0);
     next.load();
 
     expect(next.list().map((sketch) => sketch.title)).toEqual(['Another']);
@@ -222,12 +222,174 @@ describe('the sketches being written', () => {
         { id: 'd', title: 'No notes', begunAtMs: 1 },
       ],
     });
-    const library = new SketchLibrary(store);
+    const library = new SketchLibrary(store, () => 0);
     library.load();
     expect(library.list().map((sketch) => sketch.id)).toEqual(['a']);
 
-    const empty = new SketchLibrary(new InMemorySettingsStore());
+    const empty = new SketchLibrary(new InMemorySettingsStore(), () => 0);
     empty.load();
     expect(empty.list()).toEqual([]);
+  });
+});
+
+describe('what a sync of the sketches needs kept beside them', () => {
+  /** A library on a store, with a clock the test moves, and another visit to the same store. */
+  function aLibrary(): { library: SketchLibrary; store: InMemorySettingsStore; at: (ms: number) => void; again: () => SketchLibrary } {
+    const store = new InMemorySettingsStore();
+    let now = 0;
+    const library = new SketchLibrary(store, () => now);
+    return {
+      library,
+      store,
+      at: (ms) => {
+        now = ms;
+      },
+      again: () => {
+        const next = new SketchLibrary(store, () => now);
+        next.load();
+        return next;
+      },
+    };
+  }
+  const state = (library: SketchLibrary): (string | number | boolean)[][] =>
+    library.forTheDrive().here.map(({ sketch, revision, unsent }) => [sketch.id, revision, unsent]);
+
+  it('counts each sketch unsent from its beginning to its sending, and again from each change', () => {
+    const { library, at, again } = aLibrary();
+    expect(library.unsentSinceMs).toBeNull();
+    at(5_000);
+    const begun = library.begin({ events: PLAYED, beats: THREE }, 'An idea', 1_000);
+    expect(state(library)).toEqual([[begun.id, 0, true]]);
+    expect(library.unsentSinceMs).toBe(5_000);
+
+    library.sentAt(begun.id, 1);
+    expect(state(library)).toEqual([[begun.id, 1, false]]);
+    expect(library.unsentSinceMs).toBeNull();
+
+    // Each kind of change, each from when it was made.
+    const changes: [number, () => void][] = [
+      [6_000, () => library.changeTheNotes(begun.id, PLAYED.slice(0, 2))],
+      [7_000, () => library.changeTheKey(begun.id, { fifths: 2, mode: 'major' })],
+      [8_000, () => library.rename(begun.id, 'Renamed')],
+    ];
+    for (const [ms, change] of changes) {
+      at(ms);
+      change();
+      expect(state(library)).toEqual([[begun.id, 1, true]]);
+      expect(library.unsentSinceMs).toBe(ms);
+      expect(state(again())).toEqual([[begun.id, 1, true]]);
+      expect(again().unsentSinceMs).toBe(ms);
+      library.sentAt(begun.id, 1);
+    }
+    // Sent, kept in step across visits too.
+    expect(state(again())).toEqual([[begun.id, 1, false]]);
+  });
+
+  it('keeps a deletion of a sketch the drive has had, to tell it, and of no other', () => {
+    const { library, at, again } = aLibrary();
+    const sent = library.begin({ events: PLAYED, beats: THREE }, 'Sent', 1_000);
+    const never = library.begin({ events: PLAYED, beats: THREE }, 'Never sent', 2_000);
+    library.sentAt(sent.id, 3);
+    library.sentAt(never.id, 1);
+    at(9_000);
+
+    library.remove(never.id);
+    library.remove(sent.id);
+    library.remove('nowhere');
+    expect(library.forTheDrive().deleted).toEqual([
+      { id: never.id, revision: 1 },
+      { id: sent.id, revision: 3 },
+    ]);
+    expect(library.unsentSinceMs).toBe(9_000);
+    expect(again().forTheDrive().deleted).toEqual(library.forTheDrive().deleted);
+
+    library.deletionSettled(never.id);
+    library.deletionSettled(sent.id);
+    expect(again().forTheDrive().deleted).toEqual([]);
+    expect(library.unsentSinceMs).toBeNull();
+
+    // Never sent, there is nothing to tell.
+    const { library: other } = aLibrary();
+    const kept = other.begin({ events: PLAYED, beats: THREE }, 'Here only', 1);
+    other.remove(kept.id);
+    expect(other.forTheDrive().deleted).toEqual([]);
+  });
+
+  it('takes a sketch from the drive over the one here or beside them, in step with it', () => {
+    const { library, again } = aLibrary();
+    const mine = library.begin({ events: PLAYED, beats: THREE }, 'Mine', 1_000);
+
+    library.takeFromTheDrive({ ...mine, title: 'Theirs', events: PLAYED.slice(0, 2), noteCount: 99 }, 4);
+    const over = library.find(mine.id);
+    expect([over?.title, over?.noteCount]).toEqual(['Theirs', 1]);
+    library.takeFromTheDrive({ ...mine, id: 'brought', title: 'Brought' }, 2);
+    expect(state(again()).sort()).toEqual([
+      ['brought', 2, false],
+      [mine.id, 4, false],
+    ]);
+    expect(library.list().map((sketch) => sketch.title).sort()).toEqual(['Brought', 'Theirs']);
+  });
+
+  it('takes off a sketch deleted elsewhere with nothing to tell, and keeps a copy of one under a new name', () => {
+    const { library, again } = aLibrary();
+    const gone = library.begin({ events: PLAYED, beats: THREE }, 'Gone', 1_000);
+    const kept = library.begin({ events: PLAYED, beats: THREE }, 'Kept', 2_000);
+    library.sentAt(gone.id, 2);
+    library.sentAt(kept.id, 5);
+
+    library.deletedElsewhere(gone.id);
+    expect(library.find(gone.id)).toBeNull();
+    expect(library.forTheDrive().deleted).toEqual([]);
+
+    const copy = library.keepACopy(kept.id, 'Kept (conflicting copy)');
+    const second = library.keepACopy(kept.id, 'Kept (another)');
+    expect([copy?.id, second?.id]).toEqual([`${kept.id}-copy`, `${kept.id}-copy-2`]);
+    expect(copy?.events).toEqual(kept.events);
+    expect(state(library).filter(([id]) => id === copy?.id)).toEqual([[copy?.id ?? '', 0, true]]);
+    expect(state(again()).sort()).toEqual([
+      [kept.id, 5, false],
+      [`${kept.id}-copy`, 0, true],
+      [`${kept.id}-copy-2`, 0, true],
+    ]);
+    expect(library.keepACopy('nowhere', 'x')).toBeNull();
+  });
+
+  it('reads a sketch kept before there was a drive as never sent, and past what it cannot read', () => {
+    const store = new InMemorySettingsStore();
+    const sketch = (id: string, more: Record<string, unknown> = {}) => ({
+      id,
+      title: id,
+      begunAtMs: 1,
+      events: [],
+      beats: [],
+      ...more,
+    });
+    store.write({
+      version: 1,
+      sketches: [
+        sketch('old'),
+        sketch('sent', { revision: 3 }),
+        sketch('changed', { revision: 2, unsent: 1 }),
+        sketch('bad', { revision: 1.5 }),
+        sketch('negative', { revision: -2, unsent: 0 }),
+      ],
+      deleted: [['gone', 4], ['half', 1.5], 'not a pair', ['nought', 0], [7, 2]],
+      changedAtMs: 'soon',
+    });
+    const library = new SketchLibrary(store, () => 0);
+    library.load();
+
+    expect(state(library)).toEqual([
+      ['old', 0, true],
+      ['sent', 3, false],
+      ['changed', 2, true],
+      ['bad', 0, true],
+      ['negative', 0, true],
+    ]);
+    expect(library.forTheDrive().deleted).toEqual([{ id: 'gone', revision: 4 }]);
+    expect(library.unsentSinceMs).toBe(0);
+    // One the drive never had, taken off, is nothing to tell it.
+    library.remove('old');
+    expect(library.forTheDrive().deleted).toEqual([{ id: 'gone', revision: 4 }]);
   });
 });

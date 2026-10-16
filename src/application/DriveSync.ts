@@ -2,6 +2,7 @@ import type { LibrarySync, SyncOutcome } from './LibrarySync.js';
 import type { StoredScoreSummary } from './ports/IScoreStore.js';
 import type { SettingsRepository } from './SettingsRepository.js';
 import type { SettingsSync, SettingsSyncOutcome } from './SettingsSync.js';
+import type { SketchSync, SketchSyncOutcome } from './SketchSync.js';
 
 /**
  * How long after the last change here the Sync button presses itself.
@@ -15,11 +16,15 @@ export const SYNC_AFTER_QUIET_MS = 30_000;
 export interface DriveSyncOutcome {
   readonly library: SyncOutcome;
   readonly settings: SettingsSyncOutcome;
+  readonly sketches: SketchSyncOutcome;
 }
 
 export interface DriveSyncDependencies {
   readonly library: Pick<LibrarySync, 'sync'>;
   readonly settings: Pick<SettingsSync, 'sync'>;
+  readonly sketches: Pick<SketchSync, 'sync'>;
+  /** When the sketches were last changed here with the drive not yet told, or `null`: see `SketchLibrary.unsentSinceMs`. */
+  readonly sketchesUnsentSinceMs: () => number | null;
   /** The scores kept here, as they stand. */
   readonly scores: () => readonly StoredScoreSummary[];
   /** When the shared settings last changed, and where the last sync is remembered. */
@@ -46,13 +51,18 @@ export class DriveSync {
     this.deps = dependencies;
   }
 
-  async sync(progress?: (done: number, total: number) => void): Promise<DriveSyncOutcome> {
+  /**
+   * One sync of everything, leaving as it is the sketch open on the page
+   * (`openSketch`): see `SketchSync`.
+   */
+  async sync(progress?: (done: number, total: number) => void, openSketch: string | null = null): Promise<DriveSyncOutcome> {
     const library = await this.deps.library.sync(progress);
     const settings = await this.deps.settings.sync();
+    const sketches = await this.deps.sketches.sync(openSketch);
     // At least as late as anything now here: a score brought from a device
     // whose clock runs ahead would otherwise look like a change made since.
     this.deps.repository.rememberTheSync(Math.max(this.deps.now(), this.latestChange()));
-    return { library, settings };
+    return { library, settings, sketches };
   }
 
   /**
@@ -70,6 +80,10 @@ export class DriveSync {
   }
 
   get hasSomethingToSync(): boolean {
+    // A sketch says itself whether the drive has had it, whatever the clocks.
+    if (this.deps.sketchesUnsentSinceMs() !== null) {
+      return true;
+    }
     const last = this.deps.repository.lastSyncedAtMs;
     if (last === null) {
       return this.deps.scores().length > 0 || this.deps.repository.sharedSettings().changedAtMs > 0;
@@ -78,7 +92,7 @@ export class DriveSync {
   }
 
   private latestChange(): number {
-    let latest = this.deps.repository.sharedSettings().changedAtMs;
+    let latest = Math.max(this.deps.repository.sharedSettings().changedAtMs, this.deps.sketchesUnsentSinceMs() ?? 0);
     for (const score of this.deps.scores()) {
       latest = Math.max(latest, score.savedAtMs, score.markedAtMs ?? 0);
     }

@@ -64,6 +64,7 @@ import type { PracticeSettings } from '../application/PracticeController.js';
 import type { StoredTake } from '../application/TakeLibrary.js';
 import { isTypedInto, type TypedInto } from '../shared/typedInto.js';
 import { theBeatsToBeginIn, theSketchOfTheScore, type SketchKey, type StoredSketch } from '../application/SketchLibrary.js';
+import { CONFLICTING_COPY, type SketchSyncOutcome } from '../application/SketchSync.js';
 import type { DrillTask } from '../application/drill/SectionDrill.js';
 import type { ControlBinding } from '../application/ControlBinding.js';
 import {
@@ -521,6 +522,24 @@ function theBoxCornerAt(
  */
 function addsToTheChoice(event: PointerEvent): boolean {
   return event.ctrlKey || event.metaKey || event.shiftKey;
+}
+
+/**
+ * What a sync did with the sketches, in a sentence: what went and came, and
+ * - only where there were any - what was taken off here and what was kept as
+ * a copy because it had been changed on two devices at once.
+ */
+function theSketchesSynced(sketches: SketchSyncOutcome): string {
+  const said = [`Sketches sent ${String(sketches.sent)}, brought here ${String(sketches.brought)}`];
+  if (sketches.takenOff > 0) {
+    said.push(`taken off ${String(sketches.takenOff)}, deleted on another device`);
+  }
+  if (sketches.conflicts > 0) {
+    said.push(
+      `${String(sketches.conflicts)} changed on two devices at once, kept here as a ${CONFLICTING_COPY} beside the other`,
+    );
+  }
+  return `${said.join('; ')}.`;
 }
 
 /** How long a note moved up or down by an arrow key is heard for, at its new pitch. */
@@ -7835,12 +7854,15 @@ export class AppView {
     this.el.driveStatus.textContent = 'Syncing…';
     this.offerToSync();
     try {
-      const { library, settings } = await this.runtime.driveSync.sync((done, total) => {
+      // The sketch open on the page is left as it is, to be settled at the next sync.
+      const open = this.el.sheetRoll.hidden ? null : (this.theOtherRollShowing?.sketch?.id ?? null);
+      const { library, settings, sketches } = await this.runtime.driveSync.sync((done, total) => {
         this.el.driveStatus.textContent = `Syncing… ${String(done)} of ${String(total)}`;
-      });
-      this.el.driveStatus.textContent = `Synced. Sent ${String(library.sent)}, brought here ${String(library.brought)}. Settings ${SETTINGS_WENT[settings]}.`;
+      }, open);
+      this.el.driveStatus.textContent = `Synced. Sent ${String(library.sent)}, brought here ${String(library.brought)}. ${theSketchesSynced(sketches)} Settings ${SETTINGS_WENT[settings]}.`;
       this.showWhatOnlyTheDriveHas(library.onlyOnTheDrive);
       this.renderScores();
+      this.renderSketches();
     } catch (error) {
       const why = error instanceof Error ? error.message : 'Google Drive could not be reached.';
       this.el.driveStatus.textContent = why;

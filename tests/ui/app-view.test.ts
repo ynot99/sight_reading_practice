@@ -7,6 +7,7 @@ import { timeTheStart } from '../../src/shared/timeTheStart.js';
 import { LibrarySync } from '../../src/application/LibrarySync.js';
 import { SettingsSync } from '../../src/application/SettingsSync.js';
 import { DriveSync } from '../../src/application/DriveSync.js';
+import { SketchSync } from '../../src/application/SketchSync.js';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { DARK_SYSTEM_THEMES, PracticeController, TEMPO_STEP_PERCENT, THEMES } from '../../src/application/PracticeController.js';
@@ -360,7 +361,7 @@ function createRig(
   const metronomeKnob = new ControlBinding();
   metronomeKnob.listenTo(midi);
   const takes = new TakeLibrary(new InMemorySettingsStore());
-  const sketches = new SketchLibrary(new InMemorySettingsStore());
+  const sketches = new SketchLibrary(new InMemorySettingsStore(), () => Date.now());
   const takeOnOffer = new TakeOnOffer(recorder, takes, () => Date.now());
   const files = new RecordingFileSink();
   const importer = new ScoreFileImporter();
@@ -458,6 +459,8 @@ function createRig(
   const librarySync = new LibrarySync({ drive, store: scoreStore, reload: () => scores.load() });
   const driveSync = new DriveSync({
     library: librarySync,
+    sketches: new SketchSync({ drive, sketches }),
+    sketchesUnsentSinceMs: () => sketches.unsentSinceMs,
     settings: new SettingsSync({
       drive,
       settings,
@@ -16989,6 +16992,79 @@ describe('the library on Google Drive', () => {
     await waitFor(() => only.hidden === true);
 
     expect((await rig.scoreStore.read('score:City of Tears'))?.stars).toBe(4);
+  });
+
+  it('syncs the sketches from the button: a sketch from another device comes into the list, and the one open is left as it is', async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+    // Another device, on the same drive.
+    const other = new SketchLibrary(new InMemorySettingsStore(), () => 1);
+    const otherSync = new SketchSync({ drive: rig.drive, sketches: other });
+    const played = [
+      { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+      { kind: 'noteOff' as const, atMs: 400, midi: 60 },
+    ];
+    const beats = [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 }));
+    other.begin({ events: played, beats }, 'From the iPad', 5);
+    await otherSync.sync(null);
+
+    // The list of sketches open, and drawn again by the sync.
+    element<HTMLButtonElement>('focus-scores').click();
+    element<HTMLButtonElement>('scores-show-sketches').click();
+    expect(element('sketches-list').textContent).not.toContain('From the iPad');
+    element<HTMLButtonElement>('drive-sync').click();
+    await waitFor(() => element('drive-status').textContent?.startsWith('Synced') === true);
+    expect(element('drive-status').textContent).toContain('Sketches sent 0, brought here 1.');
+    expect(element('sketches-list').textContent).toContain('From the iPad');
+
+    // Renamed on the other device while it is open here: left as it is.
+    const [mine] = rig.sketches.list();
+    other.rename(mine?.id ?? '', 'Renamed on the iPad');
+    await otherSync.sync(null);
+    rowButton('sketches-list', 'Edit this sketch').click();
+    element<HTMLButtonElement>('drive-sync').click();
+    await waitFor(() => element('drive-status').textContent?.startsWith('Synced') === true);
+    expect(element('drive-status').textContent).toContain('Sketches sent 0, brought here 0.');
+    expect(rig.sketches.find(mine?.id ?? '')?.title).toBe('From the iPad');
+    // Shut, it is open no longer, and is taken.
+    element<HTMLButtonElement>('roll-close').click();
+    element('drive-status').textContent = '';
+    element<HTMLButtonElement>('drive-sync').click();
+    await waitFor(() => element('drive-status').textContent?.startsWith('Synced') === true);
+    expect(rig.sketches.find(mine?.id ?? '')?.title).toBe('Renamed on the iPad');
+  });
+
+  it('says of a sync what it took off and what it kept as a copy, where there was any', async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+    const other = new SketchLibrary(new InMemorySettingsStore(), () => 1);
+    const otherSync = new SketchSync({ drive: rig.drive, sketches: other });
+    const played = [
+      { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+      { kind: 'noteOff' as const, atMs: 400, midi: 60 },
+    ];
+    const beats = [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 }));
+    const gone = other.begin({ events: played, beats }, 'Gone', 5);
+    const both = other.begin({ events: played, beats }, 'Both', 6);
+    await otherSync.sync(null);
+    element<HTMLButtonElement>('drive-sync').click();
+    await waitFor(() => element('drive-status').textContent?.startsWith('Synced') === true);
+
+    other.remove(gone.id);
+    other.rename(both.id, 'Both, there');
+    await otherSync.sync(null);
+    rig.sketches.rename(both.id, 'Both, here');
+    element('drive-status').textContent = '';
+    element<HTMLButtonElement>('drive-sync').click();
+    await waitFor(() => element('drive-status').textContent?.startsWith('Synced') === true);
+
+    expect(element('drive-status').textContent).toContain(
+      'Sketches sent 1, brought here 1; taken off 1, deleted on another device; 1 changed on two devices at once, kept here as a conflicting copy beside the other.',
+    );
+    expect(rig.sketches.list().map((sketch) => sketch.title).sort()).toEqual([
+      'Both, here (conflicting copy)',
+      'Both, there',
+    ]);
   });
 
   it('says what went wrong rather than nothing', async () => {

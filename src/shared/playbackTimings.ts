@@ -286,7 +286,8 @@ function thisPlayback(): string[] {
   if (events.length > 0) {
     lines.push('What happened, ms since the pulse started:');
     for (const { atMs, what } of events) {
-      lines.push(`${said(atMs, 7, true)}  ${what}`);
+      // Before the start is said so, however little before.
+      lines.push(`${said(atMs < 0 ? Math.min(-1, Math.round(atMs)) : atMs, 7, true)}  ${what}`);
     }
   }
   return lines;

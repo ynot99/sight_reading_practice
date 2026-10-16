@@ -31,6 +31,11 @@ class FakeSession implements MediaSessionLike {
 class FakeSilence implements SilentPlayer {
   playing = false;
   released = 0;
+  primed = 0;
+
+  prime(): void {
+    this.primed += 1;
+  }
 
   play(): void {
     this.playing = true;
@@ -178,7 +183,7 @@ describe('the platform transport keys', () => {
     expect(session.handlers.get('play')).not.toBeNull();
   });
 
-  it('plays silence while the music plays, holds it with the music, and lets it go with it', () => {
+  it('plays silence while the music plays, and holds it with the music and when it is over', () => {
     // A browser hands the keys only to a page with a media element playing;
     // every sound here is Web Audio, so without this they never arrived.
     const session = new FakeSession();
@@ -195,11 +200,36 @@ describe('the platform transport keys', () => {
 
     keys.sounding(performanceOf(true));
     keys.sounding(null);
-    // Over, it is let go of altogether, or the panel goes on showing a paused player.
+    // Over, it is held and kept: begun again with the next start, it would
+    // cost that start what it cost the first.
     expect(silence.playing).toBe(false);
-    expect(silence.released).toBe(1);
+    expect(silence.released).toBe(0);
+  });
+
+  it('begins the silence ahead of the music, and lets it go when the page is put away with no music going', () => {
+    const session = new FakeSession();
+    const silence = new FakeSilence();
+    const keys = new MediaSessionKeys(session, named, silence);
+
+    keys.prime();
+    expect(silence.primed).toBe(1);
+
+    // Put away while the music plays, or is held, it stays: the panel's keys
+    // are wanted then.
+    keys.sounding(performanceOf(true));
+    keys.pageHidden();
+    keys.sounding(performanceOf(false));
+    keys.pageHidden();
+    expect(silence.released).toBe(0);
+    // With the music over, it goes.
     keys.sounding(null);
+    keys.pageHidden();
     expect(silence.released).toBe(1);
+
+    // No platform to hand keys to, nothing begun.
+    const none = new FakeSilence();
+    new MediaSessionKeys(null, named, none).prime();
+    expect(none.primed).toBe(0);
   });
 
   it('gives the keys back when there is nothing sounding', () => {

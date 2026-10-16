@@ -111,6 +111,8 @@ describe('how a playback kept time', () => {
     now = 1_000;
     timings.beginThePlaybackTimings();
     timings.noteAnEvent('at the earlier pulse');
+    now = 3_499.7;
+    timings.noteAnEvent('a hair before');
     now = 3_500;
     timings.noteAnEvent('just before');
     timings.beginThePlaybackTimings();
@@ -126,6 +128,8 @@ describe('how a playback kept time', () => {
     expect(latest.slice(latest.indexOf('What happened, ms since the pulse started:'), latest.indexOf(''))).toEqual([
       'What happened, ms since the pulse started:',
       '  -2500  at the earlier pulse',
+      // However little before, said to be before.
+      '     -1  a hair before',
       '    +40  the clocks read',
       '   +400  the audio clock had stood 134 ms',
     ]);

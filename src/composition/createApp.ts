@@ -347,6 +347,12 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   // metronome means.
   const waking =
     typeof document === 'undefined' ? null : keepAudioAwake(audioContextFactory, document);
+  // The platform's media keys, where there is a platform to ask; their
+  // silence begun at the touch that wakes the audio, ahead of any music.
+  const mediaKeys = typeof navigator === 'undefined' ? null : theMediaSession();
+  waking?.onChange(() => {
+    mediaKeys?.prime();
+  });
 
   // One crossing between the page's clock and the audio clock for the click
   // and the notes beside it, or a note placed from a tick lands elsewhere on
@@ -605,7 +611,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     audio: waking ?? new NoAudioWaking(),
     // Reached only where there is a platform to ask; everywhere else the keys
     // are somebody else's and this says nothing about them.
-    mediaKeys: typeof navigator === 'undefined' ? new NoMediaKeys() : theMediaSession(),
+    mediaKeys: mediaKeys ?? new NoMediaKeys(),
     screenWake:
       typeof navigator === 'undefined' || typeof document === 'undefined'
         ? new NoScreenWake()

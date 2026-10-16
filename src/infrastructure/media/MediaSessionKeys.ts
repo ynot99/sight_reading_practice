@@ -21,13 +21,14 @@ const SKIP_SECONDS = 10;
 
 /** An element playing nothing, which is what makes a browser count the page as a player. */
 export interface SilentPlayer {
+  /** Begins it ahead of the music and holds it, where it has not been begun: see `LoopedSilence`. */
+  prime(): void;
   play(): void;
   pause(): void;
   /**
    * Lets go of the element altogether. Paused, it was still a piece of
    * media to the browser and to the platform's panel, which went on showing
-   * a paused player ten seconds long - the silence's own length - after the
-   * music was over.
+   * a paused player ten seconds long - the silence's own length.
    */
   release(): void;
 }
@@ -78,6 +79,25 @@ export class MediaSessionKeys implements IMediaKeys {
     this.silence = silence;
   }
 
+  /** Begins the silence ahead of any music, at a touch of the page: see `LoopedSilence`. */
+  prime(): void {
+    if (this.session !== null) {
+      this.silence?.prime();
+    }
+  }
+
+  /**
+   * The page put away. With no music going the silence is let go of, so the
+   * platform's panel stops showing a player of it for a page nobody is at;
+   * with music going, or held, it stays - that is when the panel's keys are
+   * wanted.
+   */
+  pageHidden(): void {
+    if (!this.held) {
+      this.silence?.release();
+    }
+  }
+
   sounding(what: WhatIsSounding | null): void {
     const session = this.session;
     if (session === null) {
@@ -90,7 +110,9 @@ export class MediaSessionKeys implements IMediaKeys {
       if (!this.held) {
         return;
       }
-      this.silence?.release();
+      // Held, not let go of: begun again with the next start, it would cost
+      // that start what it cost the first (see `LoopedSilence`).
+      this.silence?.pause();
       for (const action of ACTIONS) {
         take(session, action, null);
       }
@@ -220,90 +242,61 @@ export function silentWav(seconds: number, sampleRate = 8_000): Uint8Array<Array
 /** How long the silence goes before it loops. */
 const SILENCE_SECONDS = 10;
 
-/** How long the music stays stopped before the silence beside it is let go of. */
-export const LET_GO_AFTER_MS = 30_000;
-
-/** The timers the silence waits with, named so a test can stand in. */
-export interface SilenceTimers {
-  setTimeout(run: () => void, ms: number): ReturnType<typeof setTimeout>;
-  clearTimeout(id: ReturnType<typeof setTimeout>): void;
-}
 
 /**
- * Silence on a loop in an `<audio>` element, made the first time it is asked
- * to play: a page that never plays a performance never builds it.
+ * Silence on a loop in an `<audio>` element.
+ *
+ * Begun ahead of the music, at the first touch of the page, and kept while
+ * the page is in front of the reader. On his iPad the first time an element
+ * like this begins is costly: measured, about 670 ms from being asked to
+ * playing, the page standing 173 ms and 140 ms on the way, and the audio
+ * device standing 212 ms just after - under the first notes, when it was
+ * begun with the music. Begun at a touch, it costs that while nothing
+ * plays; and kept, every start after is one that already has it. Let go of
+ * only where the page is put away with no music going (see
+ * `MediaSessionKeys.pageHidden`), so the platform's panel does not go on
+ * showing a player of silence for a page nobody is at.
  */
 export class LoopedSilence implements SilentPlayer {
   private element: HTMLAudioElement | null = null;
   private url: string | null = null;
-  private readonly timers: SilenceTimers;
-  /** The letting go waiting out `LET_GO_AFTER_MS`, while the music may still come back. */
-  private lettingGo: ReturnType<typeof setTimeout> | null = null;
+  /** Whether the music wants it playing, as against begun only to have been begun. */
+  private wanted = false;
 
-  constructor(timers: SilenceTimers = { setTimeout: (run, ms) => setTimeout(run, ms), clearTimeout: (id) => clearTimeout(id) }) {
-    this.timers = timers;
+  /** Made and begun, to be held as soon as it is playing: see the class. */
+  prime(): void {
+    if (this.element !== null) {
+      return;
+    }
+    noteAnEvent("the media keys' silence begun ahead of the music");
+    this.begin(this.make());
   }
 
   play(): void {
-    if (this.lettingGo !== null) {
-      this.timers.clearTimeout(this.lettingGo);
-      this.lettingGo = null;
-    }
-    if (this.element === null) {
-      this.url = URL.createObjectURL(new Blob([silentWav(SILENCE_SECONDS)], { type: 'audio/wav' }));
-      this.element = new Audio(this.url);
-      this.element.loop = true;
-      // When it really begins, for the playback's timings: a tablet may
-      // stand its audio device a moment as a player starts.
-      this.element.addEventListener('playing', () => {
-        noteAnEvent('the media keys\' silence began playing');
-      });
-    }
+    this.wanted = true;
+    const element = this.element ?? this.make();
     // Asked at every step of the music, and already playing at all but the
     // first: asked again, a browser may go to its audio device again each
     // time, for nothing.
-    if (!this.element.paused) {
+    if (!element.paused) {
       return;
     }
-    noteAnEvent('the media keys\' silence asked to play');
-    // Refused where the browser wants a press first. The music itself was
-    // started by one, so this is the rare case, and the keys are then only
-    // not handed over - nothing else depends on it.
-    this.element.play().catch(() => undefined);
+    noteAnEvent("the media keys' silence asked to play");
+    this.begin(element);
   }
 
   pause(): void {
+    this.wanted = false;
     this.element?.pause();
-  }
-
-  /**
-   * Let go of once the music has stayed stopped a while: held at once, and
-   * emptied after `LET_GO_AFTER_MS` unless the music plays again first.
-   *
-   * Not at once. Emptied the moment the music stopped, the element was made
-   * again at the next start, and on his iPad a player beginning stands the
-   * audio device: about 70 ms just after it, measured, with the first notes
-   * already sounding - a stutter at every start, where before it the element
-   * lived on and only the first start had one. Kept for a run of starts and
-   * stops, it is begun once; let go of after a while, the platform's panel
-   * still stops showing a player of silence.
-   */
-  release(): void {
-    this.element?.pause();
-    if (this.element === null || this.lettingGo !== null) {
-      return;
-    }
-    // Its wait is called off by the next play, which a wait already out
-    // costs nothing.
-    this.lettingGo = this.timers.setTimeout(() => this.letGo(), LET_GO_AFTER_MS);
   }
 
   /**
    * Emptied as a media element is let go of - its source taken away and
    * loaded again - so the browser stops counting the page as a player; and
-   * its file freed. Made again the next time the music plays.
+   * its file freed. Made again the next time it is asked for.
    */
-  private letGo(): void {
+  release(): void {
+    this.wanted = false;
     const element = this.element;
     if (element !== null) {
       element.pause();
@@ -315,6 +308,31 @@ export class LoopedSilence implements SilentPlayer {
     }
     this.element = null;
     this.url = null;
+  }
+
+  private make(): HTMLAudioElement {
+    this.url = URL.createObjectURL(new Blob([silentWav(SILENCE_SECONDS)], { type: 'audio/wav' }));
+    const element = new Audio(this.url);
+    element.loop = true;
+    element.addEventListener('playing', () => {
+      noteAnEvent("the media keys' silence began playing");
+      // Begun ahead of the music, it is held once it has begun, unless the
+      // music has asked for it meanwhile.
+      if (!this.wanted) {
+        element.pause();
+      }
+    });
+    this.element = element;
+    return element;
+  }
+
+  /**
+   * Refused where the browser wants a press first. Both ways in come from
+   * one, so this is the rare case, and the keys are then only not handed
+   * over - nothing else depends on it.
+   */
+  private begin(element: HTMLAudioElement): void {
+    element.play().catch(() => undefined);
   }
 }
 
@@ -356,9 +374,15 @@ export function theMediaSession(): MediaSessionKeys {
   const session = (navigator as unknown as { mediaSession?: MediaSessionLike }).mediaSession;
   const Metadata = (globalThis as unknown as { MediaMetadata?: new (init: PanelMetadata) => unknown })
     .MediaMetadata;
-  return new MediaSessionKeys(
+  const keys = new MediaSessionKeys(
     session ?? null,
     Metadata === undefined ? null : (title: string) => new Metadata(panelMetadataFor(title, document.baseURI)),
     typeof Audio === 'function' && typeof URL.createObjectURL === 'function' ? new LoopedSilence() : null,
   );
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      keys.pageHidden();
+    }
+  });
+  return keys;
 }

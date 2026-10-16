@@ -1941,6 +1941,13 @@ export class AppView {
    * what it meant.
    */
   private readonly rollFingers = new Map<number, { readonly x: number; readonly y: number }>();
+  /**
+   * Every finger down on the drawing and where it is, whatever it is doing
+   * there - holding a note, the pedal or a box as well as moving the drawing:
+   * what a second finger needs to make a pinch of the first one's gesture.
+   * The mouse and a pen are counted as a first finger.
+   */
+  private readonly fingersOnTheDrawing = new Map<number, { readonly x: number; readonly y: number }>();
   private pinchedFrom: PinchedFrom | null = null;
   /**
    * How tall a row of pitch is drawn, in pixels.
@@ -9327,6 +9334,7 @@ export class AppView {
       this.pinched = false;
       this.panned = false;
       this.stopTheFling();
+      this.countTheFingerIn(event);
       // The middle button moves the drawing wherever it goes down; the right
       // one is the menu's, which a note being edited answers.
       const middle = event.pointerType === 'mouse' && event.button === 1;
@@ -9370,6 +9378,9 @@ export class AppView {
           : null;
     });
     this.listen(this.el.rollBody, 'pointermove', (event) => {
+      if (this.fingersOnTheDrawing.has(event.pointerId)) {
+        this.fingersOnTheDrawing.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      }
       if (this.rollPedalDrag?.pointerId === event.pointerId) {
         this.dragThePedal(event);
         return;
@@ -9394,6 +9405,7 @@ export class AppView {
     });
     for (const ending of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
       this.listen(this.el.rollBody, ending, (event) => {
+        this.fingersOnTheDrawing.delete(event.pointerId);
         if (this.keyHeldOnTheStrip?.pointerId === event.pointerId) {
           this.letGoOfTheKeyOnTheStrip();
           return;
@@ -15077,6 +15089,47 @@ export class AppView {
       acrossPx: Math.abs(first.x - second.x),
       downPx: Math.abs(first.y - second.y),
     };
+  }
+
+  /**
+   * Counts a finger going down on the drawing in.
+   *
+   * A second finger is a pinch, whatever the first was doing: what it held -
+   * a note, the pedal, a box - is let go of as it was, and it becomes one of
+   * the two fingers of the pinch, from where it is now. Without that the
+   * first finger kept its gesture and the second only moved the drawing, so
+   * a pinch begun on a note, or with the selection tool, never zoomed.
+   *
+   * The first finger of a touch is the only one down - as the mouse or a pen
+   * always is - so any other still counted was lifted where the drawing never
+   * heard it, and is forgotten with what it held: kept, it would make every
+   * later finger the second of a pinch, or leave a note held that no other
+   * finger could then take hold of.
+   */
+  private countTheFingerIn(event: PointerEvent): void {
+    for (const [pointerId, at] of this.fingersOnTheDrawing) {
+      this.letGoOfWhatTheFingerHeld(pointerId, event);
+      if (event.isPrimary) {
+        this.rollFingers.delete(pointerId);
+      } else {
+        this.rollFingers.set(pointerId, at);
+      }
+    }
+    if (event.isPrimary) {
+      this.fingersOnTheDrawing.clear();
+    }
+    this.fingersOnTheDrawing.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  }
+
+  /** Lets go, as it was, of what a finger held on the drawing: a note, the pedal or a box. */
+  private letGoOfWhatTheFingerHeld(pointerId: number, event: PointerEvent): void {
+    if (this.rollDrag?.pointerId === pointerId) {
+      this.letGoOfTheHeldKey(null);
+    } else if (this.rollPedalDrag?.pointerId === pointerId) {
+      this.letGoOfThePedal(event, false);
+    } else if (this.rollBoxDrawn?.pointerId === pointerId) {
+      this.chooseWhatTheBoxHolds(event, false);
+    }
   }
 
   /** Remembers where a pinch started from, or forgets there is one. */

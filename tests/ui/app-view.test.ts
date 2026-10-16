@@ -5463,14 +5463,6 @@ describe('AppView', () => {
       expect(chosen()).toEqual([0, 500]);
       expect(scrolledDown()).toBe(down);
       expect(notes()).toBe(3);
-      // A second finger while one draws a box leaves the box to the first.
-      finger('pointerdown', at(950, 60));
-      body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 52, pointerType: 'touch', ...at(2_000, 70) }));
-      finger('pointermove', at(450, 60));
-      expect(box.style.width).toBe(`${String(at(950, 60).clientX - at(450, 60).clientX)}px`);
-      finger('pointercancel', at(450, 60));
-      body.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 52, pointerType: 'touch', ...at(2_000, 70) }));
-      expect(chosen()).toEqual([0, 500]);
       // A tap on nothing chooses nothing, and writes no note.
       tapTheDrawing({ pointerType: 'touch', ...at(1_800, 60) });
       expect(chosen()).toEqual([]);
@@ -5494,6 +5486,155 @@ describe('AppView', () => {
       tapTheDrawing({ pointerType: 'touch', ...at(3_100, 67) });
       tapTheDrawing({ pointerType: 'touch', ...at(3_100, 67) });
       expect(notes()).toBe(5);
+    });
+
+    it('makes a pinch of a second finger, whatever the first held, and forgets a finger never heard lifted', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            [0, 60],
+            [500, 62],
+            [1_000, 64],
+          ].flatMap(([atMs = 0, midi = 0]) => [
+            { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: atMs + 400, midi },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Pinched',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoomInput = element<HTMLInputElement>('roll-zoom');
+      const zoom = Number(zoomInput.value);
+      const highest = view.rollScene?.highest ?? 0;
+      const scrolledDown = (): number =>
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      const at = (ms: number, midi: number): { clientX: number; clientY: number } => ({
+        clientX: (ms / 1000) * zoom,
+        clientY: (highest - midi + 0.5) * 13 - scrolledDown(),
+      });
+      const body = element('roll-body');
+      const box = element('roll-box');
+      const touch = (type: string, pointerId: number, where: { clientX: number; clientY: number }, isPrimary = false): void => {
+        body.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId, pointerType: 'touch', isPrimary, ...where }));
+      };
+      const aside = (where: { clientX: number; clientY: number }, px: number) => ({ ...where, clientX: where.clientX + px });
+      const zoomedBack = (): void => {
+        zoomInput.value = String(zoom);
+        zoomInput.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+      const firstPitch = (): number | undefined =>
+        sketches
+          .find(sketch.id)
+          ?.events.find((event): event is Extract<MidiFileEvent, { kind: 'noteOn' }> => event.kind === 'noteOn' && event.atMs === 0)?.midi;
+      const chosen = (): number[] =>
+        (view.rollScene?.notes ?? []).filter((note) => note.chosen === true).map((note) => note.fromMs);
+
+      // A finger moving the drawing, never heard lifted: the next first
+      // finger moves it alone, and is no pinch.
+      touch('pointerdown', 65, at(1_800, 70), true);
+      touch('pointerdown', 66, at(1_800, 70), true);
+      touch('pointermove', 66, aside(at(1_800, 70), 100));
+      expect(zoomInput.value).toBe(String(zoom));
+      touch('pointerup', 66, aside(at(1_800, 70), 100));
+      // A finger holding a note, never heard lifted: the next first finger
+      // takes hold of a note of its own.
+      touch('pointerdown', 67, at(1_100, 64), true);
+      touch('pointerdown', 68, at(100, 60), true);
+      touch('pointermove', 68, at(100, 57));
+      touch('pointerup', 68, at(100, 57));
+      expect(firstPitch()).toBe(57);
+
+      // A note held and dragged is put back as it was, and the two fingers zoom.
+      touch('pointerdown', 61, at(100, 57), true);
+      touch('pointermove', 61, at(100, 55));
+      touch('pointerdown', 62, aside(at(100, 55), 100));
+      touch('pointermove', 62, aside(at(100, 55), 200));
+      expect(zoomInput.value).toBe(String(zoom * 2));
+      touch('pointerup', 62, aside(at(100, 55), 200));
+      touch('pointerup', 61, at(100, 55));
+      expect(firstPitch()).toBe(57);
+      expect(sketches.find(sketch.id)?.noteCount).toBe(3);
+      zoomedBack();
+
+      // A box being drawn goes, choosing nothing, and the two fingers zoom.
+      element<HTMLButtonElement>('roll-select').click();
+      const chosenBefore = chosen();
+      touch('pointerdown', 63, at(1_800, 60), true);
+      touch('pointermove', 63, at(1_400, 63));
+      expect(box.hidden).toBe(false);
+      touch('pointerdown', 64, aside(at(1_400, 63), 100));
+      expect(box.hidden).toBe(true);
+      touch('pointermove', 64, aside(at(1_400, 63), 200));
+      expect(zoomInput.value).toBe(String(zoom * 2));
+      touch('pointerup', 64, aside(at(1_400, 63), 200));
+      touch('pointerup', 63, at(1_400, 63));
+      expect(chosen()).toEqual(chosenBefore);
+      zoomedBack();
+      element<HTMLButtonElement>('roll-select').click();
+
+      // One of a pinch lifted and another put down: a pinch of the two down.
+      touch('pointerdown', 73, at(1_800, 70), true);
+      touch('pointerdown', 74, aside(at(1_800, 70), 100));
+      touch('pointerup', 73, at(1_800, 70));
+      touch('pointerdown', 75, aside(at(1_800, 70), 200));
+      touch('pointermove', 75, aside(at(1_800, 70), 300));
+      expect(zoomInput.value).toBe(String(zoom * 2));
+      touch('pointerup', 75, aside(at(1_800, 70), 300));
+      touch('pointerup', 74, aside(at(1_800, 70), 100));
+      zoomedBack();
+      // And a finger never heard lifted is not one of the next touch's pinch.
+      touch('pointerdown', 76, at(1_800, 70), true);
+      touch('pointerdown', 77, aside(at(1_800, 70), 100), true);
+      touch('pointerdown', 78, aside(at(1_800, 70), 200));
+      touch('pointermove', 78, aside(at(1_800, 70), 300));
+      expect(zoomInput.value).toBe(String(zoom * 2));
+    });
+
+    it('makes a pinch of a second finger where the first was drawing the pedal, and draws none', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            [0, 60],
+            [1_000, 64],
+          ].flatMap(([atMs = 0, midi = 0]) => [
+            { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: atMs + 400, midi },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Pinched on the pedal',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoomInput = element<HTMLInputElement>('roll-zoom');
+      const zoom = Number(zoomInput.value);
+      const along = (ms: number): number => (ms / 1000) * zoom;
+      // Asked for each time, as the drawing is drawn again under the fingers.
+      const onTheLane = (type: string, pointerId: number, clientX: number, isPrimary = false): void => {
+        const lane = element('roll-body').querySelector('.roll__pedal') ?? element('roll-body');
+        lane.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId, pointerType: 'touch', isPrimary, clientX, clientY: 0 }));
+      };
+
+      onTheLane('pointerdown', 69, along(100), true);
+      onTheLane('pointermove', 69, along(1_100));
+      onTheLane('pointerdown', 70, along(1_100) + 100);
+      onTheLane('pointermove', 70, along(1_100) + 200);
+      expect(zoomInput.value).toBe(String(zoom * 2));
+      onTheLane('pointerup', 70, along(1_100) + 200);
+      onTheLane('pointerup', 69, along(1_100));
+      expect(sketches.find(sketch.id)?.events.some((event) => event.kind === 'sustain')).toBe(false);
     });
 
     it('sounds a note of a sketch while it is held, at each pitch it is dragged to, and one written for as long as it is', async () => {

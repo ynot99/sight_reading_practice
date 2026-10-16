@@ -49,8 +49,6 @@ export interface RollInks {
   readonly sounding: string;
   /** The wash over a row of a note of the scale the music is written in: no verdict either. */
   readonly scale: string;
-  /** What a mark over a bar says: no verdict, so the accent. */
-  readonly mark: string;
   /** A note nothing judged, by the hand that plays it: colours no verdict wears. */
   readonly right: string;
   readonly left: string;
@@ -84,7 +82,6 @@ export const INKS: Readonly<Record<Exclude<keyof RollInks, 'font'>, string>> = {
   chosen: 'chosen',
   sounding: 'sounding',
   scale: 'scale',
-  mark: 'mark',
   right: 'right',
   left: 'left',
   tickDivision: 'tick-division',
@@ -550,19 +547,14 @@ export function paintTheRuler(
   paint.fillStyle = inks.bar;
   paint.font = `${String(BAR_NAME_PX)}px ${inks.font}`;
   paint.textBaseline = 'top';
+  // A bar a flag is over is named on the flag, and not twice.
+  const flagged = (atMs: number): boolean => scene.marks.some((mark) => Math.abs(mark.atMs - atMs) < 1);
   for (const bar of momentsIn(scene.bars, fromMs - ms(BAR_NAME_WIDEST_PX), untilMs)) {
-    paint.fillText(bar.name, x(bar.atMs) + BAR_NAME_IN_PX, BAR_NAME_DOWN_PX);
-  }
-  // A mark after the name of its bar, a space on.
-  paint.fillStyle = inks.mark;
-  for (const mark of momentsIn(scene.marks, fromMs - ms(MARK_WIDEST_PX), untilMs)) {
-    const by = mark.after === '' ? 0 : paint.measureText(`${mark.after} `).width;
-    paint.fillText(mark.says, x(mark.atMs) + BAR_NAME_IN_PX + by, BAR_NAME_DOWN_PX);
+    if (!flagged(bar.atMs)) {
+      paint.fillText(bar.name, x(bar.atMs) + BAR_NAME_IN_PX, BAR_NAME_DOWN_PX);
+    }
   }
 }
-
-/** How far before the screen a mark may begin and still reach onto it. */
-const MARK_WIDEST_PX = 120;
 
 /** Where a pedal span sits in its lane, and how round it is. */
 const PEDAL_DOWN_PX = 4;

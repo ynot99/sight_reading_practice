@@ -418,6 +418,22 @@ describe('drawing a run as a piano roll', () => {
     expect(sceneOf(input).scaleSpans).toEqual([]);
   });
 
+  it('flags each mark, placed at its moment, its buttons hidden until one is chosen', () => {
+    const scene = theSceneOfTheRoll({
+      roll: roll({ presses: [press({ midi: MIDI.C4 })] }),
+      barLabel: () => null,
+      marks: [{ atMs: 3_500, says: 'G major' }],
+    });
+    const ruler = drawTheRoll(scene).querySelector('.roll__ruler');
+    const flag = ruler?.querySelector<HTMLElement>('.roll__marks > .roll__mark');
+    expect(flag?.style.getPropertyValue('--roll-at')).toBe(((3_500 - 1_000) / 1000).toFixed(3));
+    // Over no bar line, it names no bar.
+    expect(flag?.textContent).toBe('G major');
+    expect(flag?.getAttribute('type')).toBe('button');
+    expect(ruler?.querySelector<HTMLElement>('.roll__marks > .roll__mark-tools')?.hidden).toBe(true);
+    expect(ruler?.querySelectorAll('.roll__mark-tools > .button')).toHaveLength(2);
+  });
+
   it('shades the rows the black keys are on', () => {
     // An octave from C to C has five of them, and the band drawn for one note
     // is an octave.

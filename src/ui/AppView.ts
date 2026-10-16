@@ -2067,6 +2067,9 @@ export class AppView {
   /** The bar a change of metre or pace is being asked about, while the sheet asking is open. */
   private barAskedAbout: ReturnType<typeof theBarOfTheClickAt> = null;
 
+  /** The flag over the ruler chosen to be changed or taken away, by its moment on the run's own clock, or none. */
+  private markChosenAtMs: number | null = null;
+
   /** And the key that bar is in, and the one the bar before it is in - none before the first. */
   private keyAskedAbout: { readonly here: KeyOfTheMusic; readonly before: KeyOfTheMusic | null } | null = null;
 
@@ -9180,6 +9183,16 @@ export class AppView {
       if (this.pinched || this.panned) {
         return;
       }
+      // A flag pressed was answered as it went down; one clicked by the keys
+      // is a click with no press before it.
+      if (event.target instanceof Element && event.target.closest('.roll__marks') !== null) {
+        if ((event as MouseEvent).detail === 0) {
+          this.answerTheFlags(event);
+        }
+        return;
+      }
+      // Anywhere else, a flag chosen is let go of.
+      this.chooseTheMark(null);
       // A finger's tap on a key beside the drawing: heard for a moment.
       const tapped = this.theKeyOfTheStripUnder(event);
       const roll = this.theRoll();
@@ -9369,15 +9382,7 @@ export class AppView {
       this.barAskedAbout = null;
     });
     this.listen(this.el.rollMarkRemove, 'click', () => {
-      const before = this.barAskedAbout?.before;
-      const keyBefore = this.keyAskedAbout?.before;
-      if (before !== null && before !== undefined && keyBefore !== null && keyBefore !== undefined) {
-        this.changeFromTheBarAsked(
-          `${String(before.metre.beatsInBar)}/${String(before.metre.beatType)}`,
-          before.crotchetsPerMinute,
-          keyBefore,
-        );
-      }
+      this.takeTheChangeAway();
     });
     this.listen(this.el.rollChordsOpen, 'click', () => {
       this.chordsOfTheKeyOpen = !this.chordsOfTheKeyOpen;
@@ -9442,6 +9447,12 @@ export class AppView {
       // one is the menu's, which a note being edited answers.
       const middle = event.pointerType === 'mouse' && event.button === 1;
       if (event.pointerType === 'mouse' && event.button === 2) {
+        return;
+      }
+      // A flag is answered as it is pressed, before the drawing takes the
+      // pointer for a drag - which would then take the click as well.
+      if (event.button === 0 && this.answerTheFlags(event)) {
+        event.preventDefault();
         return;
       }
       if (
@@ -13145,15 +13156,26 @@ export class AppView {
    * take a change away where one begins on that bar.
    */
   private askForAChangeAtTheHead(): void {
+    const roll = this.theRoll();
+    if (roll !== null && this.askAboutTheBarAt(this.headIsAtMs() + rollBeganAtMs(roll))) {
+      this.showTheSheet(this.el.sheetRollMark);
+    }
+  }
+
+  /**
+   * Sets the sheet to the bar a moment is in, on the run's own clock: its
+   * key, metre and pace, and whether a change begins on it. Says whether
+   * there is such a bar to ask about.
+   */
+  private askAboutTheBarAt(atMs: number): boolean {
     const showing = this.theOtherRollShowing;
     const stored = showing?.sketch === undefined ? null : this.runtime.sketches.find(showing.sketch.id);
-    const roll = this.theRoll();
-    if (showing === null || stored === null || roll === null) {
-      return;
+    if (showing === null || stored === null) {
+      return false;
     }
-    const bar = theBarOfTheClickAt(stored.events, stored.beats, this.headIsAtMs() + rollBeganAtMs(roll));
+    const bar = theBarOfTheClickAt(stored.events, stored.beats, atMs);
     if (bar === null) {
-      return;
+      return false;
     }
     this.barAskedAbout = bar;
     const begunIn = this.theKeyTheSketchBeginsIn(stored);
@@ -13179,7 +13201,133 @@ export class AppView {
         bar.before.metre.beatType !== bar.metre.beatType);
     this.el.rollMarkTitle.textContent = `From bar ${String(bar.number)}, until the next change`;
     this.el.rollMarkRemove.hidden = !changesHere;
-    this.showTheSheet(this.el.sheetRollMark);
+    return true;
+  }
+
+  /** The bar asked about given back what the bars before it are in: its changes taken away. */
+  private takeTheChangeAway(): void {
+    const before = this.barAskedAbout?.before;
+    const keyBefore = this.keyAskedAbout?.before;
+    if (before !== null && before !== undefined && keyBefore !== null && keyBefore !== undefined) {
+      this.changeFromTheBarAsked(
+        `${String(before.metre.beatsInBar)}/${String(before.metre.beatType)}`,
+        before.crotchetsPerMinute,
+        keyBefore,
+      );
+    }
+  }
+
+  /**
+   * Answers a tap on a flag over the ruler, or on a button under the chosen
+   * one; says whether the tap was one. A flag tapped puts the cursor on its
+   * bar; while the sketch is edited it is chosen, and tapped again once
+   * chosen it is asked about in the sheet. Under the chosen flag, the pencil
+   * asks about it and the bin takes it away.
+   */
+  private answerTheFlags(event: Event): boolean {
+    const target = event.target instanceof Element ? event.target : null;
+    const scene = this.drawnScene;
+    const roll = this.theRoll();
+    if (target === null || scene === null || roll === null || target.closest('.roll__marks') === null) {
+      return false;
+    }
+    const origin = rollBeganAtMs(roll);
+    if (target.closest('.roll__mark-change') !== null && this.markChosenAtMs !== null) {
+      if (this.askAboutTheBarAt(this.markChosenAtMs)) {
+        this.showTheSheet(this.el.sheetRollMark);
+      }
+      return true;
+    }
+    if (target.closest('.roll__mark-delete') !== null && this.markChosenAtMs !== null) {
+      this.takeTheMarkAway(this.markChosenAtMs);
+      return true;
+    }
+    const flag = target.closest<HTMLElement>('.roll__mark');
+    const mark = flag === null ? undefined : scene.marks[Number(flag.dataset['mark'])];
+    if (mark === undefined) {
+      return true;
+    }
+    const atMs = mark.atMs + origin;
+    this.putTheHeadAt(mark.atMs);
+    if (this.theOtherRollShowing?.sketch?.editing !== true) {
+      return true;
+    }
+    if (this.markChosenAtMs !== null && Math.abs(this.markChosenAtMs - atMs) < 1) {
+      if (this.askAboutTheBarAt(atMs)) {
+        this.showTheSheet(this.el.sheetRollMark);
+      }
+    } else {
+      this.chooseTheMark(atMs);
+    }
+    return true;
+  }
+
+  /** Chooses the flag at a moment on the run's own clock, or lets go of the one chosen. */
+  private chooseTheMark(atMs: number | null): void {
+    if (atMs === this.markChosenAtMs) {
+      return;
+    }
+    this.markChosenAtMs = atMs;
+    this.showTheMarkChosen();
+  }
+
+  /**
+   * The chosen flag pressed, and the two buttons under it; the bin dimmed,
+   * with the reason, over the first bar, whose key, metre and pace are the
+   * sketch's own and only changed.
+   */
+  private showTheMarkChosen(): void {
+    const scene = this.drawnScene;
+    const roll = this.theRoll();
+    const marks = this.rollHeads?.marks;
+    if (marks === undefined || scene === null || roll === null) {
+      return;
+    }
+    const origin = rollBeganAtMs(roll);
+    const chosenAt = this.markChosenAtMs;
+    const chosen = chosenAt === null ? -1 : scene.marks.findIndex((mark) => Math.abs(mark.atMs + origin - chosenAt) < 1);
+    if (chosen < 0 && chosenAt !== null) {
+      // Taken away, or moved off: nothing is chosen any more.
+      this.markChosenAtMs = null;
+    }
+    marks.querySelectorAll<HTMLElement>('.roll__mark').forEach((flag) => {
+      flag.setAttribute('aria-pressed', String(Number(flag.dataset['mark']) === chosen));
+      const mark = scene.marks[Number(flag.dataset['mark'])];
+      flag.title = `Bar ${mark?.after ?? ''}: ${mark?.says ?? ''}. Tap to choose it, and again to change it.`;
+      flag.setAttribute('aria-label', flag.title);
+    });
+    const tools = marks.querySelector<HTMLElement>('.roll__mark-tools');
+    const mark = scene.marks[chosen];
+    if (tools === null) {
+      return;
+    }
+    tools.hidden = mark === undefined;
+    if (mark === undefined) {
+      return;
+    }
+    tools.style.setProperty('--roll-at', (mark.atMs / 1000).toFixed(3));
+    const change = tools.querySelector<HTMLButtonElement>('.roll__mark-change');
+    const remove = tools.querySelector<HTMLButtonElement>('.roll__mark-delete');
+    if (change !== null) {
+      change.title = `Change what bar ${mark.after} is in`;
+      change.setAttribute('aria-label', change.title);
+    }
+    if (remove !== null) {
+      sayWhetherIdle(
+        remove,
+        chosen === 0
+          ? "Take this change away. The first bar's key, metre and pace are the sketch's own: change them instead."
+          : `Take the change at bar ${mark.after} away`,
+        chosen === 0,
+      );
+    }
+  }
+
+  /** Takes the changes at a flag away, the bar given back what the bars before it are in. The first bar has none before it, and keeps its own. */
+  private takeTheMarkAway(atMs: number): void {
+    if (this.askAboutTheBarAt(atMs)) {
+      this.takeTheChangeAway();
+    }
   }
 
   /**
@@ -14350,6 +14498,17 @@ export class AppView {
     if (!this.theOtherRollShowing.sketch.editing) {
       return;
     }
+    if (this.markChosenAtMs !== null && (event.key === 'Escape' || event.key === 'Delete' || event.key === 'Backspace')) {
+      // A flag chosen answers first: let go of, or taken away.
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (event.key === 'Escape') {
+        this.chooseTheMark(null);
+      } else {
+        this.takeTheMarkAway(this.markChosenAtMs);
+      }
+      return;
+    }
     if (event.key === 'Escape' && this.chordsBeingForgotten) {
       // The deleting ends first, then what is chosen, then the sheet.
       event.preventDefault();
@@ -14790,6 +14949,7 @@ export class AppView {
     // A new strip of keys, none of them lit yet, but for those of the scale the cursor is in.
     this.soundingRowsSaid = '';
     this.markTheScaleOnTheStrip();
+    this.showTheMarkChosen();
     this.rollPitches = thePitchesOfTheRun(roll, ghosts, this.theOtherRollShowing?.sketch?.editing === true, {
       freely: this.nothingOnTheDrawingIsJudged(),
       chosen: this.theNotesChosen(),
@@ -14871,6 +15031,7 @@ export class AppView {
     this.rollHeads?.line.style.setProperty('--roll-x', along);
     this.rollHeads?.mark.style.setProperty('--roll-x', along);
     this.rollHeads?.place.style.setProperty('--roll-x', along);
+    this.rollHeads?.marks.style.setProperty('--roll-x', along);
     this.rollKeysStrip?.style.setProperty('--roll-y', `${String(scrolled.y)}px`);
     // Nothing on the screen to paint for: the sheet is shut, or nothing has
     // been laid out yet.
@@ -15598,6 +15759,7 @@ export class AppView {
       this.rollHeads?.line.style.setProperty('--roll-second', second);
       this.rollHeads?.mark.style.setProperty('--roll-second', second);
       this.rollHeads?.place.style.setProperty('--roll-second', second);
+      this.rollHeads?.marks.style.setProperty('--roll-second', second);
       roll.style.setProperty('--roll-row-asked', `${this.rollRowPx}px`);
     }
     // How long and how tall the run now is follow from the zoom, so the

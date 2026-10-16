@@ -157,10 +157,16 @@ describe('the stylesheet', () => {
 
     expect(roll?.body).toMatch(/overflow\s*:\s*hidden/);
     expect(rules().some((rule) => rule.selector.startsWith('.roll::-webkit-scrollbar'))).toBe(false);
-    // And each lane keeps what is painted in it to itself.
-    for (const lane of ['.roll__ruler', '.roll__keys', '.roll__grid', '.roll__pedal']) {
+    // And each lane keeps what is painted in it to itself: the ruler to its
+    // width, the two buttons under a chosen flag hanging over the drawing, so
+    // it stands over it.
+    for (const lane of ['.roll__keys', '.roll__grid', '.roll__pedal']) {
       expect(rules().find((rule) => rule.selector === lane)?.body, lane).toMatch(/overflow\s*:\s*hidden/);
     }
+    const ruler = rules().find((rule) => rule.selector === '.roll__ruler')?.body;
+    expect(ruler).toMatch(/clip-path\s*:\s*inset\(0 0 -48px 0\)/);
+    expect(ruler).toMatch(/z-index\s*:\s*1/);
+    expect(ruler).not.toMatch(/overflow/);
   });
 
   it('stands the map against the drawing, in the place the bar had', () => {
@@ -2302,6 +2308,15 @@ describe('searching the settings', () => {
     expect(body('.roll-body')).toMatch(/cursor\s*:\s*pointer/);
     expect(body('.roll__grid')).not.toMatch(/cursor/);
     expect(body('.roll__keys-strip')).not.toMatch(/cursor/);
+    // The flags placed as the heads are, pressable where nothing else on the
+    // ruler is, filled when chosen; their buttons under them.
+    expect(body('.roll__marks')).toMatch(/pointer-events\s*:\s*none/);
+    expect(body('.roll__mark')).toMatch(/transform\s*:\s*translateX\(calc\(var\(--roll-second\) \* var\(--roll-at, 0\) - var\(--roll-x\)\)\)/);
+    expect(body('.roll__mark')).toMatch(/pointer-events\s*:\s*auto/);
+    expect(body(".roll__mark[aria-pressed='true']")).toMatch(/background\s*:\s*var\(--accent\)/);
+    expect(body('.roll__mark-tools')).toMatch(/top\s*:\s*100%/);
+    expect(body('.roll__mark-tools')).toMatch(/transform\s*:\s*translateX\(calc\(var\(--roll-second\) \* var\(--roll-at, 0\) - var\(--roll-x\)\)\)/);
+    expect(body('.roll__mark-tools')).toMatch(/pointer-events\s*:\s*auto/);
     // The key of a chosen note outlined in the chosen note's ink.
     expect(body(".roll__key[data-chosen='true']")).toMatch(/box-shadow\s*:\s*inset 0 0 0 2px var\(--roll-ink-chosen\)/);
     // A key of the scale marked down its edge by an image, which neither the

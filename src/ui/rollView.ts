@@ -452,6 +452,8 @@ export interface RollHeads {
   readonly mark: HTMLElement;
   /** Where the marker was last put, which a playback goes back to. */
   readonly place: HTMLElement;
+  /** The flags over the bars where the music changes, which scroll and zoom as the heads do. */
+  readonly marks: HTMLElement;
 }
 
 /** The head's marks in a drawing, or `null` where nothing has been drawn. */
@@ -459,7 +461,8 @@ export function theHeadsOf(within: ParentNode): RollHeads | null {
   const line = within.querySelector<HTMLElement>('.roll__grid > .roll__head');
   const mark = within.querySelector<HTMLElement>('.roll__ruler > .roll__head-mark');
   const place = within.querySelector<HTMLElement>('.roll__ruler > .roll__place-mark');
-  return line === null || mark === null || place === null ? null : { line, mark, place };
+  const marks = within.querySelector<HTMLElement>('.roll__ruler > .roll__marks');
+  return line === null || mark === null || place === null || marks === null ? null : { line, mark, place, marks };
 }
 
 /**
@@ -1333,6 +1336,34 @@ export function drawTheRoll(scene: RollScene): HTMLElement {
   // над курсором".
   // And where the marker was last put, which a playback goes back to.
   ruler.append(element('canvas', 'roll__paint'), element('div', 'roll__place-mark'), element('div', 'roll__head-mark'));
+  // Where the music changes key, metre or pace: a flag over the bar, to be
+  // chosen and then changed or taken away by the two buttons under it.
+  const marks = element('div', 'roll__marks');
+  scene.marks.forEach((mark, at) => {
+    const flag = element('button', 'roll__mark');
+    flag.setAttribute('type', 'button');
+    flag.dataset['mark'] = String(at);
+    flag.style.setProperty('--roll-at', (mark.atMs / 1000).toFixed(3));
+    flag.setAttribute('aria-pressed', 'false');
+    // The bar it is over named first, where it is over one.
+    if (mark.after !== '') {
+      const bar = element('span', 'roll__mark-bar');
+      bar.textContent = mark.after;
+      flag.append(bar, ' ');
+    }
+    flag.append(mark.says);
+    marks.append(flag);
+  });
+  const tools = element('div', 'roll__mark-tools');
+  tools.hidden = true;
+  for (const [name, path] of [['roll__mark-change', 'M3 17.2V21h3.8l11-11-3.8-3.8-11 11zM20.7 7a1 1 0 0 0 0-1.4l-2.3-2.3a1 1 0 0 0-1.4 0l-1.8 1.8 3.8 3.8L20.7 7z'], ['roll__mark-delete', 'M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z']] as const) {
+    const button = element('button', `button ${name}`);
+    button.setAttribute('type', 'button');
+    button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="take-transport__icon"><path d="${path}" /></svg>`;
+    tools.append(button);
+  }
+  marks.append(tools);
+  ruler.append(marks);
 
   const keys = element('div', 'roll__keys');
   const strip = element('div', 'roll__keys-strip');

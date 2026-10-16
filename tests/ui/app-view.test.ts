@@ -6992,6 +6992,123 @@ describe('AppView', () => {
       expect(marks()).toEqual(['1: C\u266f major 3/4 \u2669=120']);
     });
 
+    it('chooses a flag over the ruler by a tap, changes it by a second or the pencil under it, and takes it away by the bin or Delete', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      sketches.begin(
+        {
+          events: Array.from({ length: 16 }, (_, at) => [
+            { kind: 'noteOn' as const, atMs: at * 500, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: at * 500 + 400, midi: 60 },
+          ]).flat(),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Flagged',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const body = element('roll-body');
+      const flags = (): HTMLButtonElement[] => [...body.querySelectorAll<HTMLButtonElement>('.roll__mark')];
+      const pressed = (): (string | null)[] => flags().map((flag) => flag.getAttribute('aria-pressed'));
+      const tools = (): HTMLElement | null => body.querySelector<HTMLElement>('.roll__mark-tools');
+      const bin = (): HTMLButtonElement | null => body.querySelector<HTMLButtonElement>('.roll__mark-delete');
+      const sheet = element('sheet-roll-mark');
+      const key = (init: KeyboardEventInit): void => {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
+      };
+      // A change of key at the third bar, asked from the cursor there.
+      tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: 4.2 * zoom, clientY: 20 });
+      element<HTMLButtonElement>('roll-mark').click();
+      element<HTMLSelectElement>('roll-mark-key').value = '7';
+      element<HTMLButtonElement>('roll-mark-yes').click();
+
+      // A flag over each bar that changes, naming the bar, none chosen;
+      // placed at its moment, and zoomed and scrolled as the heads are.
+      expect(flags().map((flag) => flag.textContent)).toEqual(['1 C major 4/4 \u2669=120', '3 G major']);
+      expect(flags().map((flag) => flag.style.getPropertyValue('--roll-at'))).toEqual(['0.000', '4.000']);
+      const together = body.querySelector<HTMLElement>('.roll__marks');
+      const head = body.querySelector<HTMLElement>('.roll__head-mark');
+      expect(together?.style.getPropertyValue('--roll-second')).toBe(`${String(zoom)}px`);
+      expect(together?.style.getPropertyValue('--roll-x')).toBe(head?.style.getPropertyValue('--roll-x'));
+      expect(together?.style.getPropertyValue('--roll-x')).not.toBe('');
+      expect(pressed()).toEqual(['false', 'false']);
+      expect(tools()?.hidden).toBe(true);
+
+      // Pressed with a finger: chosen as it goes down - the drawing would take
+      // the pointer for a drag, and the click with it - and the click after
+      // it is not a second tap.
+      tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: 1.2 * zoom, clientY: 20 });
+      flags()[1]?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 81, pointerType: 'touch', button: 0 }));
+      expect(pressed()).toEqual(['false', 'true']);
+      flags()[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+      expect(sheet.hidden).toBe(true);
+      expect(pressed()).toEqual(['false', 'true']);
+      expect(tools()?.hidden).toBe(false);
+      expect(tools()?.style.getPropertyValue('--roll-at')).toBe('4.000');
+      expect(flags()[1]?.title).toBe('Bar 3: G major. Tap to choose it, and again to change it.');
+      expect(bin()?.dataset['idle']).toBeUndefined();
+      expect(bin()?.title).toBe('Take the change at bar 3 away');
+      element<HTMLButtonElement>('roll-mark').click();
+      expect(element('roll-mark-title').textContent).toBe('From bar 3, until the next change');
+      element<HTMLButtonElement>('roll-mark-no').click();
+      // Still chosen when the drawing is drawn again.
+      element<HTMLInputElement>('roll-slips').dispatchEvent(new Event('change'));
+      expect(pressed()).toEqual(['false', 'true']);
+      expect(tools()?.hidden).toBe(false);
+      // Tapped again: asked about in the sheet; so is the pencil.
+      flags()[1]?.click();
+      expect(sheet.hidden).toBe(false);
+      expect(element('roll-mark-title').textContent).toBe('From bar 3, until the next change');
+      element<HTMLButtonElement>('roll-mark-no').click();
+      body.querySelector<HTMLButtonElement>('.roll__mark-change')?.click();
+      expect(sheet.hidden).toBe(false);
+      element<HTMLButtonElement>('roll-mark-no').click();
+
+      // The bin takes it away, and nothing is chosen any more.
+      bin()?.click();
+      expect(flags().map((flag) => flag.textContent)).toEqual(['1 C major 4/4 \u2669=120']);
+      expect(tools()?.hidden).toBe(true);
+      // Put back, chosen again, and Delete takes it away; Escape lets go of it first.
+      element<HTMLButtonElement>('roll-undo').click();
+      flags()[1]?.click();
+      key({ key: 'Escape' });
+      expect(pressed()).toEqual(['false', 'false']);
+      expect(element('sheet-roll').hidden).toBe(false);
+      flags()[1]?.click();
+      key({ key: 'Delete' });
+      expect(flags()).toHaveLength(1);
+
+      // The first bar's flag is chosen, but its bin is dimmed with the reason, and takes nothing.
+      element<HTMLButtonElement>('roll-undo').click();
+      flags()[0]?.click();
+      expect(bin()?.dataset['idle']).toBe('true');
+      expect(bin()?.title).toBe("Take this change away. The first bar's key, metre and pace are the sketch's own: change them instead.");
+      bin()?.click();
+      key({ key: 'Delete' });
+      expect(flags()).toHaveLength(2);
+      // A tap anywhere else on the drawing lets go of it.
+      tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: 6.2 * zoom, clientY: 20 });
+      expect(pressed()).toEqual(['false', 'false']);
+
+      // Listening, a flag only puts the cursor on its bar.
+      element<HTMLButtonElement>('roll-edit').click();
+      flags()[1]?.click();
+      expect(pressed()).toEqual(['false', 'false']);
+      element<HTMLButtonElement>('roll-edit').click();
+      element<HTMLButtonElement>('roll-mark').click();
+      expect(element('roll-mark-title').textContent).toBe('From bar 3, until the next change');
+      element<HTMLButtonElement>('roll-mark-no').click();
+
+      // Taken away, a flag is chosen no more: the next Escape is the sheet's.
+      flags()[1]?.click();
+      bin()?.click();
+      key({ key: 'Escape' });
+      expect(element('sheet-roll').hidden).toBe(true);
+    });
+
     it('offers in the sheet a metre its list does not, where the bar is in one', async () => {
       const { view, sketches } = createRig();
       await view.initialize();

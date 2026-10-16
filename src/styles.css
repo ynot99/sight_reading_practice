@@ -1405,8 +1405,6 @@ textarea {
    * accent, fainter than a key sounding, so the two are told apart.
    */
   --roll-ink-scale: color-mix(in srgb, var(--accent) 7%, transparent);
-  /* What a mark over a bar says - its metre, its pace: no verdict, so the accent. */
-  --roll-ink-mark: var(--accent);
   --roll-ink-right: color-mix(in srgb, var(--accent) 70%, var(--surface));
   --roll-ink-left: color-mix(in srgb, var(--star-8) 70%, var(--surface));
   position: relative;
@@ -2047,7 +2045,12 @@ textarea {
 
 .roll__ruler {
   position: relative;
-  overflow: hidden;
+  /*
+   * Kept to its own width, and its height but for the two buttons under a
+   * chosen flag, which hang over the drawing - and so it stands over it.
+   */
+  clip-path: inset(0 0 -48px 0);
+  z-index: 1;
   grid-row: 1;
   grid-column: 2;
   background: var(--surface);
@@ -2195,6 +2198,63 @@ textarea {
  * Where the marker was put: the same mark, hollow, left behind while the
  * head goes on with the sound, so it is plain where Back goes to.
  */
+/* The flags over the bars where the music changes key, metre or pace, placed as the heads are. */
+.roll__marks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.roll__mark {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  transform: translateX(calc(var(--roll-second) * var(--roll-at, 0) - var(--roll-x)));
+  height: 16px;
+  padding: 0 7px 0 3px;
+  border: 0;
+  /* A flag: square at its bar line, rounded at its far end. */
+  border-radius: 0 8px 8px 0;
+  font-size: 10px;
+  line-height: 16px;
+  white-space: nowrap;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+/* Chosen: filled, as a chosen note is rimmed - no verdict, so the accent. */
+.roll__mark[aria-pressed='true'] {
+  color: var(--surface);
+  background: var(--accent);
+}
+
+.roll__mark-bar {
+  font-weight: 600;
+}
+
+/* Under the chosen flag, over the drawing: change it, or take it away. */
+.roll__mark-tools {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+  transform: translateX(calc(var(--roll-second) * var(--roll-at, 0) - var(--roll-x)));
+  pointer-events: auto;
+}
+
+.roll__mark-tools .button {
+  padding: 4px;
+  min-width: 0;
+}
+
+.roll__mark-tools .button[data-idle='true'] {
+  opacity: 0.45;
+}
+
 .roll__place-mark {
   position: absolute;
   bottom: 0;

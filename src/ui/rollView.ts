@@ -82,7 +82,7 @@ export interface RollDrawing {
    */
   readonly scales?: readonly { readonly fromMs: number; readonly pitchClasses: readonly number[] }[];
   /** Where the music changes metre or pace, on the run's own clock, and what a mark there says. */
-  readonly marks?: readonly { readonly atMs: number; readonly says: string }[];
+  readonly marks?: readonly { readonly atMs: number; readonly says: string; readonly kind: MarkKind }[];
   /**
    * Whether every key of the piano has its row, rather than the notes played
    * and a little room round them: so a note being edited can be taken to any
@@ -313,9 +313,14 @@ export interface SceneBar {
 export interface SceneMark {
   readonly atMs: number;
   readonly says: string;
+  /** What changes there: each kind is a flag of its own, so each is chosen and taken away alone. */
+  readonly kind: MarkKind;
   /** The name of the bar the mark is over, which it is written after, or nothing. */
   readonly after: string;
 }
+
+/** What a mark over the ruler says changes: the key, the metre or the pace. */
+export type MarkKind = 'key' | 'metre' | 'pace';
 
 /**
  * Everything the drawing shows, placed in the run's own time.
@@ -1053,6 +1058,7 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
       (drawing.marks ?? []).map((mark) => ({
         atMs: mark.atMs - origin,
         says: mark.says,
+        kind: mark.kind,
         after: bars.find((bar) => Math.abs(bar.atMs - (mark.atMs - origin)) < 1)?.name ?? '',
       })),
     ),
@@ -1339,30 +1345,40 @@ export function drawTheRoll(scene: RollScene): HTMLElement {
   // Where the music changes key, metre or pace: a flag over the bar, to be
   // chosen and then changed or taken away by the two buttons under it.
   const marks = element('div', 'roll__marks');
+  // The flags of one moment side by side, its bar named once before them;
+  // each with the two buttons it shows under it when it is chosen.
   scene.marks.forEach((mark, at) => {
+    const before = scene.marks[at - 1];
+    const sameMoment = before !== undefined && Math.abs(before.atMs - mark.atMs) < 1;
+    let group = marks.lastElementChild;
+    if (!sameMoment || !(group instanceof HTMLElement)) {
+      group = element('div', 'roll__mark-group');
+      (group as HTMLElement).style.setProperty('--roll-at', (mark.atMs / 1000).toFixed(3));
+      if (mark.after !== '') {
+        const bar = element('span', 'roll__mark-bar');
+        bar.textContent = mark.after;
+        group.append(bar);
+      }
+      marks.append(group);
+    }
+    const wrap = element('span', 'roll__mark-wrap');
     const flag = element('button', 'roll__mark');
     flag.setAttribute('type', 'button');
     flag.dataset['mark'] = String(at);
-    flag.style.setProperty('--roll-at', (mark.atMs / 1000).toFixed(3));
+    flag.dataset['kind'] = mark.kind;
     flag.setAttribute('aria-pressed', 'false');
-    // The bar it is over named first, where it is over one.
-    if (mark.after !== '') {
-      const bar = element('span', 'roll__mark-bar');
-      bar.textContent = mark.after;
-      flag.append(bar, ' ');
+    flag.textContent = mark.says;
+    const tools = element('span', 'roll__mark-tools');
+    tools.hidden = true;
+    for (const [name, path] of [['roll__mark-change', 'M3 17.2V21h3.8l11-11-3.8-3.8-11 11zM20.7 7a1 1 0 0 0 0-1.4l-2.3-2.3a1 1 0 0 0-1.4 0l-1.8 1.8 3.8 3.8L20.7 7z'], ['roll__mark-delete', 'M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z']] as const) {
+      const button = element('button', `button ${name}`);
+      button.setAttribute('type', 'button');
+      button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="take-transport__icon"><path d="${path}" /></svg>`;
+      tools.append(button);
     }
-    flag.append(mark.says);
-    marks.append(flag);
+    wrap.append(flag, tools);
+    group.append(wrap);
   });
-  const tools = element('div', 'roll__mark-tools');
-  tools.hidden = true;
-  for (const [name, path] of [['roll__mark-change', 'M3 17.2V21h3.8l11-11-3.8-3.8-11 11zM20.7 7a1 1 0 0 0 0-1.4l-2.3-2.3a1 1 0 0 0-1.4 0l-1.8 1.8 3.8 3.8L20.7 7z'], ['roll__mark-delete', 'M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z']] as const) {
-    const button = element('button', `button ${name}`);
-    button.setAttribute('type', 'button');
-    button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="take-transport__icon"><path d="${path}" /></svg>`;
-    tools.append(button);
-  }
-  marks.append(tools);
   ruler.append(marks);
 
   const keys = element('div', 'roll__keys');

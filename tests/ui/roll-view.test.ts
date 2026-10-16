@@ -418,20 +418,30 @@ describe('drawing a run as a piano roll', () => {
     expect(sceneOf(input).scaleSpans).toEqual([]);
   });
 
-  it('flags each mark, placed at its moment, its buttons hidden until one is chosen', () => {
+  it('flags each mark, those of a moment side by side after its bar, each with its buttons hidden until it is chosen', () => {
     const scene = theSceneOfTheRoll({
       roll: roll({ presses: [press({ midi: MIDI.C4 })] }),
       barLabel: () => null,
-      marks: [{ atMs: 3_500, says: 'G major' }],
+      marks: [
+        { atMs: 3_500, says: 'G major', kind: 'key' },
+        { atMs: 3_500, says: '3/4', kind: 'metre' },
+        { atMs: 4_500, says: '\u2669=90', kind: 'pace' },
+      ],
     });
     const ruler = drawTheRoll(scene).querySelector('.roll__ruler');
-    const flag = ruler?.querySelector<HTMLElement>('.roll__marks > .roll__mark');
-    expect(flag?.style.getPropertyValue('--roll-at')).toBe(((3_500 - 1_000) / 1000).toFixed(3));
+    const groups = [...(ruler?.querySelectorAll<HTMLElement>('.roll__marks > .roll__mark-group') ?? [])];
+    expect(groups.map((group) => group.style.getPropertyValue('--roll-at'))).toEqual(['2.500', '3.500']);
+    expect(groups.map((group) => [...group.querySelectorAll('.roll__mark')].map((flag) => flag.textContent))).toEqual([
+      ['G major', '3/4'],
+      ['\u2669=90'],
+    ]);
     // Over no bar line, it names no bar.
-    expect(flag?.textContent).toBe('G major');
-    expect(flag?.getAttribute('type')).toBe('button');
-    expect(ruler?.querySelector<HTMLElement>('.roll__marks > .roll__mark-tools')?.hidden).toBe(true);
-    expect(ruler?.querySelectorAll('.roll__mark-tools > .button')).toHaveLength(2);
+    expect(ruler?.querySelectorAll('.roll__mark-bar')).toHaveLength(0);
+    const first = ruler?.querySelector<HTMLElement>('.roll__mark-wrap');
+    expect(first?.querySelector('.roll__mark')?.getAttribute('type')).toBe('button');
+    expect((first?.querySelector('.roll__mark') as HTMLElement | null)?.dataset['kind']).toBe('key');
+    expect(first?.querySelector<HTMLElement>('.roll__mark-tools')?.hidden).toBe(true);
+    expect(first?.querySelectorAll('.roll__mark-tools > .button')).toHaveLength(2);
   });
 
   it('shades the rows the black keys are on', () => {

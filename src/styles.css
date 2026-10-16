@@ -2205,33 +2205,48 @@ textarea {
   pointer-events: none;
 }
 
-.roll__mark {
+/* The flags of one moment, side by side after the name of their bar. */
+.roll__mark-group {
   position: absolute;
   top: 2px;
   left: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding-left: 3px;
   transform: translateX(calc(var(--roll-second) * var(--roll-at, 0) - var(--roll-x)));
+}
+
+.roll__mark-bar {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* A flag and the two buttons it shows under it. */
+.roll__mark-wrap {
+  position: relative;
+  pointer-events: auto;
+}
+
+.roll__mark {
+  display: block;
   height: 16px;
-  padding: 0 7px 0 3px;
+  padding: 0 7px;
   border: 0;
-  /* A flag: square at its bar line, rounded at its far end. */
-  border-radius: 0 8px 8px 0;
+  border-radius: 8px;
   font-size: 10px;
   line-height: 16px;
   white-space: nowrap;
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 16%, var(--surface));
   cursor: pointer;
-  pointer-events: auto;
 }
 
 /* Chosen: filled, as a chosen note is rimmed - no verdict, so the accent. */
 .roll__mark[aria-pressed='true'] {
   color: var(--surface);
   background: var(--accent);
-}
-
-.roll__mark-bar {
-  font-weight: 600;
 }
 
 /* Under the chosen flag, over the drawing: change it, or take it away. */
@@ -2241,9 +2256,7 @@ textarea {
   left: 0;
   display: flex;
   gap: 4px;
-  margin-top: 2px;
-  transform: translateX(calc(var(--roll-second) * var(--roll-at, 0) - var(--roll-x)));
-  pointer-events: auto;
+  margin-top: 4px;
 }
 
 .roll__mark-tools .button {

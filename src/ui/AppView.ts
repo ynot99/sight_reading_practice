@@ -269,6 +269,7 @@ import {
   timeFromTap,
   theHeadsOf,
   type FingerSpan,
+  type MarkKind,
   type PinchedFrom,
   type RollGhost,
   type RollHeads,
@@ -2067,8 +2068,8 @@ export class AppView {
   /** The bar a change of metre or pace is being asked about, while the sheet asking is open. */
   private barAskedAbout: ReturnType<typeof theBarOfTheClickAt> = null;
 
-  /** The flag over the ruler chosen to be changed or taken away, by its moment on the run's own clock, or none. */
-  private markChosenAtMs: number | null = null;
+  /** The flag over the ruler chosen to be changed or taken away - its moment on the run's own clock, and what it changes - or none. */
+  private markChosen: { readonly atMs: number; readonly kind: MarkKind } | null = null;
 
   /** And the key that bar is in, and the one the bar before it is in - none before the first. */
   private keyAskedAbout: { readonly here: KeyOfTheMusic; readonly before: KeyOfTheMusic | null } | null = null;
@@ -12804,7 +12805,7 @@ export class AppView {
   }
 
   /** Where the sketch shown changes metre or pace, from its first bar, and what a mark there says: "3/4 ♩=90". */
-  private theMarksOfTheSketchShown(): readonly { readonly atMs: number; readonly says: string }[] {
+  private theMarksOfTheSketchShown(): readonly { readonly atMs: number; readonly says: string; readonly kind: MarkKind }[] {
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
     if (stored === null) {
@@ -12819,21 +12820,23 @@ export class AppView {
     ];
     const moments = [...new Set([...clicked.map((change) => change.atMs), ...keys.map((key) => key.atMs)])].sort((one, other) => one - other);
     const near = (one: number, other: number): boolean => Math.abs(one - other) < 1;
-    const marks: { atMs: number; says: string }[] = [];
+    const marks: { atMs: number; says: string; kind: MarkKind }[] = [];
     for (const atMs of moments) {
       if (marks.some((mark) => near(mark.atMs, atMs))) {
         continue;
       }
+      // A flag for each kind of change there, in the order a score writes them.
       const key = keys.find((each) => near(each.atMs, atMs));
       const change = clicked.find((each) => near(each.atMs, atMs));
-      marks.push({
-        atMs,
-        says: [
-          ...(key === undefined ? [] : [theNameOfTheKey(key)]),
-          ...(change?.metre === undefined ? [] : [`${String(change.metre.beatsInBar)}/${String(change.metre.beatType)}`]),
-          ...(change?.crotchetsPerMinute === undefined ? [] : [`\u2669=${String(change.crotchetsPerMinute)}`]),
-        ].join(' '),
-      });
+      if (key !== undefined) {
+        marks.push({ atMs, says: theNameOfTheKey(key), kind: 'key' });
+      }
+      if (change?.metre !== undefined) {
+        marks.push({ atMs, says: `${String(change.metre.beatsInBar)}/${String(change.metre.beatType)}`, kind: 'metre' });
+      }
+      if (change?.crotchetsPerMinute !== undefined) {
+        marks.push({ atMs, says: `\u2669=${String(change.crotchetsPerMinute)}`, kind: 'pace' });
+      }
     }
     return marks;
   }
@@ -13218,11 +13221,11 @@ export class AppView {
   }
 
   /**
-   * Answers a tap on a flag over the ruler, or on a button under the chosen
-   * one; says whether the tap was one. A flag tapped puts the cursor on its
-   * bar; while the sketch is edited it is chosen, and tapped again once
-   * chosen it is asked about in the sheet. Under the chosen flag, the pencil
-   * asks about it and the bin takes it away.
+   * Answers a press on a flag over the ruler, or on a button under the
+   * chosen one; says whether it was one. A flag pressed puts the cursor on
+   * its bar; while the sketch is edited it is chosen, and pressed again once
+   * chosen - or its pencil - it is asked about in the sheet. Its bin takes
+   * it away.
    */
   private answerTheFlags(event: Event): boolean {
     const target = event.target instanceof Element ? event.target : null;
@@ -13232,47 +13235,49 @@ export class AppView {
       return false;
     }
     const origin = rollBeganAtMs(roll);
-    if (target.closest('.roll__mark-change') !== null && this.markChosenAtMs !== null) {
-      if (this.askAboutTheBarAt(this.markChosenAtMs)) {
-        this.showTheSheet(this.el.sheetRollMark);
-      }
-      return true;
-    }
-    if (target.closest('.roll__mark-delete') !== null && this.markChosenAtMs !== null) {
-      this.takeTheMarkAway(this.markChosenAtMs);
-      return true;
-    }
-    const flag = target.closest<HTMLElement>('.roll__mark');
+    const wrap = target.closest('.roll__mark-wrap');
+    const flag = wrap?.querySelector<HTMLElement>('.roll__mark') ?? null;
     const mark = flag === null ? undefined : scene.marks[Number(flag.dataset['mark'])];
     if (mark === undefined) {
       return true;
     }
-    const atMs = mark.atMs + origin;
+    const pressed = { atMs: mark.atMs + origin, kind: mark.kind };
+    const chosen = this.markChosen !== null && this.isTheMarkChosen(pressed);
+    // The pencil is under the chosen flag only, and asks about it as a second press does.
+    if (target.closest('.roll__mark-delete') !== null && chosen) {
+      this.takeTheMarkAway(pressed);
+      return true;
+    }
     this.putTheHeadAt(mark.atMs);
     if (this.theOtherRollShowing?.sketch?.editing !== true) {
       return true;
     }
-    if (this.markChosenAtMs !== null && Math.abs(this.markChosenAtMs - atMs) < 1) {
-      if (this.askAboutTheBarAt(atMs)) {
+    if (chosen) {
+      if (this.askAboutTheBarAt(pressed.atMs)) {
         this.showTheSheet(this.el.sheetRollMark);
       }
     } else {
-      this.chooseTheMark(atMs);
+      this.chooseTheMark(pressed);
     }
     return true;
   }
 
-  /** Chooses the flag at a moment on the run's own clock, or lets go of the one chosen. */
-  private chooseTheMark(atMs: number | null): void {
-    if (atMs === this.markChosenAtMs) {
+  /** Whether a mark - its moment on the run's own clock, and what it changes - is the one chosen. */
+  private isTheMarkChosen(mark: { readonly atMs: number; readonly kind: MarkKind }): boolean {
+    return this.markChosen !== null && this.markChosen.kind === mark.kind && Math.abs(this.markChosen.atMs - mark.atMs) < 1;
+  }
+
+  /** Chooses a flag, or lets go of the one chosen. */
+  private chooseTheMark(mark: { readonly atMs: number; readonly kind: MarkKind } | null): void {
+    if (mark === null && this.markChosen === null) {
       return;
     }
-    this.markChosenAtMs = atMs;
+    this.markChosen = mark;
     this.showTheMarkChosen();
   }
 
   /**
-   * The chosen flag pressed, and the two buttons under it; the bin dimmed,
+   * The chosen flag pressed, and the two buttons under it; its bin dimmed,
    * with the reason, over the first bar, whose key, metre and pace are the
    * sketch's own and only changed.
    */
@@ -13284,50 +13289,64 @@ export class AppView {
       return;
     }
     const origin = rollBeganAtMs(roll);
-    const chosenAt = this.markChosenAtMs;
-    const chosen = chosenAt === null ? -1 : scene.marks.findIndex((mark) => Math.abs(mark.atMs + origin - chosenAt) < 1);
-    if (chosen < 0 && chosenAt !== null) {
+    const chosen = scene.marks.findIndex((mark) => this.isTheMarkChosen({ atMs: mark.atMs + origin, kind: mark.kind }));
+    if (chosen < 0) {
       // Taken away, or moved off: nothing is chosen any more.
-      this.markChosenAtMs = null;
+      this.markChosen = null;
     }
-    marks.querySelectorAll<HTMLElement>('.roll__mark').forEach((flag) => {
-      flag.setAttribute('aria-pressed', String(Number(flag.dataset['mark']) === chosen));
-      const mark = scene.marks[Number(flag.dataset['mark'])];
-      flag.title = `Bar ${mark?.after ?? ''}: ${mark?.says ?? ''}. Tap to choose it, and again to change it.`;
+    const first = scene.marks[0]?.atMs;
+    const WHAT: Readonly<Record<MarkKind, string>> = { key: 'key', metre: 'metre', pace: 'pace' };
+    marks.querySelectorAll<HTMLElement>('.roll__mark-wrap').forEach((wrap) => {
+      const flag = wrap.querySelector<HTMLElement>('.roll__mark');
+      const at = Number(flag?.dataset['mark']);
+      const mark = scene.marks[at];
+      const tools = wrap.querySelector<HTMLElement>('.roll__mark-tools');
+      if (flag === null || mark === undefined || tools === null) {
+        return;
+      }
+      flag.setAttribute('aria-pressed', String(at === chosen));
+      flag.title = `Bar ${mark.after}: ${mark.says}. Tap to choose it, and again to change it.`;
       flag.setAttribute('aria-label', flag.title);
+      tools.hidden = at !== chosen;
+      const change = tools.querySelector<HTMLButtonElement>('.roll__mark-change');
+      const remove = tools.querySelector<HTMLButtonElement>('.roll__mark-delete');
+      if (change !== null) {
+        change.title = `Change what bar ${mark.after} is in`;
+        change.setAttribute('aria-label', change.title);
+      }
+      const atTheStart = first !== undefined && Math.abs(mark.atMs - first) < 1;
+      if (remove !== null) {
+        sayWhetherIdle(
+          remove,
+          atTheStart
+            ? "Take this change away. The first bar's key, metre and pace are the sketch's own: change them instead."
+            : `Take the change of ${WHAT[mark.kind]} at bar ${mark.after} away`,
+          atTheStart,
+        );
+      }
     });
-    const tools = marks.querySelector<HTMLElement>('.roll__mark-tools');
-    const mark = scene.marks[chosen];
-    if (tools === null) {
-      return;
-    }
-    tools.hidden = mark === undefined;
-    if (mark === undefined) {
-      return;
-    }
-    tools.style.setProperty('--roll-at', (mark.atMs / 1000).toFixed(3));
-    const change = tools.querySelector<HTMLButtonElement>('.roll__mark-change');
-    const remove = tools.querySelector<HTMLButtonElement>('.roll__mark-delete');
-    if (change !== null) {
-      change.title = `Change what bar ${mark.after} is in`;
-      change.setAttribute('aria-label', change.title);
-    }
-    if (remove !== null) {
-      sayWhetherIdle(
-        remove,
-        chosen === 0
-          ? "Take this change away. The first bar's key, metre and pace are the sketch's own: change them instead."
-          : `Take the change at bar ${mark.after} away`,
-        chosen === 0,
-      );
-    }
   }
 
-  /** Takes the changes at a flag away, the bar given back what the bars before it are in. The first bar has none before it, and keeps its own. */
-  private takeTheMarkAway(atMs: number): void {
-    if (this.askAboutTheBarAt(atMs)) {
-      this.takeTheChangeAway();
+  /**
+   * Takes one change at a flag away - of the key, the metre or the pace - the
+   * bar given back what the bar before it is in for that, and keeping the
+   * rest. The first bar has none before it, and keeps its own.
+   */
+  private takeTheMarkAway(mark: { readonly atMs: number; readonly kind: MarkKind }): void {
+    if (!this.askAboutTheBarAt(mark.atMs)) {
+      return;
     }
+    const bar = this.barAskedAbout;
+    const keys = this.keyAskedAbout;
+    if (bar === null || bar.before === null || keys === null || keys.before === null) {
+      return;
+    }
+    const metre = mark.kind === 'metre' ? bar.before.metre : bar.metre;
+    this.changeFromTheBarAsked(
+      `${String(metre.beatsInBar)}/${String(metre.beatType)}`,
+      mark.kind === 'pace' ? bar.before.crotchetsPerMinute : bar.crotchetsPerMinute,
+      mark.kind === 'key' ? keys.before : keys.here,
+    );
   }
 
   /**
@@ -14498,14 +14517,14 @@ export class AppView {
     if (!this.theOtherRollShowing.sketch.editing) {
       return;
     }
-    if (this.markChosenAtMs !== null && (event.key === 'Escape' || event.key === 'Delete' || event.key === 'Backspace')) {
+    if (this.markChosen !== null && (event.key === 'Escape' || event.key === 'Delete' || event.key === 'Backspace')) {
       // A flag chosen answers first: let go of, or taken away.
       event.preventDefault();
       event.stopImmediatePropagation();
       if (event.key === 'Escape') {
         this.chooseTheMark(null);
       } else {
-        this.takeTheMarkAway(this.markChosenAtMs);
+        this.takeTheMarkAway(this.markChosen);
       }
       return;
     }

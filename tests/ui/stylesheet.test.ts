@@ -1372,6 +1372,23 @@ describe('the stylesheet', () => {
     expect(HTML).toMatch(/<div class="roll-stage">\s*<div id="roll-body"[^>]*><\/div>[\s\S]*?<div id="roll-box"/);
   });
 
+  it('opens the drawer of chords at the right of the drawing, beside it rather than over it', () => {
+    // In one row with the drawing, after it, and the drawing gives up its
+    // width: a drawer laid over it would hide the notes at its right edge.
+    const ruleOf = (selector: string): string => rules().find((rule) => rule.selector === selector)?.body ?? '';
+    expect(HTML).toMatch(
+      /<div class="roll-room">\s*<div class="roll-frame">[\s\S]*?id="roll-map"[\s\S]*?<\/div>\s*<\/div>\s*<div id="roll-chords"[^>]*><\/div>\s*<\/div>/,
+    );
+    expect(ruleOf('.roll-room')).toMatch(/display\s*:\s*flex/);
+    expect(ruleOf('.roll-room')).not.toMatch(/flex-direction/);
+    expect(ruleOf('.roll-room')).toMatch(/flex\s*:\s*1 1 auto/);
+    expect(ruleOf('.roll-room')).toMatch(/min-height\s*:\s*0/);
+    expect(ruleOf('.roll-frame')).toMatch(/min-width\s*:\s*0/);
+    expect(ruleOf('.roll-chords')).toMatch(/flex\s*:\s*none/);
+    expect(ruleOf('.roll-chords')).not.toMatch(/position\s*:\s*absolute/);
+    expect(ruleOf('.roll-chords')).toMatch(/overflow-y\s*:\s*auto/);
+  });
+
   it('keeps a caret out of the range iOS magnifies the page for', () => {
     // Anything under 16px makes iOS zoom the whole page in on focus and never
     // undo it - which is a score left magnified because a bar number was

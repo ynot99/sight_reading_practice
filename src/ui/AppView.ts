@@ -9,6 +9,7 @@ import {
 } from '../application/modes/challengeModes.js';
 import { barCells } from '../domain/scoring/barCells.js';
 import { nameTheChord } from '../domain/harmony/chordName.js';
+import { theChordsOfTheKey } from '../domain/harmony/chordsOfTheKey.js';
 import { barsOfThePicture, tiersOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
 import { FREE_PLAY_MODE_ID } from '../application/modes/FreePlayFrame.js';
@@ -1959,6 +1960,12 @@ export class AppView {
    * from, which is what makes a tap on the grid mean anything at all.
    */
   private rollAtMs = 0;
+
+  /**
+   * Whether the drawer of the chords of the key is open beside a sketch being
+   * edited: kept from one sketch to the next, as a tool laid out on the desk.
+   */
+  private chordsOfTheKeyOpen = false;
   /** Whether the passage markers are on the page, which a tap turns over. */
   private passageMarkersWanted = true;
   /**
@@ -2233,6 +2240,8 @@ export class AppView {
     rollSelect: HTMLButtonElement;
     rollUndo: HTMLButtonElement;
     rollRedo: HTMLButtonElement;
+    rollChordsOpen: HTMLButtonElement;
+    rollChords: HTMLElement;
     rollTitle: HTMLElement;
     rollBox: HTMLElement;
     rollChord: HTMLOutputElement;
@@ -2601,6 +2610,8 @@ export class AppView {
       rollSelect: requireElement(doc, 'roll-select'),
       rollUndo: requireElement(doc, 'roll-undo'),
       rollRedo: requireElement(doc, 'roll-redo'),
+      rollChordsOpen: requireElement(doc, 'roll-chords-open'),
+      rollChords: requireElement(doc, 'roll-chords'),
       rollTitle: requireElement(doc, 'roll-title'),
       rollBox: requireElement(doc, 'roll-box'),
       rollChord: requireElement(doc, 'roll-chord'),
@@ -8959,8 +8970,9 @@ export class AppView {
       if (sketch !== undefined) {
         const key = parseKeyValue(this.el.rollKey.value);
         this.runtime.sketches.changeTheKey(sketch.id, { fifths: key.fifths, mode: key.mode });
-        // The key spells the black keys of the chord's name.
+        // The key spells the black keys of the chord's name, and is what the drawer's chords are of.
         this.nameTheChosenChord();
+        this.showTheChordsOfTheKey();
       }
     });
     this.listen(this.el.rollMetre, 'change', () => {
@@ -9032,6 +9044,16 @@ export class AppView {
     });
     this.listen(this.el.rollUndo, 'click', () => {
       this.putBackTheLastChange();
+    });
+    this.listen(this.el.rollChordsOpen, 'click', () => {
+      this.chordsOfTheKeyOpen = !this.chordsOfTheKeyOpen;
+      this.showTheChordsOfTheKey();
+    });
+    this.listen(this.el.rollChords, 'click', (event) => {
+      const chord = (event.target as Element | null)?.closest<HTMLElement>('[data-chord]');
+      if (chord !== null && chord !== undefined) {
+        this.writeTheChordAtTheHead(Number(chord.dataset['chord']));
+      }
     });
     this.listen(this.el.rollRedo, 'click', () => {
       this.bringBackTheLastPutBack();
@@ -12141,7 +12163,7 @@ export class AppView {
     this.el.rollEdit.setAttribute('aria-label', this.el.rollEdit.title);
     this.el.rollSelect.setAttribute('aria-pressed', String(sketch?.tool === 'selection'));
     // Only a sketch has them, and they are there only while it is edited.
-    for (const button of [this.el.rollSelect, this.el.rollDelete, this.el.rollUndo, this.el.rollRedo]) {
+    for (const button of [this.el.rollSelect, this.el.rollDelete, this.el.rollUndo, this.el.rollRedo, this.el.rollChordsOpen]) {
       button.hidden = sketch === undefined;
       if (editing) {
         delete button.dataset['away'];
@@ -12166,6 +12188,7 @@ export class AppView {
 
     this.sayHowLoudTheChosenAre();
     this.nameTheChosenChord();
+    this.showTheChordsOfTheKey();
 
     if ((sketch?.before.length ?? 0) > 0) {
       delete this.el.rollUndo.dataset['idle'];
@@ -12205,6 +12228,91 @@ export class AppView {
         : null;
     this.el.rollChord.textContent = chord ?? '';
     this.el.rollChord.hidden = chord === null;
+  }
+
+  /**
+   * The drawer of the chords of the key, open beside a sketch being edited
+   * once asked for: a button for each, its name and its numeral, built again
+   * only when the key it is of changes, so a finger on one is not lost from
+   * under it by a change it made.
+   */
+  private showTheChordsOfTheKey(): void {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const open = this.chordsOfTheKeyOpen && sketch?.editing === true && stored !== null;
+    this.el.rollChordsOpen.setAttribute('aria-pressed', String(this.chordsOfTheKeyOpen));
+    this.el.rollChordsOpen.title = this.chordsOfTheKeyOpen
+      ? 'Put the chords of the key away'
+      : 'The chords of the key, to write where the cursor is';
+    this.el.rollChordsOpen.setAttribute('aria-label', this.el.rollChordsOpen.title);
+    this.el.rollChords.hidden = !open;
+    if (!open || stored === null) {
+      return;
+    }
+    const key = new KeySignature(stored.key.fifths, stored.key.mode);
+    if (this.el.rollChords.dataset['key'] === keyValue(key)) {
+      return;
+    }
+    this.el.rollChords.dataset['key'] = keyValue(key);
+    this.el.rollChords.replaceChildren(
+      ...theChordsOfTheKey(key).map((chord, at) => {
+        const button = this.doc.createElement('button');
+        button.type = 'button';
+        button.className = 'button roll-chords__chord';
+        button.dataset['chord'] = String(at);
+        button.title = `Write ${chord.name} (${chord.numeral}) where the cursor is, to the next line of the grid`;
+        button.setAttribute('aria-label', button.title);
+        const name = this.doc.createElement('span');
+        name.className = 'roll-chords__name';
+        name.textContent = chord.name;
+        const numeral = this.doc.createElement('span');
+        numeral.className = 'roll-chords__numeral';
+        numeral.textContent = chord.numeral;
+        button.append(name, numeral);
+        return button;
+      }),
+    );
+  }
+
+  /**
+   * Writes a chord of the key into the sketch where the cursor is - from the
+   * line of the grid it is in where the marker is put on one - to the next
+   * line, as loud as the sketch is on the whole: one change, put back as one,
+   * heard as it is written, and chosen, to be moved where it was not quite
+   * meant. The cursor goes on to where it ends, so the next chord tapped
+   * follows it, and a progression is written by tapping it through. A key of
+   * it already sounding there is left out, as a paste leaves it.
+   */
+  private writeTheChordAtTheHead(at: number): void {
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const chord = stored === null ? undefined : theChordsOfTheKey(new KeySignature(stored.key.fifths, stored.key.mode))[at];
+    if (showing === null || sketch === undefined || stored === null || chord === undefined) {
+      return;
+    }
+    const roll = showing.roll;
+    const origin = rollBeganAtMs(roll);
+    const grid = this.theRollsGrid();
+    const head = this.headIsAtMs();
+    const fromMs = this.el.rollSnap.checked ? theLineOfTheGridUnder(roll, head, grid) : head;
+    const untilMs = theNextLineOfTheGrid(roll, fromMs, grid, 1) ?? fromMs + theBeatAt(roll, fromMs + origin);
+    const velocity = theUsualLoudness(stored.events);
+    const { events, pasted } = takeWithTheNotesPasted(
+      stored.events,
+      chord.midis.map((midi) => ({ afterMs: 0, lengthMs: untilMs - fromMs, midi, velocity })),
+      fromMs + origin,
+    );
+    if (pasted.length === 0) {
+      return;
+    }
+    const now = this.runtime.clock.now();
+    for (const { midi } of pasted) {
+      this.runtime.pitchPlayer.play(midi, velocity, now);
+      this.runtime.pitchPlayer.stop(midi, now + (untilMs - fromMs));
+    }
+    this.changeTheSketchShowing(events, [...sketch.before, asItWas(stored, sketch.chosen)], pasted);
+    this.putTheHeadAt(untilMs);
   }
 
   /**

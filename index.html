@@ -550,6 +550,17 @@
                 <path d="M18.4 10.6C16.55 9 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.05-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z" />
               </svg>
             </button>
+            <!--
+              The chords of the sketch's key, in a drawer at the right of the
+              drawing: a tap on one writes it where the cursor is.
+            -->
+            <button id="roll-chords-open" type="button" class="button" title="The chords of the key"
+              aria-label="The chords of the key" aria-pressed="false" aria-controls="roll-chords" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
+                class="take-transport__icon">
+                <path d="M4 4h10v4H4zM4 10h16v4H4zM4 16h12v4H4z" />
+              </svg>
+            </button>
             <button id="roll-options" type="button" class="button button--ghost roll__gear"
               title="Options" aria-label="Options">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
@@ -570,6 +581,11 @@
             drawing's bottom edge, as the pitch map is its right one, and not a
             row of the sheet with the sheet's space between.
           -->
+          <!--
+            The drawing, and the drawer of chords beside it: beside rather than
+            over it, so no note goes under the drawer while it is open.
+          -->
+          <div class="roll-room">
           <div class="roll-frame">
           <div class="roll-stage">
             <div id="roll-body" class="roll-body"></div>
@@ -615,6 +631,8 @@
             <div id="roll-map-window" class="roll-map__window" hidden></div>
             <div id="roll-map-head" class="roll-map__head"></div>
           </div>
+          </div>
+          <div id="roll-chords" class="roll-chords" role="group" aria-label="The chords of the key" hidden></div>
           </div>
           <!--
             Choosing what to practise out of the picture of what happened.

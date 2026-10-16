@@ -1,0 +1,69 @@
+import { describe, expect, it } from 'vitest';
+import { theChordsOfTheKey } from '../../src/domain/harmony/chordsOfTheKey.js';
+import { KeySignature } from '../../src/domain/model/KeySignature.js';
+import { STEPS } from '../../src/domain/model/Pitch.js';
+
+/** Every key a sketch can be written in. */
+const EVERY_KEY = (['major', 'minor'] as const).flatMap((mode) =>
+  Array.from({ length: 15 }, (_, at) => new KeySignature(at - 7, mode)),
+);
+
+const MIDDLE_C = 60;
+
+describe('the chords of a key', () => {
+  it('names the seven of C major and of A minor, with their numerals', () => {
+    const said = (key: KeySignature): string[] => theChordsOfTheKey(key).map(({ name, numeral }) => `${numeral} ${name}`);
+    expect(said(KeySignature.major(0))).toEqual(['I C', 'ii Dm', 'iii Em', 'IV F', 'V G', 'vi Am', 'vii° Bdim']);
+    expect(said(KeySignature.minor(0))).toEqual(['i Am', 'ii° Bdim', 'III C', 'iv Dm', 'v Em', 'VI F', 'VII G']);
+    expect(theChordsOfTheKey(KeySignature.major(0))[0]?.midis).toEqual([60, 64, 67]);
+  });
+
+  it('spells them as the key does', () => {
+    expect(theChordsOfTheKey(KeySignature.major(-3)).map(({ name }) => name)).toEqual([
+      'E♭',
+      'Fm',
+      'Gm',
+      'A♭',
+      'B♭',
+      'Cm',
+      'Ddim',
+    ]);
+    expect(theChordsOfTheKey(KeySignature.minor(3)).map(({ name }) => name)).toEqual([
+      'F♯m',
+      'G♯dim',
+      'A',
+      'Bm',
+      'C♯m',
+      'D',
+      'E',
+    ]);
+  });
+
+  it('stacks the key\'s own notes in thirds on each degree, from the tonic up, rooted in the octave of middle C', () => {
+    // Swept: every key a signature can have, major and minor.
+    for (const key of EVERY_KEY) {
+      const inTheKey = new Set(
+        Array.from({ length: STEPS.length }, (_, step) => (key.pitchAt(step).midi % 12 + 12) % 12),
+      );
+      const tonic = (key.pitchAt(key.tonicIndexAtOrAbove(0)).midi % 12 + 12) % 12;
+      const chords = theChordsOfTheKey(key);
+      expect(chords, key.name).toHaveLength(7);
+      expect(((chords[0]?.midis[0] ?? 0) % 12 + 12) % 12, key.name).toBe(tonic);
+      // Each a degree above the last: seven different roots.
+      expect(new Set(chords.map(({ midis }) => (midis[0] ?? 0) % 12)).size, key.name).toBe(7);
+      for (const { midis, name, numeral } of chords) {
+        const [root = 0, third = 0, fifth = 0] = midis;
+        // A flat C is the B below middle C, and a sharp B the C above the B.
+        expect(root, key.name).toBeGreaterThanOrEqual(MIDDLE_C - 1);
+        expect(root, key.name).toBeLessThanOrEqual(MIDDLE_C + 12);
+        expect(midis.every((midi) => inTheKey.has(midi % 12)), `${key.name} ${name}`).toBe(true);
+        expect([3, 4], `${key.name} ${name}`).toContain(third - root);
+        expect([6, 7], `${key.name} ${name}`).toContain(fifth - root);
+        // The numeral says the third and the fifth.
+        expect(numeral === numeral.toUpperCase(), `${key.name} ${numeral}`).toBe(third - root === 4);
+        expect(numeral.endsWith('°'), `${key.name} ${numeral}`).toBe(fifth - root === 6);
+        expect(name, `${key.name} ${numeral}`).not.toBe('');
+      }
+    }
+  });
+});

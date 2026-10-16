@@ -6426,6 +6426,146 @@ describe('AppView', () => {
       }
     });
 
+    it('writes a chord of the key from the drawer where the cursor is, to the next line of the grid, and moves the cursor on', async () => {
+      const { view, sketches, instrument } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            [0, 400, 60],
+            [500, 1_000, 64],
+          ].flatMap(([atMs = 0, upAtMs = 0, midi = 0]) => [
+            { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: upAtMs, midi },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Palette',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const highest = view.rollScene?.highest ?? 0;
+      const scrolledDown =
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      const at = (ms: number, midi: number): { clientX: number; clientY: number } => ({
+        clientX: (ms / 1000) * zoom,
+        clientY: (highest - midi + 0.5) * 13 - scrolledDown,
+      });
+      const inOrder = ([one = 0, a = 0]: number[], [other = 0, b = 0]: number[]): number => one - other || a - b;
+      const notes = (): number[][] => {
+        const events = sketches.find(sketch.id)?.events ?? [];
+        return events
+          .flatMap((event, index) => {
+            if (event.kind !== 'noteOn') {
+              return [];
+            }
+            const off = events.slice(index + 1).find((later) => later.kind === 'noteOff' && later.midi === event.midi);
+            return [[event.atMs, event.midi, off?.atMs ?? -1, event.velocity]];
+          })
+          .sort(inOrder);
+      };
+      const chosen = (): number[][] =>
+        (view.rollScene?.notes ?? [])
+          .filter((note) => note.chosen === true)
+          .map((note) => [note.fromMs, (view.rollScene?.highest ?? 0) - note.row])
+          .sort(inOrder);
+      const open = element<HTMLButtonElement>('roll-chords-open');
+      const drawer = element('roll-chords');
+      const chords = (): string[] =>
+        [...drawer.querySelectorAll<HTMLButtonElement>('[data-chord]')].map((button) => button.textContent);
+      const tapTheChord = (name: string): void => {
+        [...drawer.querySelectorAll<HTMLButtonElement>('[data-chord]')]
+          .find((button) => button.querySelector('.roll-chords__name')?.textContent === name)
+          ?.click();
+      };
+      const snap = element<HTMLInputElement>('roll-snap');
+      const original = [
+        [0, 60, 400, 0.5],
+        [500, 64, 1_000, 0.5],
+      ];
+
+      // Shut until asked for, its button there while the sketch is edited.
+      expect(open.hidden).toBe(false);
+      expect(open.dataset['away']).toBeUndefined();
+      expect(drawer.hidden).toBe(true);
+      open.click();
+      expect(open.getAttribute('aria-pressed')).toBe('true');
+      expect(drawer.hidden).toBe(false);
+      expect(chords()).toEqual(['CI', 'Dmii', 'Emiii', 'FIV', 'GV', 'Amvi', 'Bdimvii°']);
+
+      // Written from the cursor to the next line of the grid, as loud as the
+      // sketch is, heard, and chosen; and the cursor goes on to its end.
+      tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(3_000, 50) });
+      tapTheChord('Am');
+      expect(notes()).toEqual([...original, [3_000, 69, 3_500, 0.5], [3_000, 72, 3_500, 0.5], [3_000, 76, 3_500, 0.5]]);
+      expect(chosen()).toEqual([
+        [3_000, 69],
+        [3_000, 72],
+        [3_000, 76],
+      ]);
+      expect(instrument.played.slice(-3).map(({ midi, velocity }) => [midi, velocity])).toEqual([
+        [69, 0.5],
+        [72, 0.5],
+        [76, 0.5],
+      ]);
+      tapTheChord('F');
+      expect(notes().slice(5)).toEqual([[3_500, 65, 4_000, 0.5], [3_500, 69, 4_000, 0.5], [3_500, 72, 4_000, 0.5]]);
+      // Each one change, put back as one.
+      key({ key: 'z', code: 'KeyZ', ctrlKey: true });
+      expect(notes()).toHaveLength(5);
+      key({ key: 'z', code: 'KeyZ', ctrlKey: true });
+      expect(notes()).toEqual(original);
+
+      // Off the grid, from where the cursor is; and with the marker put on it
+      // again, from the line the cursor is after.
+      snap.click();
+      tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(3_100, 50) });
+      tapTheChord('C');
+      expect(notes().slice(2).map(([down = 0, , up = 0]) => [down, up])).toEqual([
+        [3_100, 3_500],
+        [3_100, 3_500],
+        [3_100, 3_500],
+      ]);
+      key({ key: 'z', code: 'KeyZ', ctrlKey: true });
+      // Away from the last, or it is the second of two taps, which writes a note.
+      tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(3_100, 40) });
+      snap.click();
+      tapTheChord('C');
+      expect(notes().slice(2).map(([down = 0, , up = 0]) => [down, up])).toEqual([
+        [3_000, 3_500],
+        [3_000, 3_500],
+        [3_000, 3_500],
+      ]);
+      key({ key: 'z', code: 'KeyZ', ctrlKey: true });
+
+      // In another key, its chords.
+      const keyOfTheSketch = element<HTMLSelectElement>('roll-key');
+      keyOfTheSketch.value = '-2:minor';
+      keyOfTheSketch.dispatchEvent(new Event('change'));
+      expect(chords()).toEqual(['Gmi', 'Adimii°', 'B♭III', 'Cmiv', 'Dmv', 'E♭VI', 'FVII']);
+
+      // Listening, it is put away, and back with the editing.
+      element<HTMLButtonElement>('roll-edit').click();
+      expect(drawer.hidden).toBe(true);
+      expect(open.dataset['away']).toBe('true');
+      element<HTMLButtonElement>('roll-edit').click();
+      expect(drawer.hidden).toBe(false);
+      // Put away by its button.
+      open.click();
+      expect(open.getAttribute('aria-pressed')).toBe('false');
+      expect(drawer.hidden).toBe(true);
+      expect(notes()).toEqual(original);
+
+      function key(init: KeyboardEventInit): void {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
+      }
+    });
+
     it('puts the chosen notes on the grid by the Quantize button, whether or not the marker is put on it', async () => {
       const { view, sketches } = createRig();
       await view.initialize();

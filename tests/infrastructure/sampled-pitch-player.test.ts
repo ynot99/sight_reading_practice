@@ -3,6 +3,7 @@ import type { IPitchPlayer, SampleLoading } from '../../src/application/ports/IP
 import { SampledPitchPlayer } from '../../src/infrastructure/audio/SampledPitchPlayer.js';
 import { AudioClockReading } from '../../src/infrastructure/audio/audioTime.js';
 import { beginThePlaybackTimings, thePlaybackTimingsText } from '../../src/shared/playbackTimings.js';
+import { theLatestPlayback } from '../support/playbackTimings.js';
 import {
   HIGHEST_SAMPLED_MIDI,
   LOWEST_SAMPLED_MIDI,
@@ -730,11 +731,7 @@ describe('the playback timings, as the instrument sees them', () => {
 
     await player.load();
 
-    const said = thePlaybackTimingsText('')
-      .split('\n')
-      .filter((line) => line.includes('recordings'))
-      .map((line) => line.trim().replace(/^\+?\d+ +/, ''));
-    expect(said).toEqual([
+    expect(theLatestPlayback(thePlaybackTimingsText('')).happened).toEqual([
       "the piano's recordings asked for",
       `the piano's recordings decoded, ${String(PIANO_SAMPLES.length - 1)} of ${String(PIANO_SAMPLES.length)}`,
     ]);
@@ -748,8 +745,7 @@ describe('the playback timings, as the instrument sees them', () => {
     player.play(60, 1, performance.now() + 100);
     player.play(62, 1, performance.now() - 3_000);
 
-    const lines = thePlaybackTimingsText('').split('\n');
-    const row = lines[lines.findIndex((line) => line.trim().startsWith('sec notes')) + 1]?.trim().split(/\s+/) ?? [];
+    const row = theLatestPlayback(thePlaybackTimingsText('')).rows[0] ?? [];
     // Seconds, notes, least ahead, late, dropped.
     expect([row[0], row[1], row[3], row[4]]).toEqual(['0', '2', '0', '1']);
   });

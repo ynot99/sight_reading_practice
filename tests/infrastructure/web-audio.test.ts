@@ -6,6 +6,7 @@ import { WebAudioMetronome } from '../../src/infrastructure/audio/WebAudioMetron
 import { WebAudioPitchPlayer } from '../../src/infrastructure/audio/WebAudioPitchPlayer.js';
 import { AudioClockReading, outputLatencySeconds } from '../../src/infrastructure/audio/audioTime.js';
 import { beginThePlaybackTimings, noteAFrame, thePlaybackTimingsText } from '../../src/shared/playbackTimings.js';
+import { theLatestPlayback } from '../support/playbackTimings.js';
 
 /**
  * The page's clock, held still for the length of `body`.
@@ -183,19 +184,14 @@ describe('WebAudioMetronome', () => {
   });
 
   it('begins the playback timings again as it starts', () => {
-    const seconds = (): string[] => {
-      const lines = thePlaybackTimingsText('').split('\n');
-      return lines.slice(lines.findIndex((line) => line.trim().startsWith('sec notes')) + 1);
-    };
     beginThePlaybackTimings();
     noteAFrame();
-    expect(seconds()[0]?.trim().startsWith('0')).toBe(true);
+    expect(theLatestPlayback(thePlaybackTimingsText('')).rows.map((row) => row[10])).toEqual(['1']);
 
     metronome.start();
 
     // The frame before it gone; only the pulse's own first look at the clocks.
-    const table = seconds();
-    expect(table.slice(0, table.indexOf('')).map((row) => row.trim().split(/ +/)[10])).toEqual(['0']);
+    expect(theLatestPlayback(thePlaybackTimingsText('')).rows.map((row) => row[10])).toEqual(['0']);
   });
 
   it('unplugs each click once it has sounded', () => {
@@ -236,13 +232,10 @@ describe('WebAudioMetronome', () => {
     expect(stamped.at(-1)).toBeGreaterThanOrEqual(75);
     expect(stamped.at(-1)).toBeLessThanOrEqual(92);
     // And the timings say where it was taken again.
-    const lines = thePlaybackTimingsText('').split('\n');
-    const table = lines.slice(lines.findIndex((line) => line.trim().startsWith('sec notes')) + 1);
-    const again = table.slice(0, table.indexOf('')).map((line) => line.trim().split(/ +/).at(-1));
-    expect(again.filter((said) => said !== '-').map(Number)).toEqual([stamped.at(-1)]);
+    const { rows, happened } = theLatestPlayback(thePlaybackTimingsText(''));
+    expect(rows.map((row) => row.at(-1)).filter((said) => said !== '-').map(Number)).toEqual([stamped.at(-1)]);
     // And what happened, in order: the clocks read, the audio clock standing
     // as long as it stood, and the clocks read again by as much.
-    const happened = table.slice(table.indexOf('') + 2).map((line) => line.trim().replace(/^\+?\d+ +/, ''));
     expect(happened).toEqual([
       'the clocks read',
       // As far as the pulse's looks saw it, every 20 ms.
@@ -308,7 +301,7 @@ describe('WebAudioMetronome', () => {
     const first = ticks[0]?.scheduledTimeMs ?? 0;
     expect(ticks.map((tick) => Math.abs(Math.round(tick.scheduledTimeMs - first - tick.index * 1_000)))).toEqual(ticks.map(() => 0));
     // Nor is wandering inside its buffers, nor 5 ms, told as the clock standing.
-    expect(thePlaybackTimingsText('')).not.toContain('had stood');
+    expect(theLatestPlayback(thePlaybackTimingsText('')).happened.filter((what) => what.includes('stood'))).toEqual([]);
   });
 
   it('takes the clocks apart again when the device wakes', () => {

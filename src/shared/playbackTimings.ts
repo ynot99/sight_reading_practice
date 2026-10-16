@@ -39,6 +39,10 @@ let lastFrameAt: number | null = null;
 const events: { readonly atMs: number; readonly what: string }[] = [];
 /** How many events are kept: enough for a start, never a growing list. */
 const EVENTS_KEPT = 200;
+/** The playbacks before the last, as they were written out, the latest first. */
+const earlier: string[][] = [];
+/** How many playbacks before the last are kept. */
+const EARLIER_KEPT = 2;
 /** Where the pulse first saw the audio clock's nought on the page's clock, since it started. */
 let firstNought: number | null = null;
 const seconds = new Map<number, Second>();
@@ -87,6 +91,12 @@ function most(kept: number | null, value: number): number {
 
 /** Begins the timings again, as the pulse starts. */
 export function beginThePlaybackTimings(): void {
+  // The one before kept as it was, for a start that went wrong to be copied
+  // after the next one too: the first start of a page is not like the rest.
+  if (seconds.size > 0 || events.length > 0) {
+    earlier.unshift(thisPlayback());
+    earlier.splice(EARLIER_KEPT);
+  }
   began = performance.now();
   lastFrameAt = null;
   firstNought = null;
@@ -202,7 +212,7 @@ function said(value: number | null, width: number, signed = false): string {
 /** The timings as text to be read: what each column is, then a line a second. */
 export function thePlaybackTimingsText(device: string): string {
   const lines = [
-    'How the last playback kept time',
+    'How the last playbacks kept time, the latest first',
     device,
     '',
     'sec    - seconds since the pulse started',
@@ -217,9 +227,19 @@ export function thePlaybackTimingsText(device: string): string {
     'frames - frames of falling notes painted; gap - the longest between two (ms)',
     'clock  - the earliest the audio clock\'s nought stood in the second, against the first look (ms; it rises while the audio clock stands)',
     'again  - how far the clocks\' reading was taken again in the second (ms)',
-    '',
-    '  sec notes ahead late drop drift   out/base beats b.late frames   gap clock again',
   ];
+  [thisPlayback(), ...earlier].forEach((playback, at) => {
+    lines.push('', `${PLAYBACKS_SAID[at] ?? 'An earlier one'}:`, ...playback);
+  });
+  return lines.join('\n');
+}
+
+/** What each playback kept is called, the latest first. */
+const PLAYBACKS_SAID = ['The latest playback', 'The one before it', 'The one before that'];
+
+/** The playback going, or the last: its seconds, a line each, and what happened in it. */
+function thisPlayback(): string[] {
+  const lines = ['  sec notes ahead late drop drift   out/base beats b.late frames   gap clock again'];
   for (const [at, second] of [...seconds].sort(([one], [other]) => one - other)) {
     lines.push(
       [
@@ -243,10 +263,10 @@ export function thePlaybackTimingsText(device: string): string {
     lines.push('Nothing yet: start a playback, and copy this after it.');
   }
   if (events.length > 0) {
-    lines.push('', 'What happened, ms since the pulse started:');
+    lines.push('What happened, ms since the pulse started:');
     for (const { atMs, what } of events) {
       lines.push(`${said(atMs, 7, true)}  ${what}`);
     }
   }
-  return lines.join('\n');
+  return lines;
 }

@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LET_GO_AFTER_MS, LoopedSilence, type SilenceTimers } from '../../src/infrastructure/media/MediaSessionKeys.js';
 import { beginThePlaybackTimings, thePlaybackTimingsText } from '../../src/shared/playbackTimings.js';
+import { theLatestPlayback } from '../support/playbackTimings.js';
 
 describe('the silence that makes the page a player', () => {
   afterEach(() => {
@@ -111,11 +112,7 @@ describe('the silence that makes the page a player', () => {
     const browser = stubTheBrowser();
     const silence = new LoopedSilence();
     beginThePlaybackTimings();
-    const happened = (): string[] =>
-      thePlaybackTimingsText('')
-        .split('\n')
-        .filter((line) => line.includes('silence'))
-        .map((line) => line.trim().replace(/^\+?\d+ +/, ''));
+    const happened = (): string[] => theLatestPlayback(thePlaybackTimingsText('')).happened;
 
     silence.play();
     silence.pause();
@@ -144,7 +141,7 @@ describe('the silence that makes the page a player', () => {
     silence.play();
 
     expect(browser.played).toEqual([element]);
-    expect(thePlaybackTimingsText('').split('\n').filter((line) => line.includes('asked to play'))).toHaveLength(1);
+    expect(theLatestPlayback(thePlaybackTimingsText('')).happened).toEqual(["the media keys' silence asked to play"]);
   });
 
   it('lets go of nothing it never made', () => {

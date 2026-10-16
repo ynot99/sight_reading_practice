@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { theLatestPlayback } from '../support/playbackTimings.js';
 
 type Timings = typeof import('../../src/shared/playbackTimings.js');
 
@@ -18,20 +19,16 @@ describe('how a playback kept time', () => {
     vi.restoreAllMocks();
   });
 
-  /** The lines a second each, under the columns' heading, their spaces closed up. */
-  const rows = (): string[] => {
-    const lines = timings.thePlaybackTimingsText('a tablet').split('\n');
-    return lines
-      .slice(lines.findIndex((line) => line.trim().startsWith('sec notes')) + 1)
-      .map((line) => line.trim().replace(/\s+/g, ' '));
-  };
+  /** The latest playback's lines a second each, their spaces closed up. */
+  const rows = (): string[] => theLatestPlayback(timings.thePlaybackTimingsText('a tablet')).rows.map((row) => row.join(' '));
 
   it('keeps nothing before the pulse starts', () => {
     timings.noteANoteHanded(1_200, false, null);
     timings.noteABeatShown(900);
     timings.noteAFrame();
 
-    expect(rows()).toEqual(['Nothing yet: start a playback, and copy this after it.']);
+    expect(rows()).toEqual([]);
+    expect(timings.thePlaybackTimingsText('')).toContain('Nothing yet: start a playback, and copy this after it.');
   });
 
   it('says of each second how far ahead notes were handed, how late the beats were acted on, and the longest frame', () => {
@@ -65,7 +62,7 @@ describe('how a playback kept time', () => {
 
     expect(rows()).toEqual(['0 4 -300 1 1 +3 40/ 5 2 70 3 84 - -', '1 0 - 0 0 - -/ - 0 - 2 500 - -']);
     const text = timings.thePlaybackTimingsText('a tablet');
-    expect(text.split('\n').slice(0, 2)).toEqual(['How the last playback kept time', 'a tablet']);
+    expect(text.split('\n').slice(0, 2)).toEqual(['How the last playbacks kept time, the latest first', 'a tablet']);
   });
 
   it('begins again with the pulse', () => {
@@ -119,8 +116,9 @@ describe('how a playback kept time', () => {
     now = 2_400;
     timings.noteAnEvent('the audio clock had stood 134 ms');
     const lines = timings.thePlaybackTimingsText('a tablet').split('\n');
+    const latest = lines.slice(lines.indexOf('The latest playback:'));
 
-    expect(lines.slice(lines.indexOf('What happened, ms since the pulse started:'))).toEqual([
+    expect(latest.slice(latest.indexOf('What happened, ms since the pulse started:'), latest.indexOf(''))).toEqual([
       'What happened, ms since the pulse started:',
       '    +40  the clocks read',
       '   +400  the audio clock had stood 134 ms',
@@ -132,10 +130,34 @@ describe('how a playback kept time', () => {
     for (let at = 0; at < 250; at += 1) {
       timings.noteAnEvent(`event ${String(at)}`);
     }
-    const lines = timings.thePlaybackTimingsText('').split('\n');
+    const { happened } = theLatestPlayback(timings.thePlaybackTimingsText(''));
 
-    expect(lines.filter((line) => line.includes('event '))).toHaveLength(200);
-    expect(lines.at(-1)).toContain('event 199');
+    expect(happened).toHaveLength(200);
+    expect(happened.at(-1)).toBe('event 199');
+  });
+
+  it('keeps the two playbacks before the latest, as they were, the latest first', () => {
+    for (const [at, what] of [
+      [1_000, 'first'],
+      [2_000, 'second'],
+      [3_000, 'third'],
+      [4_000, 'fourth'],
+    ] as const) {
+      now = at;
+      timings.beginThePlaybackTimings();
+      timings.noteAnEvent(what);
+    }
+    // And a pulse begun again with nothing come of it is not kept over the
+    // one before - a run's pulse begins again often.
+    now = 5_000;
+    timings.beginThePlaybackTimings();
+    timings.beginThePlaybackTimings();
+    now = 5_500;
+    timings.noteAFrame();
+
+    const lines = timings.thePlaybackTimingsText('').split('\n');
+    const said = lines.filter((line) => /^The |^[+ ]+\d+ {2}\w/.test(line)).map((line) => line.trim().replace(/^\+?\d+ +/, ''));
+    expect(said).toEqual(['The latest playback:', 'The one before it:', 'fourth', 'The one before that:', 'third']);
   });
 
   it('keeps the last quarter of an hour', () => {

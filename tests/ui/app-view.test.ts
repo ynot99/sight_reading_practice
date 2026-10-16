@@ -55,6 +55,7 @@ import {
   type RunRoll,
 } from '../../src/application/session/RunRoll.js';
 import { beginThePlaybackTimings } from '../../src/shared/playbackTimings.js';
+import { theLatestPlayback } from '../support/playbackTimings.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import type { MidiFileEvent } from '../../src/domain/midi/MidiFile.js';
@@ -1293,12 +1294,10 @@ describe('AppView', () => {
       element<HTMLButtonElement>('copy-timings').click();
       await Promise.resolve();
       const lines = (written[0] ?? '').split('\n');
-      expect(lines[0]).toBe('How the last playback kept time');
+      expect(lines[0]).toBe('How the last playbacks kept time, the latest first');
       expect(lines[1]).toContain(navigator.userAgent);
       expect(lines[1]).toContain('falling notes on');
-      const rows = lines
-        .slice(lines.findIndex((line) => line.trim().startsWith('sec notes')) + 1)
-        .map((line) => line.trim().split(/\s+/));
+      const { rows } = theLatestPlayback(written[0] ?? '');
       // Seconds nought and four: a beat acted on in the first, and the frames' longest gaps.
       expect(rows.map((row) => [row[0], row[11]])).toEqual([
         ['0', '20'],

@@ -239,6 +239,7 @@ export interface AppRuntime {
   readonly codeSignIn: ICodeSignIn;
   /** Keeps the library the same on every device, through that folder. */
   readonly librarySync: LibrarySync;
+  readonly sketchSync: SketchSync;
   /** The library and the settings together, and whether there is anything to send. */
   readonly driveSync: DriveSync;
   /** Scores kept between visits, so a file is chosen from the disk once. */
@@ -561,9 +562,10 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   controller.events.on('settingsChanged', ({ settings: current }) => {
     settings.savePractice(current, Date.now());
   });
+  const sketchSync = new SketchSync({ drive: cloudDrive, sketches });
   const driveSync = new DriveSync({
     library: librarySync,
-    sketches: new SketchSync({ drive: cloudDrive, sketches }),
+    sketches: sketchSync,
     sketchesUnsentSinceMs: () => sketches.unsentSinceMs,
     settings: new SettingsSync({
       drive: cloudDrive,
@@ -590,6 +592,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     cloudDrive,
     codeSignIn: cloudDrive,
     librarySync,
+    sketchSync,
     driveSync,
     volumeKnob,
     metronomeKnob,

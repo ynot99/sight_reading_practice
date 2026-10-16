@@ -38,16 +38,12 @@ class FolderDrive implements ICloudDrive {
     return Promise.resolve({ id, name });
   }
 
-  /** What the drive holds, read plainly: each sketch's title and revision, and what was deleted. */
-  holds(): { sketches: [string, string, number][]; deleted: [string, number][] } {
-    const read = JSON.parse(this.files.get(SKETCHES_FILE)?.content ?? '{"sketches":[],"deleted":[]}') as {
+  /** What the drive holds, read plainly: each sketch's id, title and revision. */
+  holds(): [string, string, number][] {
+    const read = JSON.parse(this.files.get(SKETCHES_FILE)?.content ?? '{"sketches":[]}') as {
       sketches: { id: string; title: string; revision: number }[];
-      deleted: [string, number][];
     };
-    return {
-      sketches: read.sketches.map(({ id, title, revision }) => [id, title, revision] as [string, string, number]).sort(),
-      deleted: [...read.deleted].sort(),
-    };
+    return read.sketches.map(({ id, title, revision }) => [id, title, revision] as [string, string, number]).sort();
   }
 }
 
@@ -67,6 +63,7 @@ function device(drive: FolderDrive) {
   return {
     sketches,
     sync: () => sync.sync(open),
+    bring: (id: string) => sync.bringHere(id),
     edit: (id: string | null) => {
       open = id;
     },
@@ -74,39 +71,50 @@ function device(drive: FolderDrive) {
   };
 }
 
-describe('the sketches kept the same on every device', () => {
-  it('takes one begun on one device to the other at its next sync, and sends nothing once both have it', async () => {
+describe('the sketches kept the same on every device that has them', () => {
+  it('offers one begun on another device rather than bringing it, and keeps it in step once brought', async () => {
     const drive = new FolderDrive();
     const ipad = device(drive);
     const pc = device(drive);
-    const idea = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Idea', 1);
+    const older = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Older', 1);
+    const idea = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Idea', 2);
 
-    expect(await ipad.sync()).toEqual({ sent: 1, brought: 0, takenOff: 0, conflicts: 0 });
+    expect(await ipad.sync()).toEqual({ sent: 2, brought: 0, conflicts: 0, onlyOnTheDrive: [] });
     const written = drive.files.get(SKETCHES_FILE)?.id;
-    expect(await pc.sync()).toEqual({ sent: 0, brought: 1, takenOff: 0, conflicts: 0 });
+    // Offered, newest first, and not brought.
+    expect(await pc.sync()).toEqual({
+      sent: 0,
+      brought: 0,
+      conflicts: 0,
+      onlyOnTheDrive: [
+        { id: idea.id, title: 'Idea', begunAtMs: 2, noteCount: 2 },
+        { id: older.id, title: 'Older', begunAtMs: 1, noteCount: 2 },
+      ],
+    });
+    expect(pc.titles()).toEqual([]);
 
+    await pc.bring(idea.id);
     expect(pc.sketches.find(idea.id)?.events).toEqual(idea.events);
     expect(pc.sketches.find(idea.id)?.beats).toEqual(idea.beats);
-    expect(drive.holds().sketches).toEqual([[idea.id, 'Idea', 1]]);
+    expect(pc.sketches.unsentSinceMs).toBeNull();
     // In step on both: nothing to send, and the drive not written again.
     const writes = drive.writes;
-    expect(await ipad.sync()).toEqual({ sent: 0, brought: 0, takenOff: 0, conflicts: 0 });
-    expect(await pc.sync()).toEqual({ sent: 0, brought: 0, takenOff: 0, conflicts: 0 });
+    expect((await pc.sync()).onlyOnTheDrive.map(({ title }) => title)).toEqual(['Older']);
+    expect((await ipad.sync()).sent).toBe(0);
     expect(drive.writes).toBe(writes);
-    expect(pc.sketches.unsentSinceMs).toBeNull();
     // Written again, it is the same file, not another beside it.
     pc.sketches.rename(idea.id, 'Again');
     await pc.sync();
     expect(drive.files.get(SKETCHES_FILE)?.id).toBe(written);
   });
 
-  it('takes a change made on one device to the other, a revision on', async () => {
+  it('takes a change made on one device to the other that has it, a revision on', async () => {
     const drive = new FolderDrive();
     const ipad = device(drive);
     const pc = device(drive);
     const idea = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Idea', 1);
     await ipad.sync();
-    await pc.sync();
+    await pc.bring(idea.id);
 
     pc.sketches.changeTheNotes(idea.id, PLAYED.slice(0, 2));
     pc.sketches.rename(idea.id, 'Better');
@@ -115,7 +123,7 @@ describe('the sketches kept the same on every device', () => {
 
     expect(ipad.sketches.find(idea.id)?.title).toBe('Better');
     expect(ipad.sketches.find(idea.id)?.noteCount).toBe(1);
-    expect(drive.holds().sketches).toEqual([[idea.id, 'Better', 2]]);
+    expect(drive.holds()).toEqual([[idea.id, 'Better', 2]]);
   });
 
   it('keeps both where one was changed on each device: the drive\'s under its name, this one\'s as a copy beside it', async () => {
@@ -124,99 +132,41 @@ describe('the sketches kept the same on every device', () => {
     const pc = device(drive);
     const idea = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Idea', 1);
     await ipad.sync();
-    await pc.sync();
+    await pc.bring(idea.id);
 
     pc.sketches.changeTheNotes(idea.id, PLAYED.slice(0, 2));
     ipad.sketches.changeTheNotes(idea.id, [...PLAYED, on(900, 67), off(1_000, 67)]);
     await pc.sync();
-    expect(await ipad.sync()).toEqual({ sent: 1, brought: 1, takenOff: 0, conflicts: 1 });
+    const synced = await ipad.sync();
+    expect([synced.sent, synced.brought, synced.conflicts]).toEqual([1, 1, 1]);
 
     // The drive's notes under the name; the iPad's in the copy.
     expect(ipad.sketches.find(idea.id)?.noteCount).toBe(1);
     const copy = ipad.sketches.find(`${idea.id}-copy`);
     expect([copy?.title, copy?.noteCount]).toEqual([`Idea (${CONFLICTING_COPY})`, 3]);
-    // And the copy on the PC at its next sync.
-    expect((await pc.sync()).brought).toBe(1);
-    expect(pc.titles()).toEqual(['Idea', `Idea (${CONFLICTING_COPY})`]);
     expect(ipad.sketches.unsentSinceMs).toBeNull();
+    // And the copy offered to the PC.
+    expect((await pc.sync()).onlyOnTheDrive.map(({ title }) => title)).toEqual([`Idea (${CONFLICTING_COPY})`]);
   });
 
-  it('takes a deletion to the other device, and never sends back what was deleted', async () => {
+  it('takes one deleted here off this device only, and offers it back', async () => {
     const drive = new FolderDrive();
     const ipad = device(drive);
     const pc = device(drive);
     const idea = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Idea', 1);
-    const kept = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Kept', 2);
     await ipad.sync();
-    await pc.sync();
+    await pc.bring(idea.id);
 
     ipad.sketches.remove(idea.id);
-    expect(await ipad.sync()).toEqual({ sent: 1, brought: 0, takenOff: 0, conflicts: 0 });
-    expect(drive.holds()).toEqual({ sketches: [[kept.id, 'Kept', 1]], deleted: [[idea.id, 1]] });
-    expect(ipad.sketches.forTheDrive().deleted).toEqual([]);
+    const synced = await ipad.sync();
+    expect([synced.sent, synced.onlyOnTheDrive.map(({ title }) => title)]).toEqual([0, ['Idea']]);
+    expect(drive.holds()).toEqual([[idea.id, 'Idea', 1]]);
+    expect(pc.titles()).toEqual(['Idea']);
+    expect((await pc.sync()).onlyOnTheDrive).toEqual([]);
 
-    expect(await pc.sync()).toEqual({ sent: 0, brought: 0, takenOff: 1, conflicts: 0 });
-    expect(pc.titles()).toEqual(['Kept']);
-    expect(pc.sketches.forTheDrive().deleted).toEqual([]);
-    expect((await ipad.sync()).sent).toBe(0);
-  });
-
-  it('brings back one deleted here that another device changed since', async () => {
-    const drive = new FolderDrive();
-    const ipad = device(drive);
-    const pc = device(drive);
-    const idea = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Idea', 1);
-    await ipad.sync();
-    await pc.sync();
-
-    pc.sketches.rename(idea.id, 'Changed on the PC');
-    await pc.sync();
-    ipad.sketches.remove(idea.id);
-    expect(await ipad.sync()).toEqual({ sent: 0, brought: 1, takenOff: 0, conflicts: 0 });
-
-    expect(ipad.titles()).toEqual(['Changed on the PC']);
-    expect(drive.holds()).toEqual({ sketches: [[idea.id, 'Changed on the PC', 2]], deleted: [] });
-    expect(ipad.sketches.forTheDrive().deleted).toEqual([]);
-  });
-
-  it('sends back one deleted elsewhere at a revision past its deletion, so every other device takes it', async () => {
-    const drive = new FolderDrive();
-    const ipad = device(drive);
-    const pc = device(drive);
-    const idea = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Idea', 1);
-    await ipad.sync();
-    await pc.sync();
-
-    // Changed twice on the PC, then deleted there at revision 3.
-    pc.sketches.rename(idea.id, 'Twice');
-    await pc.sync();
-    pc.sketches.rename(idea.id, 'Thrice');
-    await pc.sync();
-    pc.sketches.remove(idea.id);
-    await pc.sync();
-    expect(drive.holds().deleted).toEqual([[idea.id, 3]]);
-    // Changed on the iPad at revision 1 meanwhile: back on the drive at 4.
-    ipad.sketches.rename(idea.id, 'Wanted');
-    await ipad.sync();
-    expect(drive.holds()).toEqual({ sketches: [[idea.id, 'Wanted', 4]], deleted: [] });
-  });
-
-  it('sends back one deleted elsewhere that was changed here since', async () => {
-    const drive = new FolderDrive();
-    const ipad = device(drive);
-    const pc = device(drive);
-    const idea = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Idea', 1);
-    await ipad.sync();
-    await pc.sync();
-
-    ipad.sketches.remove(idea.id);
-    await ipad.sync();
-    pc.sketches.rename(idea.id, 'Still wanted');
-    expect(await pc.sync()).toEqual({ sent: 1, brought: 0, takenOff: 0, conflicts: 0 });
-    expect(drive.holds()).toEqual({ sketches: [[idea.id, 'Still wanted', 2]], deleted: [] });
-
-    expect((await ipad.sync()).brought).toBe(1);
-    expect(ipad.titles()).toEqual(['Still wanted']);
+    await ipad.bring(idea.id);
+    expect(ipad.titles()).toEqual(['Idea']);
+    await expect(ipad.bring('nowhere')).rejects.toThrow('no longer on the drive');
   });
 
   it('leaves the sketch open in the editor as it is, and settles it at the sync after', async () => {
@@ -224,48 +174,55 @@ describe('the sketches kept the same on every device', () => {
     const ipad = device(drive);
     const pc = device(drive);
     const idea = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Idea', 1);
-    const other = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Other', 2);
     await ipad.sync();
-    await pc.sync();
+    await pc.bring(idea.id);
 
     pc.sketches.rename(idea.id, 'Renamed on the PC');
-    pc.sketches.remove(other.id);
     await pc.sync();
     ipad.edit(idea.id);
-    expect(await ipad.sync()).toEqual({ sent: 0, brought: 0, takenOff: 1, conflicts: 0 });
+    expect((await ipad.sync()).brought).toBe(0);
     expect(ipad.titles()).toEqual(['Idea']);
-    // Nor taken off while open.
-    ipad.edit(other.id);
-    pc.sketches.remove(idea.id);
-    ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Brought back', 3);
-    await pc.sync();
-    ipad.edit(idea.id);
-    expect((await ipad.sync()).takenOff).toBe(0);
-    expect(ipad.titles()).toContain('Idea');
 
     ipad.edit(null);
-    expect((await ipad.sync()).takenOff).toBe(1);
-    expect(ipad.titles()).not.toContain('Idea');
+    expect((await ipad.sync()).brought).toBe(1);
+    expect(ipad.titles()).toEqual(['Renamed on the PC']);
+  });
+
+  it('sends one the drive has at an older revision than here, a revision past both', async () => {
+    const drive = new FolderDrive();
+    const ipad = device(drive);
+    const idea = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Idea', 1);
+    await ipad.sync();
+    ipad.sketches.rename(idea.id, 'Twice');
+    await ipad.sync();
+    ipad.sketches.rename(idea.id, 'Thrice');
+    await ipad.sync();
+    expect(drive.holds()).toEqual([[idea.id, 'Thrice', 3]]);
+    // The drive put back to an older file of it, at revision 1.
+    const file = drive.files.get(SKETCHES_FILE);
+    drive.files.set(SKETCHES_FILE, {
+      id: file?.id ?? '',
+      content: (file?.content ?? '').replace('"revision":3', '"revision":1'),
+    });
+
+    expect((await ipad.sync()).sent).toBe(1);
+    expect(drive.holds()).toEqual([[idea.id, 'Thrice', 4]]);
   });
 
   it('marks nothing sent where the drive could not be written, and sends it at the next sync', async () => {
     const drive = new FolderDrive();
     const ipad = device(drive);
     const idea = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Idea', 1);
-    ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Doomed', 2);
     await ipad.sync();
-    const doomed = ipad.sketches.list().find((sketch) => sketch.title === 'Doomed');
-    ipad.sketches.remove(doomed?.id ?? '');
     ipad.sketches.rename(idea.id, 'Renamed');
 
     drive.failing = true;
     await expect(ipad.sync()).rejects.toThrow('could not be reached');
-    expect(ipad.sketches.forTheDrive().here.map(({ unsent }) => unsent)).toEqual([true]);
-    expect(ipad.sketches.forTheDrive().deleted).toHaveLength(1);
+    expect(ipad.sketches.forTheDrive().map(({ unsent }) => unsent)).toEqual([true]);
 
     drive.failing = false;
-    expect((await ipad.sync()).sent).toBe(2);
-    expect(drive.holds()).toEqual({ sketches: [[idea.id, 'Renamed', 2]], deleted: [[doomed?.id ?? '', 1]] });
+    expect((await ipad.sync()).sent).toBe(1);
+    expect(drive.holds()).toEqual([[idea.id, 'Renamed', 2]]);
   });
 
   it('reads past what on the drive it cannot, and a file that is no list at all as an empty drive', async () => {
@@ -284,21 +241,19 @@ describe('the sketches kept the same on every device', () => {
           { id: 'broken', revision: 1 },
           null,
         ],
-        deleted: [['gone', 3], ['good', 1], ['nought', 0], 'not a pair', [5, 1]],
       }),
     });
-    pc.sketches.begin({ events: PLAYED, beats: BEATS }, 'Mine', 1);
-    expect(await pc.sync()).toEqual({ sent: 1, brought: 1, takenOff: 0, conflicts: 0 });
-    expect(pc.titles()).toEqual(['Good', 'Mine']);
-    // Written back without what it could not read: a deletion of a sketch
-    // the drive has is no deletion, and one at no revision none.
-    expect(drive.holds().deleted).toEqual([['gone', 3]]);
+    expect((await pc.sync()).onlyOnTheDrive.map(({ id }) => id)).toEqual(['good']);
+    // Written back without what it could not read.
+    pc.sketches.begin({ events: PLAYED, beats: BEATS }, 'Mine', 3);
+    await pc.sync();
+    expect(drive.holds().map(([, title]) => title)).toEqual(['Good', 'Mine']);
 
     const other = new FolderDrive();
     other.files.set(SKETCHES_FILE, { id: 'file-1', content: 'not json' });
     const fresh = device(other);
     fresh.sketches.begin({ events: PLAYED, beats: BEATS }, 'Mine', 1);
     expect((await fresh.sync()).sent).toBe(1);
-    expect(other.holds().sketches.map(([, title]) => title)).toEqual(['Mine']);
+    expect(other.holds().map(([, title]) => title)).toEqual(['Mine']);
   });
 });

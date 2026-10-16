@@ -234,13 +234,12 @@ describe('the sketches being written', () => {
 
 describe('what a sync of the sketches needs kept beside them', () => {
   /** A library on a store, with a clock the test moves, and another visit to the same store. */
-  function aLibrary(): { library: SketchLibrary; store: InMemorySettingsStore; at: (ms: number) => void; again: () => SketchLibrary } {
+  function aLibrary(): { library: SketchLibrary; at: (ms: number) => void; again: () => SketchLibrary } {
     const store = new InMemorySettingsStore();
     let now = 0;
     const library = new SketchLibrary(store, () => now);
     return {
       library,
-      store,
       at: (ms) => {
         now = ms;
       },
@@ -252,7 +251,7 @@ describe('what a sync of the sketches needs kept beside them', () => {
     };
   }
   const state = (library: SketchLibrary): (string | number | boolean)[][] =>
-    library.forTheDrive().here.map(({ sketch, revision, unsent }) => [sketch.id, revision, unsent]);
+    library.forTheDrive().map(({ sketch, revision, unsent }) => [sketch.id, revision, unsent]);
 
   it('counts each sketch unsent from its beginning to its sending, and again from each change', () => {
     const { library, at, again } = aLibrary();
@@ -285,34 +284,21 @@ describe('what a sync of the sketches needs kept beside them', () => {
     expect(state(again())).toEqual([[begun.id, 1, false]]);
   });
 
-  it('keeps a deletion of a sketch the drive has had, to tell it, and of no other', () => {
-    const { library, at, again } = aLibrary();
+  it('takes a sketch off this device only, with nothing left unsent of it', () => {
+    const { library, again } = aLibrary();
     const sent = library.begin({ events: PLAYED, beats: THREE }, 'Sent', 1_000);
-    const never = library.begin({ events: PLAYED, beats: THREE }, 'Never sent', 2_000);
+    const unsent = library.begin({ events: PLAYED, beats: THREE }, 'Unsent', 2_000);
     library.sentAt(sent.id, 3);
-    library.sentAt(never.id, 1);
-    at(9_000);
 
-    library.remove(never.id);
+    library.remove(unsent.id);
+    expect(library.unsentSinceMs).toBeNull();
     library.remove(sent.id);
     library.remove('nowhere');
-    expect(library.forTheDrive().deleted).toEqual([
-      { id: never.id, revision: 1 },
-      { id: sent.id, revision: 3 },
-    ]);
-    expect(library.unsentSinceMs).toBe(9_000);
-    expect(again().forTheDrive().deleted).toEqual(library.forTheDrive().deleted);
-
-    library.deletionSettled(never.id);
-    library.deletionSettled(sent.id);
-    expect(again().forTheDrive().deleted).toEqual([]);
-    expect(library.unsentSinceMs).toBeNull();
-
-    // Never sent, there is nothing to tell.
-    const { library: other } = aLibrary();
-    const kept = other.begin({ events: PLAYED, beats: THREE }, 'Here only', 1);
-    other.remove(kept.id);
-    expect(other.forTheDrive().deleted).toEqual([]);
+    expect(state(library)).toEqual([]);
+    expect(state(again())).toEqual([]);
+    // Brought back, it is in step with the drive again, not still at the old revision.
+    library.takeFromTheDrive(sent, 5);
+    expect(state(library)).toEqual([[sent.id, 5, false]]);
   });
 
   it('takes a sketch from the drive over the one here or beside them, in step with it', () => {
@@ -330,16 +316,10 @@ describe('what a sync of the sketches needs kept beside them', () => {
     expect(library.list().map((sketch) => sketch.title).sort()).toEqual(['Brought', 'Theirs']);
   });
 
-  it('takes off a sketch deleted elsewhere with nothing to tell, and keeps a copy of one under a new name', () => {
+  it('keeps a copy of one under a new id and name, never yet sent', () => {
     const { library, again } = aLibrary();
-    const gone = library.begin({ events: PLAYED, beats: THREE }, 'Gone', 1_000);
     const kept = library.begin({ events: PLAYED, beats: THREE }, 'Kept', 2_000);
-    library.sentAt(gone.id, 2);
     library.sentAt(kept.id, 5);
-
-    library.deletedElsewhere(gone.id);
-    expect(library.find(gone.id)).toBeNull();
-    expect(library.forTheDrive().deleted).toEqual([]);
 
     const copy = library.keepACopy(kept.id, 'Kept (conflicting copy)');
     const second = library.keepACopy(kept.id, 'Kept (another)');
@@ -373,7 +353,6 @@ describe('what a sync of the sketches needs kept beside them', () => {
         sketch('bad', { revision: 1.5 }),
         sketch('negative', { revision: -2, unsent: 0 }),
       ],
-      deleted: [['gone', 4], ['half', 1.5], 'not a pair', ['nought', 0], [7, 2]],
       changedAtMs: 'soon',
     });
     const library = new SketchLibrary(store, () => 0);
@@ -386,10 +365,6 @@ describe('what a sync of the sketches needs kept beside them', () => {
       ['bad', 0, true],
       ['negative', 0, true],
     ]);
-    expect(library.forTheDrive().deleted).toEqual([{ id: 'gone', revision: 4 }]);
     expect(library.unsentSinceMs).toBe(0);
-    // One the drive never had, taken off, is nothing to tell it.
-    library.remove('old');
-    expect(library.forTheDrive().deleted).toEqual([{ id: 'gone', revision: 4 }]);
   });
 });

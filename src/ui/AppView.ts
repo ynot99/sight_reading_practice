@@ -64,7 +64,7 @@ import type { PracticeSettings } from '../application/PracticeController.js';
 import type { StoredTake } from '../application/TakeLibrary.js';
 import { isTypedInto, type TypedInto } from '../shared/typedInto.js';
 import { theBeatsToBeginIn, theSketchOfTheScore, type SketchKey, type StoredSketch } from '../application/SketchLibrary.js';
-import { CONFLICTING_COPY, type SketchSyncOutcome } from '../application/SketchSync.js';
+import { CONFLICTING_COPY, type SketchOnTheDrive, type SketchSyncOutcome } from '../application/SketchSync.js';
 import type { DrillTask } from '../application/drill/SectionDrill.js';
 import type { ControlBinding } from '../application/ControlBinding.js';
 import {
@@ -526,14 +526,11 @@ function addsToTheChoice(event: PointerEvent): boolean {
 
 /**
  * What a sync did with the sketches, in a sentence: what went and came, and
- * - only where there were any - what was taken off here and what was kept as
- * a copy because it had been changed on two devices at once.
+ * - only where there were any - what was kept as a copy because it had been
+ * changed on two devices at once.
  */
 function theSketchesSynced(sketches: SketchSyncOutcome): string {
   const said = [`Sketches sent ${String(sketches.sent)}, brought here ${String(sketches.brought)}`];
-  if (sketches.takenOff > 0) {
-    said.push(`taken off ${String(sketches.takenOff)}, deleted on another device`);
-  }
   if (sketches.conflicts > 0) {
     said.push(
       `${String(sketches.conflicts)} changed on two devices at once, kept here as a ${CONFLICTING_COPY} beside the other`,
@@ -2128,6 +2125,8 @@ export class AppView {
     driveCode: HTMLButtonElement;
     driveStatus: HTMLElement;
     driveOnly: HTMLUListElement;
+    driveOnlySketches: HTMLUListElement;
+    driveOnlySketchesSaid: HTMLElement;
     offerToSync: HTMLInputElement;
     settingsSearch: HTMLInputElement;
     settingsSearchCount: HTMLOutputElement;
@@ -2494,6 +2493,8 @@ export class AppView {
       driveCode: requireElement(doc, 'drive-code'),
       driveStatus: requireElement(doc, 'drive-status'),
       driveOnly: requireElement(doc, 'drive-only'),
+      driveOnlySketches: requireElement(doc, 'drive-only-sketches'),
+      driveOnlySketchesSaid: requireElement(doc, 'drive-only-sketches-said'),
       offerToSync: requireElement(doc, 'offer-to-sync'),
       settingsSearch: requireElement(doc, 'settings-search'),
       settingsSearchCount: requireElement(doc, 'settings-search-count'),
@@ -7861,6 +7862,7 @@ export class AppView {
       }, open);
       this.el.driveStatus.textContent = `Synced. Sent ${String(library.sent)}, brought here ${String(library.brought)}. ${theSketchesSynced(sketches)} Settings ${SETTINGS_WENT[settings]}.`;
       this.showWhatOnlyTheDriveHas(library.onlyOnTheDrive);
+      this.showTheSketchesOnlyTheDriveHas(sketches.onlyOnTheDrive);
       this.renderScores();
       this.renderSketches();
     } catch (error) {
@@ -7975,6 +7977,47 @@ export class AppView {
   }
 
   /** The scores only the drive has, each with a button to bring it here. */
+  /**
+   * The sketches the drive has and this device does not, each with a button
+   * to bring it here - as the scores are offered, under a line of their own.
+   */
+  private showTheSketchesOnlyTheDriveHas(sketches: readonly SketchOnTheDrive[]): void {
+    const list = this.el.driveOnlySketches;
+    const sayWhetherAny = (): void => {
+      list.hidden = list.childElementCount === 0;
+      this.el.driveOnlySketchesSaid.hidden = list.hidden;
+    };
+    list.replaceChildren(
+      ...sketches.map((sketch) => {
+        const row = this.doc.createElement('li');
+        const title = this.doc.createElement('span');
+        title.textContent = `${sketch.title} · ${String(sketch.noteCount)} notes`;
+        const bring = this.doc.createElement('button');
+        bring.type = 'button';
+        bring.className = 'button button--ghost';
+        bring.textContent = 'Bring here';
+        bring.addEventListener('click', () => {
+          bring.disabled = true;
+          void this.runtime.sketchSync
+            .bringHere(sketch.id)
+            .then(() => {
+              row.remove();
+              sayWhetherAny();
+              this.renderSketches();
+            })
+            .catch((error: unknown) => {
+              bring.disabled = false;
+              this.el.driveStatus.textContent =
+                error instanceof Error ? error.message : 'That sketch could not be brought here.';
+            });
+        });
+        row.append(title, bring);
+        return row;
+      }),
+    );
+    sayWhetherAny();
+  }
+
   private showWhatOnlyTheDriveHas(scores: readonly DriveScore[]): void {
     this.el.driveOnly.replaceChildren(
       ...scores.map((score) => {

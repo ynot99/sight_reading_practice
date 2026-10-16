@@ -117,12 +117,6 @@ export interface SketchHere {
   readonly unsent: boolean;
 }
 
-/** A sketch taken off this device after the drive had it, at the revision it had. */
-export interface SketchDeleted {
-  readonly id: string;
-  readonly revision: number;
-}
-
 /**
  * A sketch in the form it is kept in, here and on the drive alike: its notes
  * and beats packed, its key as a pair.
@@ -179,10 +173,11 @@ function sketchOf(
  *
  * And what a sync of them between devices needs kept beside them: for each,
  * the revision of it the drive had when this copy was last in step with it,
- * and whether it has been changed here since; the sketches deleted here that
- * the drive had, for it to be told; and when anything was last changed here,
- * for a sync to be pressed half a minute after. No clock is compared with
- * another device's: a revision is a count the drive keeps.
+ * and whether it has been changed here since; and when anything was last
+ * changed here, for a sync to be pressed half a minute after. No clock is
+ * compared with another device's: a revision is a count the drive keeps.
+ * Deleting a sketch here takes it off this device only, as with a score:
+ * the drive keeps it, and offers it back.
  */
 export class SketchLibrary {
   private readonly store: ISettingsStore;
@@ -190,7 +185,6 @@ export class SketchLibrary {
   private sketches: StoredSketch[] = [];
   private readonly revisions = new Map<string, number>();
   private readonly unsent = new Set<string>();
-  private readonly deleted = new Map<string, number>();
   private changedAtMs = 0;
 
   constructor(store: ISettingsStore, now: () => number) {
@@ -205,7 +199,6 @@ export class SketchLibrary {
     this.sketches = [];
     this.revisions.clear();
     this.unsent.clear();
-    this.deleted.clear();
     for (const entry of entries) {
       const sketch = readSketch(entry);
       if (sketch === null) {
@@ -220,13 +213,6 @@ export class SketchLibrary {
       // Kept before there was a drive to send it to, it has never been sent.
       if (unsent === 1 || synced === 0) {
         this.unsent.add(sketch.id);
-      }
-    }
-    const deleted: unknown[] = isRecord(raw) && Array.isArray(raw['deleted']) ? raw['deleted'] : [];
-    for (const entry of deleted) {
-      const [id, revision] = Array.isArray(entry) ? (entry as unknown[]) : [];
-      if (typeof id === 'string' && typeof revision === 'number' && Number.isInteger(revision) && revision > 0) {
-        this.deleted.set(id, revision);
       }
     }
     const changed = isRecord(raw) ? raw['changedAtMs'] : undefined;
@@ -304,20 +290,12 @@ export class SketchLibrary {
     return changed;
   }
 
-  /**
-   * Takes a sketch off this device; and where the drive has had it, keeps
-   * that it was taken off, for the drive to be told at the next sync.
-   */
+  /** Takes a sketch off this device: only this one - the drive keeps what it has had. */
   remove(id: string): void {
     const before = this.sketches.length;
     this.sketches = this.sketches.filter((sketch) => sketch.id !== id);
     if (this.sketches.length === before) {
       return;
-    }
-    const revision = this.revisions.get(id);
-    if (revision !== undefined) {
-      this.deleted.set(id, revision);
-      this.changedAtMs = this.now();
     }
     this.revisions.delete(id);
     this.unsent.delete(id);
@@ -325,15 +303,12 @@ export class SketchLibrary {
   }
 
   /** Every sketch here, as a sync sees it. */
-  forTheDrive(): { readonly here: readonly SketchHere[]; readonly deleted: readonly SketchDeleted[] } {
-    return {
-      here: this.sketches.map((sketch) => ({
-        sketch,
-        revision: this.revisions.get(sketch.id) ?? 0,
-        unsent: this.unsent.has(sketch.id),
-      })),
-      deleted: [...this.deleted].map(([id, revision]) => ({ id, revision })),
-    };
+  forTheDrive(): readonly SketchHere[] {
+    return this.sketches.map((sketch) => ({
+      sketch,
+      revision: this.revisions.get(sketch.id) ?? 0,
+      unsent: this.unsent.has(sketch.id),
+    }));
   }
 
   /**
@@ -341,7 +316,7 @@ export class SketchLibrary {
    * it has had everything: for a sync to be pressed half a minute after.
    */
   get unsentSinceMs(): number | null {
-    return this.unsent.size > 0 || this.deleted.size > 0 ? this.changedAtMs : null;
+    return this.unsent.size > 0 ? this.changedAtMs : null;
   }
 
   /** A sketch sent to the drive at a revision: in step with it, and nothing unsent. */
@@ -361,21 +336,6 @@ export class SketchLibrary {
     this.revisions.set(sketch.id, revision);
     this.unsent.delete(sketch.id);
     this.persist();
-  }
-
-  /** A sketch deleted on another device, taken off here with nothing to tell the drive. */
-  deletedElsewhere(id: string): void {
-    this.sketches = this.sketches.filter((sketch) => sketch.id !== id);
-    this.revisions.delete(id);
-    this.unsent.delete(id);
-    this.persist();
-  }
-
-  /** A deletion the drive has been told of, or that it no longer needs. */
-  deletionSettled(id: string): void {
-    if (this.deleted.delete(id)) {
-      this.persist();
-    }
   }
 
   /**
@@ -419,7 +379,6 @@ export class SketchLibrary {
         ...(this.revisions.has(sketch.id) ? { revision: this.revisions.get(sketch.id) } : {}),
         ...(this.unsent.has(sketch.id) ? { unsent: 1 } : {}),
       })),
-      deleted: [...this.deleted],
       changedAtMs: this.changedAtMs,
     });
   }

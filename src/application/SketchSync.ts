@@ -1,7 +1,7 @@
 import type { CloudFile, ICloudDrive } from './ports/ICloudDrive.js';
 import { sketchAsKept, sketchFromKept, type SketchLibrary, type StoredSketch } from './SketchLibrary.js';
 
-/** The one file on the drive that holds every sketch, and every one deleted. */
+/** The one file on the drive that holds every sketch. */
 export const SKETCHES_FILE = 'sketches.json';
 const VERSION = 1;
 
@@ -14,21 +14,23 @@ interface SketchThere {
   readonly revision: number;
 }
 
-/** What the drive holds: the sketches, and those deleted with the revision each was at. */
-interface TheDrivesSketches {
-  readonly sketches: ReadonlyMap<string, SketchThere>;
-  readonly deleted: ReadonlyMap<string, number>;
+/** A sketch the drive has and this device does not, for the reader to bring here or leave. */
+export interface SketchOnTheDrive {
+  readonly id: string;
+  readonly title: string;
+  readonly begunAtMs: number;
+  readonly noteCount: number;
 }
 
 export interface SketchSyncOutcome {
-  /** Sketches, and deletions, the drive has had from this device. */
+  /** Sketches the drive has had from this device. */
   readonly sent: number;
-  /** Sketches this device took from the drive: new ones, and newer ones. */
+  /** Sketches here this device took a newer copy of from the drive. */
   readonly brought: number;
-  /** Sketches taken off this device because another deleted them. */
-  readonly takenOff: number;
   /** Sketches changed here and elsewhere at once, kept here as a copy beside the drive's. */
   readonly conflicts: number;
+  /** Sketches the drive has and this device does not, newest first. */
+  readonly onlyOnTheDrive: readonly SketchOnTheDrive[];
 }
 
 export interface SketchSyncDependencies {
@@ -37,7 +39,10 @@ export interface SketchSyncDependencies {
 }
 
 /**
- * Keeps the sketches the same on every device, through one file on the drive.
+ * Keeps the sketches on every device that has them the same, through one
+ * file on the drive - as the scores are kept, and with the scores' rule for
+ * what a device has: a sketch only the drive has is not brought here unasked,
+ * but offered, and deleting one here takes it off this device only.
  *
  * A sketch is changed far more often than a score, and on either device, so
  * "the newer one wins" would lose whatever the other device had done. So
@@ -45,21 +50,17 @@ export interface SketchSyncDependencies {
  * revision its copy was last in step with, and whether it has changed it
  * since - no device's clock is set against another's. Then:
  *
- * - A sketch only here goes to the drive; one only on the drive comes here:
- *   a sketch begun on one device is on the other at its next sync.
+ * - A sketch only here goes to the drive.
  * - Changed here, and still at the drive's revision: sent, a revision on.
  *   At an older revision and not changed here: the drive's is taken.
  * - Changed here *and* on the drive since: both kept. The drive's is taken
  *   under its own name, and this device's becomes a copy beside it, named
  *   so, and sent as a new sketch - the writer chooses which to keep.
- * - Deleted here: the drive is told, unless another device has changed it
- *   since, in which case it comes back. Deleted elsewhere: taken off here,
- *   unless changed here since, in which case it goes back to the drive.
  *
  * The sketch open in the editor is not taken from the drive underneath it -
- * its undo is of what is here - and waits for the next sync. What only the
- * drive's writing settles - sent, told - is marked here once it is written,
- * so a sync that fails partway is simply done again.
+ * its undo is of what is here - and waits for the next sync. That a sketch is
+ * sent is marked here once the drive has it, so a sync that fails partway is
+ * simply done again.
  */
 export class SketchSync {
   private readonly deps: SketchSyncDependencies;
@@ -70,54 +71,26 @@ export class SketchSync {
 
   /** One sync, leaving as it is the sketch open on the page (`open`), if any. */
   async sync(open: string | null): Promise<SketchSyncOutcome> {
-    const { drive, sketches: library } = this.deps;
-    await drive.connect();
-    const file: CloudFile | undefined = (await drive.list()).find((each) => each.name === SKETCHES_FILE);
-    const there = file === undefined ? { sketches: new Map(), deleted: new Map() } : readTheDrive(await drive.read(file.id));
-    const { here, deleted: deletedHere } = library.forTheDrive();
-    const editing = open;
+    const { sketches: library } = this.deps;
+    const { file, there } = await this.readTheDrive();
 
-    const next = new Map<string, SketchThere>(there.sketches);
-    const nextDeleted = new Map<string, number>(there.deleted);
+    const next = new Map<string, SketchThere>(there);
     // Settled here only once the drive has it.
     const sentAt: [string, number][] = [];
-    const settled: string[] = [];
     let brought = 0;
-    let takenOff = 0;
     let conflicts = 0;
 
-    for (const { id, revision } of deletedHere) {
-      const theirs = there.sketches.get(id);
-      // Changed elsewhere since it was deleted here: it comes back, below.
-      if (theirs !== undefined && theirs.revision <= revision) {
-        next.delete(id);
-        nextDeleted.set(id, theirs.revision);
-      }
-      settled.push(id);
-    }
-    const deletedHereIds = new Set(deletedHere.map(({ id }) => id));
-
-    for (const mine of here) {
+    for (const mine of library.forTheDrive()) {
       const { sketch } = mine;
-      const theirs = there.sketches.get(sketch.id);
-      const gone = there.deleted.get(sketch.id);
+      const theirs = there.get(sketch.id);
       const send = (revision: number): void => {
         next.set(sketch.id, { sketch, revision });
-        nextDeleted.delete(sketch.id);
         sentAt.push([sketch.id, revision]);
       };
       if (theirs === undefined) {
-        if (gone !== undefined && !mine.unsent && mine.revision <= gone) {
-          if (sketch.id !== editing) {
-            library.deletedElsewhere(sketch.id);
-            takenOff += 1;
-          }
-        } else {
-          // New here; or changed here since another device deleted it.
-          send(Math.max(mine.revision, gone ?? 0) + 1);
-        }
+        send(mine.revision + 1);
       } else if (theirs.revision > mine.revision) {
-        if (sketch.id === editing) {
+        if (sketch.id === open) {
           continue;
         }
         if (mine.unsent) {
@@ -135,43 +108,48 @@ export class SketchSync {
       }
     }
 
-    const hereIds = new Set(here.map(({ sketch }) => sketch.id));
-    for (const theirs of there.sketches.values()) {
-      if (!hereIds.has(theirs.sketch.id) && !deletedHereIds.has(theirs.sketch.id)) {
-        library.takeFromTheDrive(theirs.sketch, theirs.revision);
-        brought += 1;
-      }
-      // Deleted here but changed elsewhere since: brought back.
-      if (deletedHereIds.has(theirs.sketch.id) && next.has(theirs.sketch.id)) {
-        library.takeFromTheDrive(theirs.sketch, theirs.revision);
-        brought += 1;
-      }
-    }
-
-    const told = settled.filter((id) => there.sketches.has(id) && !next.has(id)).length;
-    if (sentAt.length > 0 || told > 0) {
-      await drive.write(SKETCHES_FILE, writeTheDrive(next, nextDeleted), file?.id ?? null);
+    if (sentAt.length > 0) {
+      await this.deps.drive.write(SKETCHES_FILE, writeTheDrive(next), file?.id ?? null);
     }
     for (const [id, revision] of sentAt) {
       library.sentAt(id, revision);
     }
-    for (const id of settled) {
-      library.deletionSettled(id);
+    return { sent: sentAt.length, brought, conflicts, onlyOnTheDrive: onlyOnTheDrive(next, library) };
+  }
+
+  /** Takes a sketch the drive has onto this device, as the drive has it now. */
+  async bringHere(id: string): Promise<void> {
+    const theirs = (await this.readTheDrive()).there.get(id);
+    if (theirs === undefined) {
+      throw new Error('That sketch is no longer on the drive.');
     }
-    return { sent: sentAt.length + told, brought, takenOff, conflicts };
+    this.deps.sketches.takeFromTheDrive(theirs.sketch, theirs.revision);
+  }
+
+  private async readTheDrive(): Promise<{
+    readonly file: CloudFile | undefined;
+    readonly there: ReadonlyMap<string, SketchThere>;
+  }> {
+    const { drive } = this.deps;
+    await drive.connect();
+    const file = (await drive.list()).find((each) => each.name === SKETCHES_FILE);
+    return { file, there: file === undefined ? new Map() : readTheDrive(await drive.read(file.id)) };
   }
 }
 
-function writeTheDrive(sketches: ReadonlyMap<string, SketchThere>, deleted: ReadonlyMap<string, number>): string {
+/** What the drive has that the library here does not, newest first. */
+function onlyOnTheDrive(there: ReadonlyMap<string, SketchThere>, library: SketchLibrary): readonly SketchOnTheDrive[] {
+  return [...there.values()]
+    .filter(({ sketch }) => library.find(sketch.id) === null)
+    .map(({ sketch }) => ({ id: sketch.id, title: sketch.title, begunAtMs: sketch.begunAtMs, noteCount: sketch.noteCount }))
+    .sort((one, other) => other.begunAtMs - one.begunAtMs);
+}
+
+function writeTheDrive(sketches: ReadonlyMap<string, SketchThere>): string {
   return JSON.stringify({
     version: VERSION,
     sketches: [...sketches.values()].map(({ sketch, revision }) => ({ ...sketchAsKept(sketch), revision })),
-    deleted: [...deleted],
   });
-}
-
-function isARevision(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }
 
 /**
@@ -179,28 +157,21 @@ function isARevision(value: unknown): value is number {
  * itself: an entry that does not hold together is left out rather than
  * trusted, and a file that is not one at all is an empty drive.
  */
-function readTheDrive(text: string): TheDrivesSketches {
+function readTheDrive(text: string): ReadonlyMap<string, SketchThere> {
   const sketches = new Map<string, SketchThere>();
-  const deleted = new Map<string, number>();
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
-    return { sketches, deleted };
+    return sketches;
   }
-  const read = parsed as { sketches?: unknown; deleted?: unknown } | null;
+  const read = parsed as { sketches?: unknown } | null;
   for (const entry of Array.isArray(read?.sketches) ? (read.sketches as unknown[]) : []) {
     const sketch = sketchFromKept(entry);
     const revision = (entry as { revision?: unknown } | null)?.revision;
-    if (sketch !== null && isARevision(revision)) {
+    if (sketch !== null && typeof revision === 'number' && Number.isInteger(revision) && revision > 0) {
       sketches.set(sketch.id, { sketch, revision });
     }
   }
-  for (const entry of Array.isArray(read?.deleted) ? (read.deleted as unknown[]) : []) {
-    const [id, revision] = Array.isArray(entry) ? (entry as unknown[]) : [];
-    if (typeof id === 'string' && isARevision(revision) && !sketches.has(id)) {
-      deleted.set(id, revision);
-    }
-  }
-  return { sketches, deleted };
+  return sketches;
 }

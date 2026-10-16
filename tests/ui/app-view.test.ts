@@ -6796,6 +6796,137 @@ describe('AppView', () => {
       expect([tonic.value, scale.value]).toEqual(['5', 'mixolydian']);
     });
 
+    it('changes the metre and the pace from the bar the cursor is in, asked in a sheet, and marks it over the bar', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: Array.from({ length: 16 }, (_, at) => [
+            { kind: 'noteOn' as const, atMs: at * 500, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: at * 500 + 400, midi: 60 },
+          ]).flat(),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Marked',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const mark = element<HTMLButtonElement>('roll-mark');
+      const sheet = element('sheet-roll-mark');
+      const metre = element<HTMLSelectElement>('roll-mark-metre');
+      const tempo = element<HTMLInputElement>('roll-mark-tempo');
+      const remove = element<HTMLButtonElement>('roll-mark-remove');
+      const undo = element<HTMLButtonElement>('roll-undo');
+      const marks = (): string[] => (view.rollScene?.marks ?? []).map((each) => `${each.after}: ${each.says}`);
+      const struck = (): number[] =>
+        (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'noteOn' ? [Math.round(event.atMs)] : []));
+      const cursorAt = (ms: number): void => {
+        tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: (ms / 1000) * zoom, clientY: 20 });
+      };
+      const asked = (): void => {
+        mark.click();
+      };
+
+      // There while the sketch is edited; the start marked as it is.
+      expect([mark.hidden, mark.dataset['away']]).toEqual([false, undefined]);
+      expect(marks()).toEqual(['1: 4/4 \u2669=120']);
+
+      // Asked a moment into the third bar: from its first beat, as it is there.
+      cursorAt(4_200);
+      asked();
+      expect(sheet.hidden).toBe(false);
+      expect(element('roll-mark-title').textContent).toBe('From bar 3, until the next change');
+      expect([metre.value, tempo.value]).toEqual(['4/4', '120']);
+      expect(remove.hidden).toBe(true);
+      // Nothing changed, nothing done.
+      element<HTMLButtonElement>('roll-mark-yes').click();
+      expect(sheet.hidden).toBe(true);
+      expect(undo.dataset['idle']).toBe('true');
+
+      asked();
+      metre.value = '3/4';
+      tempo.value = '60';
+      element<HTMLButtonElement>('roll-mark-yes').click();
+      expect(marks()).toEqual(['1: 4/4 \u2669=120', '3: 3/4 \u2669=60']);
+      // Before the bar the notes stay; from it each crotchet is twice as long.
+      expect(struck().slice(6, 10)).toEqual([3_000, 3_500, 4_000, 5_000]);
+      // One change, put back as one.
+      undo.click();
+      expect(marks()).toEqual(['1: 4/4 \u2669=120']);
+      expect(struck().slice(6, 10)).toEqual([3_000, 3_500, 4_000, 4_500]);
+
+      // The metre only, by Enter in the pace; then taken away.
+      cursorAt(4_200);
+      asked();
+      metre.value = '3/4';
+      tempo.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(marks()).toEqual(['1: 4/4 \u2669=120', '3: 3/4']);
+      // The first bar's metre changed from the drawer leaves the change after it.
+      const firstMetre = element<HTMLSelectElement>('roll-metre');
+      firstMetre.value = '2/4';
+      firstMetre.dispatchEvent(new Event('change'));
+      expect(marks()).toEqual(['1: 2/4 \u2669=120', '5: 3/4']);
+      cursorAt(4_200);
+      asked();
+      expect(element('roll-mark-title').textContent).toBe('From bar 5, until the next change');
+      expect(remove.hidden).toBe(false);
+      remove.click();
+      expect(sheet.hidden).toBe(true);
+      expect(marks()).toEqual(['1: 2/4 \u2669=120']);
+
+      // Cancelled, nothing changes; and a pace past a metronome's is held to it.
+      cursorAt(4_200);
+      asked();
+      tempo.value = '900';
+      element<HTMLButtonElement>('roll-mark-no').click();
+      expect(sheet.hidden).toBe(true);
+      expect(marks()).toEqual(['1: 2/4 \u2669=120']);
+      asked();
+      tempo.value = '900';
+      element<HTMLButtonElement>('roll-mark-yes').click();
+      expect(marks()).toEqual(['1: 2/4 \u2669=120', '5: \u2669=400']);
+      // A change of pace alone is taken away as well.
+      cursorAt(4_200);
+      asked();
+      expect(remove.hidden).toBe(false);
+      remove.click();
+      expect(marks()).toEqual(['1: 2/4 \u2669=120']);
+    });
+
+    it('offers in the sheet a metre its list does not, where the bar is in one', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      sketches.begin(
+        {
+          events: [
+            { kind: 'noteOn' as const, atMs: 3_000, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: 3_400, midi: 60 },
+          ],
+          // Begun a second into the click: the drawing's clock begins at its first bar.
+          beats: [1_000, 1_500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 7 })),
+        },
+        'Seven',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      expect((view.rollScene?.marks ?? []).map((mark) => [mark.atMs, mark.after, mark.says])).toEqual([[0, '1', '7/4 \u2669=120']]);
+      // The cursor a moment into the second bar, three and a half seconds into the drawing.
+      tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: 3.6 * zoom, clientY: 20 });
+      element<HTMLButtonElement>('roll-mark').click();
+      expect(element('roll-mark-title').textContent).toBe('From bar 2, until the next change');
+      expect(element<HTMLSelectElement>('roll-mark-metre').value).toBe('7/4');
+      // Kept as it is, nothing changes.
+      element<HTMLButtonElement>('roll-mark-yes').click();
+      expect(element<HTMLButtonElement>('roll-undo').dataset['idle']).toBe('true');
+      expect((view.rollScene?.marks ?? []).map((mark) => mark.says)).toEqual(['7/4 \u2669=120']);
+    });
+
     it('writes a chord of the key from the drawer where the cursor is, to the next line of the grid, and moves the cursor on', async () => {
       const { view, sketches, instrument } = createRig();
       await view.initialize();

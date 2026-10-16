@@ -34,6 +34,7 @@ const INKS: RollInks = {
   chosen: 'chosen',
   sounding: 'sounding',
   scale: 'scale',
+  mark: 'mark',
   right: 'right',
   left: 'left',
   tickDivision: 'tick-division',
@@ -414,6 +415,29 @@ describe('painting the ruler and the pedal', () => {
       ['2', 563, 3],
     ]);
     expect(recorder.font).toBe('10px serif');
+  });
+
+  it('writes each mark over the ruler in its own ink, after the name of the bar it is over, and alone where none is', () => {
+    const scene = theSceneOfTheRoll({
+      roll: roll({ beats: barsOfFour(2) }),
+      barLabel: (ticks) => (ticks % (Duration.QUARTER.ticks * 4) === 0 ? String(ticks / (Duration.QUARTER.ticks * 4) + 1) : null),
+      marks: [
+        { atMs: 0, says: '4/4 \u2669=60' },
+        { atMs: 4_000, says: '3/4' },
+        { atMs: 5_000, says: '\u2669=90' },
+      ],
+    });
+    const { surface: canvas, recorder } = surface(1_400, 19);
+
+    paintTheRuler(canvas, scene, at(), INKS, 1);
+
+    // "1 " is two letters wide; "2 " too; the third is over no bar's name.
+    expect(recorder.inked('mark').map((mark) => [mark.words, Math.round(mark.x * 1000) / 1000, mark.y])).toEqual([
+      ['4/4 \u2669=60', 3 + 12, 3],
+      ['3/4', 563 + 12, 3],
+      ['\u2669=90', 703, 3],
+    ]);
+    expect(recorder.order.indexOf('bar')).toBeLessThan(recorder.order.indexOf('mark'));
   });
 
   it('keeps the name of a bar begun just off the left edge', () => {

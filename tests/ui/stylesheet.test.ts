@@ -2263,6 +2263,9 @@ describe('searching the settings', () => {
       /opacity\s*:\s*0?\.\d+/,
     );
     expect(body('.roll-quantize, .roll-humanize')).toMatch(/flex\s*:\s*none/);
+    // The metre and the pace asked for from a bar, side by side, and wrapping on a phone.
+    expect(body('.roll-mark__fields')).toMatch(/display\s*:\s*flex/);
+    expect(body('.roll-mark__fields')).toMatch(/flex-wrap\s*:\s*wrap/);
     // And the row wraps on a phone rather than running off it, each name with
     // what it names, the slider's group taking the room.
     expect(body('.roll-velocity')).toMatch(/flex-wrap\s*:\s*wrap/);

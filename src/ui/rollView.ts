@@ -80,6 +80,8 @@ export interface RollDrawing {
    * whose rows are lit: a sketch's, to write in. None for anything else.
    */
   readonly scale?: readonly number[];
+  /** Where the music changes metre or pace, on the run's own clock, and what a mark there says. */
+  readonly marks?: readonly { readonly atMs: number; readonly says: string }[];
   /**
    * Whether every key of the piano has its row, rather than the notes played
    * and a little room round them: so a note being edited can be taken to any
@@ -306,6 +308,14 @@ export interface SceneBar {
   readonly name: string;
 }
 
+/** A mark over the ruler where the music changes metre or pace: what it says, after the name of a bar begun there. */
+export interface SceneMark {
+  readonly atMs: number;
+  readonly says: string;
+  /** The name of the bar the mark is over, which it is written after, or nothing. */
+  readonly after: string;
+}
+
 /**
  * Everything the drawing shows, placed in the run's own time.
  *
@@ -327,6 +337,8 @@ export interface RollScene {
   readonly blackRows: readonly number[];
   /** The rows of the notes of the scale the music is written in, lit to write in: see {@link RollDrawing.scale}. */
   readonly scaleRows: readonly number[];
+  /** The marks over the ruler: see {@link RollDrawing.marks}. */
+  readonly marks: readonly SceneMark[];
   readonly waits: readonly SceneStretch[];
   /** The clicks, which the ruler marks as well as the grid: one list, so they cannot disagree. */
   readonly lines: readonly SceneLine[];
@@ -1022,6 +1034,13 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
     lengthMs: endMs - origin,
     blackRows,
     scaleRows,
+    marks: momentsInTimeOrder(
+      (drawing.marks ?? []).map((mark) => ({
+        atMs: mark.atMs - origin,
+        says: mark.says,
+        after: bars.find((bar) => Math.abs(bar.atMs - (mark.atMs - origin)) < 1)?.name ?? '',
+      })),
+    ),
     waits: inTimeOrder(theWaits(roll).map((wait) => waitOf(wait, origin))),
     // The same list a playback sounds its clicks from, so a line and a click
     // can never end up in different places - cut lines included.

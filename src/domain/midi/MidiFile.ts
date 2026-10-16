@@ -227,29 +227,173 @@ export function theClickOfTheTake(
 }
 
 /**
- * The beats of a click as another metre counts them: at the same pace, with
- * every moment where it was, the bars and the beats laid afresh from the
- * first beat of the first bar - so the notes stay where they were played or
- * put, and only the bars they are written in change. Where the click says
- * nothing it is given back as it was.
+ * The beats of a take's click, carried on past its playing as far as a
+ * moment, where it is later: so a bar after the last note can be changed.
+ */
+function theClickReaching(
+  events: readonly MidiFileEvent[],
+  beats: readonly HeardBeat[],
+  atMs: number,
+): readonly HeardBeat[] | null {
+  let grid = theClickOfTheTake(events, beats);
+  for (let after = 0; grid !== null && elementAt(grid, grid.length - 1).atMs < atMs; ) {
+    after += 8;
+    const longer = theClickOfTheTake(events, beats, after);
+    // A click that goes nowhere goes no further.
+    if (longer === null || longer.length === grid.length) {
+      break;
+    }
+    grid = longer;
+  }
+  return grid;
+}
+
+/** The beat a bar begins on, of the bar a moment is in: the first bar's for a moment before it. */
+function theBarAt(grid: readonly HeardBeat[], atMs: number): number {
+  let bar = 0;
+  grid.forEach((beat, at) => {
+    if (beat.beat === 0 && beat.atMs <= atMs + SAME_MOMENT_MS) {
+      bar = at;
+    }
+  });
+  return bar;
+}
+
+/** How near two moments are to be one: what rounding a click's beats to the millisecond leaves. */
+const SAME_MOMENT_MS = 0.5;
+
+/** A metre as a bar says it: "6/8". */
+function metreOf(beat: HeardBeat): string {
+  return `${String(beat.beatsInBar)}/${String(valueOf(beat))}`;
+}
+
+/** How many crotchets a minute the beat at `at` goes at, to the nearest one: the pace a tempo mark would say. */
+function thePaceOfTheBeat(grid: readonly HeardBeat[], at: number): number {
+  return Math.round((MILLISECONDS_PER_MINUTE * 4) / valueOf(elementAt(grid, at)) / gapAfter(grid, at));
+}
+
+/**
+ * The beats of a click with the bars from the one a moment is in counted in
+ * another metre, as far as the next bar that changes metre - or to the end.
+ *
+ * Every moment stays where it was, at the same pace, so the notes stay where
+ * they were played or put and only the bars they are written in change. The
+ * bars are laid whole: where the last of them would cross into the next
+ * change, that change begins on the bar line after it, in its own metre. A
+ * metre the bars before were in already is no change: they go on in it.
+ * Where the click says nothing it is given back as it was. Asked of no
+ * moment, from the first bar.
  */
 export function theClickInAnotherMetre(
   events: readonly MidiFileEvent[],
   beats: readonly HeardBeat[],
   beatsInBar: number,
   beatType: number,
+  fromMs = Number.NEGATIVE_INFINITY,
 ): readonly HeardBeat[] {
-  const grid = theClickOfTheTake(events, beats);
+  const grid = theClickReaching(events, beats, fromMs);
   if (grid === null) {
     return beats;
   }
   const marks = theCrotchetsOfTheClick(grid);
-  const unit = 4 / beatType;
+  const from = theBarAt(grid, fromMs);
+  // The metres the click is in, each from where it begins, in crotchets.
+  const sections: { crotchets: number; beatsInBar: number; beatType: number }[] = [];
+  grid.forEach((beat, at) => {
+    const begins = at === 0 || (beat.beat === 0 && metreOf(beat) !== metreOf(elementAt(grid, at - 1)));
+    if (begins || at === from) {
+      sections.push({ crotchets: elementAt(marks.points, at).crotchets, beatsInBar: beat.beatsInBar, beatType: valueOf(beat) });
+    }
+  });
+  const asked = elementAt(marks.points, from).crotchets;
+  // Two sections side by side in one metre lay the bars one would: the
+  // bars of the first are whole, so the second's begin where its would.
+  const kept = sections.map((section) =>
+    section.crotchets === asked ? { ...section, beatsInBar, beatType } : section,
+  );
   const counted: HeardBeat[] = [];
-  for (let at = 0; at * unit < marks.crotchets; at += 1) {
-    counted.push({ atMs: theMomentOfACrotchet(marks.points, at * unit), beat: at % beatsInBar, beatsInBar, beatType });
-  }
+  let at = 0;
+  kept.forEach((section, index) => {
+    const next = kept[index + 1];
+    const unit = 4 / section.beatType;
+    for (let beat = 0; next === undefined ? at < marks.crotchets : at < next.crotchets || beat !== 0; ) {
+      counted.push({ atMs: theMomentOfACrotchet(marks.points, at), beat, beatsInBar: section.beatsInBar, beatType: section.beatType });
+      at += unit;
+      beat = (beat + 1) % section.beatsInBar;
+    }
+  });
   return counted;
+}
+
+/** Where a click changes, from its first bar: what a mark over the bar says, a metre or a pace or both. */
+export interface ClickChange {
+  readonly atMs: number;
+  /** The metre its bars are in from here, where it changes here. */
+  readonly metre?: { readonly beatsInBar: number; readonly beatType: number };
+  /** Crotchets a minute from here, to the nearest one, where the pace changes here. */
+  readonly crotchetsPerMinute?: number;
+}
+
+/**
+ * Every place a take's click changes metre or pace, from its first beat,
+ * which says both: what the marks over the bars say. A pace is the nearest
+ * whole crotchets a minute, so a click's beats rounded to the millisecond
+ * are not each a change. Nothing where the click says nothing.
+ */
+export function theChangesOfTheClick(events: readonly MidiFileEvent[], beats: readonly HeardBeat[]): readonly ClickChange[] {
+  const grid = theClickOfTheTake(events, beats);
+  if (grid === null) {
+    return [];
+  }
+  return grid.flatMap((beat, at): ClickChange[] => {
+    const before = grid[at - 1];
+    // A bar's beats are all in its metre, so a change of metre is always a bar's first beat.
+    const metre =
+      at === 0 || (before !== undefined && metreOf(beat) !== metreOf(before))
+        ? { beatsInBar: beat.beatsInBar, beatType: valueOf(beat) }
+        : undefined;
+    const pace = thePaceOfTheBeat(grid, at);
+    const crotchetsPerMinute = at === 0 || pace !== thePaceOfTheBeat(grid, at - 1) ? pace : undefined;
+    return metre === undefined && crotchetsPerMinute === undefined
+      ? []
+      : [{ atMs: beat.atMs, ...(metre === undefined ? {} : { metre }), ...(crotchetsPerMinute === undefined ? {} : { crotchetsPerMinute }) }];
+  });
+}
+
+/**
+ * The bar of a take's click a moment is in, as a mark over it would be asked
+ * about: where it begins and its number, the metre and the pace there, and
+ * whether either changes on it - and what they were before it, which taking
+ * the change away gives back. `null` where the click says nothing.
+ */
+export function theBarOfTheClickAt(
+  events: readonly MidiFileEvent[],
+  beats: readonly HeardBeat[],
+  atMs: number,
+): {
+  readonly atMs: number;
+  readonly number: number;
+  readonly metre: { readonly beatsInBar: number; readonly beatType: number };
+  readonly crotchetsPerMinute: number;
+  readonly before: { readonly metre: { readonly beatsInBar: number; readonly beatType: number }; readonly crotchetsPerMinute: number } | null;
+} | null {
+  const grid = theClickReaching(events, beats, atMs);
+  if (grid === null) {
+    return null;
+  }
+  const bar = theBarAt(grid, atMs);
+  const here = elementAt(grid, bar);
+  const before = grid[bar - 1];
+  return {
+    atMs: here.atMs,
+    number: grid.slice(0, bar + 1).filter((beat) => beat.beat === 0).length,
+    metre: { beatsInBar: here.beatsInBar, beatType: valueOf(here) },
+    crotchetsPerMinute: thePaceOfTheBeat(grid, bar),
+    before:
+      before === undefined
+        ? null
+        : { metre: { beatsInBar: before.beatsInBar, beatType: valueOf(before) }, crotchetsPerMinute: thePaceOfTheBeat(grid, bar - 1) },
+  };
 }
 
 /**
@@ -268,29 +412,49 @@ export function thePaceOfTheClick(events: readonly MidiFileEvent[], beats: reado
 }
 
 /**
- * Some playing at another pace, all of it at one: every note, every pedal and
- * every beat moved to where the same place in the bar falls at that many
- * crotchets a minute, from the first beat of the first bar, which stays. The
- * notes keep their places in the bars and their lengths in beats, and the
- * music goes faster or slower. Where the click says nothing it is given back
- * as it was.
+ * Some playing at another pace from the bar a moment is in, as far as the
+ * next beat whose pace is another - or to the end: every note, every pedal
+ * and every beat there moved to where the same place in the bar falls at
+ * that many crotchets a minute, from the first beat of that bar, which
+ * stays. The notes keep their places in the bars and their lengths in beats,
+ * and the music goes faster or slower there; before it nothing moves, and
+ * after it everything keeps its own pace and moves by as much as the end of
+ * the change did. Where the click says nothing it is given back as it was.
+ * Asked of no moment, from the first bar - and what was played a little
+ * before it moves with it.
  */
 export function thePlayingAtAnotherPace(
   events: readonly MidiFileEvent[],
   beats: readonly HeardBeat[],
   crotchetsPerMinute: number,
+  fromMs = Number.NEGATIVE_INFINITY,
 ): { readonly events: readonly MidiFileEvent[]; readonly beats: readonly HeardBeat[] } {
-  const grid = theClickOfTheTake(events, beats);
+  const grid = theClickReaching(events, beats, fromMs);
   if (grid === null || !(crotchetsPerMinute > 0)) {
     return { events, beats };
   }
   const { points } = theCrotchetsOfTheClick(grid);
-  const from = elementAt(grid, 0).atMs;
-  const moved = (atMs: number): number =>
-    from + (theCrotchetAtAMoment(points, atMs) * MILLISECONDS_PER_MINUTE) / crotchetsPerMinute;
+  const bar = theBarAt(grid, fromMs);
+  let next = bar + 1;
+  while (next < grid.length && thePaceOfTheBeat(grid, next) === thePaceOfTheBeat(grid, next - 1)) {
+    next += 1;
+  }
+  const from = elementAt(points, bar);
+  const until = points[next];
+  const perCrotchet = MILLISECONDS_PER_MINUTE / crotchetsPerMinute;
+  const by = until === undefined ? 0 : from.atMs + (until.crotchets - from.crotchets) * perCrotchet - until.atMs;
+  const moved = (atMs: number): number => {
+    if (bar > 0 && atMs < from.atMs) {
+      return atMs;
+    }
+    if (until !== undefined && atMs >= until.atMs) {
+      return atMs + by;
+    }
+    return from.atMs + (theCrotchetAtAMoment(points, atMs) - from.crotchets) * perCrotchet;
+  };
   return {
     events: events.map((event) => ({ ...event, atMs: moved(event.atMs) })),
-    beats: beats.map((beat) => ({ ...beat, atMs: moved(beat.atMs) })),
+    beats: grid.map((beat) => ({ ...beat, atMs: moved(beat.atMs) })),
   };
 }
 

@@ -12,7 +12,8 @@ import {
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
 import { theSketchOfTheScore } from '../../src/application/SketchLibrary.js';
 import { readMidiFile } from '../../src/domain/midi/readMidiFile.js';
-import { writeMidiFile } from '../../src/domain/midi/MidiFile.js';
+import { theClickInAnotherMetre, thePlayingAtAnotherPace, writeMidiFile } from '../../src/domain/midi/MidiFile.js';
+import { barLines } from '../../src/domain/model/Exercise.js';
 import { midiToExercise } from '../../src/domain/notation/midiToExercise.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { Duration } from '../../src/domain/model/Duration.js';
@@ -65,6 +66,32 @@ describe('a sketch of a score', () => {
     expect(page.timeSignature.toString()).toBe('6/8');
     const treble = buildTimeline(page).steps.flatMap((step) => (step.expectedMidi.some((midi) => midi >= 60) ? [step.onsetTicks] : []));
     expect(treble).toEqual([0, 1, 2, 3, 4, 5].map((at) => at * Duration.EIGHTH.ticks));
+  });
+});
+
+describe('a sketch changed partway', () => {
+  it('is written down with the metre and the pace changed from the bar they were changed from', () => {
+    // Eight bars of 4/4 at 120, a crotchet on every beat; from the third bar
+    // 3/4, and from the same bar a crotchet a second.
+    const events: MidiFileEvent[] = Array.from({ length: 32 }, (_, at) => [
+      { kind: 'noteOn' as const, atMs: at * 500, midi: 60, velocity: 0.5 },
+      { kind: 'noteOff' as const, atMs: at * 500 + 400, midi: 60 },
+    ]).flat();
+    const plain = [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 }));
+    const counted = theClickInAnotherMetre(events, plain, 3, 4, 4_000);
+    const paced = thePlayingAtAnotherPace(events, counted, 60, 4_000);
+
+    const page = midiToExercise(readMidiFile(writeMidiFile(paced.events, { beats: paced.beats })), 'Changed').exercise;
+    const bars = barLines(page);
+    expect(bars.slice(0, 4).map((bar) => bar.timeSignature.toString())).toEqual(['4/4', '4/4', '3/4', '3/4']);
+    expect(bars[2]?.startTicks).toBe(8 * Duration.QUARTER.ticks);
+    expect([page.tempoBpm, ...page.tempoChanges.map((change) => [change.measureIndex, change.offsetTicks, change.tempoBpm])]).toEqual([
+      120,
+      [2, 0, 60],
+    ]);
+    // Every crotchet still on a crotchet.
+    const struck = buildTimeline(page).steps.flatMap((step) => (step.expectedMidi.length > 0 ? [step.onsetTicks] : []));
+    expect(struck.slice(0, 10)).toEqual(Array.from({ length: 10 }, (_, at) => at * Duration.QUARTER.ticks));
   });
 });
 

@@ -435,3 +435,68 @@ describe('a take played to a click, written down', () => {
     expect(steps.map((step) => step.onsetTicks)).toEqual([1, 2, 3, 4, 5].map((at) => at * Duration.QUARTER.ticks));
   });
 });
+
+describe('a file that changes metre and tempo partway', () => {
+  /**
+   * 3/4 at 120 (4/4 set first at the start, then 3/4), a crotchet C; at the
+   * fourth crotchet 2/4, the tempo set again at 120; at the fifth 59 and a
+   * bit, and a crotchet D there; where the D ends, past the last bar, 2/4 set
+   * again and 120 once more. The metre change may be set at `metreAt` instead.
+   */
+  const changing = (metreAt: number[] = [0x87, 0x40], pedal = false): Uint8Array =>
+    handWritten([
+      0x00, 0xff, 0x58, 0x04, 0x04, 0x02, 0x18, 0x08,
+      0x00, 0xff, 0x58, 0x04, 0x03, 0x02, 0x18, 0x08,
+      0x00, 0xff, 0x51, 0x03, 0x07, 0xa1, 0x20,
+      0x00, 0x90, 0x3c, 0x50,
+      0x83, 0x60, 0x80, 0x3c, 0x00,
+      ...metreAt, 0xff, 0x58, 0x04, 0x02, 0x02, 0x18, 0x08,
+      0x00, 0xff, 0x51, 0x03, 0x07, 0xa1, 0x20,
+      ...(metreAt[0] === 0x87 ? [0x83, 0x60] : [0x87, 0x40]), 0xff, 0x51, 0x03, 0x0f, 0x69, 0xb5,
+      ...(pedal ? [0x00, 0xb0, 0x40, 0x7f] : []),
+      0x00, 0x90, 0x3e, 0x50,
+      0x83, 0x60, 0x80, 0x3e, 0x00,
+      0x00, 0xff, 0x58, 0x04, 0x02, 0x02, 0x18, 0x08,
+      0x00, 0xff, 0x51, 0x03, 0x07, 0xa1, 0x20,
+    ]);
+
+  it('reads the metre and the tempo it begins in, and every change after, but not a tempo set again as it was', () => {
+    const document = readMidiFile(changing());
+    expect([document.beats, document.beatType, document.tempoBpm]).toEqual([3, 4, 120]);
+    expect(document.metreChanges).toEqual([{ atTicks: 1_440, beats: 2, beatType: 4 }]);
+    // A tempo of 1,010,101 microseconds a crotchet is 59.4 a minute, said as 59.
+    expect(document.tempoChanges).toEqual([
+      { atTicks: 1_920, tempoBpm: 59 },
+      { atTicks: 2_400, tempoBpm: 120 },
+    ]);
+  });
+
+  it('writes the page in the bars of each metre, and the tempo where it changes', () => {
+    const { exercise } = midiToExercise(readMidiFile(changing([0x87, 0x40], true)), 'Changing');
+    expect(() => validateExercise(exercise)).not.toThrow();
+    expect(exercise.timeSignature.toString()).toBe('3/4');
+    expect(exercise.timeChanges.map((change) => [change.measureIndex, change.timeSignature.toString()])).toEqual([[1, '2/4']]);
+    expect(exercise.tempoBpm).toBe(120);
+    expect(exercise.tempoChanges.map((change) => [change.measureIndex, change.offsetTicks, change.tempoBpm])).toEqual([
+      // The 120 set where the music ends is past every bar, and printed nowhere.
+      [1, Duration.QUARTER.ticks, 59],
+    ]);
+    expect(measureCount(exercise)).toBe(2);
+    const steps = buildTimeline(exercise).steps.filter((step) => step.expectedMidi.length > 0);
+    expect(steps.map((step) => [step.expectedMidi[0], step.onsetTicks])).toEqual([
+      [60, 0],
+      [62, 4 * Duration.QUARTER.ticks],
+    ]);
+    // The pedal down in the bar of 2/4, a crotchet in.
+    expect(exercise.pedalMarks.map((mark) => [mark.measureIndex, mark.offsetTicks, mark.type])).toEqual([
+      [1, Duration.QUARTER.ticks, 'start'],
+    ]);
+  });
+
+  it('begins a metre set inside a bar on the bar line after it', () => {
+    // 2/4 set at the second crotchet of the first bar of 3/4.
+    const { exercise } = midiToExercise(readMidiFile(changing([0x83, 0x60])), 'Inside');
+    expect(exercise.timeChanges.map((change) => [change.measureIndex, change.timeSignature.toString()])).toEqual([[1, '2/4']]);
+    expect(() => validateExercise(exercise)).not.toThrow();
+  });
+});

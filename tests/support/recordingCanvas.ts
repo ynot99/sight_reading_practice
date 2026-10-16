@@ -119,6 +119,10 @@ export class Recorder {
   fillText(words: string, x: number, y: number): void {
     this.marks.push({ how: 'text', ink: this.fillStyle, x, y, wide: 0, tall: 0, words, alpha: this.globalAlpha });
   }
+  /** Six pixels a letter, so a test can say where words after others begin. */
+  measureText(words: string): { readonly width: number } {
+    return { width: words.length * 6 };
+  }
 
   /** The inks in the order they were first painted with. */
   get order(): string[] {

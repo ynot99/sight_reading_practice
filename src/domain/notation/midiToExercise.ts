@@ -1,6 +1,6 @@
 import { DIVISIONS_PER_QUARTER, Duration, type NoteTypeName } from '../model/Duration.js';
 import { DomainError } from '../../shared/errors.js';
-import type { Exercise, MusicalEntry, PedalMark, StaffPart } from '../model/Exercise.js';
+import type { Exercise, MusicalEntry, PedalMark, StaffPart, TempoChange, TimeChange } from '../model/Exercise.js';
 import { measureOf, noteEntry, restEntry, validateExercise } from '../model/Exercise.js';
 import { KeySignature } from '../model/KeySignature.js';
 import { Pitch } from '../model/Pitch.js';
@@ -96,22 +96,18 @@ function tripletVocabulary(ticksPerBeat: number): Duration[] {
  * closer to is the one it was written on. A beat with nothing in it is plain,
  * because nothing is asking otherwise.
  */
-function gridsByBeat(
-  ticks: readonly number[],
-  ticksPerBeat: number,
-  beats: number,
-): BeatGrid[] {
-  const triplet = tripletGridFor(ticksPerBeat);
+function gridsByBeat(ticks: readonly number[], bars: Bars): BeatGrid[] {
   const byBeat = new Map<number, number[]>();
   for (const tick of ticks) {
-    const beat = Math.floor(tick / ticksPerBeat);
+    const beat = bars.beatAt(tick);
     const bucket = byBeat.get(beat) ?? [];
-    bucket.push(tick - beat * ticksPerBeat);
+    bucket.push(tick - bars.beatStart(beat));
     byBeat.set(beat, bucket);
   }
 
-  return Array.from({ length: beats }, (_, beat) => {
-    const offsets = byBeat.get(beat) ?? [];
+  return bars.beats.map((beat, index) => {
+    const offsets = byBeat.get(index) ?? [];
+    const triplet = tripletGridFor(beat.endTicks - beat.startTicks);
     if (triplet === null || offsets.length === 0) {
       return 'plain' as BeatGrid;
     }
@@ -122,16 +118,88 @@ function gridsByBeat(
 }
 
 /** Pulls one tick onto the grid the beat it falls in was written on. */
-function snapToBeat(
-  tick: number,
-  grids: readonly BeatGrid[],
-  ticksPerBeat: number,
-  tripletTicks: number,
-): number {
-  const beat = Math.min(grids.length - 1, Math.max(0, Math.floor(tick / ticksPerBeat)));
-  const grid = grids[beat] === 'triplet' ? tripletTicks : PLAIN_GRID;
-  const within = snap(tick - beat * ticksPerBeat, grid);
-  return beat * ticksPerBeat + within;
+function snapToBeat(tick: number, grids: readonly BeatGrid[], bars: Bars): number {
+  const beat = bars.beatAt(tick);
+  const start = bars.beatStart(beat);
+  const triplet = tripletGridFor(bars.beatEnd(beat) - start);
+  const grid = grids[beat] === 'triplet' && triplet !== null ? triplet : PLAIN_GRID;
+  return start + snap(tick - start, grid);
+}
+
+/** A bar of the page: where it begins and ends, in divisions, and its metre. */
+interface Bar {
+  readonly startTicks: number;
+  readonly endTicks: number;
+  readonly timeSignature: TimeSignature;
+}
+
+/** A beat of the page, in divisions. */
+interface Beat {
+  readonly startTicks: number;
+  readonly endTicks: number;
+}
+
+/**
+ * The bars and beats of the page, laid from its first metre and changed
+ * where the file changes it: whole bars, so a change the file sets inside a
+ * bar begins on the next bar line. Asked which bar or beat a tick is in, the
+ * first for a tick before the page and the last for one after it.
+ */
+interface Bars {
+  readonly bars: readonly Bar[];
+  readonly beats: readonly Beat[];
+  barAt(ticks: number): number;
+  beatAt(ticks: number): number;
+  beatStart(beat: number): number;
+  beatEnd(beat: number): number;
+}
+
+function layTheBars(
+  first: TimeSignature,
+  changes: readonly { readonly atTicks: number; readonly timeSignature: TimeSignature }[],
+  reaching: number,
+): Bars {
+  const bars: Bar[] = [];
+  let at = 0;
+  let metre = first;
+  const ahead = [...changes].sort((left, right) => left.atTicks - right.atTicks);
+  while (at < reaching || bars.length === 0) {
+    while (ahead[0] !== undefined && ahead[0].atTicks <= at) {
+      metre = ahead.shift()?.timeSignature ?? metre;
+    }
+    bars.push({ startTicks: at, endTicks: at + metre.ticksPerMeasure, timeSignature: metre });
+    at += metre.ticksPerMeasure;
+  }
+  const beats: Beat[] = bars.flatMap((bar) => {
+    const each = bar.timeSignature.ticksPerBeat;
+    const inBar: Beat[] = [];
+    for (let start = bar.startTicks; start < bar.endTicks; start += each) {
+      inBar.push({ startTicks: start, endTicks: Math.min(start + each, bar.endTicks) });
+    }
+    return inBar;
+  });
+  // Halved rather than walked: a long file asks for every note, and has thousands of beats.
+  const lastIn = <T extends { readonly startTicks: number }>(list: readonly T[], ticks: number): number => {
+    let low = 0;
+    let high = list.length - 1;
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2);
+      if ((list[middle]?.startTicks ?? Number.POSITIVE_INFINITY) <= ticks) {
+        low = middle;
+      } else {
+        high = middle - 1;
+      }
+    }
+    return low;
+  };
+  return {
+    bars,
+    beats,
+    barAt: (ticks) => lastIn(bars, ticks),
+    beatAt: (ticks) => lastIn(beats, ticks),
+    beatStart: (beat) => beats[beat]?.startTicks ?? 0,
+    beatEnd: (beat) => beats[beat]?.endTicks ?? 0,
+  };
 }
 
 /**
@@ -291,14 +359,15 @@ function tileSpan(
   emit: (measureIndex: number, value: Duration, last: boolean) => void,
 ): void {
   let at = startTicks;
+  const { bars, grids } = layout;
   while (at < endTicks) {
-    const measureIndex = Math.floor(at / layout.ticksPerMeasure);
-    const beat = Math.floor(at / layout.ticksPerBeat);
-    const grid = layout.grids[beat] ?? 'plain';
-    const measureEnd = (measureIndex + 1) * layout.ticksPerMeasure;
+    const measureIndex = bars.barAt(at);
+    const beat = bars.beatAt(at);
+    const grid = grids[beat] ?? 'plain';
+    const measureEnd = bars.bars[measureIndex]?.endTicks ?? endTicks;
     let until = Math.min(endTicks, measureEnd);
     if (grid === 'triplet') {
-      until = Math.min(until, (beat + 1) * layout.ticksPerBeat);
+      until = Math.min(until, bars.beatEnd(beat));
     } else {
       // A plain span runs on past its own beat - cutting a half note into
       // four tied quarters would be correct and unreadable - but it stops
@@ -306,14 +375,14 @@ function tileSpan(
       // bug: a span of four triplet eighths that began on a plain beat was
       // handed to the plain values, which get within forty divisions of it
       // and can go no further.
-      for (let next = beat + 1; next * layout.ticksPerBeat < until; next += 1) {
-        if ((layout.grids[next] ?? 'plain') === 'triplet') {
-          until = next * layout.ticksPerBeat;
+      for (let next = beat + 1; next < bars.beats.length && bars.beatStart(next) < until; next += 1) {
+        if ((grids[next] ?? 'plain') === 'triplet') {
+          until = bars.beatStart(next);
           break;
         }
       }
     }
-    for (const value of valuesFor(until - at, grid, layout.ticksPerBeat)) {
+    for (const value of valuesFor(until - at, grid, bars.beatEnd(beat) - bars.beatStart(beat))) {
       at += value.ticks;
       emit(measureIndex, value, at >= endTicks);
     }
@@ -321,8 +390,7 @@ function tileSpan(
 }
 
 interface Layout {
-  readonly ticksPerMeasure: number;
-  readonly ticksPerBeat: number;
+  readonly bars: Bars;
   readonly grids: readonly BeatGrid[];
 }
 
@@ -355,7 +423,7 @@ function buildStaff(
     });
     at = segment.endTicks;
   }
-  silence(at, bars * layout.ticksPerMeasure);
+  silence(at, layout.bars.bars[bars - 1]?.endTicks ?? at);
 
   const measures = Array.from({ length: bars }, (_, index) =>
     measureOf(placed.filter((each) => each.measureIndex === index).map((each) => each.entry)),
@@ -390,17 +458,21 @@ export function midiToExercise(
   const warnings: ImportWarning[] = [];
   const scale = DIVISIONS_PER_QUARTER / document.division;
   const signature = new TimeSignature(document.beats, document.beatType);
-  const ticksPerBeat = signature.ticksPerBeat;
-  const triplet = tripletGridFor(ticksPerBeat);
 
   // Which grid each beat was played on has to be settled before anything is
   // pulled onto one: three notes in a beat are a triplet and four are
-  // sixteenths, and once a note has been moved the difference is gone.
+  // sixteenths, and once a note has been moved the difference is gone. The
+  // beats are the bars', laid in the metres the file sets where it sets them,
+  // a bar past the last note so a note pulled later still has one.
   const rough = document.notes.flatMap((note) => [note.startTicks * scale, note.endTicks * scale]);
   const roughLast = rough.length === 0 ? 0 : Math.max(...rough);
-  const grids = gridsByBeat(rough, ticksPerBeat, Math.ceil(roughLast / ticksPerBeat) + 1);
-  const pull = (ticks: number): number =>
-    snapToBeat(ticks, grids, ticksPerBeat, triplet ?? PLAIN_GRID);
+  const metreChanges = document.metreChanges.map((change) => ({
+    atTicks: change.atTicks * scale,
+    timeSignature: new TimeSignature(change.beats, change.beatType),
+  }));
+  const laid = layTheBars(signature, metreChanges, roughLast + 1);
+  const grids = gridsByBeat(rough, laid);
+  const pull = (ticks: number): number => snapToBeat(ticks, grids, laid);
 
   let moved = 0;
   let dropped = 0;
@@ -423,9 +495,8 @@ export function midiToExercise(
   }
 
   const timeSignature = signature;
-  const ticksPerMeasure = timeSignature.ticksPerMeasure;
   const lastTick = Math.max(...notes.map((note) => note.endTicks));
-  const bars = Math.max(1, Math.ceil(lastTick / ticksPerMeasure));
+  const bars = Math.max(1, laid.bars.filter((bar) => bar.startTicks < lastTick).length);
   const preferFlats = document.fifths < 0;
 
   const { byNote, fromPitch } = assignStaves(notes, splitAtMidi, document.trackNames);
@@ -456,7 +527,7 @@ export function midiToExercise(
       'A MIDI file records key presses, not lines of music, so each staff is written as one voice: a note held under a moving line ends where the line moves.',
   });
 
-  const layout: Layout = { ticksPerMeasure, ticksPerBeat, grids };
+  const layout: Layout = { bars: laid, grids };
   const staves = [
     buildStaff(segmentsFor(right), bars, layout, RIGHT_HAND, 1, preferFlats),
     buildStaff(segmentsFor(left), bars, layout, LEFT_HAND, 2, preferFlats),
@@ -470,11 +541,17 @@ export function midiToExercise(
     });
   }
 
+  /** A place on the page, as a mark is put at one: its bar, and how far into it - the last bar's, past the end. */
+  const placed = (ticks: number): { readonly measureIndex: number; readonly offsetTicks: number } => {
+    const measureIndex = Math.min(bars - 1, laid.barAt(ticks));
+    const bar = laid.bars[measureIndex];
+    const offsetTicks = ticks - (bar?.startTicks ?? 0);
+    return { measureIndex, offsetTicks: Math.min(offsetTicks, (bar?.timeSignature.ticksPerMeasure ?? 1) - 1) };
+  };
   const pedalMarks: PedalMark[] = document.pedal.map((mark) => {
     const ticks = pull(mark.atTicks * scale);
     return {
-      measureIndex: Math.min(bars - 1, Math.floor(ticks / ticksPerMeasure)),
-      offsetTicks: ticks % ticksPerMeasure,
+      ...placed(ticks),
       // A bracket, because a recording says exactly how long the pedal was
       // held and the bracket is the notation that says exactly that.
       line: true,
@@ -482,13 +559,26 @@ export function midiToExercise(
     };
   });
 
+  // A bar in another metre than the one before it says so; the first is the page's own.
+  const timeChanges: TimeChange[] = laid.bars.slice(1, bars).flatMap((bar, before) =>
+    bar.timeSignature.equals(laid.bars[before]?.timeSignature ?? signature)
+      ? []
+      : [{ measureIndex: before + 1, timeSignature: bar.timeSignature }],
+  );
+  // A tempo the writer set, printed where it was set: on the page's grid, and
+  // none past the last bar.
+  const tempoChanges: TempoChange[] = document.tempoChanges
+    .map((change) => ({ ticks: pull(change.atTicks * scale), tempoBpm: change.tempoBpm }))
+    .filter((change) => change.ticks < (laid.bars[bars - 1]?.endTicks ?? 0))
+    .map((change) => ({ ...placed(change.ticks), tempoBpm: change.tempoBpm }));
+
   const exercise: Exercise = {
     id: `midi-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
     title,
     key: new KeySignature(document.fifths, document.minor ? 'minor' : 'major'),
     keyChanges: [],
-    timeChanges: [],
-    tempoChanges: [],
+    timeChanges,
+    tempoChanges,
     pedalMarks,
     dynamicMarks: [],
     tempoWords: [],

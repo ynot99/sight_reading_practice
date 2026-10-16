@@ -30,6 +30,10 @@ export interface MidiFileDocument {
   /** Whether the key it says is the minor of those sharps or flats. */
   readonly minor: boolean;
   readonly tempoBpm: number;
+  /** Where the file changes metre after its first, in its own ticks, each a metre other than the one before. */
+  readonly metreChanges: readonly { readonly atTicks: number; readonly beats: number; readonly beatType: number }[];
+  /** Where the file changes tempo after its first, in its own ticks, each to the nearest crotchet a minute and another than the one before. */
+  readonly tempoChanges: readonly { readonly atTicks: number; readonly tempoBpm: number }[];
   readonly title: string | null;
   /** Each track's own name where it gives one, by the track's number. */
   readonly trackNames: readonly (string | null)[];
@@ -38,6 +42,28 @@ export interface MidiFileDocument {
 const HEADER = 0x4d546864; // "MThd"
 const TRACK = 0x4d54726b; // "MTrk"
 const DEFAULT_TEMPO_BPM = 72;
+const MICROSECONDS_PER_MINUTE = 60_000_000;
+
+/**
+ * The marks a file sets after its first, in time order, each one that says
+ * something other than the one in force before it: a tempo set again at the
+ * same speed, as a writer does at every beat it measures, is no change.
+ */
+function theChangesAfterTheFirst<T extends { readonly atTicks: number }>(
+  marks: readonly T[],
+  first: string,
+  says: (mark: T) => string,
+): T[] {
+  const changes: T[] = [];
+  let before = first;
+  for (const mark of [...marks].sort((left, right) => left.atTicks - right.atTicks)) {
+    if (mark.atTicks > 0 && says(mark) !== before) {
+      changes.push(mark);
+    }
+    before = mark.atTicks > 0 ? says(mark) : before;
+  }
+  return changes;
+}
 
 /**
  * Whether these bytes are a Standard MIDI File.
@@ -137,6 +163,9 @@ interface TrackResult {
   fifths: number | null;
   minor: boolean | null;
   microsecondsPerQuarter: number | null;
+  /** Every metre and tempo the track sets, where it sets it. */
+  readonly metres: { readonly atTicks: number; readonly beats: number; readonly beatType: number }[];
+  readonly tempos: { readonly atTicks: number; readonly microsecondsPerQuarter: number }[];
   name: string | null;
   /** Its track name, apart from any other text: a file's title may be either. */
   trackName: string | null;
@@ -163,6 +192,8 @@ function readTrack(bytes: Bytes, length: number, track: number): TrackResult {
     fifths: null,
     minor: null,
     microsecondsPerQuarter: null,
+    metres: [],
+    tempos: [],
     name: null,
     trackName: null,
   };
@@ -206,12 +237,18 @@ function readTrack(bytes: Bytes, length: number, track: number): TrackResult {
       const type = bytes.byte();
       const size = bytes.variable();
       const data = bytes.take(size);
+      // The last set where the track begins is its own, as is the first set
+      // at all in a track that sets none there; the rest are where it changes.
       if (type === 0x51 && size === 3) {
-        result.microsecondsPerQuarter =
-          ((data[0] ?? 0) << 16) | ((data[1] ?? 0) << 8) | (data[2] ?? 0);
+        const microsecondsPerQuarter = ((data[0] ?? 0) << 16) | ((data[1] ?? 0) << 8) | (data[2] ?? 0);
+        result.microsecondsPerQuarter = at === 0 ? microsecondsPerQuarter : (result.microsecondsPerQuarter ?? microsecondsPerQuarter);
+        result.tempos.push({ atTicks: at, microsecondsPerQuarter });
       } else if (type === 0x58 && size >= 2) {
-        result.beats = data[0] ?? 4;
-        result.beatType = 2 ** (data[1] ?? 2);
+        const beats = data[0] ?? 4;
+        const beatType = 2 ** (data[1] ?? 2);
+        result.beats = at === 0 ? beats : (result.beats ?? beats);
+        result.beatType = at === 0 ? beatType : (result.beatType ?? beatType);
+        result.metres.push({ atTicks: at, beats, beatType });
       } else if (type === 0x59 && size >= 1) {
         // Signed: one byte, two's complement, flats negative.
         const raw = data[0] ?? 0;
@@ -325,6 +362,8 @@ export function readMidiFile(data: Uint8Array): MidiFileDocument {
   let fifths: number | null = null;
   let minor: boolean | null = null;
   let microsecondsPerQuarter: number | null = null;
+  const metres: { atTicks: number; beats: number; beatType: number }[] = [];
+  const tempos: { atTicks: number; microsecondsPerQuarter: number }[] = [];
   let title: string | null = null;
   const trackNames: (string | null)[] = [];
   let track = 0;
@@ -346,6 +385,8 @@ export function readMidiFile(data: Uint8Array): MidiFileDocument {
     fifths = fifths ?? read.fifths;
     minor = minor ?? read.minor;
     microsecondsPerQuarter = microsecondsPerQuarter ?? read.microsecondsPerQuarter;
+    metres.push(...read.metres);
+    tempos.push(...read.tempos);
     title = title ?? read.name;
     trackNames.push(read.trackName);
     track += 1;
@@ -355,6 +396,10 @@ export function readMidiFile(data: Uint8Array): MidiFileDocument {
     throw new DomainError('This MIDI file holds no notes.');
   }
 
+  const tempoBpm =
+    microsecondsPerQuarter === null || microsecondsPerQuarter <= 0
+      ? DEFAULT_TEMPO_BPM
+      : Math.round(MICROSECONDS_PER_MINUTE / microsecondsPerQuarter);
   return {
     division,
     notes: notes.sort((left, right) => left.startTicks - right.startTicks || left.midi - right.midi),
@@ -363,10 +408,24 @@ export function readMidiFile(data: Uint8Array): MidiFileDocument {
     beatType: beatType ?? 4,
     fifths: fifths ?? 0,
     minor: minor ?? false,
-    tempoBpm:
-      microsecondsPerQuarter === null || microsecondsPerQuarter <= 0
-        ? DEFAULT_TEMPO_BPM
-        : Math.round(60_000_000 / microsecondsPerQuarter),
+    tempoBpm,
+    metreChanges: theChangesAfterTheFirst(
+      metres,
+      `${String(beats ?? 4)}/${String(beatType ?? 4)}`,
+      (metre) => `${String(metre.beats)}/${String(metre.beatType)}`,
+    ).map(({ atTicks, beats: changedBeats, beatType: changedBeatType }) => ({
+      atTicks,
+      beats: changedBeats,
+      beatType: changedBeatType,
+    })),
+    tempoChanges: theChangesAfterTheFirst(
+      tempos.filter((tempo) => tempo.microsecondsPerQuarter > 0),
+      String(tempoBpm),
+      (tempo) => String(Math.round(MICROSECONDS_PER_MINUTE / tempo.microsecondsPerQuarter)),
+    ).map(({ atTicks, microsecondsPerQuarter: lasts }) => ({
+      atTicks,
+      tempoBpm: Math.round(MICROSECONDS_PER_MINUTE / lasts),
+    })),
     title,
     trackNames,
   };

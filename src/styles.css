@@ -1405,6 +1405,8 @@ textarea {
    * accent, fainter than a key sounding, so the two are told apart.
    */
   --roll-ink-scale: color-mix(in srgb, var(--accent) 7%, transparent);
+  /* What a mark over a bar says - its metre, its pace: no verdict, so the accent. */
+  --roll-ink-mark: var(--accent);
   --roll-ink-right: color-mix(in srgb, var(--accent) 70%, var(--surface));
   --roll-ink-left: color-mix(in srgb, var(--star-8) 70%, var(--surface));
   position: relative;
@@ -1823,6 +1825,14 @@ textarea {
 .roll-quantize,
 .roll-humanize {
   flex: none;
+}
+
+/* The metre and the pace asked for from a bar, side by side, wrapping on a phone. */
+.roll-mark__fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .roll-velocity__said {

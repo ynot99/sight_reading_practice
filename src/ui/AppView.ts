@@ -58,6 +58,8 @@ import { TimeSignature } from '../domain/model/TimeSignature.js';
 import { alterationSign, midiToLabel } from '../domain/model/Pitch.js';
 import {
   barsAreHeardIn,
+  theBarOfTheClickAt,
+  theChangesOfTheClick,
   theClickInAnotherMetre,
   theClickOfTheTake,
   thePaceOfTheClick,
@@ -2057,6 +2059,9 @@ export class AppView {
    */
   private chordsOfTheKeyOpen = false;
 
+  /** The bar a change of metre or pace is being asked about, while the sheet asking is open. */
+  private barAskedAbout: ReturnType<typeof theBarOfTheClickAt> = null;
+
   /** Whether a tap on a chord kept in the drawer deletes it, rather than writing it. */
   private chordsBeingForgotten = false;
 
@@ -2367,6 +2372,14 @@ export class AppView {
     rollUndo: HTMLButtonElement;
     rollRedo: HTMLButtonElement;
     rollChordsOpen: HTMLButtonElement;
+    rollMark: HTMLButtonElement;
+    sheetRollMark: HTMLElement;
+    rollMarkTitle: HTMLElement;
+    rollMarkMetre: HTMLSelectElement;
+    rollMarkTempo: HTMLInputElement;
+    rollMarkRemove: HTMLButtonElement;
+    rollMarkYes: HTMLButtonElement;
+    rollMarkNo: HTMLButtonElement;
     rollChords: HTMLElement;
     rollChordsList: HTMLElement;
     rollChordsKeep: HTMLButtonElement;
@@ -2750,6 +2763,14 @@ export class AppView {
       rollUndo: requireElement(doc, 'roll-undo'),
       rollRedo: requireElement(doc, 'roll-redo'),
       rollChordsOpen: requireElement(doc, 'roll-chords-open'),
+      rollMark: requireElement(doc, 'roll-mark'),
+      sheetRollMark: requireElement(doc, 'sheet-roll-mark'),
+      rollMarkTitle: requireElement(doc, 'roll-mark-title'),
+      rollMarkMetre: requireElement(doc, 'roll-mark-metre'),
+      rollMarkTempo: requireElement(doc, 'roll-mark-tempo'),
+      rollMarkRemove: requireElement(doc, 'roll-mark-remove'),
+      rollMarkYes: requireElement(doc, 'roll-mark-yes'),
+      rollMarkNo: requireElement(doc, 'roll-mark-no'),
       rollChords: requireElement(doc, 'roll-chords'),
       rollChordsList: requireElement(doc, 'roll-chords-list'),
       rollChordsKeep: requireElement(doc, 'roll-chords-keep'),
@@ -9296,6 +9317,33 @@ export class AppView {
     this.listen(this.el.rollUndo, 'click', () => {
       this.putBackTheLastChange();
     });
+    fillSelect(
+      this.el.rollMarkMetre,
+      SKETCH_METRES.map((metre) => ({ value: metre, label: metre })),
+      '4/4',
+    );
+    this.listen(this.el.rollMark, 'click', () => {
+      this.askForAChangeAtTheHead();
+    });
+    this.listen(this.el.rollMarkYes, 'click', () => {
+      this.changeFromTheBarAsked(this.el.rollMarkMetre.value, Number(this.el.rollMarkTempo.value));
+    });
+    this.listen(this.el.rollMarkTempo, 'keydown', (event) => {
+      if (event.key === 'Enter') {
+        this.changeFromTheBarAsked(this.el.rollMarkMetre.value, Number(this.el.rollMarkTempo.value));
+      }
+    });
+    // Escape and a tap outside press it too.
+    this.listen(this.el.rollMarkNo, 'click', () => {
+      this.el.sheetRollMark.hidden = true;
+      this.barAskedAbout = null;
+    });
+    this.listen(this.el.rollMarkRemove, 'click', () => {
+      const before = this.barAskedAbout?.before;
+      if (before !== null && before !== undefined) {
+        this.changeFromTheBarAsked(`${String(before.metre.beatsInBar)}/${String(before.metre.beatType)}`, before.crotchetsPerMinute);
+      }
+    });
     this.listen(this.el.rollChordsOpen, 'click', () => {
       this.chordsOfTheKeyOpen = !this.chordsOfTheKeyOpen;
       this.chordsBeingForgotten = false;
@@ -12468,7 +12516,7 @@ export class AppView {
     this.el.rollEdit.setAttribute('aria-label', this.el.rollEdit.title);
     this.el.rollSelect.setAttribute('aria-pressed', String(sketch === undefined ? this.boxOnTheViewer : sketch.tool === 'selection'));
     // Only a sketch has them, and they are there only while it is edited.
-    for (const button of [this.el.rollDelete, this.el.rollUndo, this.el.rollRedo, this.el.rollChordsOpen]) {
+    for (const button of [this.el.rollDelete, this.el.rollUndo, this.el.rollRedo, this.el.rollMark, this.el.rollChordsOpen]) {
       button.hidden = sketch === undefined;
       if (editing) {
         delete button.dataset['away'];
@@ -12704,6 +12752,22 @@ export class AppView {
     if (broken !== null) {
       this.changeTheSketchShowing(broken.events, [...sketch.before, asItWas(stored, sketch.chosen)], broken.keys);
     }
+  }
+
+  /** Where the sketch shown changes metre or pace, from its first bar, and what a mark there says: "3/4 ♩=90". */
+  private theMarksOfTheSketchShown(): readonly { readonly atMs: number; readonly says: string }[] {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    if (stored === null) {
+      return [];
+    }
+    return theChangesOfTheClick(stored.events, stored.beats).map((change) => ({
+      atMs: change.atMs,
+      says: [
+        ...(change.metre === undefined ? [] : [`${String(change.metre.beatsInBar)}/${String(change.metre.beatType)}`]),
+        ...(change.crotchetsPerMinute === undefined ? [] : [`\u2669=${String(change.crotchetsPerMinute)}`]),
+      ].join(' '),
+    }));
   }
 
   /** The pitch classes of the scale the sketch shown is written in, or none where no sketch is shown. */
@@ -12958,6 +13022,92 @@ export class AppView {
    * Counts the sketch on the drawing in another metre: its bars laid afresh,
    * its notes where they were. Kept with the sketch, as its key is.
    */
+  /**
+   * Asks what the bar the cursor is in is to change to: its metre and its
+   * pace, as they are there now, in a sheet over the drawing; and offers to
+   * take a change away where one begins on that bar.
+   */
+  private askForAChangeAtTheHead(): void {
+    const showing = this.theOtherRollShowing;
+    const stored = showing?.sketch === undefined ? null : this.runtime.sketches.find(showing.sketch.id);
+    const roll = this.theRoll();
+    if (showing === null || stored === null || roll === null) {
+      return;
+    }
+    const bar = theBarOfTheClickAt(stored.events, stored.beats, this.headIsAtMs() + rollBeganAtMs(roll));
+    if (bar === null) {
+      return;
+    }
+    this.barAskedAbout = bar;
+    const metre = `${String(bar.metre.beatsInBar)}/${String(bar.metre.beatType)}`;
+    // A metre the list does not offer, as a score may be in, is offered as it is.
+    if (![...this.el.rollMarkMetre.options].some((option) => option.value === metre)) {
+      this.el.rollMarkMetre.append(new Option(metre, metre));
+    }
+    this.el.rollMarkMetre.value = metre;
+    this.el.rollMarkTempo.value = String(bar.crotchetsPerMinute);
+    const changesHere =
+      bar.before !== null &&
+      (bar.before.crotchetsPerMinute !== bar.crotchetsPerMinute ||
+        bar.before.metre.beatsInBar !== bar.metre.beatsInBar ||
+        bar.before.metre.beatType !== bar.metre.beatType);
+    this.el.rollMarkTitle.textContent = `From bar ${String(bar.number)}, until the next change`;
+    this.el.rollMarkRemove.hidden = !changesHere;
+    this.showTheSheet(this.el.sheetRollMark);
+  }
+
+  /**
+   * Changes the metre and the pace from the bar asked about, as far as the
+   * next change of each: one change, put back as one. A pace past what a
+   * metronome offers is held to it.
+   */
+  private changeFromTheBarAsked(metre: string, crotchetsPerMinute: number): void {
+    const bar = this.barAskedAbout;
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const [beatsInBar, beatType] = metre.split('/').map(Number);
+    this.el.sheetRollMark.hidden = true;
+    this.barAskedAbout = null;
+    if (bar === null || sketch === undefined || stored === null || beatsInBar === undefined || beatType === undefined) {
+      return;
+    }
+    const pace = Number.isFinite(crotchetsPerMinute) && crotchetsPerMinute > 0
+      ? Math.min(FASTEST_SKETCH_BPM, Math.max(SLOWEST_SKETCH_BPM, Math.round(crotchetsPerMinute)))
+      : bar.crotchetsPerMinute;
+    const metreChanges = beatsInBar !== bar.metre.beatsInBar || beatType !== bar.metre.beatType;
+    const paceChanges = pace !== bar.crotchetsPerMinute;
+    if (!metreChanges && !paceChanges) {
+      return;
+    }
+    // The bar keeps its first beat whatever its metre, so the pace changes from the same place.
+    const counted = metreChanges
+      ? theClickInAnotherMetre(stored.events, stored.beats, beatsInBar, beatType, bar.atMs)
+      : stored.beats;
+    const paced = paceChanges
+      ? thePlayingAtAnotherPace(stored.events, counted, pace, bar.atMs)
+      : { events: stored.events, beats: counted };
+    this.changeTheSketchShowing(
+      paced.events,
+      [...sketch.before, asItWas(stored, sketch.chosen)],
+      this.theChosenMovedWith(stored.events, paced.events, sketch.chosen),
+      paced.beats,
+    );
+  }
+
+  /** The chosen notes, named by when they begin, as far as the notes have moved. */
+  private theChosenMovedWith(
+    was: readonly MidiFileEvent[],
+    now: readonly MidiFileEvent[],
+    chosen: readonly KeyNamed[],
+  ): readonly KeyNamed[] {
+    return chosen.flatMap((key) => {
+      const at = was.findIndex((event) => event.kind === 'noteOn' && event.midi === key.midi && event.atMs === key.downAtMs);
+      const moved = now[at];
+      return moved === undefined ? [] : [{ midi: key.midi, downAtMs: moved.atMs }];
+    });
+  }
+
   private countTheSketchIn(metre: string): void {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
@@ -12986,13 +13136,7 @@ export class AppView {
     }
     const paced = thePlayingAtAnotherPace(stored.events, stored.beats, crotchetsPerMinute);
     // The chosen notes are named by when they begin, which has moved with them.
-    const chosen = sketch.chosen.flatMap((key) => {
-      const at = stored.events.findIndex(
-        (event) => event.kind === 'noteOn' && event.midi === key.midi && event.atMs === key.downAtMs,
-      );
-      const now = paced.events[at];
-      return now === undefined ? [] : [{ midi: key.midi, downAtMs: now.atMs }];
-    });
+    const chosen = this.theChosenMovedWith(stored.events, paced.events, sketch.chosen);
     this.changeTheSketchShowing(paced.events, [...sketch.before, asItWas(stored, sketch.chosen)], chosen, paced.beats);
   }
 
@@ -14467,6 +14611,7 @@ export class AppView {
       wholeKeyboard: this.theOtherRollShowing?.sketch?.editing === true,
       freely: this.nothingOnTheDrawingIsJudged(),
       scale: this.theScaleOfTheSketchShown(),
+      marks: this.theMarksOfTheSketchShown(),
     });
   }
 

@@ -5248,6 +5248,148 @@ describe('AppView', () => {
       body.dispatchEvent(new PointerEvent('pointerup', { ...listening, ...at(50, 72) }));
     });
 
+    it('chooses notes on a recording to copy, by a box, Ctrl+A and Escape, and pastes them into a sketch', async () => {
+      const rectOf = HTMLElement.prototype.getBoundingClientRect;
+      HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement): DOMRect {
+        return this.classList.contains('roll__grid') ? new DOMRect(0, 0, 4_000, 3_000) : rectOf.call(this);
+      };
+      onTestFinished(() => {
+        HTMLElement.prototype.getBoundingClientRect = rectOf;
+        Reflect.deleteProperty(window.navigator, 'clipboard');
+      });
+      const { view, sketches, takes, midi, clock } = createRig();
+      await view.initialize();
+      const written: string[] = [];
+      Object.defineProperty(window.navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: (text: string): Promise<void> => {
+            written.push(text);
+            return Promise.resolve();
+          },
+        },
+      });
+      // C, E and G, half a second apart, played freely and kept.
+      clock.advance(10_000);
+      for (const pitch of [60, 64, 67]) {
+        midi.noteOn(pitch, clock.now());
+        clock.advance(300);
+        midi.noteOff(pitch, clock.now());
+        clock.advance(200);
+      }
+      element<HTMLButtonElement>('focus-keep').click();
+      expect(takes.list()[0]?.noteCount).toBe(3);
+      rowButton('takes-list', 'Look at this take').click();
+
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const scene = (): NonNullable<typeof view.rollScene> | null => view.rollScene;
+      const began = (): number => Math.min(...(scene()?.notes ?? []).map((note) => note.fromMs));
+      const scrolledDown = (): number =>
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      const at = (afterTheFirstMs: number, pitch: number): { clientX: number; clientY: number } => ({
+        clientX: ((began() + afterTheFirstMs) / 1000) * zoom,
+        clientY: ((scene()?.highest ?? 0) - pitch + 0.5) * 13 - scrolledDown(),
+      });
+      const chosen = (): number[] =>
+        (scene()?.notes ?? [])
+          .filter((note) => note.chosen === true)
+          .map((note) => (scene()?.highest ?? 0) - note.row)
+          .sort((low, high) => low - high);
+      const body = element('roll-body');
+      const select = element<HTMLButtonElement>('roll-select');
+      const copy = element<HTMLButtonElement>('roll-copy-chosen');
+      const chord = element<HTMLOutputElement>('roll-chord');
+      const drag = (pointerType: string, from: { clientX: number; clientY: number }, to: { clientX: number; clientY: number }, more = {}): void => {
+        const pointer = { bubbles: true, pointerId: 61, pointerType, button: 0, ...more };
+        body.dispatchEvent(new PointerEvent('pointerdown', { ...pointer, ...from }));
+        body.dispatchEvent(new PointerEvent('pointermove', { ...pointer, ...to }));
+        body.dispatchEvent(new PointerEvent('pointerup', { ...pointer, ...to }));
+        body.dispatchEvent(new MouseEvent('click', { bubbles: true, ...to }));
+      };
+      const key = (init: KeyboardEventInit): KeyboardEvent => {
+        const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+        document.body.dispatchEvent(event);
+        return event;
+      };
+
+      // The box and the copy are there on a recording, the copy waiting for notes.
+      expect([select.hidden, select.dataset['away']]).toEqual([false, undefined]);
+      expect(select.getAttribute('aria-pressed')).toBe('false');
+      expect(copy.hidden).toBe(false);
+      expect(copy.dataset['idle']).toBe('true');
+      expect(copy.title).toContain('Choose some first');
+      expect(chosen()).toEqual([]);
+
+      // A mouse draws a box from empty space: the C and the E inside it.
+      drag('mouse', at(-100, 69), at(700, 59));
+      expect(chosen()).toEqual([60, 64]);
+      expect(copy.dataset['idle']).toBeUndefined();
+      // With Shift, the G added; and the three are named.
+      drag('mouse', at(900, 69), at(1_400, 66), { shiftKey: true });
+      expect(chosen()).toEqual([60, 64, 67]);
+      expect(chord.hidden ? null : chord.textContent).toBe('C');
+      // Escape lets go of them, and the sheet stays.
+      key({ key: 'Escape' });
+      expect(chosen()).toEqual([]);
+      expect(element('sheet-roll').hidden).toBe(false);
+      expect(chord.hidden).toBe(true);
+
+      // A finger moves the drawing, until the box is asked for.
+      drag('touch', at(-100, 69), at(700, 59));
+      expect(chosen()).toEqual([]);
+      select.click();
+      expect(select.getAttribute('aria-pressed')).toBe('true');
+      drag('touch', at(-100, 69), at(700, 59));
+      expect(chosen()).toEqual([60, 64]);
+      select.click();
+
+      // Ctrl+A chooses every note, and Ctrl+C - or the button - copies them.
+      expect(key({ key: 'a', code: 'KeyA', ctrlKey: true }).defaultPrevented).toBe(true);
+      expect(chosen()).toEqual([60, 64, 67]);
+      expect(key({ key: 'c', code: 'KeyC', ctrlKey: true }).defaultPrevented).toBe(true);
+      copy.click();
+      const copied = written.map((text) => theNotesOnTheClipboard(text)?.map(({ afterMs, lengthMs, midi: pitch }) => [afterMs, lengthMs, pitch]));
+      expect(copied).toEqual([
+        [
+          [0, 300, 60],
+          [500, 300, 64],
+          [1_000, 300, 67],
+        ],
+        [
+          [0, 300, 60],
+          [500, 300, 64],
+          [1_000, 300, 67],
+        ],
+      ]);
+      // Nothing on the recording is changed by any of it.
+      expect(takes.list()[0]?.noteCount).toBe(3);
+      // Shown again, it is a drawing anew, with nothing chosen.
+      element<HTMLButtonElement>('roll-close').click();
+      rowButton('takes-list', 'Look at this take').click();
+      expect(chosen()).toEqual([]);
+      element<HTMLButtonElement>('roll-close').click();
+
+      // Pasted into a sketch from its drawer, where the cursor is.
+      Reflect.deleteProperty(window.navigator, 'clipboard');
+      const sketch = sketches.begin(
+        { events: [], beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })) },
+        'Into',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      // On a sketch, the copy is its drawer's.
+      expect(copy.hidden).toBe(true);
+      element<HTMLButtonElement>('roll-chords-open').click();
+      element<HTMLButtonElement>('roll-paste').click();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(sketches.find(sketch.id)?.noteCount).toBe(3);
+    });
+
     it('chooses notes with a finger by the selection tool: a box drawn from empty space, and a tap on nothing choosing nothing', async () => {
       const rectOf = HTMLElement.prototype.getBoundingClientRect;
       HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement): DOMRect {

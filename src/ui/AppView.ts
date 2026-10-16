@@ -2008,6 +2008,19 @@ export class AppView {
    * not served securely - and where it holds something else.
    */
   private notesCopiedHere: readonly NoteCopied[] | null = null;
+
+  /**
+   * The notes chosen on a drawing that is not a sketch - a score, a
+   * recording, the run - to be copied into one, and the drawing they are of:
+   * another drawing shown, they are chosen on it no longer.
+   */
+  private chosenToCopy: { readonly roll: RunRoll; readonly chosen: readonly KeyNamed[] } | null = null;
+
+  /**
+   * Whether a finger on such a drawing draws a box to choose notes by, rather
+   * than moving it. A mouse draws one from empty space whatever this says.
+   */
+  private boxOnTheViewer = false;
   /** Whether the passage markers are on the page, which a tap turns over. */
   private passageMarkersWanted = true;
   /**
@@ -2287,6 +2300,7 @@ export class AppView {
     rollChordsList: HTMLElement;
     rollChordsKeep: HTMLButtonElement;
     rollCopy: HTMLButtonElement;
+    rollCopyChosen: HTMLButtonElement;
     rollArpeggioUp: HTMLButtonElement;
     rollArpeggioDown: HTMLButtonElement;
     rollArpeggioUpAndDown: HTMLButtonElement;
@@ -2664,6 +2678,7 @@ export class AppView {
       rollChordsList: requireElement(doc, 'roll-chords-list'),
       rollChordsKeep: requireElement(doc, 'roll-chords-keep'),
       rollCopy: requireElement(doc, 'roll-copy'),
+      rollCopyChosen: requireElement(doc, 'roll-copy-chosen'),
       rollArpeggioUp: requireElement(doc, 'roll-arpeggio-up'),
       rollArpeggioDown: requireElement(doc, 'roll-arpeggio-down'),
       rollArpeggioUpAndDown: requireElement(doc, 'roll-arpeggio-up-and-down'),
@@ -9118,7 +9133,12 @@ export class AppView {
     this.listen(this.el.rollSelect, 'click', () => {
       const showing = this.theOtherRollShowing;
       const sketch = showing?.sketch;
-      if (showing === null || sketch === undefined) {
+      if (sketch === undefined) {
+        this.boxOnTheViewer = !this.boxOnTheViewer;
+        this.sayWhatCanBeChanged();
+        return;
+      }
+      if (showing === null) {
         return;
       }
       const tool = sketch.tool === 'selection' ? 'pencil' : 'selection';
@@ -9142,6 +9162,9 @@ export class AppView {
       this.keepOrLetGoOfTheChosenChord();
     });
     this.listen(this.el.rollCopy, 'click', () => {
+      this.copyTheChosenKeys(false);
+    });
+    this.listen(this.el.rollCopyChosen, 'click', () => {
       this.copyTheChosenKeys(false);
     });
     this.listen(this.el.rollPaste, 'click', () => {
@@ -12258,9 +12281,9 @@ export class AppView {
         : 'Edit the notes: a tap chooses one, a drag moves it';
     }
     this.el.rollEdit.setAttribute('aria-label', this.el.rollEdit.title);
-    this.el.rollSelect.setAttribute('aria-pressed', String(sketch?.tool === 'selection'));
+    this.el.rollSelect.setAttribute('aria-pressed', String(sketch === undefined ? this.boxOnTheViewer : sketch.tool === 'selection'));
     // Only a sketch has them, and they are there only while it is edited.
-    for (const button of [this.el.rollSelect, this.el.rollDelete, this.el.rollUndo, this.el.rollRedo, this.el.rollChordsOpen]) {
+    for (const button of [this.el.rollDelete, this.el.rollUndo, this.el.rollRedo, this.el.rollChordsOpen]) {
       button.hidden = sketch === undefined;
       if (editing) {
         delete button.dataset['away'];
@@ -12268,6 +12291,24 @@ export class AppView {
         button.dataset['away'] = 'true';
       }
     }
+    // The box chooses notes on any drawing: on a sketch while it is edited,
+    // and on anything else to copy them out of.
+    this.el.rollSelect.hidden = false;
+    if (editing || sketch === undefined) {
+      delete this.el.rollSelect.dataset['away'];
+    } else {
+      this.el.rollSelect.dataset['away'] = 'true';
+    }
+    // A sketch is copied from its drawer, with the rest of what a finger does to its notes.
+    this.el.rollCopyChosen.hidden = sketch !== undefined;
+    const toCopy = this.theNotesChosen().length > 0;
+    sayWhetherIdle(
+      this.el.rollCopyChosen,
+      toCopy
+        ? 'Copy the chosen notes, to paste into a sketch'
+        : 'Copy the chosen notes, to paste into a sketch. Choose some first: draw a box around them.',
+      !toCopy,
+    );
 
     const chosen = sketch?.chosen ?? [];
     const [only] = chosen;
@@ -12307,22 +12348,18 @@ export class AppView {
   }
 
   /**
-   * The name of the chord the chosen notes of a sketch being edited make, over
-   * the drawing, wherever in time each is: a chord broken into a figure is
-   * still that chord. Spelled as the sketch's key spells its black keys. Not
-   * there while they make none with a name - and none is chosen but while a
-   * sketch is edited.
+   * The name of the chord the chosen notes make, over the drawing, wherever
+   * in time each is: a chord broken into a figure is still that chord.
+   * Spelled as a sketch's key spells its black keys. Not there while they
+   * make none with a name - and on a sketch none is chosen but while it is
+   * edited.
    */
   private nameTheChosenChord(): void {
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
-    const chord =
-      sketch !== undefined && stored !== null
-        ? nameTheChord(
-            sketch.chosen.map((key) => key.midi),
-            stored.key.fifths,
-          )
-        : null;
+    // Spelled in a sketch's key; anything else, as chord charts spell it.
+    const chosen = this.theNotesChosen();
+    const chord = chosen.length === 0 ? null : nameTheChord(chosen.map((key) => key.midi), stored?.key.fifths ?? null);
     this.el.rollChord.textContent = chord ?? '';
     this.el.rollChord.hidden = chord === null;
   }
@@ -12956,13 +12993,30 @@ export class AppView {
   private choose(keys: readonly KeyNamed[]): void {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
-    if (showing === null || sketch === undefined) {
+    const roll = this.theRoll();
+    const chosen = keys.map((key) => ({ midi: key.midi, downAtMs: key.downAtMs }));
+    if (showing !== null && sketch !== undefined) {
+      this.theOtherRollShowing = { ...showing, sketch: { ...sketch, chosen } };
+    } else if (sketch === undefined && roll !== null) {
+      this.chosenToCopy = { roll, chosen };
+    } else {
       return;
     }
-    const chosen = keys.map((key) => ({ midi: key.midi, downAtMs: key.downAtMs }));
-    this.theOtherRollShowing = { ...showing, sketch: { ...sketch, chosen } };
     this.drawTheRollInto();
     this.sayWhatCanBeChanged();
+  }
+
+  /**
+   * The notes chosen on the drawing shown: a sketch's, to change, or those
+   * chosen on anything else to copy - while it is the drawing shown.
+   */
+  private theNotesChosen(): readonly KeyNamed[] {
+    const sketch = this.theOtherRollShowing?.sketch;
+    if (sketch !== undefined) {
+      return sketch.chosen;
+    }
+    const roll = this.theRoll();
+    return roll !== null && this.chosenToCopy?.roll === roll ? this.chosenToCopy.chosen : [];
   }
 
   /**
@@ -12972,12 +13026,18 @@ export class AppView {
    */
   private beginABox(event: PointerEvent): boolean {
     const sketch = this.theOtherRollShowing?.sketch;
-    if (sketch?.editing !== true || event.button !== 0 || this.rollBoxDrawn !== null) {
+    if (event.button !== 0 || this.rollBoxDrawn !== null) {
       return false;
     }
-    // Only with the selection tool, for a mouse as for a finger: without it,
-    // a drag from empty space moves the drawing.
-    if (sketch.tool !== 'selection') {
+    // On a sketch, only while it is edited and with the selection tool, for
+    // a mouse as for a finger: without it, a drag from empty space moves the
+    // drawing. On anything else a mouse has no drag of its own - a click
+    // puts the marker - so it draws one; a finger, with the tool.
+    const boxes =
+      sketch === undefined
+        ? event.pointerType === 'mouse' || this.boxOnTheViewer
+        : sketch.editing && sketch.tool === 'selection';
+    if (!boxes) {
       return false;
     }
     const onTheRuler = event.target instanceof Element && event.target.closest('.roll__ruler') !== null;
@@ -13044,10 +13104,9 @@ export class AppView {
     this.el.rollBox.hidden = true;
     const roll = this.theRoll();
     const scene = this.drawnScene;
-    const sketch = this.theOtherRollShowing?.sketch;
     const from = box === null ? null : this.thePointOnTheDrawing(box);
     const to = box === null ? null : this.thePointOnTheDrawing(theBoxCornerAt(box, event));
-    if (box === null || !box.drawn || !lifted || roll === null || scene === null || sketch === undefined) {
+    if (box === null || !box.drawn || !lifted || roll === null || scene === null) {
       return;
     }
     if (from === null || to === null) {
@@ -13059,9 +13118,8 @@ export class AppView {
       { fromMs: from.atMs, toMs: to.atMs, fromRow: from.row, toRow: to.row },
       Number(this.el.rollZoom.value),
     );
-    this.choose(
-      box.adds ? [...sketch.chosen, ...held.filter((key) => !sketch.chosen.some((each) => sameKey(each, key)))] : held,
-    );
+    const chosen = this.theNotesChosen();
+    this.choose(box.adds ? [...chosen, ...held.filter((key) => !chosen.some((each) => sameKey(each, key)))] : held);
   }
 
   /** Adds a key to the notes chosen, or lets go of it where it was one of them. */
@@ -13652,10 +13710,14 @@ export class AppView {
    * `pasteTheNotesCopied`.
    */
   private editByTheKeys(event: KeyboardEvent): void {
-    if (this.el.sheetRoll.hidden || this.theOtherRollShowing?.sketch?.editing !== true) {
+    if (this.el.sheetRoll.hidden || isTypedInto(event.target as TypedInto | null)) {
       return;
     }
-    if (isTypedInto(event.target as TypedInto | null)) {
+    if (this.theOtherRollShowing?.sketch === undefined) {
+      this.chooseByTheKeys(event);
+      return;
+    }
+    if (!this.theOtherRollShowing.sketch.editing) {
       return;
     }
     const command = (event.ctrlKey || event.metaKey) && !event.altKey;
@@ -13707,6 +13769,29 @@ export class AppView {
   }
 
   /**
+   * The keys that choose and copy notes on a drawing that is not a sketch,
+   * as they do on one: everything, nothing, and a copy. Nothing there is
+   * changed, so nothing else is answered.
+   */
+  private chooseByTheKeys(event: KeyboardEvent): void {
+    const command = (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey;
+    const roll = this.theRoll();
+    const chosen = this.theNotesChosen();
+    if (command && event.code === 'KeyA' && roll !== null) {
+      event.preventDefault();
+      this.choose(roll.presses);
+    } else if (event.key === 'Escape' && chosen.length > 0) {
+      // First what is chosen is let go of; the next Escape shuts the sheet.
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      this.choose([]);
+    } else if (command && event.code === 'KeyC' && chosen.length > 0) {
+      event.preventDefault();
+      this.copyTheChosenKeys(false);
+    }
+  }
+
+  /**
    * Copies the chosen notes to the clipboard, as text a paste here can read
    * back - into this sketch or another, in this tab or another - and cutting,
    * takes them out as the trash would, to be put back by an undo should the
@@ -13715,11 +13800,14 @@ export class AppView {
   private copyTheChosenKeys(cutting: boolean): void {
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const roll = this.theRoll();
     const clipboard = this.doc.defaultView?.navigator?.clipboard;
-    if (sketch === undefined || stored === null) {
+    // A sketch's notes as it keeps them; anything else's as its drawing has them.
+    const events = stored !== null ? stored.events : sketch === undefined && roll !== null ? rollAsEvents(roll) : null;
+    if (events === null) {
       return;
     }
-    const notes = theNotesCopied(stored.events, sketch.chosen);
+    const notes = theNotesCopied(events, this.theNotesChosen());
     if (notes.length > 0) {
       this.notesCopiedHere = notes;
       this.showTheChordsOfTheKey();
@@ -14046,7 +14134,7 @@ export class AppView {
       return;
     }
     const ghosts = this.theNotesAskedFor();
-    const scene = this.theSceneToDraw(roll, this.theOtherRollShowing?.sketch?.chosen ?? [], ghosts);
+    const scene = this.theSceneToDraw(roll, this.theNotesChosen(), ghosts);
     this.drawnScene = scene;
     // Said before the drawing is measured: editing, the pedal's lane is
     // taller, to be drawn on with a finger.
@@ -14063,7 +14151,7 @@ export class AppView {
     this.soundingRowsSaid = '';
     this.rollPitches = thePitchesOfTheRun(roll, ghosts, this.theOtherRollShowing?.sketch?.editing === true, {
       freely: this.nothingOnTheDrawingIsJudged(),
-      chosen: this.theOtherRollShowing?.sketch?.chosen ?? [],
+      chosen: this.theNotesChosen(),
     });
     this.applyTheZoom();
     this.el.rollMap.replaceChildren(

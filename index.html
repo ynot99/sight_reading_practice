@@ -527,6 +527,17 @@
                 <path d="M3 3h4v2H5v2H3V3zm6 0h6v2H9V3zm8 0h4v4h-2V5h-2V3zM3 9h2v6H3V9zm16 0h2v6h-2V9zM3 17h2v2h2v2H3v-4zm16 0h2v4h-4v-2h2v-2zM9 19h6v2H9v-2z" />
               </svg>
             </button>
+            <!--
+              On a drawing that is not a sketch - a score, a recording, a run -
+              the notes chosen copied, to be pasted into one.
+            -->
+            <button id="roll-copy-chosen" type="button" class="button" title="Copy the chosen notes, to paste into a sketch"
+              aria-label="Copy the chosen notes, to paste into a sketch" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
+                class="take-transport__icon">
+                <path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z" />
+              </svg>
+            </button>
             <button id="roll-delete" type="button" class="button" title="Delete a note"
               aria-label="Delete a note" hidden>
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"

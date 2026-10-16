@@ -726,10 +726,21 @@
             <div id="roll-chords-list" class="roll-chords__list"></div>
             <!--
               The chosen notes kept as a chord of the writer's own; pressed
-              again with the same notes chosen, it lets go of it.
+              again with the same notes chosen, it lets go of it. Beside it,
+              the chords kept to be deleted: pressed, a tap on one of them
+              deletes it rather than writing it.
             -->
-            <button id="roll-chords-keep" type="button" class="button roll-chords__chord roll-chords__keep"
-              title="Keep the chosen notes as a chord" aria-label="Keep the chosen notes as a chord">+</button>
+            <div class="roll-chords__row roll-chords__foot">
+              <button id="roll-chords-keep" type="button" class="button roll-chords__keep"
+                title="Keep the chosen notes as a chord" aria-label="Keep the chosen notes as a chord">+</button>
+              <button id="roll-chords-forget" type="button" class="button roll-chords__tool" aria-pressed="false"
+                title="Delete chords you kept" aria-label="Delete chords you kept">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
+                  class="take-transport__icon">
+                  <path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
+                </svg>
+              </button>
+            </div>
           </div>
           </div>
           <!--

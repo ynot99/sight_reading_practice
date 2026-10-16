@@ -1340,8 +1340,26 @@ textarea {
   border-style: dashed;
 }
 
+/* The keep and the delete at the foot, a finger high. */
+.roll-chords__foot {
+  min-height: 44px;
+}
+
 .roll-chords__keep {
+  flex: 1 1 0;
+  min-width: 0;
   font-size: 20px;
+}
+
+/* Deleting: the chords kept marked as the delete of a dialog is, the key's own put by. */
+.roll-chords__list[data-forgetting='true'] .roll-chords__chord--kept,
+.roll-chords__tool[aria-pressed='true'] {
+  border-color: var(--wrong);
+  color: var(--wrong);
+}
+
+.roll-chords__list[data-forgetting='true'] .roll-chords__chord:not(.roll-chords__chord--kept) {
+  opacity: 0.45;
 }
 
 .roll-chords__tool[data-idle='true'],

@@ -6812,6 +6812,109 @@ describe('AppView', () => {
       expect(written(500)).toHaveLength(3);
     });
 
+    it('deletes chords kept from the drawer by its delete switch, or by the right button, and never the key\'s own', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            { kind: 'noteOn' as const, atMs: 2_000, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: 2_400, midi: 60 },
+          ],
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Forgetting',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const open = element<HTMLButtonElement>('roll-chords-open');
+      const forget = element<HTMLButtonElement>('roll-chords-forget');
+      const list = element('roll-chords-list');
+      const buttons = (): HTMLButtonElement[] => [...list.querySelectorAll<HTMLButtonElement>('[data-chord]')];
+      const noteCount = (): number => sketches.find(sketch.id)?.noteCount ?? -1;
+      const key = (init: KeyboardEventInit): void => {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
+      };
+      /** Shut and opened again, so the drawer is drawn from the chords kept now. */
+      const reopen = (): void => {
+        open.click();
+        open.click();
+      };
+      open.click();
+
+      // Nothing kept, nothing to delete.
+      expect(forget.dataset['idle']).toBe('true');
+      expect(forget.title).toBe('Delete chords you kept. None is kept yet.');
+      forget.click();
+      expect(forget.getAttribute('aria-pressed')).toBe('false');
+
+      sketches.keepTheChord([48, 55, 64]);
+      sketches.keepTheChord([57, 60, 64, 67]);
+      reopen();
+      expect(forget.dataset['idle']).toBeUndefined();
+      expect(forget.title).toBe('Delete chords you kept: then a tap on one deletes it');
+      forget.click();
+      expect(forget.getAttribute('aria-pressed')).toBe('true');
+      expect(forget.title).toBe('Done deleting chords');
+      expect(list.dataset['forgetting']).toBe('true');
+      // The ones kept marked to be deleted, the key's own not.
+      expect(buttons().map((button) => button.textContent)).toEqual([
+        'CI', 'Dmii', 'Emiii', 'FIV', 'GV', 'Amvi', 'Bdimvii°', 'C×', 'Am7×',
+      ]);
+      expect(buttons()[7]?.title).toBe('Delete C (C3) from the chords kept');
+      expect(buttons()[0]?.title).toBe("C is the key's own, and is not deleted");
+
+      // A key's own tapped: neither deleted nor written.
+      buttons()[0]?.click();
+      expect(noteCount()).toBe(1);
+      expect(sketches.keptChords()).toHaveLength(2);
+      // One kept tapped: deleted, and nothing written.
+      buttons()[7]?.click();
+      expect(sketches.keptChords()).toEqual([[57, 60, 64, 67]]);
+      expect(noteCount()).toBe(1);
+      expect(forget.getAttribute('aria-pressed')).toBe('true');
+      // Escape ends the deleting, and the sheet stays.
+      key({ key: 'Escape' });
+      expect(forget.getAttribute('aria-pressed')).toBe('false');
+      expect(list.dataset['forgetting']).toBe('false');
+      expect(element('sheet-roll').hidden).toBe(false);
+      // Ended, a tap writes again.
+      buttons()[7]?.click();
+      expect(noteCount()).toBe(5);
+      key({ key: 'z', code: 'KeyZ', ctrlKey: true });
+      // The last one deleted, the deleting ends by itself.
+      forget.click();
+      buttons()[7]?.click();
+      expect(sketches.keptChords()).toEqual([]);
+      expect(forget.getAttribute('aria-pressed')).toBe('false');
+      expect(forget.dataset['idle']).toBe('true');
+      // Shut, the drawer opens again writing, not deleting.
+      sketches.keepTheChord([48, 55, 64]);
+      reopen();
+      forget.click();
+      reopen();
+      expect(forget.getAttribute('aria-pressed')).toBe('false');
+
+      // The right button deletes one kept at once; a finger held there does not.
+      const menu = (pointerType: string, at: number): boolean => {
+        const target = buttons()[at];
+        target?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType }));
+        const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
+        target?.dispatchEvent(event);
+        return event.defaultPrevented;
+      };
+      expect(menu('touch', 7)).toBe(false);
+      expect(sketches.keptChords()).toHaveLength(1);
+      expect(menu('mouse', 7)).toBe(true);
+      expect(sketches.keptChords()).toEqual([]);
+      expect(buttons()).toHaveLength(7);
+      menu('mouse', 0);
+      expect(buttons()).toHaveLength(7);
+      expect(noteCount()).toBe(1);
+    });
+
     it('copies and pastes the chosen notes by the drawer\'s buttons, from the notes copied here where the clipboard cannot say', async () => {
       const { view, sketches } = createRig();
       await view.initialize();

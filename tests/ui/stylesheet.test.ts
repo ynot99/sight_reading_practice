@@ -1377,7 +1377,7 @@ describe('the stylesheet', () => {
     // width: a drawer laid over it would hide the notes at its right edge.
     const ruleOf = (selector: string): string => rules().find((rule) => rule.selector === selector)?.body ?? '';
     expect(HTML).toMatch(
-      /<div class="roll-room">\s*<div class="roll-frame">[\s\S]*?id="roll-map"[\s\S]*?<\/div>\s*<\/div>\s*<div id="roll-chords"[^>]*>[\s\S]*?id="roll-chords-keep"[^>]*>\+<\/button>\s*<\/div>\s*<\/div>/,
+      /<div class="roll-room">\s*<div class="roll-frame">[\s\S]*?id="roll-map"[\s\S]*?<\/div>\s*<\/div>\s*<div id="roll-chords"[^>]*>[\s\S]*?id="roll-chords-keep"[^>]*>\+<\/button>\s*<button id="roll-chords-forget"[\s\S]*?<\/button>\s*<\/div>\s*<\/div>\s*<\/div>/,
     );
     expect(ruleOf('.roll-room')).toMatch(/display\s*:\s*flex/);
     expect(ruleOf('.roll-room')).not.toMatch(/flex-direction/);

@@ -2038,6 +2038,12 @@ export class AppView {
    */
   private chordsOfTheKeyOpen = false;
 
+  /** Whether a tap on a chord kept in the drawer deletes it, rather than writing it. */
+  private chordsBeingForgotten = false;
+
+  /** What last went down on the drawer's chords, so a menu asked by a finger deletes nothing. */
+  private pointerOnTheChords = '';
+
   /**
    * The notes last copied in this page, for the paste button where the
    * clipboard cannot be read - an app's browser without the API, or a page
@@ -2343,6 +2349,7 @@ export class AppView {
     rollChords: HTMLElement;
     rollChordsList: HTMLElement;
     rollChordsKeep: HTMLButtonElement;
+    rollChordsForget: HTMLButtonElement;
     rollCopy: HTMLButtonElement;
     rollCopyChosen: HTMLButtonElement;
     rollArpeggioUp: HTMLButtonElement;
@@ -2723,6 +2730,7 @@ export class AppView {
       rollChords: requireElement(doc, 'roll-chords'),
       rollChordsList: requireElement(doc, 'roll-chords-list'),
       rollChordsKeep: requireElement(doc, 'roll-chords-keep'),
+      rollChordsForget: requireElement(doc, 'roll-chords-forget'),
       rollCopy: requireElement(doc, 'roll-copy'),
       rollCopyChosen: requireElement(doc, 'roll-copy-chosen'),
       rollArpeggioUp: requireElement(doc, 'roll-arpeggio-up'),
@@ -9261,13 +9269,37 @@ export class AppView {
     });
     this.listen(this.el.rollChordsOpen, 'click', () => {
       this.chordsOfTheKeyOpen = !this.chordsOfTheKeyOpen;
+      this.chordsBeingForgotten = false;
       this.showTheChordsOfTheKey();
     });
     this.listen(this.el.rollChordsList, 'click', (event) => {
       const chord = (event.target as Element | null)?.closest<HTMLElement>('[data-chord]');
-      if (chord !== null && chord !== undefined) {
+      if (chord === null || chord === undefined) {
+        return;
+      }
+      if (this.chordsBeingForgotten) {
+        this.forgetTheChordInTheDrawer(Number(chord.dataset['chord']));
+      } else {
         this.writeTheChordAtTheHead(Number(chord.dataset['chord']));
       }
+    });
+    this.listen(this.el.rollChordsList, 'pointerdown', (event) => {
+      this.pointerOnTheChords = event.pointerType;
+    });
+    // The right button deletes a chord kept, as it deletes a note on the
+    // drawing; a finger held there asks for nothing.
+    this.listen(this.el.rollChordsList, 'contextmenu', (event) => {
+      const chord = (event.target as Element | null)?.closest<HTMLElement>('[data-chord]');
+      if (chord === null || chord === undefined || this.pointerOnTheChords !== 'mouse') {
+        return;
+      }
+      event.preventDefault();
+      this.forgetTheChordInTheDrawer(Number(chord.dataset['chord']));
+    });
+    this.listen(this.el.rollChordsForget, 'click', () => {
+      // With none kept it ends as it is drawn: see `showTheChordsOfTheKey`.
+      this.chordsBeingForgotten = !this.chordsBeingForgotten;
+      this.showTheChordsOfTheKey();
     });
     this.listen(this.el.rollChordsKeep, 'click', () => {
       this.keepOrLetGoOfTheChosenChord();
@@ -12524,7 +12556,22 @@ export class AppView {
       return;
     }
     const { fifths, mode } = stored.key;
-    const shows = `${keyValue(new KeySignature(fifths, mode))} ${JSON.stringify(this.runtime.sketches.keptChords())}`;
+    // Nothing kept, nothing to delete: the deleting ends with the last of them.
+    const anyKept = this.runtime.sketches.keptChords().length > 0;
+    this.chordsBeingForgotten = this.chordsBeingForgotten && anyKept;
+    const forgetting = this.chordsBeingForgotten;
+    this.el.rollChordsForget.setAttribute('aria-pressed', String(forgetting));
+    sayWhetherIdle(
+      this.el.rollChordsForget,
+      forgetting
+        ? 'Done deleting chords'
+        : anyKept
+          ? 'Delete chords you kept: then a tap on one deletes it'
+          : 'Delete chords you kept. None is kept yet.',
+      !anyKept,
+    );
+    this.el.rollChordsList.dataset['forgetting'] = String(forgetting);
+    const shows = `${keyValue(new KeySignature(fifths, mode))} ${JSON.stringify(this.runtime.sketches.keptChords())} ${String(forgetting)}`;
     if (this.el.rollChordsList.dataset['shows'] !== shows) {
       this.el.rollChordsList.dataset['shows'] = shows;
       this.el.rollChordsList.replaceChildren(
@@ -12533,14 +12580,18 @@ export class AppView {
           button.type = 'button';
           button.className = chord.kept ? 'button roll-chords__chord roll-chords__chord--kept' : 'button roll-chords__chord';
           button.dataset['chord'] = String(at);
-          button.title = `Write ${chord.name} (${chord.under}) where the cursor is, to the next line of the grid`;
+          button.title = !forgetting
+            ? `Write ${chord.name} (${chord.under}) where the cursor is, to the next line of the grid`
+            : chord.kept
+              ? `Delete ${chord.name} (${chord.under}) from the chords kept`
+              : `${chord.name} is the key's own, and is not deleted`;
           button.setAttribute('aria-label', button.title);
           const name = this.doc.createElement('span');
           name.className = 'roll-chords__name';
           name.textContent = chord.name;
           const under = this.doc.createElement('span');
           under.className = 'roll-chords__numeral';
-          under.textContent = chord.under;
+          under.textContent = forgetting && chord.kept ? '\u00d7' : chord.under;
           button.append(name, under);
           return button;
         }),
@@ -12618,6 +12669,21 @@ export class AppView {
     if (broken !== null) {
       this.changeTheSketchShowing(broken.events, [...sketch.before, asItWas(stored, sketch.chosen)], broken.keys);
     }
+  }
+
+  /**
+   * Deletes a chord of the drawer the writer kept. One of the key's own is
+   * never among those kept - the keep button will not keep one - so asked of
+   * one, nothing goes.
+   */
+  private forgetTheChordInTheDrawer(at: number): void {
+    const stored = this.theOtherRollShowing?.sketch === undefined ? null : this.runtime.sketches.find(this.theOtherRollShowing.sketch.id);
+    const chord = stored === null ? undefined : this.theChordsInTheDrawer(stored.key.fifths, stored.key.mode)[at];
+    if (chord === undefined) {
+      return;
+    }
+    this.runtime.sketches.letGoOfTheChord(chord.midis);
+    this.showTheChordsOfTheKey();
   }
 
   /** Keeps the chosen notes as a chord, or lets go of the kept chord they are. */
@@ -13892,6 +13958,14 @@ export class AppView {
       return;
     }
     if (!this.theOtherRollShowing.sketch.editing) {
+      return;
+    }
+    if (event.key === 'Escape' && this.chordsBeingForgotten) {
+      // The deleting ends first, then what is chosen, then the sheet.
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      this.chordsBeingForgotten = false;
+      this.showTheChordsOfTheKey();
       return;
     }
     const command = (event.ctrlKey || event.metaKey) && !event.altKey;

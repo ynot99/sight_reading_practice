@@ -55,6 +55,8 @@ export interface RollInks {
   readonly tickDownbeat: string;
   readonly bar: string;
   readonly pedal: string;
+  /** The bar along the top of a note that says how hard it was struck: no verdict, so the text's. */
+  readonly velocity: string;
   /** The typeface of the bar numbers, which is the page's. */
   readonly font: string;
 }
@@ -84,6 +86,7 @@ export const INKS: Readonly<Record<Exclude<keyof RollInks, 'font'>, string>> = {
   tickDownbeat: 'tick-downbeat',
   bar: 'bar',
   pedal: 'pedal',
+  velocity: 'velocity',
 };
 
 /**
@@ -257,6 +260,14 @@ const CORNER_PX = 2;
 /** How heavy the rim of a chosen note is: enough to find it among its neighbours. */
 const CHOSEN_RIM_PX = 2;
 
+/**
+ * The bar of how hard a note was struck: how far in from the note's edges it
+ * stands - below the rim of a note chosen, which it would otherwise hide
+ * under - and how tall it is. Left off a note too small to hold it.
+ */
+const VELOCITY_INSET_PX = 3;
+const VELOCITY_TALL_PX = 2;
+
 function inkOfLine(inks: RollInks, kind: LineKind): string {
   switch (kind) {
     case 'division':
@@ -410,6 +421,18 @@ export function paintTheGrid(
     paint.fillStyle = inkOfNote(inks, note.shade);
     box(paint, left, y(note.row), wide(note.fromMs, note.untilMs), rowPx, corners);
     paint.fill();
+  }
+  // How hard each was struck, as a bar along its top: as long, of the note's
+  // length, as the note was loud of the loudest - a soft note a short bar, a
+  // note struck as hard as a key goes the whole of it. Seen at a glance
+  // across a phrase, where a number on every note would be read one by one.
+  paint.fillStyle = inks.velocity;
+  for (const note of stretchesIn(scene.notes, fromMs - ms(NARROWEST_PX), untilMs)) {
+    const room = wide(note.fromMs, note.untilMs) - 2 * VELOCITY_INSET_PX;
+    if (!shows(note.row) || room <= 0 || rowPx < 2 * VELOCITY_INSET_PX + VELOCITY_TALL_PX) {
+      continue;
+    }
+    paint.fillRect(x(note.fromMs) + VELOCITY_INSET_PX, y(note.row) + VELOCITY_INSET_PX, room * note.loudness, VELOCITY_TALL_PX);
   }
   // Rimmed after every note is down, so a neighbour drawn later cannot cover it.
   paint.strokeStyle = inks.chosen;

@@ -40,6 +40,7 @@ const INKS: RollInks = {
   tickDownbeat: 'tick-downbeat',
   bar: 'bar',
   pedal: 'pedal',
+  velocity: 'velocity',
   font: 'serif',
 };
 
@@ -213,6 +214,42 @@ describe('painting the grid', () => {
     ]);
     // A run's unjudged notes are still an outline: nothing was decided about them.
     expect(sceneOf(roll({ presses })).notes.map((note) => note.shade)).toEqual(['unjudged', 'unjudged', 'unjudged']);
+  });
+
+  it('bars the top of each note as long, of its length, as it was loud, inside its edges, and none on a note too small', () => {
+    const scene = sceneOf(
+      roll({
+        presses: [
+          // Half a second at 140 px a second is 70 px: 64 inside the insets.
+          press({ midi: MIDI.C4, velocity: 1 }),
+          press({ midi: MIDI.C4 + 2, velocity: 0.5, verdict: null }),
+          press({ midi: MIDI.C4 + 4, velocity: 0 }),
+          press({ midi: MIDI.C4 + 5, velocity: 0.25, verdict: 'wrong' }),
+          // Too short to hold a bar inside its edges.
+          press({ midi: MIDI.C4 + 7, downAtMs: 2000, upAtMs: 2030 }),
+        ],
+      }),
+    );
+    const { surface: canvas, recorder } = surface();
+
+    paintTheGrid(canvas, scene, at(), INKS, 1);
+
+    const rowOf = (midi: number): number => scene.notes.find((note) => scene.highest - note.row === midi)?.row ?? -1;
+    expect(
+      recorder.inked('velocity').map((mark) => [mark.how, mark.x, mark.y, Number(mark.wide.toFixed(6)), mark.tall]),
+    ).toEqual([
+      ['fill', 3, rowOf(MIDI.C4) * 14 + 3, 64, 2],
+      ['fill', 3, rowOf(MIDI.C4 + 2) * 14 + 3, 32, 2],
+      ['fill', 3, rowOf(MIDI.C4 + 4) * 14 + 3, 0, 2],
+      ['fill', 3, rowOf(MIDI.C4 + 5) * 14 + 3, 16, 2],
+    ]);
+    // Painted over the notes, under the rim of one chosen.
+    const order = recorder.marks.map((mark) => mark.ink);
+    expect(order.lastIndexOf('correct')).toBeLessThan(order.indexOf('velocity'));
+    // A row too short to hold one, none.
+    const short = surface();
+    paintTheGrid(short.surface, scene, at({ rowPx: 7 }), INKS, 1);
+    expect(short.recorder.inked('velocity')).toEqual([]);
   });
 
   it('colours each press by its verdict', () => {

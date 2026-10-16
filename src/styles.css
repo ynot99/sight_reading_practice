@@ -1985,6 +1985,12 @@ textarea {
   --roll-ink-tick-downbeat: var(--accent);
   --roll-ink-bar: var(--text-muted);
   --roll-ink-pedal: color-mix(in srgb, var(--accent) 70%, transparent);
+  /*
+   * How hard a note was struck, as a bar along its top: in the text's own
+   * colour, which is no verdict and stands out on every note - dark on the
+   * light ones, light on the dark.
+   */
+  --roll-ink-velocity: color-mix(in srgb, var(--text) 75%, transparent);
   display: grid;
   grid-template-columns: var(--roll-keys) minmax(0, 1fr);
   grid-template-rows: var(--roll-ruler) minmax(0, 1fr) var(--roll-pedal);

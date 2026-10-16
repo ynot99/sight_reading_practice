@@ -1,6 +1,7 @@
 import { barsAreHeardIn, type HeardBeat, type MidiFileEvent } from '../domain/midi/MidiFile.js';
 import { barLines, elapsedMsAt, type Exercise } from '../domain/model/Exercise.js';
 import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
+import { eachKeyOnce, sameKeys } from '../domain/harmony/chordsOfTheKey.js';
 import type { ISettingsStore } from './ports/ISettingsStore.js';
 import { pack, packBeat, theBeatsIfWhole, unpack } from './packedPlaying.js';
 import { rollAsEvents, rollBeganAtMs, rollOfTheScore } from './session/RunRoll.js';
@@ -186,6 +187,7 @@ export class SketchLibrary {
   private readonly revisions = new Map<string, number>();
   private readonly unsent = new Set<string>();
   private changedAtMs = 0;
+  private chords: (readonly number[])[] = [];
 
   constructor(store: ISettingsStore, now: () => number) {
     this.store = store;
@@ -217,6 +219,38 @@ export class SketchLibrary {
     }
     const changed = isRecord(raw) ? raw['changedAtMs'] : undefined;
     this.changedAtMs = typeof changed === 'number' && Number.isFinite(changed) ? changed : 0;
+    const chords: unknown[] = isRecord(raw) && Array.isArray(raw['chords']) ? raw['chords'] : [];
+    this.chords = chords.flatMap((chord) => {
+      const keys = Array.isArray(chord) ? (chord as unknown[]) : [];
+      const fit = keys.every((midi) => Number.isInteger(midi) && (midi as number) >= 0 && (midi as number) <= 127);
+      const once = eachKeyOnce(keys as number[]);
+      return fit && once.length >= 2 ? [once] : [];
+    });
+  }
+
+  /**
+   * The chords the writer has kept in the palette, to write into any sketch:
+   * each its keys, once, low to high, in the order they were kept. Kept with
+   * the sketches, as the writer's own, and not with any one of them.
+   */
+  keptChords(): readonly (readonly number[])[] {
+    return this.chords;
+  }
+
+  /** Keeps a chord in the palette, after the others - unless it is there already, or is one key. */
+  keepTheChord(midis: readonly number[]): void {
+    const once = eachKeyOnce(midis);
+    if (once.length < 2 || this.chords.some((chord) => sameKeys(chord, once))) {
+      return;
+    }
+    this.chords = [...this.chords, once];
+    this.persist();
+  }
+
+  /** Takes a chord out of the palette. */
+  letGoOfTheChord(midis: readonly number[]): void {
+    this.chords = this.chords.filter((chord) => !sameKeys(chord, midis));
+    this.persist();
   }
 
   /** Newest first: the one being worked on is almost always the last begun. */
@@ -380,6 +414,7 @@ export class SketchLibrary {
         ...(this.unsent.has(sketch.id) ? { unsent: 1 } : {}),
       })),
       changedAtMs: this.changedAtMs,
+      ...(this.chords.length > 0 ? { chords: this.chords } : {}),
     });
   }
 }

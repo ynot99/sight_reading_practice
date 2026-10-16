@@ -52,6 +52,7 @@ import {
   rollOfTheTake,
   theKeysOfTheTake,
   theNotesOnTheClipboard,
+  theClipboardTextOf,
   theMusicsBeats,
   type RunRoll,
 } from '../../src/application/session/RunRoll.js';
@@ -6563,6 +6564,210 @@ describe('AppView', () => {
 
       function key(init: KeyboardEventInit): void {
         document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
+      }
+    });
+
+    it('keeps the chosen notes as a chord in the drawer, writes it, and lets go of it', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            [2_000, 2_400, 48],
+            [2_000, 2_400, 55],
+            [2_000, 2_400, 64],
+            [2_500, 3_000, 60],
+          ].flatMap(([atMs = 0, upAtMs = 0, midi = 0]) => [
+            { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: upAtMs, midi },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Kept',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const highest = view.rollScene?.highest ?? 0;
+      const scrolledDown =
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      const tap = (ms: number, midi: number, adding = true): void => {
+        tapTheDrawing({
+          pointerType: 'mouse',
+          button: 0,
+          shiftKey: adding,
+          clientX: (ms / 1000) * zoom,
+          clientY: (highest - midi + 0.5) * 13 - scrolledDown,
+        });
+      };
+      const written = (from: number): number[][] => {
+        const events = sketches.find(sketch.id)?.events ?? [];
+        return events
+          .flatMap((event, index) => {
+            if (event.kind !== 'noteOn' || event.atMs < from || event.atMs >= 2_000) {
+              return [];
+            }
+            const off = events.slice(index + 1).find((later) => later.kind === 'noteOff' && later.midi === event.midi);
+            return [[event.atMs, event.midi, off?.atMs ?? -1]];
+          })
+          .sort(([one = 0, a = 0], [other = 0, b = 0]) => one - other || a - b);
+      };
+      element<HTMLButtonElement>('roll-chords-open').click();
+      const list = element('roll-chords-list');
+      const buttons = (): HTMLButtonElement[] => [...list.querySelectorAll<HTMLButtonElement>('[data-chord]')];
+      const keep = element<HTMLButtonElement>('roll-chords-keep');
+
+      // Nothing chosen, or one note, is no chord to keep.
+      expect(keep.dataset['idle']).toBe('true');
+      expect(keep.title).toContain('Choose two notes or more first');
+      tap(2_600, 60, false);
+      expect(keep.dataset['idle']).toBe('true');
+      // C over its fifth and third, kept: after the key's own, with its bass under its name.
+      tap(2_100, 48, false);
+      tap(2_100, 55);
+      tap(2_100, 64);
+      expect(keep.dataset['idle']).toBeUndefined();
+      expect(keep.textContent).toBe('+');
+      expect(keep.title).toBe('Keep C, the chosen notes, as a chord');
+      keep.click();
+      expect(sketches.keptChords()).toEqual([[48, 55, 64]]);
+      expect(buttons().map((button) => button.textContent)).toEqual(['CI', 'Dmii', 'Emiii', 'FIV', 'GV', 'Amvi', 'Bdimvii°', 'CC3']);
+      expect(buttons().map((button) => button.classList.contains('roll-chords__chord--kept'))).toEqual([
+        false, false, false, false, false, false, false, true,
+      ]);
+      // The same notes chosen, it lets go of them.
+      expect(keep.textContent).toBe('\u2212');
+      expect(keep.title).toBe('Take C out of the chords kept');
+
+      // A chord of the key is there already.
+      buttons()[5]?.click();
+      expect(written(0)).toEqual([
+        [0, 69, 500],
+        [0, 72, 500],
+        [0, 76, 500],
+      ]);
+      expect(keep.dataset['idle']).toBe('true');
+      expect(keep.title).toBe("Am is the key's own vi, here already.");
+      keep.click();
+      expect(sketches.keptChords()).toEqual([[48, 55, 64]]);
+
+      // The one kept is written as it was kept, after it.
+      buttons()[7]?.click();
+      expect(written(500)).toEqual([
+        [500, 48, 1_000],
+        [500, 55, 1_000],
+        [500, 64, 1_000],
+      ]);
+      // And let go of, it is gone from the drawer; the notes written stay.
+      keep.click();
+      expect(sketches.keptChords()).toEqual([]);
+      expect(buttons()).toHaveLength(7);
+      expect(keep.textContent).toBe('+');
+      expect(written(500)).toHaveLength(3);
+    });
+
+    it('copies and pastes the chosen notes by the drawer\'s buttons, from the notes copied here where the clipboard cannot say', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            [0, 400, 60],
+            [500, 1_000, 64],
+          ].flatMap(([atMs = 0, upAtMs = 0, midi = 0]) => [
+            { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: upAtMs, midi },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Fingers',
+        1,
+      );
+      Reflect.deleteProperty(window.navigator, 'clipboard');
+      try {
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-sketches').click();
+        rowButton('sketches-list', 'Edit this sketch').click();
+        const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+        const highest = view.rollScene?.highest ?? 0;
+        const scrolledDown =
+          Number.parseFloat(
+            element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+          ) || 0;
+        const at = (ms: number, midi: number): { clientX: number; clientY: number } => ({
+          clientX: (ms / 1000) * zoom,
+          clientY: (highest - midi + 0.5) * 13 - scrolledDown,
+        });
+        const notes = (): number[][] => {
+          const events = sketches.find(sketch.id)?.events ?? [];
+          return events
+            .flatMap((event, index) => {
+              if (event.kind !== 'noteOn') {
+                return [];
+              }
+              const off = events.slice(index + 1).find((later) => later.kind === 'noteOff' && later.midi === event.midi);
+              return [[event.atMs, event.midi, off?.atMs ?? -1]];
+            })
+            .sort(([one = 0, a = 0], [other = 0, b = 0]) => one - other || a - b);
+        };
+        const original = [
+          [0, 60, 400],
+          [500, 64, 1_000],
+        ];
+        const copy = element<HTMLButtonElement>('roll-copy');
+        const paste = element<HTMLButtonElement>('roll-paste');
+        const pasted = async (): Promise<void> => {
+          paste.click();
+          await Promise.resolve();
+          await Promise.resolve();
+        };
+        const theClipboardSays = (readText: () => Promise<string>): void => {
+          Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: { readText } });
+        };
+        const undo = (): void => {
+          document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'z', code: 'KeyZ', ctrlKey: true }));
+        };
+        element<HTMLButtonElement>('roll-chords-open').click();
+
+        // Nothing chosen, nothing to copy; nothing copied and no clipboard, nothing to paste.
+        expect(copy.dataset['idle']).toBe('true');
+        expect(copy.title).toContain('Choose one first');
+        expect(paste.dataset['idle']).toBe('true');
+        expect(paste.title).toContain('Copy notes first');
+        await pasted();
+        expect(notes()).toEqual(original);
+
+        // Copied here, pasted where the cursor is, and chosen.
+        tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(600, 64) });
+        expect(copy.dataset['idle']).toBeUndefined();
+        copy.click();
+        expect(paste.dataset['idle']).toBeUndefined();
+        tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(3_000, 50) });
+        await pasted();
+        expect(notes()).toEqual([...original, [3_000, 64, 3_500]]);
+        expect((view.rollScene?.notes ?? []).filter((note) => note.chosen === true).map((note) => note.fromMs)).toEqual([3_000]);
+        undo();
+
+        // Notes on the clipboard are pasted before the ones copied here.
+        theClipboardSays(() => Promise.resolve(theClipboardTextOf([{ afterMs: 0, lengthMs: 250, midi: 72, velocity: 0.5 }])));
+        expect(paste.dataset['idle']).toBeUndefined();
+        await pasted();
+        expect(notes()).toEqual([...original, [3_000, 72, 3_250]]);
+        undo();
+        // Anything else there, or a clipboard that will not be read, and they are.
+        for (const readText of [() => Promise.resolve('C E G'), () => Promise.reject(new Error('refused'))]) {
+          theClipboardSays(readText);
+          await pasted();
+          expect(notes()).toEqual([...original, [3_000, 64, 3_500]]);
+          undo();
+        }
+        expect(notes()).toEqual(original);
+      } finally {
+        Reflect.deleteProperty(window.navigator, 'clipboard');
       }
     });
 

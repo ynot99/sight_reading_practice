@@ -8,8 +8,8 @@ import {
   type PlayedWith,
 } from '../application/modes/challengeModes.js';
 import { barCells } from '../domain/scoring/barCells.js';
-import { nameTheChord } from '../domain/harmony/chordName.js';
-import { theChordsOfTheKey } from '../domain/harmony/chordsOfTheKey.js';
+import { nameOfThePitchClass, nameTheChord } from '../domain/harmony/chordName.js';
+import { eachKeyOnce, sameKeys, theChordsOfTheKey } from '../domain/harmony/chordsOfTheKey.js';
 import { barsOfThePicture, tiersOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
 import { FREE_PLAY_MODE_ID } from '../application/modes/FreePlayFrame.js';
@@ -180,6 +180,7 @@ import {
   theKeysOfTheTake,
   theNotesCopied,
   theNotesOnTheClipboard,
+  type NoteCopied,
   theKeysOnTheGrid,
   type KeyChange,
   type KeyNamed,
@@ -591,6 +592,30 @@ function theBeatAt(roll: RunRoll, atMs: number): number {
     return next - here;
   }
   return here !== undefined && before !== null ? here - before : 500;
+}
+
+/** A chord as the drawer offers it: its name, what is said under it, and its keys. */
+interface ChordInTheDrawer {
+  readonly name: string;
+  readonly under: string;
+  readonly midis: readonly number[];
+  readonly kept: boolean;
+}
+
+/** What a chord's keys are called: the chord they make, or where they make none, each key's name. */
+function theNameOfTheKeys(midis: readonly number[], fifths: number): string {
+  return nameTheChord(midis, fifths) ?? eachKeyOnce(midis).map((midi) => nameOfThePitchClass(midi, fifths)).join(' ');
+}
+
+/** A button's title and label, and whether it is dimmed for the reason the title gives. */
+function sayWhetherIdle(button: HTMLButtonElement, says: string, idle: boolean): void {
+  button.title = says;
+  button.setAttribute('aria-label', says);
+  if (idle) {
+    button.dataset['idle'] = 'true';
+  } else {
+    delete button.dataset['idle'];
+  }
 }
 
 /** How loud a note is written: as the sketch's notes are on the whole, and moderately where it has none. */
@@ -1966,6 +1991,13 @@ export class AppView {
    * edited: kept from one sketch to the next, as a tool laid out on the desk.
    */
   private chordsOfTheKeyOpen = false;
+
+  /**
+   * The notes last copied in this page, for the paste button where the
+   * clipboard cannot be read - an app's browser without the API, or a page
+   * not served securely - and where it holds something else.
+   */
+  private notesCopiedHere: readonly NoteCopied[] | null = null;
   /** Whether the passage markers are on the page, which a tap turns over. */
   private passageMarkersWanted = true;
   /**
@@ -2242,6 +2274,10 @@ export class AppView {
     rollRedo: HTMLButtonElement;
     rollChordsOpen: HTMLButtonElement;
     rollChords: HTMLElement;
+    rollChordsList: HTMLElement;
+    rollChordsKeep: HTMLButtonElement;
+    rollCopy: HTMLButtonElement;
+    rollPaste: HTMLButtonElement;
     rollTitle: HTMLElement;
     rollBox: HTMLElement;
     rollChord: HTMLOutputElement;
@@ -2612,6 +2648,10 @@ export class AppView {
       rollRedo: requireElement(doc, 'roll-redo'),
       rollChordsOpen: requireElement(doc, 'roll-chords-open'),
       rollChords: requireElement(doc, 'roll-chords'),
+      rollChordsList: requireElement(doc, 'roll-chords-list'),
+      rollChordsKeep: requireElement(doc, 'roll-chords-keep'),
+      rollCopy: requireElement(doc, 'roll-copy'),
+      rollPaste: requireElement(doc, 'roll-paste'),
       rollTitle: requireElement(doc, 'roll-title'),
       rollBox: requireElement(doc, 'roll-box'),
       rollChord: requireElement(doc, 'roll-chord'),
@@ -9049,11 +9089,20 @@ export class AppView {
       this.chordsOfTheKeyOpen = !this.chordsOfTheKeyOpen;
       this.showTheChordsOfTheKey();
     });
-    this.listen(this.el.rollChords, 'click', (event) => {
+    this.listen(this.el.rollChordsList, 'click', (event) => {
       const chord = (event.target as Element | null)?.closest<HTMLElement>('[data-chord]');
       if (chord !== null && chord !== undefined) {
         this.writeTheChordAtTheHead(Number(chord.dataset['chord']));
       }
+    });
+    this.listen(this.el.rollChordsKeep, 'click', () => {
+      this.keepOrLetGoOfTheChosenChord();
+    });
+    this.listen(this.el.rollCopy, 'click', () => {
+      this.copyTheChosenKeys(false);
+    });
+    this.listen(this.el.rollPaste, 'click', () => {
+      this.pasteWithTheButton();
     });
     this.listen(this.el.rollRedo, 'click', () => {
       this.bringBackTheLastPutBack();
@@ -12231,10 +12280,31 @@ export class AppView {
   }
 
   /**
-   * The drawer of the chords of the key, open beside a sketch being edited
-   * once asked for: a button for each, its name and its numeral, built again
-   * only when the key it is of changes, so a finger on one is not lost from
-   * under it by a change it made.
+   * The chords the drawer offers for a sketch: the key's seven, then the
+   * writer's own kept ones, each with what its button says under its name -
+   * the key's numeral, or the bass of one kept.
+   */
+  private theChordsInTheDrawer(fifths: number, mode: 'major' | 'minor'): readonly ChordInTheDrawer[] {
+    const ofTheKey = theChordsOfTheKey(new KeySignature(fifths, mode)).map(
+      ({ name, numeral, midis }): ChordInTheDrawer => ({ name, under: numeral, midis, kept: false }),
+    );
+    const kept = this.runtime.sketches.keptChords().map(
+      (midis): ChordInTheDrawer => ({
+        name: theNameOfTheKeys(midis, fifths),
+        under: midiToLabel(Math.min(...midis)),
+        midis,
+        kept: true,
+      }),
+    );
+    return [...ofTheKey, ...kept];
+  }
+
+  /**
+   * The drawer of chords, open beside a sketch being edited once asked for:
+   * a button for each chord, its name and what is under it, built again only
+   * when the key or the chords kept change, so a finger on one is not lost
+   * from under it by a change it made; and its copy, paste and keep, which
+   * the notes chosen decide.
    */
   private showTheChordsOfTheKey(): void {
     const sketch = this.theOtherRollShowing?.sketch;
@@ -12242,44 +12312,95 @@ export class AppView {
     const open = this.chordsOfTheKeyOpen && sketch?.editing === true && stored !== null;
     this.el.rollChordsOpen.setAttribute('aria-pressed', String(this.chordsOfTheKeyOpen));
     this.el.rollChordsOpen.title = this.chordsOfTheKeyOpen
-      ? 'Put the chords of the key away'
-      : 'The chords of the key, to write where the cursor is';
+      ? 'Put the chords away'
+      : 'Chords, to write where the cursor is, and copy and paste';
     this.el.rollChordsOpen.setAttribute('aria-label', this.el.rollChordsOpen.title);
     this.el.rollChords.hidden = !open;
-    if (!open || stored === null) {
+    if (!open || stored === null || sketch === undefined) {
       return;
     }
-    const key = new KeySignature(stored.key.fifths, stored.key.mode);
-    if (this.el.rollChords.dataset['key'] === keyValue(key)) {
-      return;
+    const { fifths, mode } = stored.key;
+    const shows = `${keyValue(new KeySignature(fifths, mode))} ${JSON.stringify(this.runtime.sketches.keptChords())}`;
+    if (this.el.rollChordsList.dataset['shows'] !== shows) {
+      this.el.rollChordsList.dataset['shows'] = shows;
+      this.el.rollChordsList.replaceChildren(
+        ...this.theChordsInTheDrawer(fifths, mode).map((chord, at) => {
+          const button = this.doc.createElement('button');
+          button.type = 'button';
+          button.className = chord.kept ? 'button roll-chords__chord roll-chords__chord--kept' : 'button roll-chords__chord';
+          button.dataset['chord'] = String(at);
+          button.title = `Write ${chord.name} (${chord.under}) where the cursor is, to the next line of the grid`;
+          button.setAttribute('aria-label', button.title);
+          const name = this.doc.createElement('span');
+          name.className = 'roll-chords__name';
+          name.textContent = chord.name;
+          const under = this.doc.createElement('span');
+          under.className = 'roll-chords__numeral';
+          under.textContent = chord.under;
+          button.append(name, under);
+          return button;
+        }),
+      );
     }
-    this.el.rollChords.dataset['key'] = keyValue(key);
-    this.el.rollChords.replaceChildren(
-      ...theChordsOfTheKey(key).map((chord, at) => {
-        const button = this.doc.createElement('button');
-        button.type = 'button';
-        button.className = 'button roll-chords__chord';
-        button.dataset['chord'] = String(at);
-        button.title = `Write ${chord.name} (${chord.numeral}) where the cursor is, to the next line of the grid`;
-        button.setAttribute('aria-label', button.title);
-        const name = this.doc.createElement('span');
-        name.className = 'roll-chords__name';
-        name.textContent = chord.name;
-        const numeral = this.doc.createElement('span');
-        numeral.className = 'roll-chords__numeral';
-        numeral.textContent = chord.numeral;
-        button.append(name, numeral);
-        return button;
-      }),
-    );
+
+    const chosen = sketch.chosen.length > 0;
+    sayWhetherIdle(this.el.rollCopy, chosen ? 'Copy the chosen notes' : 'Copy the chosen notes. Choose one first.', !chosen);
+    const canRead = typeof this.doc.defaultView?.navigator?.clipboard?.readText === 'function';
+    const toPaste = canRead || this.notesCopiedHere !== null;
+    sayWhetherIdle(this.el.rollPaste, toPaste ? 'Paste where the cursor is' : 'Paste where the cursor is. Copy notes first.', !toPaste);
+
+    const keeping = this.whatKeepingWouldDo();
+    this.el.rollChordsKeep.textContent = keeping.lettingGo ? '\u2212' : '+';
+    sayWhetherIdle(this.el.rollChordsKeep, keeping.says, keeping.idle);
   }
 
   /**
-   * Writes a chord of the key into the sketch where the cursor is - from the
-   * line of the grid it is in where the marker is put on one - to the next
-   * line, as loud as the sketch is on the whole: one change, put back as one,
-   * heard as it is written, and chosen, to be moved where it was not quite
-   * meant. The cursor goes on to where it ends, so the next chord tapped
+   * What the keep button would do with the notes chosen: keep them as a
+   * chord, let go of the kept chord they are, or nothing, and why. A chord is
+   * two keys or more, and the key's own are always there.
+   */
+  private whatKeepingWouldDo(): { readonly says: string; readonly idle: boolean; readonly lettingGo: boolean } {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const chosen = eachKeyOnce(sketch?.chosen.map((key) => key.midi) ?? []);
+    if (stored === null || chosen.length < 2) {
+      return { says: 'Keep the chosen notes as a chord. Choose two notes or more first.', idle: true, lettingGo: false };
+    }
+    const name = theNameOfTheKeys(chosen, stored.key.fifths);
+    const ofTheKey = theChordsOfTheKey(new KeySignature(stored.key.fifths, stored.key.mode)).find(({ midis }) =>
+      sameKeys(midis, chosen),
+    );
+    if (ofTheKey !== undefined) {
+      return { says: `${name} is the key's own ${ofTheKey.numeral}, here already.`, idle: true, lettingGo: false };
+    }
+    if (this.runtime.sketches.keptChords().some((chord) => sameKeys(chord, chosen))) {
+      return { says: `Take ${name} out of the chords kept`, idle: false, lettingGo: true };
+    }
+    return { says: `Keep ${name}, the chosen notes, as a chord`, idle: false, lettingGo: false };
+  }
+
+  /** Keeps the chosen notes as a chord, or lets go of the kept chord they are. */
+  private keepOrLetGoOfTheChosenChord(): void {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const keeping = this.whatKeepingWouldDo();
+    if (sketch === undefined || keeping.idle) {
+      return;
+    }
+    const chosen = sketch.chosen.map((key) => key.midi);
+    if (keeping.lettingGo) {
+      this.runtime.sketches.letGoOfTheChord(chosen);
+    } else {
+      this.runtime.sketches.keepTheChord(chosen);
+    }
+    this.showTheChordsOfTheKey();
+  }
+
+  /**
+   * Writes a chord of the drawer into the sketch where the cursor is - from
+   * the line of the grid it is in where the marker is put on one - to the
+   * next line, as loud as the sketch is on the whole: one change, put back as
+   * one, heard as it is written, and chosen, to be moved where it was not
+   * quite meant. The cursor goes on to where it ends, so the next chord tapped
    * follows it, and a progression is written by tapping it through. A key of
    * it already sounding there is left out, as a paste leaves it.
    */
@@ -12287,7 +12408,7 @@ export class AppView {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
-    const chord = stored === null ? undefined : theChordsOfTheKey(new KeySignature(stored.key.fifths, stored.key.mode))[at];
+    const chord = stored === null ? undefined : this.theChordsInTheDrawer(stored.key.fifths, stored.key.mode)[at];
     if (showing === null || sketch === undefined || stored === null || chord === undefined) {
       return;
     }
@@ -13510,11 +13631,18 @@ export class AppView {
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
     const clipboard = this.doc.defaultView?.navigator?.clipboard;
-    // A page not served securely has no clipboard, and a cut there would only delete.
-    if (sketch === undefined || stored === null || clipboard === undefined) {
+    if (sketch === undefined || stored === null) {
       return;
     }
     const notes = theNotesCopied(stored.events, sketch.chosen);
+    if (notes.length > 0) {
+      this.notesCopiedHere = notes;
+      this.showTheChordsOfTheKey();
+    }
+    // A page not served securely has no clipboard, and a cut there would only delete.
+    if (clipboard === undefined) {
+      return;
+    }
     if (notes.length > 0) {
       void clipboard.writeText(theClipboardTextOf(notes)).catch(() => undefined);
     }
@@ -13548,6 +13676,37 @@ export class AppView {
       return;
     }
     event.preventDefault();
+    this.pasteTheNotes(notes);
+  }
+
+  /**
+   * Pastes by the drawer's button, which has no paste event to read: the
+   * clipboard is asked - which a browser may first ask the reader's leave
+   * for - and where it cannot be read or holds no notes, the notes last
+   * copied in this page are pasted.
+   */
+  private pasteWithTheButton(): void {
+    const clipboard = this.doc.defaultView?.navigator?.clipboard;
+    const read =
+      typeof clipboard?.readText === 'function'
+        ? clipboard.readText().then(theNotesOnTheClipboard, () => null)
+        : Promise.resolve(null);
+    void read.then((notes) => {
+      const toPaste = notes ?? this.notesCopiedHere;
+      if (toPaste !== null) {
+        this.pasteTheNotes(toPaste);
+      }
+    });
+  }
+
+  /** Puts notes copied into the sketch being edited, the first where the head is, and chooses them: one change. */
+  private pasteTheNotes(notes: readonly NoteCopied[]): void {
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    if (showing === null || sketch === undefined || stored === null) {
+      return;
+    }
     const { events, pasted } = takeWithTheNotesPasted(stored.events, notes, this.rollAtMs + rollBeganAtMs(showing.roll));
     if (pasted.length > 0) {
       this.changeTheSketchShowing(events, [...sketch.before, asItWas(stored, sketch.chosen)], pasted);

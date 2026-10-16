@@ -166,6 +166,47 @@ describe('the sketches being written', () => {
     }
   });
 
+  it('keeps the chords the writer keeps across visits, each key once, low to high, and lets go of them', () => {
+    const store = new InMemorySettingsStore();
+    const library = new SketchLibrary(store, () => 0);
+    library.begin({ events: PLAYED, beats: THREE }, 'Plain', 1);
+    expect(library.keptChords()).toEqual([]);
+
+    library.keepTheChord([64, 52, 60, 67, 64]);
+    library.keepTheChord([57, 60, 64]);
+    // One key is no chord, and the same keys are kept once, however struck.
+    library.keepTheChord([60, 60]);
+    library.keepTheChord([60, 67, 52, 64]);
+    expect(library.keptChords()).toEqual([
+      [52, 60, 64, 67],
+      [57, 60, 64],
+    ]);
+    const next = new SketchLibrary(store, () => 0);
+    next.load();
+    expect(next.keptChords()).toEqual([
+      [52, 60, 64, 67],
+      [57, 60, 64],
+    ]);
+    // Kept beside the sketches, which are as they were.
+    expect(next.list().map(({ title }) => title)).toEqual(['Plain']);
+
+    next.letGoOfTheChord([64, 60, 57]);
+    expect(next.keptChords()).toEqual([[52, 60, 64, 67]]);
+    library.load();
+    expect(library.keptChords()).toEqual([[52, 60, 64, 67]]);
+
+    // Anything else read back is left out.
+    store.write({ version: 1, sketches: [], chords: [[60, 64], [60], [60, 128], [60, 61.5], 'C', [-1, 60], [67, 64, 60, 60]] });
+    library.load();
+    expect(library.keptChords()).toEqual([
+      [60, 64],
+      [60, 64, 67],
+    ]);
+    store.write({ version: 1, sketches: [], chords: 'C E G' });
+    library.load();
+    expect(library.keptChords()).toEqual([]);
+  });
+
   it('keeps the beats a sketch is counted in across visits, its notes as they were', () => {
     const store = new InMemorySettingsStore();
     const library = new SketchLibrary(store, () => 0);

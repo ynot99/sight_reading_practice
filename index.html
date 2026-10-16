@@ -632,7 +632,36 @@
             <div id="roll-map-head" class="roll-map__head"></div>
           </div>
           </div>
-          <div id="roll-chords" class="roll-chords" role="group" aria-label="The chords of the key" hidden></div>
+          <div id="roll-chords" class="roll-chords" role="group" aria-label="The chords of the key" hidden>
+            <!--
+              Copying and pasting with a finger, which has no keyboard to hold
+              Ctrl on: what Ctrl+C and Ctrl+V do.
+            -->
+            <div class="roll-chords__clipboard">
+              <button id="roll-copy" type="button" class="button roll-chords__tool" title="Copy the chosen notes"
+                aria-label="Copy the chosen notes">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
+                  class="take-transport__icon">
+                  <path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z" />
+                </svg>
+              </button>
+              <button id="roll-paste" type="button" class="button roll-chords__tool" title="Paste where the cursor is"
+                aria-label="Paste where the cursor is">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
+                  class="take-transport__icon">
+                  <path d="M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zm-7 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm7 18H5V4h2v3h10V4h2v16z" />
+                </svg>
+              </button>
+            </div>
+            <!-- The key's chords, then the writer's own, each one press to write. -->
+            <div id="roll-chords-list" class="roll-chords__list"></div>
+            <!--
+              The chosen notes kept as a chord of the writer's own; pressed
+              again with the same notes chosen, it lets go of it.
+            -->
+            <button id="roll-chords-keep" type="button" class="button roll-chords__chord roll-chords__keep"
+              title="Keep the chosen notes as a chord" aria-label="Keep the chosen notes as a chord">+</button>
+          </div>
           </div>
           <!--
             Choosing what to practise out of the picture of what happened.

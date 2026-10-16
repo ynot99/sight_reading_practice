@@ -15,6 +15,22 @@ export interface ChordOfTheKey {
 
 const NUMERALS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'] as const;
 
+/**
+ * The keys of a chord as a palette keeps it: each once, low to high. Where
+ * and how often a key was struck in the notes it was taken from is the
+ * figure, not the chord.
+ */
+export function eachKeyOnce(midis: readonly number[]): readonly number[] {
+  return [...new Set(midis)].sort((low, high) => low - high);
+}
+
+/** Whether two chords are the same keys, each once. */
+export function sameKeys(one: readonly number[], other: readonly number[]): boolean {
+  const left = eachKeyOnce(one);
+  const right = eachKeyOnce(other);
+  return left.length === right.length && left.every((midi, at) => midi === right[at]);
+}
+
 /** Middle C as a staff position: the fourth octave, counted in letters. */
 const MIDDLE_C_INDEX = 4 * STEPS.length;
 

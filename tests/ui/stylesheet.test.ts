@@ -1377,7 +1377,7 @@ describe('the stylesheet', () => {
     // width: a drawer laid over it would hide the notes at its right edge.
     const ruleOf = (selector: string): string => rules().find((rule) => rule.selector === selector)?.body ?? '';
     expect(HTML).toMatch(
-      /<div class="roll-room">\s*<div class="roll-frame">[\s\S]*?id="roll-map"[\s\S]*?<\/div>\s*<\/div>\s*<div id="roll-chords"[^>]*><\/div>\s*<\/div>/,
+      /<div class="roll-room">\s*<div class="roll-frame">[\s\S]*?id="roll-map"[\s\S]*?<\/div>\s*<\/div>\s*<div id="roll-chords"[^>]*>[\s\S]*?id="roll-chords-keep"[^>]*>\+<\/button>\s*<\/div>\s*<\/div>/,
     );
     expect(ruleOf('.roll-room')).toMatch(/display\s*:\s*flex/);
     expect(ruleOf('.roll-room')).not.toMatch(/flex-direction/);
@@ -1387,6 +1387,14 @@ describe('the stylesheet', () => {
     expect(ruleOf('.roll-chords')).toMatch(/flex\s*:\s*none/);
     expect(ruleOf('.roll-chords')).not.toMatch(/position\s*:\s*absolute/);
     expect(ruleOf('.roll-chords')).toMatch(/overflow-y\s*:\s*auto/);
+    expect(ruleOf('.roll-chords')).toMatch(/overflow-x\s*:\s*hidden/);
+    // Its buttons' padding outweighs the button's own, which is written later
+    // in the sheet: two of them side by side were wider than the column.
+    expect(ruleOf('.roll-chords .button')).toMatch(/padding\s*:\s*4px\s*;/);
+    expect(ruleOf('.roll-chords .button')).toMatch(/min-width\s*:\s*0/);
+    expect(ruleOf('.button')).toMatch(/padding\s*:\s*8px 14px/);
+    // The chords stand in the column itself, sharing its height with the keep button.
+    expect(ruleOf('.roll-chords__list')).toMatch(/display\s*:\s*contents/);
   });
 
   it('keeps a caret out of the range iOS magnifies the page for', () => {

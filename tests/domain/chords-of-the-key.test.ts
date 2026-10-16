@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { theChordsOfTheKey } from '../../src/domain/harmony/chordsOfTheKey.js';
+import { eachKeyOnce, sameKeys, theChordsOfTheKey } from '../../src/domain/harmony/chordsOfTheKey.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { STEPS } from '../../src/domain/model/Pitch.js';
 
@@ -9,6 +9,17 @@ const EVERY_KEY = (['major', 'minor'] as const).flatMap((mode) =>
 );
 
 const MIDDLE_C = 60;
+
+describe('the keys of a chord', () => {
+  it('are each key once, low to high, wherever and however often struck', () => {
+    expect(eachKeyOnce([67, 60, 64, 60, 48])).toEqual([48, 60, 64, 67]);
+    expect(sameKeys([64, 60, 67, 60], [60, 64, 67])).toBe(true);
+    // Another octave is another chord, and so is one key more.
+    expect(sameKeys([60, 64, 67], [48, 64, 67])).toBe(false);
+    expect(sameKeys([60, 64, 67], [60, 64, 67, 71])).toBe(false);
+    expect(sameKeys([60, 64, 67, 71], [60, 64, 67])).toBe(false);
+  });
+});
 
 describe('the chords of a key', () => {
   it('names the seven of C major and of A minor, with their numerals', () => {

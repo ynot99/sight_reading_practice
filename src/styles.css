@@ -1277,9 +1277,20 @@ textarea {
   flex: none;
   flex-direction: column;
   gap: 6px;
-  width: 72px;
+  width: 84px;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+/*
+ * Its buttons narrower than a button is elsewhere: the button's own padding,
+ * written further down the sheet, would otherwise win, and two of them side
+ * by side were wider than the column.
+ */
+.roll-chords .button {
+  min-width: 0;
+  padding: 4px;
 }
 
 .roll-chords__chord {
@@ -1289,7 +1300,6 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  padding: 4px;
 }
 
 .roll-chords__name {
@@ -1302,6 +1312,40 @@ textarea {
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 600;
+}
+
+/* The chords are the column's own, as if the list around them were not there. */
+.roll-chords__list {
+  display: contents;
+}
+
+/* Copy and paste side by side over the chords, as the editor's tools are. */
+.roll-chords__clipboard {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.roll-chords__tool {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+}
+
+/* The writer's own chords, apart from the key's by their edge. */
+.roll-chords__chord--kept {
+  border-style: dashed;
+}
+
+.roll-chords__keep {
+  font-size: 20px;
+}
+
+.roll-chords__tool[data-idle='true'],
+.roll-chords__keep[data-idle='true'] {
+  opacity: 0.45;
 }
 
 /*

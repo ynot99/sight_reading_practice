@@ -76,10 +76,11 @@ export interface RollDrawing {
    */
   readonly freely?: boolean;
   /**
-   * The pitch classes of the scale the music is written in, C being nought,
-   * whose rows are lit: a sketch's, to write in. None for anything else.
+   * The scales the music is written in, each from where it begins on the
+   * run's own clock, by its pitch classes, C being nought: their rows are
+   * lit as far as the next. A sketch's, to write in; none for anything else.
    */
-  readonly scale?: readonly number[];
+  readonly scales?: readonly { readonly fromMs: number; readonly pitchClasses: readonly number[] }[];
   /** Where the music changes metre or pace, on the run's own clock, and what a mark there says. */
   readonly marks?: readonly { readonly atMs: number; readonly says: string }[];
   /**
@@ -335,8 +336,8 @@ export interface RollScene {
   readonly lengthMs: number;
   /** The rows the black keys are on, which are shaded as they are on the instrument. */
   readonly blackRows: readonly number[];
-  /** The rows of the notes of the scale the music is written in, lit to write in: see {@link RollDrawing.scale}. */
-  readonly scaleRows: readonly number[];
+  /** The rows of the notes of each scale the music is written in, as far as the next: see {@link RollDrawing.scales}. */
+  readonly scaleSpans: readonly { readonly fromMs: number; readonly untilMs: number; readonly rows: readonly number[] }[];
   /** The marks over the ruler: see {@link RollDrawing.marks}. */
   readonly marks: readonly SceneMark[];
   readonly waits: readonly SceneStretch[];
@@ -977,16 +978,27 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
   const band = bandOf(roll.presses, ghosts, drawing.wholeKeyboard);
 
   const blackRows: number[] = [];
-  const scaleRows: number[] = [];
-  const inTheScale = new Set(drawing.scale ?? []);
   for (let midi = band.high; midi >= band.low; midi -= 1) {
     if (isBlack(midi)) {
       blackRows.push(band.high - midi);
     }
-    if (inTheScale.has(((midi % 12) + 12) % 12)) {
-      scaleRows.push(band.high - midi);
-    }
   }
+  const scales = drawing.scales ?? [];
+  const scaleSpans = scales.map((scale, at) => {
+    const inTheScale = new Set(scale.pitchClasses);
+    const rows: number[] = [];
+    for (let midi = band.high; midi >= band.low; midi -= 1) {
+      if (inTheScale.has(((midi % 12) + 12) % 12)) {
+        rows.push(band.high - midi);
+      }
+    }
+    // The first from the very beginning, so nothing before the first bar is left unlit.
+    return {
+      fromMs: at === 0 ? Number.NEGATIVE_INFINITY : scale.fromMs - origin,
+      untilMs: (scales[at + 1]?.fromMs ?? Number.POSITIVE_INFINITY) - origin,
+      rows,
+    };
+  });
 
   // One name per bar line, where it fell due rather than where it was given:
   // the number over the grid is the page's, and the page does not move.
@@ -1033,7 +1045,7 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
     rows: band.high - band.low + 1,
     lengthMs: endMs - origin,
     blackRows,
-    scaleRows,
+    scaleSpans,
     marks: momentsInTimeOrder(
       (drawing.marks ?? []).map((mark) => ({
         atMs: mark.atMs - origin,
@@ -1324,9 +1336,8 @@ export function drawTheRoll(scene: RollScene): HTMLElement {
 
   const keys = element('div', 'roll__keys');
   const strip = element('div', 'roll__keys-strip');
-  // The rows a chosen note is on, whose keys are outlined as it is; and those of the scale, marked as their rows are lit.
+  // The rows a chosen note is on, whose keys are outlined as it is.
   const chosenRows = new Set(scene.notes.filter((note) => note.chosen === true).map((note) => note.row));
-  const scaleRows = new Set(scene.scaleRows);
   for (let row = 0; row < scene.rows; row += 1) {
     const midi = scene.highest - row;
     const key = element('div', `roll__key${isBlack(midi) ? ' roll__key--black' : ''}`);
@@ -1337,9 +1348,6 @@ export function drawTheRoll(scene: RollScene): HTMLElement {
     key.dataset['midi'] = String(midi);
     if (chosenRows.has(row)) {
       key.dataset['chosen'] = 'true';
-    }
-    if (scaleRows.has(row)) {
-      key.dataset['inScale'] = 'true';
     }
     strip.append(key);
   }

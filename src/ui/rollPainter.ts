@@ -358,12 +358,19 @@ export function paintTheGrid(
       paint.fillRect(0, y(row), widePx, rowPx);
     }
   }
-  // The rows of the scale, lit over the keys' shading, which still shows
-  // through: a black key in the scale is a lit dark row.
+  // The rows of each scale, as far as the next, lit over the keys' shading,
+  // which still shows through: a black key in the scale is a lit dark row.
   paint.fillStyle = inks.scale;
-  for (const row of scene.scaleRows) {
-    if (shows(row)) {
-      paint.fillRect(0, y(row), widePx, rowPx);
+  for (const span of scene.scaleSpans) {
+    const left = Math.max(0, x(span.fromMs));
+    const right = Math.min(widePx, x(span.untilMs));
+    if (right <= left) {
+      continue;
+    }
+    for (const row of span.rows) {
+      if (shows(row)) {
+        paint.fillRect(left, y(row), right - left, rowPx);
+      }
     }
   }
   // The rows of the keys sounding now, across the whole width: which row a

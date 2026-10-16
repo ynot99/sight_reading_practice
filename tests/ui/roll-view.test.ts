@@ -33,6 +33,7 @@ import {
 } from '../../src/ui/rollView.js';
 import {
   RollRecorder,
+  rollBeganAtMs,
   type RolledBeat,
   type RolledPress,
   type RunRoll,
@@ -396,21 +397,25 @@ describe('drawing a run as a piano roll', () => {
     ]);
   });
 
-  it('lights the rows of the scale the music is written in, and marks their keys, and none where it says none', () => {
+  it('lights the rows of each scale the music is written in, as far as the next, and none where it says none', () => {
     const input = roll({ presses: [press({ midi: MIDI.C4 })] });
-    // C major over the band from G3 to F#4: F, E, D, C, B, A and G, from the top.
+    // C major, then from two seconds G major, over the band from G3 to F#4,
+    // whose rows from the top are F#, F, E, D#, D, C#, C, B, A#, A, G# and G.
     const scene = theSceneOfTheRoll({
       roll: input,
       barLabel: () => null,
-      scale: [0, 2, 4, 5, 7, 9, 11],
+      scales: [
+        { fromMs: 0, pitchClasses: [0, 2, 4, 5, 7, 9, 11] },
+        { fromMs: 2_000, pitchClasses: [7, 9, 11, 0, 2, 4, 6] },
+      ],
     });
-    expect(scene.scaleRows).toEqual([1, 2, 4, 6, 7, 9, 11]);
-    const keys = [...drawTheRoll(scene).querySelectorAll<HTMLElement>('.roll__key')];
-    expect(keys.filter((key) => key.dataset['inScale'] === 'true').map((key) => Number(key.dataset['midi']))).toEqual([
-      65, 64, 62, 60, 59, 57, 55,
+    // On the drawing's own clock, which begins a second into the run.
+    expect(rollBeganAtMs(input)).toBe(1_000);
+    expect(scene.scaleSpans).toEqual([
+      { fromMs: Number.NEGATIVE_INFINITY, untilMs: 1_000, rows: [1, 2, 4, 6, 7, 9, 11] },
+      { fromMs: 1_000, untilMs: Number.POSITIVE_INFINITY, rows: [0, 2, 4, 6, 7, 9, 11] },
     ]);
-    expect(sceneOf(input).scaleRows).toEqual([]);
-    expect(draw(input).querySelectorAll("[data-in-scale='true']")).toHaveLength(0);
+    expect(sceneOf(input).scaleSpans).toEqual([]);
   });
 
   it('shades the rows the black keys are on', () => {

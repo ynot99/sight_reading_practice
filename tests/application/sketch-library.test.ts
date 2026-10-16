@@ -12,7 +12,7 @@ import {
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
 import { theSketchOfTheScore } from '../../src/application/SketchLibrary.js';
 import { readMidiFile } from '../../src/domain/midi/readMidiFile.js';
-import { theClickInAnotherMetre, thePlayingAtAnotherPace, writeMidiFile } from '../../src/domain/midi/MidiFile.js';
+import { takeWithTheKeyFrom, theClickInAnotherMetre, thePlayingAtAnotherPace, writeMidiFile } from '../../src/domain/midi/MidiFile.js';
 import { barLines } from '../../src/domain/model/Exercise.js';
 import { midiToExercise } from '../../src/domain/notation/midiToExercise.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
@@ -70,7 +70,7 @@ describe('a sketch of a score', () => {
 });
 
 describe('a sketch changed partway', () => {
-  it('is written down with the metre and the pace changed from the bar they were changed from', () => {
+  it('is written down with the key, the metre and the pace changed from the bar they were changed from', () => {
     // Eight bars of 4/4 at 120, a crotchet on every beat; from the third bar
     // 3/4, and from the same bar a crotchet a second.
     const events: MidiFileEvent[] = Array.from({ length: 32 }, (_, at) => [
@@ -78,13 +78,20 @@ describe('a sketch changed partway', () => {
       { kind: 'noteOff' as const, atMs: at * 500 + 400, midi: 60 },
     ]).flat();
     const plain = [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 }));
-    const counted = theClickInAnotherMetre(events, plain, 3, 4, 4_000);
-    const paced = thePlayingAtAnotherPace(events, counted, 60, 4_000);
+    // And from the same bar in D major.
+    const keyed = takeWithTheKeyFrom(events, { fifths: 0, scale: 'major' }, 4_000, { fifths: 2, scale: 'major' });
+    const counted = theClickInAnotherMetre(keyed, plain, 3, 4, 4_000);
+    const paced = thePlayingAtAnotherPace(keyed, counted, 60, 4_000);
 
-    const page = midiToExercise(readMidiFile(writeMidiFile(paced.events, { beats: paced.beats })), 'Changed').exercise;
+    // Its own key said where it begins, as a sketch written down says it.
+    const page = midiToExercise(
+      readMidiFile(writeMidiFile(paced.events, { beats: paced.beats, key: { fifths: 0, minor: false } })),
+      'Changed',
+    ).exercise;
     const bars = barLines(page);
     expect(bars.slice(0, 4).map((bar) => bar.timeSignature.toString())).toEqual(['4/4', '4/4', '3/4', '3/4']);
     expect(bars[2]?.startTicks).toBe(8 * Duration.QUARTER.ticks);
+    expect(page.keyChanges.map((change) => [change.measureIndex, change.key.fifths])).toEqual([[2, 2]]);
     expect([page.tempoBpm, ...page.tempoChanges.map((change) => [change.measureIndex, change.offsetTicks, change.tempoBpm])]).toEqual([
       120,
       [2, 0, 60],
@@ -348,6 +355,32 @@ describe('the sketches being written', () => {
     next.load();
     expect(next.find('odd')?.key).toEqual({ fifths: 3, mode: 'major' });
     expect(next.find('wrong')?.key).toEqual({ fifths: 0, mode: 'minor', scale: 'phrygian' });
+  });
+
+  it('keeps a change of key among a sketch\'s notes across visits, and leaves out one no signature or scale has', () => {
+    const store = new InMemorySettingsStore();
+    const library = new SketchLibrary(store, () => 0);
+    const events: MidiFileEvent[] = [
+      ...PLAYED,
+      { kind: 'key', atMs: 2_000, fifths: -3, scale: 'dorian' },
+      { kind: 'key', atMs: 3_000, fifths: 7, scale: 'locrian' },
+    ];
+    const sketch = library.begin({ events, beats: THREE }, 'Keys', 1);
+    const next = new SketchLibrary(store, () => 0);
+    next.load();
+    expect(next.find(sketch.id)?.events).toEqual(events);
+    // Kept as four numbers, like a note: where, the signature, and the scale by its place in the list.
+    const kept = sketchAsKept(sketch)['events'] as unknown[];
+    expect(kept.slice(-2)).toEqual([
+      [3, 2_000, -3, 4],
+      [3, 3_000, 7, 8],
+    ]);
+    store.write({
+      version: 1,
+      sketches: [{ ...sketchAsKept(sketch), events: [...kept.slice(0, -2), [3, 2_000, 8, 0], [3, 2_000, -8, 0], [3, 2_000, 0, 9], [3, 2_000, 1.5, 0]] }],
+    });
+    next.load();
+    expect(next.find(sketch.id)?.events).toEqual(PLAYED);
   });
 
   it('keeps the beats a sketch is counted in across visits, its notes as they were', () => {

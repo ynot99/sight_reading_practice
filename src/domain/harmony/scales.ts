@@ -1,6 +1,6 @@
 import { floorMod } from '../../shared/asserts.js';
 import { KeySignature } from '../model/KeySignature.js';
-import { Pitch, STEPS, type Alteration, type Step } from '../model/Pitch.js';
+import { Pitch, STEPS, alterationSign, type Alteration, type Step } from '../model/Pitch.js';
 
 /**
  * The scales music can be written in here: the seven-note ones, each of
@@ -93,4 +93,10 @@ export function theSignatureOfTheScale(tonicPitchClass: number, scale: ScaleName
 export function thePitchClassesOfTheScale(fifths: number, scale: ScaleName): readonly number[] {
   const tonic = theTonicPitchClass(fifths, scale);
   return SCALES[scale].steps.map((step) => floorMod(tonic + step, 12));
+}
+
+/** What a key is called, its tonic spelt as its signature spells it: "D dorian", "B♭ major". */
+export function theNameOfTheKey(key: { readonly fifths: number; readonly scale: ScaleName }): string {
+  const { step, alter } = theTonicOfTheScale(key.fifths, key.scale);
+  return `${step}${alterationSign(alter)} ${SCALES[key.scale].called}`;
 }

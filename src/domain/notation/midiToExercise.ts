@@ -1,6 +1,6 @@
 import { DIVISIONS_PER_QUARTER, Duration, type NoteTypeName } from '../model/Duration.js';
 import { DomainError } from '../../shared/errors.js';
-import type { Exercise, MusicalEntry, PedalMark, StaffPart, TempoChange, TimeChange } from '../model/Exercise.js';
+import type { Exercise, KeyChange, MusicalEntry, PedalMark, StaffPart, TempoChange, TimeChange } from '../model/Exercise.js';
 import { measureOf, noteEntry, restEntry, validateExercise } from '../model/Exercise.js';
 import { KeySignature } from '../model/KeySignature.js';
 import { Pitch } from '../model/Pitch.js';
@@ -400,7 +400,7 @@ function buildStaff(
   layout: Layout,
   staffNumber: number,
   voice: number,
-  preferFlats: boolean,
+  preferFlatsIn: (measureIndex: number) => boolean,
 ): StaffPart {
   const placed: { measureIndex: number; entry: MusicalEntry }[] = [];
   const silence = (from: number, to: number): void => {
@@ -414,6 +414,8 @@ function buildStaff(
     if (segment.startTicks > at) {
       silence(at, segment.startTicks);
     }
+    // Spelt as the key of the bar it is struck in spells its black keys.
+    const preferFlats = preferFlatsIn(layout.bars.barAt(segment.startTicks));
     const pitches = segment.midis.map((midi) => Pitch.fromMidi(midi, preferFlats));
     tileSpan(segment.startTicks, segment.endTicks, layout, (measureIndex, value, last) => {
       placed.push({
@@ -497,7 +499,17 @@ export function midiToExercise(
   const timeSignature = signature;
   const lastTick = Math.max(...notes.map((note) => note.endTicks));
   const bars = Math.max(1, laid.bars.filter((bar) => bar.startTicks < lastTick).length);
-  const preferFlats = document.fifths < 0;
+  // A key set inside a bar begins on the bar line after it, as a metre does.
+  const keyChanges: KeyChange[] = document.keyChanges.flatMap((change) => {
+    const ticks = change.atTicks * scale;
+    const within = laid.barAt(ticks);
+    const measureIndex = within + ((laid.bars[within]?.startTicks ?? 0) < ticks ? 1 : 0);
+    return measureIndex >= bars ? [] : [{ measureIndex, key: new KeySignature(change.fifths, change.minor ? 'minor' : 'major') }];
+  });
+  const preferFlatsIn = (measureIndex: number): boolean =>
+    [{ measureIndex: 0, key: new KeySignature(document.fifths) }, ...keyChanges]
+      .filter((change) => change.measureIndex <= measureIndex)
+      .reduce<number>((_, change) => change.key.fifths, document.fifths) < 0;
 
   const { byNote, fromPitch } = assignStaves(notes, splitAtMidi, document.trackNames);
   const right = notes.filter((note) => byNote.get(note) === RIGHT_HAND);
@@ -529,8 +541,8 @@ export function midiToExercise(
 
   const layout: Layout = { bars: laid, grids };
   const staves = [
-    buildStaff(segmentsFor(right), bars, layout, RIGHT_HAND, 1, preferFlats),
-    buildStaff(segmentsFor(left), bars, layout, LEFT_HAND, 2, preferFlats),
+    buildStaff(segmentsFor(right), bars, layout, RIGHT_HAND, 1, preferFlatsIn),
+    buildStaff(segmentsFor(left), bars, layout, LEFT_HAND, 2, preferFlatsIn),
   ];
 
   const tripletBeats = grids.filter((each) => each === 'triplet').length;
@@ -576,7 +588,7 @@ export function midiToExercise(
     id: `midi-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
     title,
     key: new KeySignature(document.fifths, document.minor ? 'minor' : 'major'),
-    keyChanges: [],
+    keyChanges,
     timeChanges,
     tempoChanges,
     pedalMarks,

@@ -500,3 +500,53 @@ describe('a file that changes metre and tempo partway', () => {
     expect(() => validateExercise(exercise)).not.toThrow();
   });
 });
+
+describe('a file that changes key partway', () => {
+  /** C major, a C sharp; F major set at `keyAt` ticks; at the second bar a D flat - the same key. */
+  const changingKey = (keyAt: number[]): Uint8Array =>
+    handWritten([
+      0x00, 0xff, 0x59, 0x02, 0x00, 0x00,
+      0x00, 0x90, 0x3d, 0x50,
+      0x83, 0x60, 0x80, 0x3d, 0x00,
+      ...keyAt, 0xff, 0x59, 0x02, 0xff, 0x00,
+      // Set again as it is: no change.
+      0x00, 0xff, 0x59, 0x02, 0xff, 0x00,
+      ...(keyAt[0] === 0x8b ? [0x00] : [0x87, 0x40]), 0x90, 0x3d, 0x50,
+      0x83, 0x60, 0x80, 0x3d, 0x00,
+    ]);
+
+  it('takes the last key set where the file begins for its own', () => {
+    const document = readMidiFile(
+      handWritten([
+        0x00, 0xff, 0x59, 0x02, 0x00, 0x00,
+        0x00, 0xff, 0x59, 0x02, 0x03, 0x01,
+        0x00, 0x90, 0x3c, 0x50,
+        0x83, 0x60, 0x80, 0x3c, 0x00,
+      ]),
+    );
+    expect([document.fifths, document.minor, document.keyChanges]).toEqual([3, true, []]);
+  });
+
+  it('reads every change of key after the first, and not one set again as it was', () => {
+    // F major set where the second bar begins.
+    const document = readMidiFile(changingKey([0x8b, 0x20]));
+    expect([document.fifths, document.minor]).toEqual([0, false]);
+    expect(document.keyChanges).toEqual([{ atTicks: 1_920, fifths: -1, minor: false }]);
+  });
+
+  it('writes the page in each key from its bar, and spells each bar\'s black keys as its key does', () => {
+    const { exercise } = midiToExercise(readMidiFile(changingKey([0x8b, 0x20])), 'Keys');
+    expect(() => validateExercise(exercise)).not.toThrow();
+    expect(exercise.keyChanges.map((change) => [change.measureIndex, change.key.fifths])).toEqual([[1, -1]]);
+    const spelt = buildTimeline(exercise)
+      .steps.flatMap((step) => step.notes)
+      .map((note) => `${note.pitch.step}${String(note.pitch.alter)}`);
+    expect(spelt).toEqual(['C1', 'D-1']);
+  });
+
+  it('begins a key set inside a bar on the bar line after it', () => {
+    // F major set at the second crotchet of the first bar.
+    const { exercise } = midiToExercise(readMidiFile(changingKey([0x83, 0x60])), 'Inside');
+    expect(exercise.keyChanges.map((change) => change.measureIndex)).toEqual([1]);
+  });
+});

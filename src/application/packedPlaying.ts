@@ -1,4 +1,5 @@
 import type { Hand, HeardBeat, MidiFileEvent } from '../domain/midi/MidiFile.js';
+import { SCALE_NAMES } from '../domain/harmony/scales.js';
 
 /*
  * How a stream of playing is written into browser storage, for every shelf
@@ -29,6 +30,8 @@ export function pack(event: MidiFileEvent): Packed {
       return [1, Math.round(event.atMs), event.midi, 0];
     case 'sustain':
       return [2, Math.round(event.atMs), 0, Math.round(event.value * 127)];
+    case 'key':
+      return [3, Math.round(event.atMs), event.fifths, SCALE_NAMES.indexOf(event.scale)];
   }
 }
 
@@ -54,6 +57,11 @@ export function unpack(value: unknown): MidiFileEvent | null {
       return { kind: 'noteOff', atMs, midi: a };
     case 2:
       return { kind: 'sustain', atMs, value: b / 127 };
+    case 3: {
+      // A signature has seven sharps or flats at most, and the scale is one of those offered.
+      const scale = SCALE_NAMES[b];
+      return Number.isInteger(a) && a >= -7 && a <= 7 && scale !== undefined ? { kind: 'key', atMs, fifths: a, scale } : null;
+    }
     default:
       return null;
   }

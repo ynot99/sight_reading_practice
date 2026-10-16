@@ -1426,7 +1426,7 @@ describe('changing a recording', () => {
     ]);
     // One still down at the end is copied still down.
     const sharp = MIDI.E4 + 2;
-    expect(takeWithTheKeysCopied(events, [e], 0, 2)?.filter((event) => event.kind !== 'sustain' && event.midi === sharp)).toEqual([on(500, sharp)]);
+    expect(takeWithTheKeysCopied(events, [e], 0, 2)?.filter((event) => (event.kind === 'noteOn' || event.kind === 'noteOff') && event.midi === sharp)).toEqual([on(500, sharp)]);
     expect(takeWithTheKeysCopied(events, [c, { midi: MIDI.C4, downAtMs: 1 }], 1_000, 0)).toBeNull();
   });
 

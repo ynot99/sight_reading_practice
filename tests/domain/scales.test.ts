@@ -5,6 +5,7 @@ import {
   thePitchClassesOfTheScale,
   theSignatureOfTheScale,
   theTonicOfTheScale,
+  theNameOfTheKey,
   theTonicPitchClass,
   type ScaleName,
 } from '../../src/domain/harmony/scales.js';
@@ -73,6 +74,12 @@ describe('the scales music is written in', () => {
     expect(thePitchClassesOfTheScale(0, 'harmonicMinor')).toEqual([9, 11, 0, 2, 4, 5, 8]);
     expect(thePitchClassesOfTheScale(0, 'melodicMinor')).toEqual([9, 11, 0, 2, 4, 6, 8]);
     expect(thePitchClassesOfTheScale(0, 'dorian')).toEqual([2, 4, 5, 7, 9, 11, 0]);
+  });
+
+  it('names a key by its tonic, spelt as its signature spells it, and its scale', () => {
+    expect(theNameOfTheKey({ fifths: 0, scale: 'dorian' })).toBe('D dorian');
+    expect(theNameOfTheKey({ fifths: -2, scale: 'major' })).toBe('B\u266d major');
+    expect(theNameOfTheKey({ fifths: 4, scale: 'harmonicMinor' })).toBe('C\u266f harmonic minor');
   });
 
   it('knows a scale\'s name read back from one that is none', () => {

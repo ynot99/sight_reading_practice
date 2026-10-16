@@ -16,6 +16,7 @@ import {
   SCALE_NAMES,
   theSignatureOfTheScale,
   theTonicOfTheScale,
+  theNameOfTheKey,
   thePitchClassesOfTheScale,
   theTonicPitchClass,
 } from '../domain/harmony/scales.js';
@@ -58,8 +59,11 @@ import { TimeSignature } from '../domain/model/TimeSignature.js';
 import { alterationSign, midiToLabel } from '../domain/model/Pitch.js';
 import {
   barsAreHeardIn,
+  takeWithTheKeyFrom,
   theBarOfTheClickAt,
   theChangesOfTheClick,
+  theKeyChangesOf,
+  theKeyOfTheMusicAt,
   theClickInAnotherMetre,
   theClickOfTheTake,
   thePaceOfTheClick,
@@ -67,6 +71,7 @@ import {
   writeMidiFile,
   type Hand,
   type HeardBeat,
+  type KeyOfTheMusic,
   type MidiFileEvent,
 } from '../domain/midi/MidiFile.js';
 import { worstPassage } from '../domain/scoring/troubleSpots.js';
@@ -2062,6 +2067,9 @@ export class AppView {
   /** The bar a change of metre or pace is being asked about, while the sheet asking is open. */
   private barAskedAbout: ReturnType<typeof theBarOfTheClickAt> = null;
 
+  /** And the key that bar is in, and the one the bar before it is in - none before the first. */
+  private keyAskedAbout: { readonly here: KeyOfTheMusic; readonly before: KeyOfTheMusic | null } | null = null;
+
   /** Whether a tap on a chord kept in the drawer deletes it, rather than writing it. */
   private chordsBeingForgotten = false;
 
@@ -2376,6 +2384,8 @@ export class AppView {
     sheetRollMark: HTMLElement;
     rollMarkTitle: HTMLElement;
     rollMarkMetre: HTMLSelectElement;
+    rollMarkKey: HTMLSelectElement;
+    rollMarkScale: HTMLSelectElement;
     rollMarkTempo: HTMLInputElement;
     rollMarkRemove: HTMLButtonElement;
     rollMarkYes: HTMLButtonElement;
@@ -2767,6 +2777,8 @@ export class AppView {
       sheetRollMark: requireElement(doc, 'sheet-roll-mark'),
       rollMarkTitle: requireElement(doc, 'roll-mark-title'),
       rollMarkMetre: requireElement(doc, 'roll-mark-metre'),
+      rollMarkKey: requireElement(doc, 'roll-mark-key'),
+      rollMarkScale: requireElement(doc, 'roll-mark-scale'),
       rollMarkTempo: requireElement(doc, 'roll-mark-tempo'),
       rollMarkRemove: requireElement(doc, 'roll-mark-remove'),
       rollMarkYes: requireElement(doc, 'roll-mark-yes'),
@@ -9322,15 +9334,33 @@ export class AppView {
       SKETCH_METRES.map((metre) => ({ value: metre, label: metre })),
       '4/4',
     );
+    fillSelect(
+      this.el.rollMarkKey,
+      Array.from({ length: 12 }, (_, pitchClass) => ({ value: String(pitchClass), label: String(pitchClass) })),
+      '0',
+    );
+    fillSelect(
+      this.el.rollMarkScale,
+      SCALE_NAMES.map((scale) => ({ value: scale, label: SCALES[scale].called })),
+      'major',
+    );
+    // Another scale names the tonics again, as that scale on each is spelt.
+    this.listen(this.el.rollMarkScale, 'change', () => {
+      const scale = SCALE_NAMES.find((each) => each === this.el.rollMarkScale.value) ?? 'major';
+      this.sayTheKeyIn(this.el.rollMarkKey, this.el.rollMarkScale, {
+        fifths: theSignatureOfTheScale(Number(this.el.rollMarkKey.value), scale),
+        scale,
+      });
+    });
     this.listen(this.el.rollMark, 'click', () => {
       this.askForAChangeAtTheHead();
     });
     this.listen(this.el.rollMarkYes, 'click', () => {
-      this.changeFromTheBarAsked(this.el.rollMarkMetre.value, Number(this.el.rollMarkTempo.value));
+      this.changeFromTheBarAsked(this.el.rollMarkMetre.value, Number(this.el.rollMarkTempo.value), this.theKeyAskedFor());
     });
     this.listen(this.el.rollMarkTempo, 'keydown', (event) => {
       if (event.key === 'Enter') {
-        this.changeFromTheBarAsked(this.el.rollMarkMetre.value, Number(this.el.rollMarkTempo.value));
+        this.changeFromTheBarAsked(this.el.rollMarkMetre.value, Number(this.el.rollMarkTempo.value), this.theKeyAskedFor());
       }
     });
     // Escape and a tap outside press it too.
@@ -9340,8 +9370,13 @@ export class AppView {
     });
     this.listen(this.el.rollMarkRemove, 'click', () => {
       const before = this.barAskedAbout?.before;
-      if (before !== null && before !== undefined) {
-        this.changeFromTheBarAsked(`${String(before.metre.beatsInBar)}/${String(before.metre.beatType)}`, before.crotchetsPerMinute);
+      const keyBefore = this.keyAskedAbout?.before;
+      if (before !== null && before !== undefined && keyBefore !== null && keyBefore !== undefined) {
+        this.changeFromTheBarAsked(
+          `${String(before.metre.beatsInBar)}/${String(before.metre.beatType)}`,
+          before.crotchetsPerMinute,
+          keyBefore,
+        );
       }
     });
     this.listen(this.el.rollChordsOpen, 'click', () => {
@@ -12592,7 +12627,8 @@ export class AppView {
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
     // Spelled in a sketch's key; anything else, as chord charts spell it.
     const chosen = this.theNotesChosen();
-    const chord = chosen.length === 0 ? null : nameTheChord(chosen.map((key) => key.midi), stored?.key.fifths ?? null);
+    const chord =
+      chosen.length === 0 ? null : nameTheChord(chosen.map((key) => key.midi), stored === null ? null : this.theKeyAtTheHead(stored).fifths);
     this.el.rollChord.textContent = chord ?? '';
     this.el.rollChord.hidden = chord === null;
   }
@@ -12638,7 +12674,8 @@ export class AppView {
     if (!open || stored === null || sketch === undefined) {
       return;
     }
-    const { fifths } = stored.key;
+    const keyHere = this.theKeyAtTheHead(stored);
+    const { fifths } = keyHere;
     // Nothing kept, nothing to delete: the deleting ends with the last of them.
     const anyKept = this.runtime.sketches.keptChords().length > 0;
     this.chordsBeingForgotten = this.chordsBeingForgotten && anyKept;
@@ -12654,11 +12691,11 @@ export class AppView {
       !anyKept,
     );
     this.el.rollChordsList.dataset['forgetting'] = String(forgetting);
-    const shows = `${String(fifths)}:${theScaleOfTheKey(stored.key)} ${JSON.stringify(this.runtime.sketches.keptChords())} ${String(forgetting)}`;
+    const shows = `${String(fifths)}:${theScaleOfTheKey(keyHere)} ${JSON.stringify(this.runtime.sketches.keptChords())} ${String(forgetting)}`;
     if (this.el.rollChordsList.dataset['shows'] !== shows) {
       this.el.rollChordsList.dataset['shows'] = shows;
       this.el.rollChordsList.replaceChildren(
-        ...this.theChordsInTheDrawer(stored.key).map((chord, at) => {
+        ...this.theChordsInTheDrawer(keyHere).map((chord, at) => {
           const button = this.doc.createElement('button');
           button.type = 'button';
           button.className = chord.kept ? 'button roll-chords__chord roll-chords__chord--kept' : 'button roll-chords__chord';
@@ -12713,8 +12750,9 @@ export class AppView {
     if (stored === null || chosen.length < 2) {
       return { says: 'Keep the chosen notes as a chord. Choose two notes or more first.', idle: true, lettingGo: false };
     }
-    const name = theNameOfTheKeys(chosen, stored.key.fifths);
-    const ofTheKey = theChordsOfTheScale(stored.key.fifths, theScaleOfTheKey(stored.key)).find(({ midis }) =>
+    const keyHere = this.theKeyAtTheHead(stored);
+    const name = theNameOfTheKeys(chosen, keyHere.fifths);
+    const ofTheKey = theChordsOfTheScale(keyHere.fifths, theScaleOfTheKey(keyHere)).find(({ midis }) =>
       sameKeys(midis, chosen),
     );
     if (ofTheKey !== undefined) {
@@ -12761,20 +12799,95 @@ export class AppView {
     if (stored === null) {
       return [];
     }
-    return theChangesOfTheClick(stored.events, stored.beats).map((change) => ({
-      atMs: change.atMs,
-      says: [
-        ...(change.metre === undefined ? [] : [`${String(change.metre.beatsInBar)}/${String(change.metre.beatType)}`]),
-        ...(change.crotchetsPerMinute === undefined ? [] : [`\u2669=${String(change.crotchetsPerMinute)}`]),
-      ].join(' '),
-    }));
+    const clicked = theChangesOfTheClick(stored.events, stored.beats);
+    const begins = clicked[0]?.atMs;
+    // The key it begins in at its first bar, and every change of it at its own.
+    const keys = [
+      ...(begins === undefined ? [] : [{ atMs: begins, ...this.theKeyTheSketchBeginsIn(stored) }]),
+      ...theKeyChangesOf(stored.events),
+    ];
+    const moments = [...new Set([...clicked.map((change) => change.atMs), ...keys.map((key) => key.atMs)])].sort((one, other) => one - other);
+    const near = (one: number, other: number): boolean => Math.abs(one - other) < 1;
+    const marks: { atMs: number; says: string }[] = [];
+    for (const atMs of moments) {
+      if (marks.some((mark) => near(mark.atMs, atMs))) {
+        continue;
+      }
+      const key = keys.find((each) => near(each.atMs, atMs));
+      const change = clicked.find((each) => near(each.atMs, atMs));
+      marks.push({
+        atMs,
+        says: [
+          ...(key === undefined ? [] : [theNameOfTheKey(key)]),
+          ...(change?.metre === undefined ? [] : [`${String(change.metre.beatsInBar)}/${String(change.metre.beatType)}`]),
+          ...(change?.crotchetsPerMinute === undefined ? [] : [`\u2669=${String(change.crotchetsPerMinute)}`]),
+        ].join(' '),
+      });
+    }
+    return marks;
   }
 
-  /** The pitch classes of the scale the sketch shown is written in, or none where no sketch is shown. */
-  private theScaleOfTheSketchShown(): readonly number[] {
+  /** The key a sketch begins in: its own, which the drawer's lists say. */
+  private theKeyTheSketchBeginsIn(stored: StoredSketch): KeyOfTheMusic {
+    return { fifths: stored.key.fifths, scale: theScaleOfTheKey(stored.key) };
+  }
+
+  /**
+   * The key of the sketch shown where the cursor is, as a sketch keeps one:
+   * what the drawer's chords are of, and the strip marks.
+   */
+  private theKeyAtTheHead(stored: StoredSketch): SketchKey {
+    const roll = this.theRoll();
+    const atMs = roll === null ? Number.NEGATIVE_INFINITY : this.headIsAtMs() + rollBeganAtMs(roll);
+    const key = theKeyOfTheMusicAt(stored.events, this.theKeyTheSketchBeginsIn(stored), atMs);
+    return aKeyInTheScale(key.fifths, key.scale);
+  }
+
+  /** The key the sheet's two lists say: the tonic chosen in the scale chosen - as the bar is spelt, where it is the bar's own. */
+  private theKeyAskedFor(): KeyOfTheMusic {
+    const scale = SCALE_NAMES.find((each) => each === this.el.rollMarkScale.value) ?? 'major';
+    const tonic = Number(this.el.rollMarkKey.value);
+    const here = this.keyAskedAbout?.here;
+    return here !== undefined && here.scale === scale && theTonicPitchClass(here.fifths, here.scale) === tonic
+      ? here
+      : { fifths: theSignatureOfTheScale(tonic, scale), scale };
+  }
+
+  /** Marks on the strip the keys of the scale the cursor is in. */
+  private markTheScaleOnTheStrip(): void {
     const sketch = this.theOtherRollShowing?.sketch;
-    const key = sketch === undefined ? null : (this.runtime.sketches.find(sketch.id)?.key ?? null);
-    return key === null ? [] : thePitchClassesOfTheScale(key.fifths, theScaleOfTheKey(key));
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const key = stored === null ? null : this.theKeyAtTheHead(stored);
+    const inTheScale = new Set(key === null ? [] : thePitchClassesOfTheScale(key.fifths, theScaleOfTheKey(key)));
+    this.rollKeysStrip?.querySelectorAll<HTMLElement>('.roll__key').forEach((each) => {
+      const midi = Number(each.dataset['midi']);
+      if (inTheScale.has(((midi % 12) + 12) % 12)) {
+        each.dataset['inScale'] = 'true';
+      } else {
+        delete each.dataset['inScale'];
+      }
+    });
+  }
+
+  /** What follows the cursor into another key: the drawer's chords, the strip's marks, the chosen chord's spelling. */
+  private followTheKeyAtTheHead(): void {
+    this.markTheScaleOnTheStrip();
+    this.showTheChordsOfTheKey();
+    this.nameTheChosenChord();
+  }
+
+  /** The scales the sketch shown is written in, each from where it begins, or none where no sketch is shown. */
+  private theScalesOfTheSketchShown(): readonly { readonly fromMs: number; readonly pitchClasses: readonly number[] }[] {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    if (stored === null) {
+      return [];
+    }
+    const begunIn = this.theKeyTheSketchBeginsIn(stored);
+    return [{ atMs: Number.NEGATIVE_INFINITY, ...begunIn }, ...theKeyChangesOf(stored.events)].map((key) => ({
+      fromMs: key.atMs,
+      pitchClasses: thePitchClassesOfTheScale(key.fifths, key.scale),
+    }));
   }
 
   /**
@@ -12805,18 +12918,22 @@ export class AppView {
    * may have spelt otherwise.
    */
   private sayTheKeyOfTheSketch(key: SketchKey): void {
-    const scale = theScaleOfTheKey(key);
-    const tonic = theTonicPitchClass(key.fifths, scale);
-    for (const option of this.el.rollKey.options) {
+    this.sayTheKeyIn(this.el.rollKey, this.el.rollScale, { fifths: key.fifths, scale: theScaleOfTheKey(key) });
+  }
+
+  /** A key in a tonic's list and a scale's, the tonics named as the scale on each is spelt, the key's own as it is. */
+  private sayTheKeyIn(tonics: HTMLSelectElement, scales: HTMLSelectElement, key: KeyOfTheMusic): void {
+    const tonic = theTonicPitchClass(key.fifths, key.scale);
+    for (const option of tonics.options) {
       const pitchClass = Number(option.value);
       const { step, alter } = theTonicOfTheScale(
-        pitchClass === tonic ? key.fifths : theSignatureOfTheScale(pitchClass, scale),
-        scale,
+        pitchClass === tonic ? key.fifths : theSignatureOfTheScale(pitchClass, key.scale),
+        key.scale,
       );
       option.textContent = `${step}${alterationSign(alter)}`;
     }
-    this.el.rollKey.value = String(tonic);
-    this.el.rollScale.value = scale;
+    tonics.value = String(tonic);
+    scales.value = key.scale;
   }
 
   /**
@@ -12826,7 +12943,7 @@ export class AppView {
    */
   private forgetTheChordInTheDrawer(at: number): void {
     const stored = this.theOtherRollShowing?.sketch === undefined ? null : this.runtime.sketches.find(this.theOtherRollShowing.sketch.id);
-    const chord = stored === null ? undefined : this.theChordsInTheDrawer(stored.key)[at];
+    const chord = stored === null ? undefined : this.theChordsInTheDrawer(this.theKeyAtTheHead(stored))[at];
     if (chord === undefined) {
       return;
     }
@@ -12863,7 +12980,7 @@ export class AppView {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
-    const chord = stored === null ? undefined : this.theChordsInTheDrawer(stored.key)[at];
+    const chord = stored === null ? undefined : this.theChordsInTheDrawer(this.theKeyAtTheHead(stored))[at];
     if (showing === null || sketch === undefined || stored === null || chord === undefined) {
       return;
     }
@@ -13039,6 +13156,12 @@ export class AppView {
       return;
     }
     this.barAskedAbout = bar;
+    const begunIn = this.theKeyTheSketchBeginsIn(stored);
+    const keyHere = theKeyOfTheMusicAt(stored.events, begunIn, bar.atMs);
+    // Just before the bar's first beat: what the bar before it is in.
+    const keyBefore = bar.before === null ? null : theKeyOfTheMusicAt(stored.events, begunIn, bar.atMs - 1);
+    this.keyAskedAbout = { here: keyHere, before: keyBefore };
+    this.sayTheKeyIn(this.el.rollMarkKey, this.el.rollMarkScale, keyHere);
     const metre = `${String(bar.metre.beatsInBar)}/${String(bar.metre.beatType)}`;
     // A metre the list does not offer, as a score may be in, is offered as it is.
     if (![...this.el.rollMarkMetre.options].some((option) => option.value === metre)) {
@@ -13048,7 +13171,10 @@ export class AppView {
     this.el.rollMarkTempo.value = String(bar.crotchetsPerMinute);
     const changesHere =
       bar.before !== null &&
-      (bar.before.crotchetsPerMinute !== bar.crotchetsPerMinute ||
+      keyBefore !== null &&
+      (keyBefore.fifths !== keyHere.fifths ||
+        keyBefore.scale !== keyHere.scale ||
+        bar.before.crotchetsPerMinute !== bar.crotchetsPerMinute ||
         bar.before.metre.beatsInBar !== bar.metre.beatsInBar ||
         bar.before.metre.beatType !== bar.metre.beatType);
     this.el.rollMarkTitle.textContent = `From bar ${String(bar.number)}, until the next change`;
@@ -13061,15 +13187,17 @@ export class AppView {
    * next change of each: one change, put back as one. A pace past what a
    * metronome offers is held to it.
    */
-  private changeFromTheBarAsked(metre: string, crotchetsPerMinute: number): void {
+  private changeFromTheBarAsked(metre: string, crotchetsPerMinute: number, key: KeyOfTheMusic): void {
     const bar = this.barAskedAbout;
+    const keyHere = this.keyAskedAbout?.here ?? null;
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
     const [beatsInBar, beatType] = metre.split('/').map(Number);
     this.el.sheetRollMark.hidden = true;
     this.barAskedAbout = null;
-    if (bar === null || sketch === undefined || stored === null || beatsInBar === undefined || beatType === undefined) {
+    this.keyAskedAbout = null;
+    if (bar === null || keyHere === null || sketch === undefined || stored === null || beatsInBar === undefined || beatType === undefined) {
       return;
     }
     const pace = Number.isFinite(crotchetsPerMinute) && crotchetsPerMinute > 0
@@ -13077,16 +13205,34 @@ export class AppView {
       : bar.crotchetsPerMinute;
     const metreChanges = beatsInBar !== bar.metre.beatsInBar || beatType !== bar.metre.beatType;
     const paceChanges = pace !== bar.crotchetsPerMinute;
-    if (!metreChanges && !paceChanges) {
+    const keyChanges = key.fifths !== keyHere.fifths || key.scale !== keyHere.scale;
+    if (!metreChanges && !paceChanges && !keyChanges) {
       return;
+    }
+    // The first bar's key is the sketch's own, which the drawer's lists say;
+    // any other bar's is a change among the notes, which moves with them.
+    let events = stored.events;
+    if (keyChanges && bar.before === null) {
+      this.runtime.sketches.changeTheKey(sketch.id, aKeyInTheScale(key.fifths, key.scale));
+      events = takeWithTheKeyFrom(events, key, bar.atMs, key);
+    } else if (keyChanges) {
+      events = takeWithTheKeyFrom(events, this.theKeyTheSketchBeginsIn(stored), bar.atMs, key);
     }
     // The bar keeps its first beat whatever its metre, so the pace changes from the same place.
     const counted = metreChanges
-      ? theClickInAnotherMetre(stored.events, stored.beats, beatsInBar, beatType, bar.atMs)
+      ? theClickInAnotherMetre(events, stored.beats, beatsInBar, beatType, bar.atMs)
       : stored.beats;
     const paced = paceChanges
-      ? thePlayingAtAnotherPace(stored.events, counted, pace, bar.atMs)
-      : { events: stored.events, beats: counted };
+      ? thePlayingAtAnotherPace(events, counted, pace, bar.atMs)
+      : { events, beats: counted };
+    if (paced.events === stored.events && paced.beats === stored.beats) {
+      // Only the sketch's own key changed, which the lists say and the drawing lights.
+      this.sayHowLoudTheChosenAre();
+      this.nameTheChosenChord();
+      this.showTheChordsOfTheKey();
+      this.drawTheRollInto();
+      return;
+    }
     this.changeTheSketchShowing(
       paced.events,
       [...sketch.before, asItWas(stored, sketch.chosen)],
@@ -14610,7 +14756,7 @@ export class AppView {
       chosen,
       wholeKeyboard: this.theOtherRollShowing?.sketch?.editing === true,
       freely: this.nothingOnTheDrawingIsJudged(),
-      scale: this.theScaleOfTheSketchShown(),
+      scales: this.theScalesOfTheSketchShown(),
       marks: this.theMarksOfTheSketchShown(),
     });
   }
@@ -14641,8 +14787,9 @@ export class AppView {
     this.rollCanvases = theCanvasesOf(this.el.rollBody);
     this.rollKeysStrip = theKeysStripOf(this.el.rollBody);
     this.rollInks = null;
-    // A new strip of keys, none of them lit yet.
+    // A new strip of keys, none of them lit yet, but for those of the scale the cursor is in.
     this.soundingRowsSaid = '';
+    this.markTheScaleOnTheStrip();
     this.rollPitches = thePitchesOfTheRun(roll, ghosts, this.theOtherRollShowing?.sketch?.editing === true, {
       freely: this.nothingOnTheDrawingIsJudged(),
       chosen: this.theNotesChosen(),
@@ -15083,6 +15230,7 @@ export class AppView {
       this.clickAheadOfTheRoll();
     }
     this.describeTheRoll();
+    this.followTheKeyAtTheHead();
   }
 
   private followTheRoll(): void {

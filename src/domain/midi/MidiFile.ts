@@ -1,3 +1,4 @@
+import { SCALES, type ScaleName } from '../harmony/scales.js';
 import { elementAt } from '../../shared/asserts.js';
 import { DomainError } from '../../shared/errors.js';
 
@@ -17,7 +18,13 @@ export type MidiFileEvent =
       readonly hand?: Hand;
     }
   | { readonly kind: 'noteOff'; readonly atMs: number; readonly midi: number }
-  | { readonly kind: 'sustain'; readonly atMs: number; readonly value: number };
+  | { readonly kind: 'sustain'; readonly atMs: number; readonly value: number }
+  /**
+   * The music written in another key from here: its signature and its scale.
+   * Nothing a hand plays - a file says it as a mark, as it says a tempo -
+   * but kept among the events so that it moves with the music it is in.
+   */
+  | { readonly kind: 'key'; readonly atMs: number; readonly fifths: number; readonly scale: ScaleName };
 
 /** The two hands, as the two staves of a piano score are theirs. */
 export type Hand = 'left' | 'right';
@@ -360,6 +367,63 @@ export function theChangesOfTheClick(events: readonly MidiFileEvent[], beats: re
   });
 }
 
+/** A key as the music is written in it: its signature, and its scale. */
+export interface KeyOfTheMusic {
+  readonly fifths: number;
+  readonly scale: ScaleName;
+}
+
+function sameKeyOfTheMusic(one: KeyOfTheMusic, other: KeyOfTheMusic): boolean {
+  return one.fifths === other.fifths && one.scale === other.scale;
+}
+
+/**
+ * The key music is in at a moment: the last it changed to by then, a moment
+ * on the change itself being in it - or the key it begins in.
+ */
+export function theKeyOfTheMusicAt(
+  events: readonly MidiFileEvent[],
+  begunIn: KeyOfTheMusic,
+  atMs: number,
+): KeyOfTheMusic {
+  let key = begunIn;
+  for (const event of events) {
+    if (event.kind === 'key' && event.atMs <= atMs + SAME_MOMENT_MS) {
+      key = { fifths: event.fifths, scale: event.scale };
+    }
+  }
+  return key;
+}
+
+/**
+ * The music written in a key from a moment, as far as the next change of
+ * key: a change already there replaced, none put where the key does not
+ * change, and the next change taken away where it is to the key now asked
+ * for - it changes nothing any more.
+ */
+export function takeWithTheKeyFrom(
+  events: readonly MidiFileEvent[],
+  begunIn: KeyOfTheMusic,
+  atMs: number,
+  key: KeyOfTheMusic,
+): readonly MidiFileEvent[] {
+  const here = (event: MidiFileEvent): boolean => event.kind === 'key' && Math.abs(event.atMs - atMs) <= SAME_MOMENT_MS;
+  const kept = events.filter((event) => !here(event));
+  // With the change there gone, the key at that moment is the one before it.
+  const before = theKeyOfTheMusicAt(kept, begunIn, atMs);
+  const next = kept.find((event) => event.kind === 'key' && event.atMs > atMs);
+  const changes = !sameKeyOfTheMusic(before, key);
+  const joined = kept.filter(
+    (event) => event !== next || event.kind !== 'key' || !sameKeyOfTheMusic({ fifths: event.fifths, scale: event.scale }, key),
+  );
+  return inTheOrderPlayed(changes ? [...joined, { kind: 'key', atMs, fifths: key.fifths, scale: key.scale }] : joined);
+}
+
+/** Where music changes key, and to what, in time order. */
+export function theKeyChangesOf(events: readonly MidiFileEvent[]): readonly ({ readonly atMs: number } & KeyOfTheMusic)[] {
+  return events.flatMap((event) => (event.kind === 'key' ? [{ atMs: event.atMs, fifths: event.fifths, scale: event.scale }] : []));
+}
+
 /**
  * The bar of a take's click a moment is in, as a mark over it would be asked
  * about: where it begins and its number, the metre and the pace there, and
@@ -541,9 +605,14 @@ export function inTheOrderPlayed(events: readonly MidiFileEvent[]): readonly Mid
     .map(({ event }) => event);
 }
 
-/** Rank at one instant: a release must be written before the next press. */
+/**
+ * Rank at one instant: a key first, as the bar it begins is in it; then a
+ * release, which must be written before the next press.
+ */
 function orderAt(event: MidiFileEvent): number {
   switch (event.kind) {
+    case 'key':
+      return -1;
     case 'noteOff':
       return 0;
     case 'sustain':
@@ -759,6 +828,9 @@ function theTrack(
         break;
       case 'sustain':
         track.push(0xb0, 0x40, toController(event.value));
+        break;
+      case 'key':
+        track.push(...keyMark({ fifths: event.fifths, minor: SCALES[event.scale].minor }));
         break;
     }
   }

@@ -273,14 +273,26 @@ describe('painting the grid', () => {
     expect(recorder.inked('aside')).toHaveLength(1);
   });
 
-  it('lights each row of the scale across the whole width, over the black keys\' shading and under the notes, none out of sight', () => {
+  it('lights each row of a scale as far as the next, over the black keys\' shading and under the notes, none out of sight', () => {
     const input = roll({ presses: [press({ midi: 40 }), press({ midi: 90 })] });
-    const scene = { ...sceneOf(input), scaleRows: [2, 50] };
+    // One scale until two seconds in - 280 pixels at 140 a second - then another.
+    const scene = {
+      ...sceneOf(input),
+      scaleSpans: [
+        { fromMs: Number.NEGATIVE_INFINITY, untilMs: 2_000, rows: [2, 50] },
+        { fromMs: 2_000, untilMs: Number.POSITIVE_INFINITY, rows: [3] },
+        // Past the screen altogether.
+        { fromMs: 9_000, untilMs: 10_000, rows: [4] },
+      ],
+    };
     const { surface: canvas, recorder } = surface(700, 140);
 
     paintTheGrid(canvas, scene, at(), INKS, 1);
 
-    expect(recorder.inked('scale')).toEqual([expect.objectContaining({ x: 0, y: 2 * 14, wide: 700, tall: 14 })]);
+    expect(recorder.inked('scale')).toEqual([
+      expect.objectContaining({ x: 0, y: 2 * 14, wide: 280, tall: 14 }),
+      expect.objectContaining({ x: 280, y: 3 * 14, wide: 420, tall: 14 }),
+    ]);
     expect(recorder.order.indexOf('row')).toBeLessThan(recorder.order.indexOf('scale'));
     expect(recorder.order.indexOf('scale')).toBeLessThan(recorder.order.indexOf('correct'));
     const { surface: plain, recorder: none } = surface(700, 140);

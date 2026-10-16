@@ -32,6 +32,8 @@ export interface MidiFileDocument {
   readonly tempoBpm: number;
   /** Where the file changes metre after its first, in its own ticks, each a metre other than the one before. */
   readonly metreChanges: readonly { readonly atTicks: number; readonly beats: number; readonly beatType: number }[];
+  /** Where the file changes key after its first, in its own ticks, each another than the one before. */
+  readonly keyChanges: readonly { readonly atTicks: number; readonly fifths: number; readonly minor: boolean }[];
   /** Where the file changes tempo after its first, in its own ticks, each to the nearest crotchet a minute and another than the one before. */
   readonly tempoChanges: readonly { readonly atTicks: number; readonly tempoBpm: number }[];
   readonly title: string | null;
@@ -163,8 +165,9 @@ interface TrackResult {
   fifths: number | null;
   minor: boolean | null;
   microsecondsPerQuarter: number | null;
-  /** Every metre and tempo the track sets, where it sets it. */
+  /** Every metre, key and tempo the track sets, where it sets it. */
   readonly metres: { readonly atTicks: number; readonly beats: number; readonly beatType: number }[];
+  readonly keys: { readonly atTicks: number; readonly fifths: number; readonly minor: boolean }[];
   readonly tempos: { readonly atTicks: number; readonly microsecondsPerQuarter: number }[];
   name: string | null;
   /** Its track name, apart from any other text: a file's title may be either. */
@@ -193,6 +196,7 @@ function readTrack(bytes: Bytes, length: number, track: number): TrackResult {
     minor: null,
     microsecondsPerQuarter: null,
     metres: [],
+    keys: [],
     tempos: [],
     name: null,
     trackName: null,
@@ -252,8 +256,11 @@ function readTrack(bytes: Bytes, length: number, track: number): TrackResult {
       } else if (type === 0x59 && size >= 1) {
         // Signed: one byte, two's complement, flats negative.
         const raw = data[0] ?? 0;
-        result.fifths = raw > 127 ? raw - 256 : raw;
-        result.minor = (data[1] ?? 0) === 1;
+        const fifths = raw > 127 ? raw - 256 : raw;
+        const minor = (data[1] ?? 0) === 1;
+        result.fifths = at === 0 ? fifths : (result.fifths ?? fifths);
+        result.minor = at === 0 ? minor : (result.minor ?? minor);
+        result.keys.push({ atTicks: at, fifths, minor });
       } else if ((type === 0x03 || type === 0x01) && size > 0) {
         result.name ??= decodeText(data);
         if (type === 0x03) {
@@ -363,6 +370,7 @@ export function readMidiFile(data: Uint8Array): MidiFileDocument {
   let minor: boolean | null = null;
   let microsecondsPerQuarter: number | null = null;
   const metres: { atTicks: number; beats: number; beatType: number }[] = [];
+  const keys: { atTicks: number; fifths: number; minor: boolean }[] = [];
   const tempos: { atTicks: number; microsecondsPerQuarter: number }[] = [];
   let title: string | null = null;
   const trackNames: (string | null)[] = [];
@@ -386,6 +394,7 @@ export function readMidiFile(data: Uint8Array): MidiFileDocument {
     minor = minor ?? read.minor;
     microsecondsPerQuarter = microsecondsPerQuarter ?? read.microsecondsPerQuarter;
     metres.push(...read.metres);
+    keys.push(...read.keys);
     tempos.push(...read.tempos);
     title = title ?? read.name;
     trackNames.push(read.trackName);
@@ -418,6 +427,11 @@ export function readMidiFile(data: Uint8Array): MidiFileDocument {
       beats: changedBeats,
       beatType: changedBeatType,
     })),
+    keyChanges: theChangesAfterTheFirst(
+      keys,
+      `${String(fifths ?? 0)}:${String(minor ?? false)}`,
+      (key) => `${String(key.fifths)}:${String(key.minor)}`,
+    ).map(({ atTicks, fifths: changedFifths, minor: changedMinor }) => ({ atTicks, fifths: changedFifths, minor: changedMinor })),
     tempoChanges: theChangesAfterTheFirst(
       tempos.filter((tempo) => tempo.microsecondsPerQuarter > 0),
       String(tempoBpm),

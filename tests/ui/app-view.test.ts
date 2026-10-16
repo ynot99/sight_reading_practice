@@ -60,7 +60,7 @@ import { beginThePlaybackTimings } from '../../src/shared/playbackTimings.js';
 import { theLatestPlayback } from '../support/playbackTimings.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
-import type { MidiFileEvent } from '../../src/domain/midi/MidiFile.js';
+import { theKeyChangesOf, type MidiFileEvent } from '../../src/domain/midi/MidiFile.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { readMidiFile } from '../../src/domain/midi/readMidiFile.js';
 import { RecordingFileSink } from '../../src/application/ports/IFileSink.js';
@@ -4727,7 +4727,7 @@ describe('AppView', () => {
       expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(3);
       tapTheDrawing({ clientX: 1.4 * zoom, clientY: (onTheRowOf + 0.5) * 13 - scrolledDown() });
       const written = (sketches.find(sketch?.id ?? '')?.events ?? []).filter(
-        (event) => event.kind !== 'sustain' && event.midi === 64 && event.atMs >= 1_000,
+        (event) => (event.kind === 'noteOn' || event.kind === 'noteOff') && event.midi === 64 && event.atMs >= 1_000,
       );
       expect(written).toEqual([
         { kind: 'noteOn', atMs: 1_000, midi: 64, velocity: kept?.events[0]?.kind === 'noteOn' ? kept.events[0].velocity : -1 },
@@ -6764,7 +6764,7 @@ describe('AppView', () => {
       choose('2', 'dorian');
       expect(sketches.find(sketch.id)?.key).toEqual({ fifths: 0, mode: 'minor', scale: 'dorian' });
       expect(new Set(lit())).toEqual(new Set([2, 4, 5, 7, 9, 11, 0]));
-      expect(view.rollScene?.scaleRows.length).toBeGreaterThan(0);
+      expect(view.rollScene?.scaleSpans[0]?.rows.length).toBeGreaterThan(0);
       // The tonics, as each dorian is spelt.
       expect(tonics()).toEqual(['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'B♭', 'B']);
       const drawn = (): (string | null)[] =>
@@ -6832,7 +6832,7 @@ describe('AppView', () => {
 
       // There while the sketch is edited; the start marked as it is.
       expect([mark.hidden, mark.dataset['away']]).toEqual([false, undefined]);
-      expect(marks()).toEqual(['1: 4/4 \u2669=120']);
+      expect(marks()).toEqual(['1: C major 4/4 \u2669=120']);
 
       // Asked a moment into the third bar: from its first beat, as it is there.
       cursorAt(4_200);
@@ -6850,12 +6850,12 @@ describe('AppView', () => {
       metre.value = '3/4';
       tempo.value = '60';
       element<HTMLButtonElement>('roll-mark-yes').click();
-      expect(marks()).toEqual(['1: 4/4 \u2669=120', '3: 3/4 \u2669=60']);
+      expect(marks()).toEqual(['1: C major 4/4 \u2669=120', '3: 3/4 \u2669=60']);
       // Before the bar the notes stay; from it each crotchet is twice as long.
       expect(struck().slice(6, 10)).toEqual([3_000, 3_500, 4_000, 5_000]);
       // One change, put back as one.
       undo.click();
-      expect(marks()).toEqual(['1: 4/4 \u2669=120']);
+      expect(marks()).toEqual(['1: C major 4/4 \u2669=120']);
       expect(struck().slice(6, 10)).toEqual([3_000, 3_500, 4_000, 4_500]);
 
       // The metre only, by Enter in the pace; then taken away.
@@ -6863,19 +6863,19 @@ describe('AppView', () => {
       asked();
       metre.value = '3/4';
       tempo.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-      expect(marks()).toEqual(['1: 4/4 \u2669=120', '3: 3/4']);
+      expect(marks()).toEqual(['1: C major 4/4 \u2669=120', '3: 3/4']);
       // The first bar's metre changed from the drawer leaves the change after it.
       const firstMetre = element<HTMLSelectElement>('roll-metre');
       firstMetre.value = '2/4';
       firstMetre.dispatchEvent(new Event('change'));
-      expect(marks()).toEqual(['1: 2/4 \u2669=120', '5: 3/4']);
+      expect(marks()).toEqual(['1: C major 2/4 \u2669=120', '5: 3/4']);
       cursorAt(4_200);
       asked();
       expect(element('roll-mark-title').textContent).toBe('From bar 5, until the next change');
       expect(remove.hidden).toBe(false);
       remove.click();
       expect(sheet.hidden).toBe(true);
-      expect(marks()).toEqual(['1: 2/4 \u2669=120']);
+      expect(marks()).toEqual(['1: C major 2/4 \u2669=120']);
 
       // Cancelled, nothing changes; and a pace past a metronome's is held to it.
       cursorAt(4_200);
@@ -6883,17 +6883,113 @@ describe('AppView', () => {
       tempo.value = '900';
       element<HTMLButtonElement>('roll-mark-no').click();
       expect(sheet.hidden).toBe(true);
-      expect(marks()).toEqual(['1: 2/4 \u2669=120']);
+      expect(marks()).toEqual(['1: C major 2/4 \u2669=120']);
       asked();
       tempo.value = '900';
       element<HTMLButtonElement>('roll-mark-yes').click();
-      expect(marks()).toEqual(['1: 2/4 \u2669=120', '5: \u2669=400']);
+      expect(marks()).toEqual(['1: C major 2/4 \u2669=120', '5: \u2669=400']);
       // A change of pace alone is taken away as well.
       cursorAt(4_200);
       asked();
       expect(remove.hidden).toBe(false);
       remove.click();
-      expect(marks()).toEqual(['1: 2/4 \u2669=120']);
+      expect(marks()).toEqual(['1: C major 2/4 \u2669=120']);
+    });
+
+    it('changes the key from the bar the cursor is in, marked over the bar, its chords and its keys followed by the cursor', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: Array.from({ length: 16 }, (_, at) => [
+            { kind: 'noteOn' as const, atMs: at * 500, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: at * 500 + 400, midi: 60 },
+          ]).flat(),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Keyed',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const tonic = element<HTMLSelectElement>('roll-mark-key');
+      const scale = element<HTMLSelectElement>('roll-mark-scale');
+      const remove = element<HTMLButtonElement>('roll-mark-remove');
+      const marks = (): string[] => (view.rollScene?.marks ?? []).map((each) => `${each.after}: ${each.says}`);
+      const cursorAt = (ms: number): void => {
+        tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: (ms / 1000) * zoom, clientY: 20 });
+      };
+      const change = (pitchClass: string, name: string): void => {
+        element<HTMLButtonElement>('roll-mark').click();
+        tonic.value = pitchClass;
+        scale.value = name;
+        element<HTMLButtonElement>('roll-mark-yes').click();
+      };
+      const firstChord = (): string | null =>
+        element('roll-chords-list').querySelector('[data-chord]')?.textContent ?? null;
+      const inScale = (midi: number): boolean =>
+        element('roll-body').querySelector<HTMLElement>(`.roll__key[data-midi='${String(midi)}']`)?.dataset['inScale'] === 'true';
+      element<HTMLButtonElement>('roll-chords-open').click();
+
+      // Asked in the third bar: the key there, in both lists.
+      cursorAt(4_200);
+      element<HTMLButtonElement>('roll-mark').click();
+      expect([tonic.value, scale.value]).toEqual(['0', 'major']);
+      // Another scale in the sheet names the tonics as it spells them.
+      scale.value = 'minor';
+      scale.dispatchEvent(new Event('change'));
+      expect(tonic.options[1]?.textContent).toBe('C\u266f');
+      element<HTMLButtonElement>('roll-mark-no').click();
+
+      change('7', 'major');
+      expect(marks()).toEqual(['1: C major 4/4 \u2669=120', '3: G major']);
+      // Asked there again, the lists say the key the bar is in now.
+      element<HTMLButtonElement>('roll-mark').click();
+      expect([tonic.value, scale.value]).toEqual(['7', 'major']);
+      element<HTMLButtonElement>('roll-mark-no').click();
+      expect(theKeyChangesOf(sketches.find(sketch.id)?.events ?? [])).toEqual([{ atMs: 4_000, fifths: 1, scale: 'major' }]);
+      expect(view.rollScene?.scaleSpans.map((span) => span.fromMs)).toEqual([Number.NEGATIVE_INFINITY, 4_000]);
+      // The cursor in it: G's chords, and F sharp on the strip rather than F.
+      expect(firstChord()).toBe('GI');
+      expect([inScale(66), inScale(65)]).toEqual([true, false]);
+      // The cursor back in the first bar: C's.
+      cursorAt(1_000);
+      expect(firstChord()).toBe('CI');
+      expect([inScale(66), inScale(65)]).toEqual([false, true]);
+      // Put back as one change.
+      element<HTMLButtonElement>('roll-undo').click();
+      expect(marks()).toEqual(['1: C major 4/4 \u2669=120']);
+
+      // A change taken away where it alone changes there.
+      cursorAt(4_200);
+      change('7', 'major');
+      cursorAt(4_200);
+      element<HTMLButtonElement>('roll-mark').click();
+      expect(remove.hidden).toBe(false);
+      remove.click();
+      expect(marks()).toEqual(['1: C major 4/4 \u2669=120']);
+
+      // The first bar's key is the sketch's own: the drawer's lists say it, and
+      // a later change to the same key changes nothing any more.
+      change('7', 'major');
+      cursorAt(1_000);
+      change('7', 'major');
+      expect(sketches.find(sketch.id)?.key).toEqual({ fifths: 1, mode: 'major' });
+      expect([element<HTMLSelectElement>('roll-key').value, element<HTMLSelectElement>('roll-scale').value]).toEqual(['7', 'major']);
+      expect(marks()).toEqual(['1: G major 4/4 \u2669=120']);
+      change('2', 'dorian');
+      expect(sketches.find(sketch.id)?.key).toEqual({ fifths: 0, mode: 'minor', scale: 'dorian' });
+      expect(marks()).toEqual(['1: D dorian 4/4 \u2669=120']);
+      // A key spelt its own way stays so where only the metre changes: C sharp, not D flat.
+      sketches.changeTheKey(sketch.id, { fifths: 7, mode: 'major' });
+      cursorAt(1_000);
+      element<HTMLButtonElement>('roll-mark').click();
+      element<HTMLSelectElement>('roll-mark-metre').value = '3/4';
+      element<HTMLButtonElement>('roll-mark-yes').click();
+      expect(sketches.find(sketch.id)?.key).toEqual({ fifths: 7, mode: 'major' });
+      expect(marks()).toEqual(['1: C\u266f major 3/4 \u2669=120']);
     });
 
     it('offers in the sheet a metre its list does not, where the bar is in one', async () => {
@@ -6915,7 +7011,7 @@ describe('AppView', () => {
       element<HTMLButtonElement>('scores-show-sketches').click();
       rowButton('sketches-list', 'Edit this sketch').click();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
-      expect((view.rollScene?.marks ?? []).map((mark) => [mark.atMs, mark.after, mark.says])).toEqual([[0, '1', '7/4 \u2669=120']]);
+      expect((view.rollScene?.marks ?? []).map((mark) => [mark.atMs, mark.after, mark.says])).toEqual([[0, '1', 'C major 7/4 \u2669=120']]);
       // The cursor a moment into the second bar, three and a half seconds into the drawing.
       tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: 3.6 * zoom, clientY: 20 });
       element<HTMLButtonElement>('roll-mark').click();
@@ -6924,7 +7020,7 @@ describe('AppView', () => {
       // Kept as it is, nothing changes.
       element<HTMLButtonElement>('roll-mark-yes').click();
       expect(element<HTMLButtonElement>('roll-undo').dataset['idle']).toBe('true');
-      expect((view.rollScene?.marks ?? []).map((mark) => mark.says)).toEqual(['7/4 \u2669=120']);
+      expect((view.rollScene?.marks ?? []).map((mark) => mark.says)).toEqual(['C major 7/4 \u2669=120']);
     });
 
     it('writes a chord of the key from the drawer where the cursor is, to the next line of the grid, and moves the cursor on', async () => {

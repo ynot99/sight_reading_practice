@@ -608,12 +608,12 @@
               </svg>
             </button>
             <!--
-              A change of metre or pace from the bar the cursor is in: asked
-              in a sheet, and marked over the bar on the ruler.
+              A change of key, metre or pace from the bar the cursor is in:
+              asked in a sheet, and marked over the bar on the ruler.
             -->
             <button id="roll-mark" type="button" class="button"
-              title="Change the metre or the pace from the bar the cursor is in"
-              aria-label="Change the metre or the pace from the bar the cursor is in" hidden>
+              title="Change the key, the metre or the pace from the bar the cursor is in"
+              aria-label="Change the key, the metre or the pace from the bar the cursor is in" hidden>
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
                 class="take-transport__icon">
                 <path d="M14.4 6 14 4H5v17h2v-7h5.6l.4 2h7V6z" />
@@ -866,16 +866,21 @@
         можуть не влазити: тому може варто це винести як діалог?".
       -->
       <!--
-        A change of metre or pace from the bar the cursor is in, as far as the
-        next one: the boxes say what the bar is in now, to be changed; and the
-        change taken away, where one begins on that bar, gives back what the
-        bars before it are in.
+        A change of key, metre or pace from the bar the cursor is in, as far
+        as the next one: the boxes say what the bar is in now, to be changed;
+        and the change taken away, where one begins on that bar, gives back
+        what the bars before it are in.
       -->
       <div id="sheet-roll-mark" class="sheet sheet--over" hidden>
         <div class="sheet__panel sheet__panel--narrow" role="dialog" aria-modal="true"
           aria-labelledby="roll-mark-title">
           <p id="roll-mark-title" class="sheet__text"></p>
           <div class="roll-mark__fields">
+            <span class="roll-velocity__group">
+              <label class="roll-velocity__name" for="roll-mark-key">Key</label>
+              <select id="roll-mark-key" class="roll-velocity__key"></select>
+              <select id="roll-mark-scale" class="roll-velocity__key" title="Scale" aria-label="Scale"></select>
+            </span>
             <span class="roll-velocity__group">
               <label class="roll-velocity__name" for="roll-mark-metre">Time</label>
               <select id="roll-mark-metre" class="roll-velocity__key"></select>

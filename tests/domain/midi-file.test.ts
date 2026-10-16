@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   barsAreHeardIn,
   damperIsDown,
+  takeWithTheKeyFrom,
   theBarOfTheClickAt,
   theChangesOfTheClick,
+  theKeyChangesOf,
+  theKeyOfTheMusicAt,
   theClickInAnotherMetre,
   theClickOfTheTake,
   thePaceOfTheClick,
@@ -709,5 +712,47 @@ describe('a click changed from a bar on', () => {
     const firstAt = (events: readonly MidiFileEvent[]): number => Math.round(events[0]?.atMs ?? 0);
     expect(firstAt(thePlayingAtAnotherPace(early, EIGHT_BARS, 60).events)).toBe(-200);
     expect(firstAt(thePlayingAtAnotherPace(early, EIGHT_BARS, 60, 2_000).events)).toBe(-100);
+  });
+});
+
+describe('the key music is in, changed from a bar', () => {
+  const C_MAJOR = { fifths: 0, scale: 'major' as const };
+  const G_MAJOR = { fifths: 1, scale: 'major' as const };
+  const D_DORIAN = { fifths: 0, scale: 'dorian' as const };
+  const notes = struck(0, 2_000, 4_000, 6_000);
+  const keysOf = (events: readonly MidiFileEvent[]): string[] =>
+    theKeyChangesOf(events).map((key) => `${String(key.atMs)} ${String(key.fifths)} ${key.scale}`);
+
+  it('is the last change by then, a moment on the change being in it, or the key it begins in', () => {
+    const changed = takeWithTheKeyFrom(notes, C_MAJOR, 2_000, G_MAJOR);
+    expect(keysOf(changed)).toEqual(['2000 1 major']);
+    expect([1_999, 1_999.8, 2_000, 5_000].map((atMs) => theKeyOfTheMusicAt(changed, C_MAJOR, atMs).fifths)).toEqual([0, 1, 1, 1]);
+    expect(theKeyOfTheMusicAt(notes, D_DORIAN, 5_000)).toEqual(D_DORIAN);
+    // Before every note, and ordered among them as the bar it begins is in it.
+    expect(changed.findIndex((event) => event.kind === 'key')).toBe(2);
+  });
+
+  it('replaces a change there, puts none where the key does not change, and takes the next away where it is the key asked for', () => {
+    const twice = takeWithTheKeyFrom(takeWithTheKeyFrom(notes, C_MAJOR, 2_000, G_MAJOR), C_MAJOR, 4_000, D_DORIAN);
+    expect(keysOf(twice)).toEqual(['2000 1 major', '4000 0 dorian']);
+    // Replaced.
+    expect(keysOf(takeWithTheKeyFrom(twice, C_MAJOR, 2_000, { fifths: -1, scale: 'major' }))).toEqual([
+      '2000 -1 major',
+      '4000 0 dorian',
+    ]);
+    // Asked for the key before it: taken away.
+    expect(keysOf(takeWithTheKeyFrom(twice, C_MAJOR, 2_000, C_MAJOR))).toEqual(['4000 0 dorian']);
+    // Asked for the key the next change is to: that one changes nothing any more.
+    expect(keysOf(takeWithTheKeyFrom(twice, C_MAJOR, 2_000, D_DORIAN))).toEqual(['2000 0 dorian']);
+    // In the key it is in already, where none changes: nothing.
+    expect(takeWithTheKeyFrom(notes, C_MAJOR, 2_000, C_MAJOR)).toEqual(notes);
+  });
+
+  it('moves with the music at another pace, and is written to a file as a key signature where it falls', () => {
+    const changed = takeWithTheKeyFrom(notes, C_MAJOR, 2_000, { fifths: -2, scale: 'minor' });
+    const slow = thePlayingAtAnotherPace(changed, click(0, 500, 4), 60);
+    expect(keysOf(slow.events)).toEqual(['4000 -2 minor']);
+    const document = readMidiFile(writeMidiFile(changed, { beats: click(0, 500, 4), key: { fifths: 0, minor: false } }));
+    expect(document.keyChanges).toEqual([{ atTicks: 4 * BEAT, fifths: -2, minor: true }]);
   });
 });

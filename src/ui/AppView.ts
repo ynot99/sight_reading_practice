@@ -175,6 +175,9 @@ import {
   takeWithTheKeysCopied,
   takeWithTheKeyCut,
   takeWithTheNotesPasted,
+  takeWithTheChordsBroken,
+  theMusicsBeats,
+  type ArpeggioWay,
   takeWithThePedalAt,
   theClipboardTextOf,
   theKeysOfTheTake,
@@ -593,6 +596,13 @@ function theBeatAt(roll: RunRoll, atMs: number): number {
   }
   return here !== undefined && before !== null ? here - before : 500;
 }
+
+/** How the way a chord is broken is said on its button. */
+const ARPEGGIO_WAYS: Readonly<Record<ArpeggioWay, string>> = {
+  up: 'up',
+  down: 'down',
+  upAndDown: 'up and back down',
+};
 
 /** A chord as the drawer offers it: its name, what is said under it, and its keys. */
 interface ChordInTheDrawer {
@@ -2277,6 +2287,9 @@ export class AppView {
     rollChordsList: HTMLElement;
     rollChordsKeep: HTMLButtonElement;
     rollCopy: HTMLButtonElement;
+    rollArpeggioUp: HTMLButtonElement;
+    rollArpeggioDown: HTMLButtonElement;
+    rollArpeggioUpAndDown: HTMLButtonElement;
     rollPaste: HTMLButtonElement;
     rollTitle: HTMLElement;
     rollBox: HTMLElement;
@@ -2651,6 +2664,9 @@ export class AppView {
       rollChordsList: requireElement(doc, 'roll-chords-list'),
       rollChordsKeep: requireElement(doc, 'roll-chords-keep'),
       rollCopy: requireElement(doc, 'roll-copy'),
+      rollArpeggioUp: requireElement(doc, 'roll-arpeggio-up'),
+      rollArpeggioDown: requireElement(doc, 'roll-arpeggio-down'),
+      rollArpeggioUpAndDown: requireElement(doc, 'roll-arpeggio-up-and-down'),
       rollPaste: requireElement(doc, 'roll-paste'),
       rollTitle: requireElement(doc, 'roll-title'),
       rollBox: requireElement(doc, 'roll-box'),
@@ -9104,6 +9120,11 @@ export class AppView {
     this.listen(this.el.rollPaste, 'click', () => {
       this.pasteWithTheButton();
     });
+    for (const [button, way] of this.theArpeggioButtons()) {
+      this.listen(button, 'click', () => {
+        this.breakTheChosenChords(way);
+      });
+    }
     this.listen(this.el.rollRedo, 'click', () => {
       this.bringBackTheLastPutBack();
     });
@@ -12349,6 +12370,15 @@ export class AppView {
     const toPaste = canRead || this.notesCopiedHere !== null;
     sayWhetherIdle(this.el.rollPaste, toPaste ? 'Paste where the cursor is' : 'Paste where the cursor is. Copy notes first.', !toPaste);
 
+    // A chord is two keys or more chosen that go down together.
+    const struckTogether = sketch.chosen.some((key) =>
+      sketch.chosen.some((other) => other.downAtMs === key.downAtMs && other.midi !== key.midi),
+    );
+    for (const [button, way] of this.theArpeggioButtons()) {
+      const breaks = `Break the chosen chords ${ARPEGGIO_WAYS[way]}, a key a step of the grid`;
+      sayWhetherIdle(button, struckTogether ? breaks : `${breaks}. Choose a chord first: notes struck together.`, !struckTogether);
+    }
+
     const keeping = this.whatKeepingWouldDo();
     this.el.rollChordsKeep.textContent = keeping.lettingGo ? '\u2212' : '+';
     sayWhetherIdle(this.el.rollChordsKeep, keeping.says, keeping.idle);
@@ -12377,6 +12407,34 @@ export class AppView {
       return { says: `Take ${name} out of the chords kept`, idle: false, lettingGo: true };
     }
     return { says: `Keep ${name}, the chosen notes, as a chord`, idle: false, lettingGo: false };
+  }
+
+  /** The drawer's buttons that break a chord, and which way each goes. */
+  private theArpeggioButtons(): readonly (readonly [HTMLButtonElement, ArpeggioWay])[] {
+    return [
+      [this.el.rollArpeggioUp, 'up'],
+      [this.el.rollArpeggioDown, 'down'],
+      [this.el.rollArpeggioUpAndDown, 'upAndDown'],
+    ];
+  }
+
+  /**
+   * Breaks each chosen chord into one key a step of the grid as it is drawn,
+   * over the chord's length: one change, put back as one, and the keys it
+   * became chosen, to be broken another way after an undo or moved.
+   */
+  private breakTheChosenChords(way: ArpeggioWay): void {
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    if (showing === null || sketch === undefined || stored === null) {
+      return;
+    }
+    const lines = theMusicsBeats(showing.roll, this.theRollsGrid()).map((line) => line.atMs);
+    const broken = takeWithTheChordsBroken(stored.events, sketch.chosen, lines, way);
+    if (broken !== null) {
+      this.changeTheSketchShowing(broken.events, [...sketch.before, asItWas(stored, sketch.chosen)], broken.keys);
+    }
   }
 
   /** Keeps the chosen notes as a chord, or lets go of the kept chord they are. */

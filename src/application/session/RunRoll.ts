@@ -1317,6 +1317,83 @@ export function takeWithTheNotesPasted(
   return { events: taken, pasted };
 }
 
+/** Which way a chord broken goes through its keys: up, down, or up and back down. */
+export type ArpeggioWay = 'up' | 'down' | 'upAndDown';
+
+/**
+ * The order a chord's keys are struck in, broken, before it begins again.
+ * Up and back down turns on the top and the bottom rather than striking
+ * either twice running: C E G becomes C E G E, and then C again.
+ */
+export function theKeysInTurn(midis: readonly number[], way: ArpeggioWay): readonly number[] {
+  const up = [...new Set(midis)].sort((low, high) => low - high);
+  if (way === 'up') {
+    return up;
+  }
+  const down = [...up].reverse();
+  return way === 'down' ? down : [...up, ...down.slice(1, -1)];
+}
+
+/**
+ * A take's events with each chord of the named keys broken - the keys of it
+ * that go down at one moment, two or more - into one key a step, struck in
+ * turn over the chord's length, and the keys it became; or `null` where a
+ * key is not there or no chord was broken.
+ *
+ * The steps are the lines of the grid inside the chord, its own beginning
+ * and end its first and last: a finer grid breaks it faster. Each key is
+ * held to the next step and struck as hard and with the hand it was. A
+ * chord no line falls inside has no second step to break into and stays as
+ * it is, as does a key named alone; a key that would sound over another of
+ * its pitch is left out, as a paste leaves it.
+ */
+export function takeWithTheChordsBroken(
+  events: readonly MidiFileEvent[],
+  named: readonly KeyNamed[],
+  lines: readonly number[],
+  way: ArpeggioWay,
+): { readonly events: readonly MidiFileEvent[]; readonly keys: readonly KeyNamed[] } | null {
+  // A key not there leaves nothing to break, which says so already.
+  const chords = new Map<number, KeyOfTheTake[]>();
+  for (const key of theKeysNamed(events, named) ?? []) {
+    chords.set(key.downAtMs, [...(chords.get(key.downAtMs) ?? []), key]);
+  }
+  let taken = events;
+  const after: KeyNamed[] = [];
+  for (const [fromMs, chord] of chords) {
+    const untilMs = Math.max(...chord.map((key) => key.upAtMs ?? key.downAtMs));
+    const steps = [fromMs, ...lines.filter((at) => at > fromMs + 0.5 && at < untilMs - 0.5), untilMs];
+    const order = theKeysInTurn(
+      chord.map((key) => key.midi),
+      way,
+    );
+    const without = order.length < 2 || steps.length < 3 ? null : takeWithoutTheKeys(taken, chord);
+    if (without === null) {
+      after.push(...chord.map(({ midi, downAtMs }) => ({ midi, downAtMs })));
+      continue;
+    }
+    const notes = steps.slice(0, -1).flatMap((stepMs, at): NoteCopied[] => {
+      const midi = order[at % order.length];
+      const struck = chord.find((key) => key.midi === midi);
+      return struck === undefined
+        ? []
+        : [
+            {
+              afterMs: stepMs - fromMs,
+              lengthMs: (steps[at + 1] ?? untilMs) - stepMs,
+              midi: struck.midi,
+              velocity: struck.velocity,
+              ...(struck.hand === undefined ? {} : { hand: struck.hand }),
+            },
+          ];
+    });
+    const broken = takeWithTheNotesPasted(without, notes, fromMs);
+    taken = broken.events;
+    after.push(...broken.pasted);
+  }
+  return taken === events ? null : { events: taken, keys: after };
+}
+
 /**
  * A take's events with a key cut in two at a moment inside it: the first part
  * let go of there, and the second struck there, as loud and in the same hand,

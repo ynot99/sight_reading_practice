@@ -6771,6 +6771,129 @@ describe('AppView', () => {
       }
     });
 
+    it('breaks the chosen chords by the drawer\'s arrows, a key a step of the grid as it is drawn', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            [0, 2_000, 60],
+            [0, 2_000, 64],
+            [0, 2_000, 67],
+            [3_000, 3_500, 72],
+          ].flatMap(([atMs = 0, upAtMs = 0, midi = 0]) => [
+            { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: upAtMs, midi },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Broken',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const highest = view.rollScene?.highest ?? 0;
+      const scrolledDown =
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      const tap = (ms: number, midi: number, adding = true): void => {
+        tapTheDrawing({
+          pointerType: 'mouse',
+          button: 0,
+          shiftKey: adding,
+          clientX: (ms / 1000) * zoom,
+          clientY: (highest - midi + 0.5) * 13 - scrolledDown,
+        });
+      };
+      const notes = (): number[][] => {
+        const events = sketches.find(sketch.id)?.events ?? [];
+        return events
+          .flatMap((event, index) => {
+            if (event.kind !== 'noteOn') {
+              return [];
+            }
+            const off = events.slice(index + 1).find((later) => later.kind === 'noteOff' && later.midi === event.midi);
+            return [[event.atMs, event.midi, off?.atMs ?? -1]];
+          })
+          .sort(([one = 0, a = 0], [other = 0, b = 0]) => one - other || a - b);
+      };
+      const chosen = (): number[][] =>
+        (view.rollScene?.notes ?? [])
+          .filter((note) => note.chosen === true)
+          .map((note) => [note.fromMs, (view.rollScene?.highest ?? 0) - note.row])
+          .sort(([one = 0, a = 0], [other = 0, b = 0]) => one - other || a - b);
+      const undo = (): void => {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'z', code: 'KeyZ', ctrlKey: true }));
+      };
+      const up = element<HTMLButtonElement>('roll-arpeggio-up');
+      const down = element<HTMLButtonElement>('roll-arpeggio-down');
+      const upAndDown = element<HTMLButtonElement>('roll-arpeggio-up-and-down');
+      const original = notes();
+      element<HTMLButtonElement>('roll-chords-open').click();
+
+      // No chord chosen - nothing, or keys not struck together - nothing to break.
+      for (const button of [up, down, upAndDown]) {
+        expect(button.dataset['idle'], button.id).toBe('true');
+        expect(button.title, button.id).toContain('Choose a chord first');
+      }
+      tap(100, 60, false);
+      tap(3_100, 72);
+      expect(up.dataset['idle']).toBe('true');
+      up.click();
+      expect(notes()).toEqual(original);
+
+      // The chord chosen, broken up a beat a key over its two seconds; the
+      // C alone stays as it was; and what it became is chosen.
+      tap(100, 64);
+      tap(100, 67);
+      expect(up.dataset['idle']).toBeUndefined();
+      expect(up.title).toBe('Break the chosen chords up, a key a step of the grid');
+      up.click();
+      expect(notes()).toEqual([
+        [0, 60, 500],
+        [500, 64, 1_000],
+        [1_000, 67, 1_500],
+        [1_500, 60, 2_000],
+        [3_000, 72, 3_500],
+      ]);
+      expect(chosen()).toEqual([
+        [0, 60],
+        [500, 64],
+        [1_000, 67],
+        [1_500, 60],
+        [3_000, 72],
+      ]);
+      // One change, put back as one.
+      undo();
+      expect(notes()).toEqual(original);
+
+      down.click();
+      expect(notes().slice(0, 4).map(([, midi]) => midi)).toEqual([67, 64, 60, 67]);
+      undo();
+      upAndDown.click();
+      expect(notes().slice(0, 4).map(([, midi]) => midi)).toEqual([60, 64, 67, 64]);
+      undo();
+
+      // On a finer grid, faster.
+      const grid = element<HTMLSelectElement>('roll-grid');
+      grid.value = '2';
+      grid.dispatchEvent(new Event('change', { bubbles: true }));
+      up.click();
+      expect(notes().slice(0, 8).map(([down = 0, midi = 0]) => [down, midi])).toEqual([
+        [0, 60],
+        [250, 64],
+        [500, 67],
+        [750, 60],
+        [1_000, 64],
+        [1_250, 67],
+        [1_500, 60],
+        [1_750, 64],
+      ]);
+    });
+
     it('puts the chosen notes on the grid by the Quantize button, whether or not the marker is put on it', async () => {
       const { view, sketches } = createRig();
       await view.initialize();

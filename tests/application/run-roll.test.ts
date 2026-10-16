@@ -28,6 +28,8 @@ import {
   takeWithTheKeysCopied,
   takeWithTheKeyCut,
   takeWithTheNotesPasted,
+  takeWithTheChordsBroken,
+  theKeysInTurn,
   theClipboardTextOf,
   theNotesCopied,
   theNotesOnTheClipboard,
@@ -1504,6 +1506,111 @@ describe('changing a recording', () => {
     ]) {
       expect(theNotesOnTheClipboard(other), other).toBeNull();
     }
+  });
+
+  it('turns a chord broken up, down, or up and back down without striking the top or the bottom twice', () => {
+    const chord = [MIDI.G4, MIDI.C4, MIDI.E4, MIDI.C4];
+    expect(theKeysInTurn(chord, 'up')).toEqual([MIDI.C4, MIDI.E4, MIDI.G4]);
+    expect(theKeysInTurn(chord, 'down')).toEqual([MIDI.G4, MIDI.E4, MIDI.C4]);
+    expect(theKeysInTurn(chord, 'upAndDown')).toEqual([MIDI.C4, MIDI.E4, MIDI.G4, MIDI.E4]);
+    expect(theKeysInTurn([...chord, MIDI.C5], 'upAndDown')).toEqual([MIDI.C4, MIDI.E4, MIDI.G4, MIDI.C5, MIDI.G4, MIDI.E4]);
+    expect(theKeysInTurn([MIDI.C4, MIDI.G4], 'upAndDown')).toEqual([MIDI.C4, MIDI.G4]);
+  });
+
+  it('breaks each chord named into a key a line of the grid, over its length, as hard and in the hand it was', () => {
+    // C E G struck at 1000 and held to 2000, C the hardest, in the left hand.
+    const events = inTheOrderPlayed([
+      { kind: 'noteOn', atMs: 1_000, midi: MIDI.C4, velocity: 0.9, hand: 'left' },
+      on(1_000, MIDI.E4),
+      on(1_000, MIDI.G4),
+      off(2_000, MIDI.C4),
+      off(1_800, MIDI.E4),
+      off(2_000, MIDI.G4),
+      on(3_000, MIDI.D4),
+      off(3_500, MIDI.D4),
+    ]);
+    const chord = [MIDI.C4, MIDI.E4, MIDI.G4].map((midi) => ({ midi, downAtMs: 1_000 }));
+    // Lines every 250 ms, one of them off the millisecond, and some outside the chord.
+    const lines = [0, 500, 1_000, 1_250, 1_500.4, 1_750, 2_000, 2_250];
+    const notes = (taken: readonly MidiFileEvent[]): (number | string)[][] =>
+      theKeysOfTheTake(taken).map((key) => [key.downAtMs, key.midi, key.upAtMs ?? -1, key.velocity, key.hand ?? '']);
+
+    const broken = takeWithTheChordsBroken(events, chord, lines, 'up');
+    expect(notes(broken?.events ?? [])).toEqual([
+      [1_000, MIDI.C4, 1_250, 0.9, 'left'],
+      [1_250, MIDI.E4, 1_500, 0.7, ''],
+      [1_500, MIDI.G4, 1_750, 0.7, ''],
+      [1_750, MIDI.C4, 2_000, 0.9, 'left'],
+      [3_000, MIDI.D4, 3_500, 0.7, ''],
+    ]);
+    expect(broken?.keys).toEqual([
+      { midi: MIDI.C4, downAtMs: 1_000 },
+      { midi: MIDI.E4, downAtMs: 1_250 },
+      { midi: MIDI.G4, downAtMs: 1_500 },
+      { midi: MIDI.C4, downAtMs: 1_750 },
+    ]);
+    expect(notes(takeWithTheChordsBroken(events, chord, lines, 'down')?.events ?? []).map(([, midi]) => midi)).toEqual([
+      MIDI.G4,
+      MIDI.E4,
+      MIDI.C4,
+      MIDI.G4,
+      MIDI.D4,
+    ]);
+
+    // A key named alone stays as it is, and is still among the keys; and
+    // with no chord broken there is nothing to change.
+    const withTheD = takeWithTheChordsBroken(events, [...chord, { midi: MIDI.D4, downAtMs: 3_000 }], lines, 'up');
+    expect(withTheD?.keys).toContainEqual({ midi: MIDI.D4, downAtMs: 3_000 });
+    expect(notes(withTheD?.events ?? [])).toEqual(notes(broken?.events ?? []));
+    expect(takeWithTheChordsBroken(events, [{ midi: MIDI.D4, downAtMs: 3_000 }], lines, 'up')).toBeNull();
+    // One key named twice is no chord.
+    const theC = { midi: MIDI.C4, downAtMs: 1_000 };
+    expect(takeWithTheChordsBroken(events, [theC, theC], lines, 'up')).toBeNull();
+    // Nor is one no line falls inside.
+    expect(takeWithTheChordsBroken(events, chord, [0, 2_000, 2_500], 'up')).toBeNull();
+    // And a key not there refuses the whole.
+    expect(takeWithTheChordsBroken(events, [...chord, { midi: MIDI.F4, downAtMs: 1_000 }], lines, 'up')).toBeNull();
+  });
+
+  it('breaks two chords at once, each over its own length, leaving out a key that would sound over another of its pitch', () => {
+    // C with a short G, held to 1000; then D F to 1500; and a G not named
+    // inside the first chord's length, after its own G has let go.
+    const events = inTheOrderPlayed([
+      on(0, MIDI.C4),
+      on(0, MIDI.G4),
+      off(200, MIDI.G4),
+      off(1_000, MIDI.C4),
+      on(1_000, MIDI.D4),
+      on(1_000, MIDI.F4),
+      off(1_500, MIDI.D4),
+      off(1_500, MIDI.F4),
+    ]);
+    const named = [
+      { midi: MIDI.C4, downAtMs: 0 },
+      { midi: MIDI.G4, downAtMs: 0 },
+      { midi: MIDI.D4, downAtMs: 1_000 },
+      { midi: MIDI.F4, downAtMs: 1_000 },
+    ];
+    const lines = [0, 250, 500, 750, 1_000, 1_250, 1_500];
+    const steps = (taken: readonly MidiFileEvent[]): number[][] =>
+      theKeysOfTheTake(taken).map((key) => [key.downAtMs, key.midi, key.upAtMs ?? -1]);
+    expect(steps(takeWithTheChordsBroken(events, named, lines, 'up')?.events ?? [])).toEqual([
+      [0, MIDI.C4, 250],
+      [250, MIDI.G4, 500],
+      [500, MIDI.C4, 750],
+      [750, MIDI.G4, 1_000],
+      [1_000, MIDI.D4, 1_250],
+      [1_250, MIDI.F4, 1_500],
+    ]);
+    // The G not named sounds where the last G of the first chord would.
+    const under = inTheOrderPlayed([...events, on(800, MIDI.G4), off(900, MIDI.G4)]);
+    expect(takeWithTheChordsBroken(under, named, lines, 'up')?.keys).toEqual([
+      { midi: MIDI.C4, downAtMs: 0 },
+      { midi: MIDI.G4, downAtMs: 250 },
+      { midi: MIDI.C4, downAtMs: 500 },
+      { midi: MIDI.D4, downAtMs: 1_000 },
+      { midi: MIDI.F4, downAtMs: 1_250 },
+    ]);
   });
 
   it('pastes notes from a moment on, leaving out each that would be over another of its pitch', () => {

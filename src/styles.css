@@ -1277,7 +1277,7 @@ textarea {
   flex: none;
   flex-direction: column;
   gap: 6px;
-  width: 84px;
+  width: 96px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1319,8 +1319,8 @@ textarea {
   display: contents;
 }
 
-/* Copy and paste side by side over the chords, as the editor's tools are. */
-.roll-chords__clipboard {
+/* Copy and paste, and the ways to break a chord, side by side over the chords, as the editor's tools are. */
+.roll-chords__row {
   display: flex;
   flex: none;
   gap: 4px;
@@ -1332,6 +1332,7 @@ textarea {
   align-items: center;
   justify-content: center;
   min-height: 40px;
+  font-size: 18px;
 }
 
 /* The writer's own chords, apart from the key's by their edge. */

@@ -763,10 +763,15 @@
               Each name with what it names, so a row that wraps on a phone
               never leaves a word on one line and its slider on the next.
             -->
-            <!-- The key the sketch is written in, which its notes are spelt in. -->
+            <!--
+              The key the sketch is written in, which its notes are spelt in:
+              its tonic, and its scale - the two minors beside the plain one,
+              and the modes - whose notes' rows are lit on the drawing.
+            -->
             <span class="roll-velocity__group">
               <label class="roll-velocity__name" for="roll-key">Key</label>
               <select id="roll-key" class="roll-velocity__key"></select>
+              <select id="roll-scale" class="roll-velocity__key" title="Scale" aria-label="Scale"></select>
             </span>
             <!-- The metre it is written in: the notes stay put, the bars move. -->
             <span class="roll-velocity__group">

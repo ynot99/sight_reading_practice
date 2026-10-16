@@ -396,6 +396,23 @@ describe('drawing a run as a piano roll', () => {
     ]);
   });
 
+  it('lights the rows of the scale the music is written in, and marks their keys, and none where it says none', () => {
+    const input = roll({ presses: [press({ midi: MIDI.C4 })] });
+    // C major over the band from G3 to F#4: F, E, D, C, B, A and G, from the top.
+    const scene = theSceneOfTheRoll({
+      roll: input,
+      barLabel: () => null,
+      scale: [0, 2, 4, 5, 7, 9, 11],
+    });
+    expect(scene.scaleRows).toEqual([1, 2, 4, 6, 7, 9, 11]);
+    const keys = [...drawTheRoll(scene).querySelectorAll<HTMLElement>('.roll__key')];
+    expect(keys.filter((key) => key.dataset['inScale'] === 'true').map((key) => Number(key.dataset['midi']))).toEqual([
+      65, 64, 62, 60, 59, 57, 55,
+    ]);
+    expect(sceneOf(input).scaleRows).toEqual([]);
+    expect(draw(input).querySelectorAll("[data-in-scale='true']")).toHaveLength(0);
+  });
+
   it('shades the rows the black keys are on', () => {
     // An octave from C to C has five of them, and the band drawn for one note
     // is an octave.

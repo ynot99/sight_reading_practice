@@ -4,7 +4,10 @@ import {
   ASSUMED_BPM,
   C_MAJOR,
   SketchLibrary,
+  aKeyInTheScale,
+  sketchAsKept,
   theBeatsToBeginIn,
+  theScaleOfTheKey,
 } from '../../src/application/SketchLibrary.js';
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
 import { theSketchOfTheScore } from '../../src/application/SketchLibrary.js';
@@ -288,6 +291,36 @@ describe('the sketches being written', () => {
     expect(library.keptChords()).toEqual([[55, 59, 62], [57, 60, 64]]);
     expect(library.chordsForTheDrive().inStep).toEqual([[60, 64, 67], [55, 59, 62]]);
     expect(library.unsentSinceMs).toBe(1_000);
+  });
+
+  it('keeps the scale a sketch is written in across visits, and its mode as the scale\'s third says', () => {
+    const store = new InMemorySettingsStore();
+    const library = new SketchLibrary(store, () => 0);
+    const dorian = library.begin({ events: PLAYED, beats: THREE }, 'Dorian', 1, aKeyInTheScale(0, 'dorian'));
+    const plain = library.begin({ events: PLAYED, beats: THREE }, 'Plain', 2, aKeyInTheScale(-2, 'minor'));
+    const lydian = library.begin({ events: PLAYED, beats: THREE }, 'Lydian', 3, aKeyInTheScale(1, 'lydian'));
+    expect(dorian.key).toEqual({ fifths: 0, mode: 'minor', scale: 'dorian' });
+    // The mode's own scale is the mode, said once.
+    expect(plain.key).toEqual({ fifths: -2, mode: 'minor' });
+    expect(lydian.key).toEqual({ fifths: 1, mode: 'major', scale: 'lydian' });
+    expect([dorian, plain, lydian].map((sketch) => theScaleOfTheKey(sketch.key))).toEqual(['dorian', 'minor', 'lydian']);
+    expect(sketchAsKept(dorian)['key']).toEqual([0, 1, 'dorian']);
+    expect(sketchAsKept(plain)['key']).toEqual([-2, 1]);
+
+    const next = new SketchLibrary(store, () => 0);
+    next.load();
+    expect(next.list().map((sketch) => sketch.key)).toEqual([lydian.key, plain.key, dorian.key]);
+    // A scale read back that is none is the plain mode; a scale beside a mode it disagrees with is the scale's.
+    store.write({
+      version: 1,
+      sketches: [
+        { ...sketchAsKept(dorian), id: 'odd', key: [3, 0, 'blues'] },
+        { ...sketchAsKept(dorian), id: 'wrong', key: [0, 0, 'phrygian'] },
+      ],
+    });
+    next.load();
+    expect(next.find('odd')?.key).toEqual({ fifths: 3, mode: 'major' });
+    expect(next.find('wrong')?.key).toEqual({ fifths: 0, mode: 'minor', scale: 'phrygian' });
   });
 
   it('keeps the beats a sketch is counted in across visits, its notes as they were', () => {

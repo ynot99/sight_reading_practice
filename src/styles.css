@@ -1400,6 +1400,11 @@ textarea {
    * head: no verdict either, so the accent, faint enough to read through.
    */
   --roll-ink-sounding: color-mix(in srgb, var(--accent) 16%, transparent);
+  /*
+   * A row of a note of the scale a sketch is written in, lit to write in: the
+   * accent, fainter than a key sounding, so the two are told apart.
+   */
+  --roll-ink-scale: color-mix(in srgb, var(--accent) 7%, transparent);
   --roll-ink-right: color-mix(in srgb, var(--accent) 70%, var(--surface));
   --roll-ink-left: color-mix(in srgb, var(--star-8) 70%, var(--surface));
   position: relative;
@@ -2092,6 +2097,14 @@ textarea {
 
 .roll__key--black {
   background: var(--surface-strong);
+}
+
+/*
+ * A key of the scale the sketch is written in, marked down its edge as its row
+ * is lit: a mark of its own, so it never hides the outline of a chosen note.
+ */
+.roll__key[data-in-scale='true'] {
+  background-image: linear-gradient(to right, color-mix(in srgb, var(--accent) 55%, transparent) 0 3px, transparent 3px);
 }
 
 /* The key of a row a chosen note is on, outlined as the note is: no verdict, so the accent. */

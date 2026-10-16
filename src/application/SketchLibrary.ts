@@ -2,6 +2,7 @@ import { barsAreHeardIn, type HeardBeat, type MidiFileEvent } from '../domain/mi
 import { barLines, elapsedMsAt, type Exercise } from '../domain/model/Exercise.js';
 import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
 import { eachKeyOnce, sameKeys, theChordsMerged } from '../domain/harmony/chordsOfTheKey.js';
+import { SCALES, isAScale, type ScaleName } from '../domain/harmony/scales.js';
 import type { ISettingsStore } from './ports/ISettingsStore.js';
 import { pack, packBeat, theBeatsIfWhole, unpack } from './packedPlaying.js';
 import { rollAsEvents, rollBeganAtMs, rollOfTheScore } from './session/RunRoll.js';
@@ -32,6 +33,23 @@ export interface StoredSketch {
 export interface SketchKey {
   readonly fifths: number;
   readonly mode: 'major' | 'minor';
+  /**
+   * The scale it is in, where it is other than the mode's own - a dorian, a
+   * harmonic minor - written with the signature `fifths` says: see `SCALES`.
+   * Then `mode` is whether that scale's third is minor.
+   */
+  readonly scale?: ScaleName;
+}
+
+/** The scale a sketch is written in: the one it says, or its mode's own. */
+export function theScaleOfTheKey(key: SketchKey): ScaleName {
+  return key.scale ?? key.mode;
+}
+
+/** A sketch's key in a scale, written with a signature: the mode the scale's third says, the scale kept where it is not the mode's own. */
+export function aKeyInTheScale(fifths: number, scale: ScaleName): SketchKey {
+  const mode = SCALES[scale].minor ? 'minor' : 'major';
+  return scale === mode ? { fifths, mode } : { fifths, mode, scale };
 }
 
 /** The key of a sketch nothing gave one. */
@@ -54,15 +72,16 @@ export function readTheChords(raw: unknown): (readonly number[])[] | null {
   });
 }
 
-/** A key read back, where it is one a key signature can have. */
+/** A key read back, where it is one a key signature can have, in the scale it says where it says one. */
 function readKey(value: unknown): SketchKey {
   if (!Array.isArray(value)) {
     return C_MAJOR;
   }
-  const [fifths, minor] = value as readonly unknown[];
-  return Number.isInteger(fifths) && (fifths as number) >= -7 && (fifths as number) <= 7
-    ? { fifths: fifths as number, mode: minor === 1 ? 'minor' : 'major' }
-    : C_MAJOR;
+  const [fifths, minor, scale] = value as readonly unknown[];
+  if (!Number.isInteger(fifths) || (fifths as number) < -7 || (fifths as number) > 7) {
+    return C_MAJOR;
+  }
+  return isAScale(scale) ? aKeyInTheScale(fifths as number, scale) : { fifths: fifths as number, mode: minor === 1 ? 'minor' : 'major' };
 }
 
 const STORAGE_VERSION = 1;
@@ -146,7 +165,11 @@ export function sketchAsKept(sketch: StoredSketch): Record<string, unknown> {
     begunAtMs: sketch.begunAtMs,
     events: sketch.events.map(pack),
     beats: sketch.beats.map(packBeat),
-    key: [sketch.key.fifths, sketch.key.mode === 'minor' ? 1 : 0],
+    key: [
+      sketch.key.fifths,
+      sketch.key.mode === 'minor' ? 1 : 0,
+      ...(sketch.key.scale === undefined ? [] : [sketch.key.scale]),
+    ],
   };
 }
 

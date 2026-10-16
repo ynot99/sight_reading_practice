@@ -1,7 +1,8 @@
 import { floorMod } from '../../shared/asserts.js';
-import type { KeySignature } from '../model/KeySignature.js';
-import { STEPS } from '../model/Pitch.js';
-import { nameTheChord } from './chordName.js';
+import { KeySignature } from '../model/KeySignature.js';
+import { STEPS, alterationSign, stepAt, type Alteration } from '../model/Pitch.js';
+import { nameOfThePitchClass, nameTheChord } from './chordName.js';
+import { theTonicOfTheScale, thePitchClassesOfTheScale, type ScaleName } from './scales.js';
 
 /** A chord built on a degree of a key, as the palette offers it to write. */
 export interface ChordOfTheKey {
@@ -68,15 +69,44 @@ const MIDDLE_C_INDEX = 4 * STEPS.length;
  * seventh of B major is not written an octave above the first of C.
  */
 export function theChordsOfTheKey(key: KeySignature): readonly ChordOfTheKey[] {
-  const tonic = key.tonicIndexAtOrAbove(MIDDLE_C_INDEX);
+  return theChordsOfTheScale(key.fifths, key.mode);
+}
+
+/**
+ * The seven triads of a scale written with a key signature, as for a key
+ * (see `theChordsOfTheKey`): its own notes stacked in thirds, so a harmonic
+ * minor's fifth is major and a dorian's fourth is. A note the scale raises
+ * past its signature is taken a semitone up from the signature's, and its
+ * root is named by its own letter - G sharp in A harmonic minor, never the A
+ * flat a chart would call that key. Augmented, a triad is marked +.
+ */
+export function theChordsOfTheScale(fifths: number, scale: ScaleName): readonly ChordOfTheKey[] {
+  const signature = KeySignature.major(fifths);
+  const { step } = theTonicOfTheScale(fifths, scale);
+  let tonic = MIDDLE_C_INDEX;
+  while (STEPS[floorMod(tonic, STEPS.length)] !== step) {
+    tonic += 1;
+  }
+  const pitchClasses = thePitchClassesOfTheScale(fifths, scale);
+  /** How far a staff position's note in the scale is from the signature's: a semitone up where the scale raises it. */
+  const raisedBy = (index: number): number => {
+    const written = signature.pitchAt(index).midi;
+    const wanted = pitchClasses[floorMod(index - tonic, STEPS.length)] ?? 0;
+    return floorMod(wanted - written + 6, 12) - 6;
+  };
+  const scaleNote = (index: number): number => signature.pitchAt(index).midi + raisedBy(index);
   return NUMERALS.map((numeral, degree) => {
     const root = MIDDLE_C_INDEX + floorMod(tonic + degree - MIDDLE_C_INDEX, STEPS.length);
-    const midis = [root, root + 2, root + 4].map((index) => key.pitchAt(index).midi);
+    const midis = [root, root + 2, root + 4].map(scaleNote);
     const [first = 0, third = 0, fifth = 0] = midis;
     const quality = third - first === 4 ? numeral : numeral.toLowerCase();
+    const charted = nameTheChord(midis, fifths) ?? '';
+    const step = stepAt(root);
+    const spelled = `${step}${alterationSign((signature.alterationFor(step) + raisedBy(root)) as Alteration)}`;
+    const asCharted = nameOfThePitchClass(first, fifths);
     return {
-      numeral: fifth - first === 6 ? `${quality}°` : quality,
-      name: nameTheChord(midis, key.fifths) ?? '',
+      numeral: fifth - first === 6 ? `${quality}°` : fifth - first === 8 ? `${quality}+` : quality,
+      name: charted.startsWith(asCharted) ? `${spelled}${charted.slice(asCharted.length)}` : charted,
       midis,
     };
   });

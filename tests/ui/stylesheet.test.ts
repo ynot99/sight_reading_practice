@@ -2301,6 +2301,10 @@ describe('searching the settings', () => {
     expect(body('.roll__keys-strip')).not.toMatch(/cursor/);
     // The key of a chosen note outlined in the chosen note's ink.
     expect(body(".roll__key[data-chosen='true']")).toMatch(/box-shadow\s*:\s*inset 0 0 0 2px var\(--roll-ink-chosen\)/);
+    // A key of the scale marked down its edge by an image, which neither the
+    // chosen outline nor a black key's ground takes the place of.
+    expect(body(".roll__key[data-in-scale='true']")).toMatch(/background-image\s*:\s*linear-gradient\(to right,[^;]*0 3px, transparent 3px\)/);
+    expect(body(".roll__key[data-in-scale='true']")).not.toMatch(/box-shadow|background\s*:/);
     expect(rules().find((rule) => rule.selector === ".roll-body[data-grip='note']")?.body).toMatch(/cursor\s*:\s*grab/);
     expect(rules().find((rule) => rule.selector === ".roll-body[data-grip='end']")?.body).toMatch(/cursor\s*:\s*ew-resize/);
   });

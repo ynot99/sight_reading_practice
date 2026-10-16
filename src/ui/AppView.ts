@@ -10,7 +10,15 @@ import {
 import { barCells } from '../domain/scoring/barCells.js';
 import { nameOfThePitchClass, nameTheChord } from '../domain/harmony/chordName.js';
 import { DYNAMIC_VELOCITY, type DynamicLevel } from '../domain/model/Exercise.js';
-import { eachKeyOnce, sameKeys, theChordsOfTheKey } from '../domain/harmony/chordsOfTheKey.js';
+import { eachKeyOnce, sameKeys, theChordsOfTheScale } from '../domain/harmony/chordsOfTheKey.js';
+import {
+  SCALES,
+  SCALE_NAMES,
+  theSignatureOfTheScale,
+  theTonicOfTheScale,
+  thePitchClassesOfTheScale,
+  theTonicPitchClass,
+} from '../domain/harmony/scales.js';
 import { barsOfThePicture, tiersOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
 import { FREE_PLAY_MODE_ID } from '../application/modes/FreePlayFrame.js';
@@ -47,7 +55,7 @@ import {
 import type { PerformanceReport } from '../domain/scoring/PerformanceReport.js';
 import { COMMON_KEYS, KeySignature } from '../domain/model/KeySignature.js';
 import { TimeSignature } from '../domain/model/TimeSignature.js';
-import { midiToLabel } from '../domain/model/Pitch.js';
+import { alterationSign, midiToLabel } from '../domain/model/Pitch.js';
 import {
   barsAreHeardIn,
   theClickInAnotherMetre,
@@ -65,7 +73,14 @@ import { drawTheLadderTrack, marksOfThePlace, type PlaceOnTheLadder } from './la
 import type { PracticeSettings } from '../application/PracticeController.js';
 import type { StoredTake } from '../application/TakeLibrary.js';
 import { isTypedInto, type TypedInto } from '../shared/typedInto.js';
-import { theBeatsToBeginIn, theSketchOfTheScore, type SketchKey, type StoredSketch } from '../application/SketchLibrary.js';
+import {
+  aKeyInTheScale,
+  theBeatsToBeginIn,
+  theScaleOfTheKey,
+  theSketchOfTheScore,
+  type SketchKey,
+  type StoredSketch,
+} from '../application/SketchLibrary.js';
 import { CONFLICTING_COPY, type SketchOnTheDrive, type SketchSyncOutcome } from '../application/SketchSync.js';
 import type { DrillTask } from '../application/drill/SectionDrill.js';
 import type { ControlBinding } from '../application/ControlBinding.js';
@@ -1351,11 +1366,6 @@ const FASTEST_SKETCH_BPM = 400;
 /** The metres a sketch may be written in: the simple and compound ones a pianist meets. */
 const SKETCH_METRES = ['2/4', '3/4', '4/4', '5/4', '6/4', '2/2', '3/2', '3/8', '5/8', '6/8', '7/8', '9/8', '12/8'] as const;
 
-/** Every key a signature can be, major and minor, for a sketch to be written in. */
-const EVERY_KEY: readonly KeySignature[] = (['major', 'minor'] as const).flatMap((mode) =>
-  [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 7, -7].map((fifths) => new KeySignature(fifths, mode)),
-);
-
 function takeName(savedAtMs: number): string {
   const at = new Date(savedAtMs);
   const pad = (value: number): string => String(value).padStart(2, '0');
@@ -2344,6 +2354,7 @@ export class AppView {
     rollVelocitySaid: HTMLOutputElement;
     rollHands: HTMLElement;
     rollKey: HTMLSelectElement;
+    rollScale: HTMLSelectElement;
     rollMetre: HTMLSelectElement;
     rollTempo: HTMLInputElement;
     rollHandLeft: HTMLButtonElement;
@@ -2726,6 +2737,7 @@ export class AppView {
       rollVelocitySaid: requireElement(doc, 'roll-velocity-said'),
       rollHands: requireElement(doc, 'roll-hands'),
       rollKey: requireElement(doc, 'roll-key'),
+      rollScale: requireElement(doc, 'roll-scale'),
       rollMetre: requireElement(doc, 'roll-metre'),
       rollTempo: requireElement(doc, 'roll-tempo'),
       rollHandLeft: requireElement(doc, 'roll-hand-left'),
@@ -9190,21 +9202,22 @@ export class AppView {
       });
       this.sayHowLoudTheChosenAre();
     });
+    // The tonics are named as the scale chosen spells them, once a sketch is shown: see `sayTheKeyOfTheSketch`.
     fillSelect(
       this.el.rollKey,
-      EVERY_KEY.map((key) => ({ value: keyValue(key), label: key.name })),
-      keyValue(KeySignature.C_MAJOR),
+      Array.from({ length: 12 }, (_, pitchClass) => ({ value: String(pitchClass), label: String(pitchClass) })),
+      '0',
     );
-    this.listen(this.el.rollKey, 'change', () => {
-      const sketch = this.theOtherRollShowing?.sketch;
-      if (sketch !== undefined) {
-        const key = parseKeyValue(this.el.rollKey.value);
-        this.runtime.sketches.changeTheKey(sketch.id, { fifths: key.fifths, mode: key.mode });
-        // The key spells the black keys of the chord's name, and is what the drawer's chords are of.
-        this.nameTheChosenChord();
-        this.showTheChordsOfTheKey();
-      }
-    });
+    fillSelect(
+      this.el.rollScale,
+      SCALE_NAMES.map((scale) => ({ value: scale, label: SCALES[scale].called })),
+      'major',
+    );
+    for (const select of [this.el.rollKey, this.el.rollScale]) {
+      this.listen(select, 'change', () => {
+        this.writeTheSketchInTheKeyChosen();
+      });
+    }
     this.listen(this.el.rollMetre, 'change', () => {
       this.countTheSketchIn(this.el.rollMetre.value);
     });
@@ -12541,8 +12554,9 @@ export class AppView {
    * writer's own kept ones, each with what its button says under its name -
    * the key's numeral, or the bass of one kept.
    */
-  private theChordsInTheDrawer(fifths: number, mode: 'major' | 'minor'): readonly ChordInTheDrawer[] {
-    const ofTheKey = theChordsOfTheKey(new KeySignature(fifths, mode)).map(
+  private theChordsInTheDrawer(key: SketchKey): readonly ChordInTheDrawer[] {
+    const { fifths } = key;
+    const ofTheKey = theChordsOfTheScale(fifths, theScaleOfTheKey(key)).map(
       ({ name, numeral, midis }): ChordInTheDrawer => ({ name, under: numeral, midis, kept: false }),
     );
     const kept = this.runtime.sketches.keptChords().map(
@@ -12576,7 +12590,7 @@ export class AppView {
     if (!open || stored === null || sketch === undefined) {
       return;
     }
-    const { fifths, mode } = stored.key;
+    const { fifths } = stored.key;
     // Nothing kept, nothing to delete: the deleting ends with the last of them.
     const anyKept = this.runtime.sketches.keptChords().length > 0;
     this.chordsBeingForgotten = this.chordsBeingForgotten && anyKept;
@@ -12592,11 +12606,11 @@ export class AppView {
       !anyKept,
     );
     this.el.rollChordsList.dataset['forgetting'] = String(forgetting);
-    const shows = `${keyValue(new KeySignature(fifths, mode))} ${JSON.stringify(this.runtime.sketches.keptChords())} ${String(forgetting)}`;
+    const shows = `${String(fifths)}:${theScaleOfTheKey(stored.key)} ${JSON.stringify(this.runtime.sketches.keptChords())} ${String(forgetting)}`;
     if (this.el.rollChordsList.dataset['shows'] !== shows) {
       this.el.rollChordsList.dataset['shows'] = shows;
       this.el.rollChordsList.replaceChildren(
-        ...this.theChordsInTheDrawer(fifths, mode).map((chord, at) => {
+        ...this.theChordsInTheDrawer(stored.key).map((chord, at) => {
           const button = this.doc.createElement('button');
           button.type = 'button';
           button.className = chord.kept ? 'button roll-chords__chord roll-chords__chord--kept' : 'button roll-chords__chord';
@@ -12652,7 +12666,7 @@ export class AppView {
       return { says: 'Keep the chosen notes as a chord. Choose two notes or more first.', idle: true, lettingGo: false };
     }
     const name = theNameOfTheKeys(chosen, stored.key.fifths);
-    const ofTheKey = theChordsOfTheKey(new KeySignature(stored.key.fifths, stored.key.mode)).find(({ midis }) =>
+    const ofTheKey = theChordsOfTheScale(stored.key.fifths, theScaleOfTheKey(stored.key)).find(({ midis }) =>
       sameKeys(midis, chosen),
     );
     if (ofTheKey !== undefined) {
@@ -12692,6 +12706,55 @@ export class AppView {
     }
   }
 
+  /** The pitch classes of the scale the sketch shown is written in, or none where no sketch is shown. */
+  private theScaleOfTheSketchShown(): readonly number[] {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const key = sketch === undefined ? null : (this.runtime.sketches.find(sketch.id)?.key ?? null);
+    return key === null ? [] : thePitchClassesOfTheScale(key.fifths, theScaleOfTheKey(key));
+  }
+
+  /**
+   * Writes the sketch shown in the key the two lists say: the tonic chosen,
+   * in the scale chosen, with the signature that scale on that tonic is
+   * written with. Its notes stay where they are, spelt in that key.
+   */
+  private writeTheSketchInTheKeyChosen(): void {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const scale = SCALE_NAMES.find((each) => each === this.el.rollScale.value);
+    if (sketch === undefined || scale === undefined) {
+      return;
+    }
+    const tonic = Number(this.el.rollKey.value);
+    this.runtime.sketches.changeTheKey(sketch.id, aKeyInTheScale(theSignatureOfTheScale(tonic, scale), scale));
+    // The key spells the black keys of the chord's name, is what the drawer's
+    // chords are of, and lights the rows of its notes.
+    this.sayHowLoudTheChosenAre();
+    this.nameTheChosenChord();
+    this.showTheChordsOfTheKey();
+    this.drawTheRollInto();
+  }
+
+  /**
+   * The two lists of the key, as the sketch is written: its scale, and its
+   * tonic among the twelve, each named as that scale on it is spelt - the
+   * sketch's own as the sketch spells it, which a score it was begun from
+   * may have spelt otherwise.
+   */
+  private sayTheKeyOfTheSketch(key: SketchKey): void {
+    const scale = theScaleOfTheKey(key);
+    const tonic = theTonicPitchClass(key.fifths, scale);
+    for (const option of this.el.rollKey.options) {
+      const pitchClass = Number(option.value);
+      const { step, alter } = theTonicOfTheScale(
+        pitchClass === tonic ? key.fifths : theSignatureOfTheScale(pitchClass, scale),
+        scale,
+      );
+      option.textContent = `${step}${alterationSign(alter)}`;
+    }
+    this.el.rollKey.value = String(tonic);
+    this.el.rollScale.value = scale;
+  }
+
   /**
    * Deletes a chord of the drawer the writer kept. One of the key's own is
    * never among those kept - the keep button will not keep one - so asked of
@@ -12699,7 +12762,7 @@ export class AppView {
    */
   private forgetTheChordInTheDrawer(at: number): void {
     const stored = this.theOtherRollShowing?.sketch === undefined ? null : this.runtime.sketches.find(this.theOtherRollShowing.sketch.id);
-    const chord = stored === null ? undefined : this.theChordsInTheDrawer(stored.key.fifths, stored.key.mode)[at];
+    const chord = stored === null ? undefined : this.theChordsInTheDrawer(stored.key)[at];
     if (chord === undefined) {
       return;
     }
@@ -12736,7 +12799,7 @@ export class AppView {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
-    const chord = stored === null ? undefined : this.theChordsInTheDrawer(stored.key.fifths, stored.key.mode)[at];
+    const chord = stored === null ? undefined : this.theChordsInTheDrawer(stored.key)[at];
     if (showing === null || sketch === undefined || stored === null || chord === undefined) {
       return;
     }
@@ -12775,7 +12838,7 @@ export class AppView {
     this.el.rollVelocity.hidden = sketch?.editing !== true;
     const key = sketch === undefined ? null : this.runtime.sketches.find(sketch.id)?.key;
     if (key !== undefined && key !== null) {
-      this.el.rollKey.value = keyValue(new KeySignature(key.fifths, key.mode));
+      this.sayTheKeyOfTheSketch(key);
     }
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
     const first = stored === null ? undefined : theClickOfTheTake(stored.events, stored.beats)?.[0];
@@ -14403,6 +14466,7 @@ export class AppView {
       chosen,
       wholeKeyboard: this.theOtherRollShowing?.sketch?.editing === true,
       freely: this.nothingOnTheDrawingIsJudged(),
+      scale: this.theScaleOfTheSketchShown(),
     });
   }
 

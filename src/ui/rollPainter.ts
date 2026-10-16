@@ -47,6 +47,8 @@ export interface RollInks {
   readonly chosen: string;
   /** The band across a row whose key is sounding: no verdict, so the accent. */
   readonly sounding: string;
+  /** The wash over a row of a note of the scale the music is written in: no verdict either. */
+  readonly scale: string;
   /** A note nothing judged, by the hand that plays it: colours no verdict wears. */
   readonly right: string;
   readonly left: string;
@@ -79,6 +81,7 @@ export const INKS: Readonly<Record<Exclude<keyof RollInks, 'font'>, string>> = {
   aside: 'aside',
   chosen: 'chosen',
   sounding: 'sounding',
+  scale: 'scale',
   right: 'right',
   left: 'left',
   tickDivision: 'tick-division',
@@ -348,6 +351,14 @@ export function paintTheGrid(
 
   paint.fillStyle = inks.row;
   for (const row of scene.blackRows) {
+    if (shows(row)) {
+      paint.fillRect(0, y(row), widePx, rowPx);
+    }
+  }
+  // The rows of the scale, lit over the keys' shading, which still shows
+  // through: a black key in the scale is a lit dark row.
+  paint.fillStyle = inks.scale;
+  for (const row of scene.scaleRows) {
     if (shows(row)) {
       paint.fillRect(0, y(row), widePx, rowPx);
     }

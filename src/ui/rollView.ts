@@ -76,6 +76,11 @@ export interface RollDrawing {
    */
   readonly freely?: boolean;
   /**
+   * The pitch classes of the scale the music is written in, C being nought,
+   * whose rows are lit: a sketch's, to write in. None for anything else.
+   */
+  readonly scale?: readonly number[];
+  /**
    * Whether every key of the piano has its row, rather than the notes played
    * and a little room round them: so a note being edited can be taken to any
    * of them.
@@ -320,6 +325,8 @@ export interface RollScene {
   readonly lengthMs: number;
   /** The rows the black keys are on, which are shaded as they are on the instrument. */
   readonly blackRows: readonly number[];
+  /** The rows of the notes of the scale the music is written in, lit to write in: see {@link RollDrawing.scale}. */
+  readonly scaleRows: readonly number[];
   readonly waits: readonly SceneStretch[];
   /** The clicks, which the ruler marks as well as the grid: one list, so they cannot disagree. */
   readonly lines: readonly SceneLine[];
@@ -958,9 +965,14 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
   const band = bandOf(roll.presses, ghosts, drawing.wholeKeyboard);
 
   const blackRows: number[] = [];
+  const scaleRows: number[] = [];
+  const inTheScale = new Set(drawing.scale ?? []);
   for (let midi = band.high; midi >= band.low; midi -= 1) {
     if (isBlack(midi)) {
       blackRows.push(band.high - midi);
+    }
+    if (inTheScale.has(((midi % 12) + 12) % 12)) {
+      scaleRows.push(band.high - midi);
     }
   }
 
@@ -1009,6 +1021,7 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
     rows: band.high - band.low + 1,
     lengthMs: endMs - origin,
     blackRows,
+    scaleRows,
     waits: inTimeOrder(theWaits(roll).map((wait) => waitOf(wait, origin))),
     // The same list a playback sounds its clicks from, so a line and a click
     // can never end up in different places - cut lines included.
@@ -1292,8 +1305,9 @@ export function drawTheRoll(scene: RollScene): HTMLElement {
 
   const keys = element('div', 'roll__keys');
   const strip = element('div', 'roll__keys-strip');
-  // The rows a chosen note is on, whose keys are outlined as it is.
+  // The rows a chosen note is on, whose keys are outlined as it is; and those of the scale, marked as their rows are lit.
   const chosenRows = new Set(scene.notes.filter((note) => note.chosen === true).map((note) => note.row));
+  const scaleRows = new Set(scene.scaleRows);
   for (let row = 0; row < scene.rows; row += 1) {
     const midi = scene.highest - row;
     const key = element('div', `roll__key${isBlack(midi) ? ' roll__key--black' : ''}`);
@@ -1304,6 +1318,9 @@ export function drawTheRoll(scene: RollScene): HTMLElement {
     key.dataset['midi'] = String(midi);
     if (chosenRows.has(row)) {
       key.dataset['chosen'] = 'true';
+    }
+    if (scaleRows.has(row)) {
+      key.dataset['inScale'] = 'true';
     }
     strip.append(key);
   }

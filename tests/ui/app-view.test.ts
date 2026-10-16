@@ -36,7 +36,7 @@ import { PerformanceRecorder } from '../../src/application/PerformanceRecorder.j
 import { ControlBinding } from '../../src/application/ControlBinding.js';
 import { DrillProgress } from '../../src/application/drill/DrillProgress.js';
 import { TakeLibrary } from '../../src/application/TakeLibrary.js';
-import { SketchLibrary } from '../../src/application/SketchLibrary.js';
+import { SketchLibrary, aKeyInTheScale } from '../../src/application/SketchLibrary.js';
 import { TakeOnOffer } from '../../src/application/TakeOnOffer.js';
 import { TakePlayer } from '../../src/application/TakePlayer.js';
 import { BackupService } from '../../src/application/Backup.js';
@@ -4786,9 +4786,11 @@ describe('AppView', () => {
       expect(sketch?.title).toBe('Sketch of In six');
       // In the score's key, which the editor shows and changes.
       expect(sketch?.key).toEqual({ fifths: written?.key.fifths, mode: written?.key.mode });
-      expect(element<HTMLSelectElement>('roll-key').value).toBe(`${String(written?.key.fifths)}:${written?.key.mode ?? ''}`);
-      expect(element<HTMLSelectElement>('roll-key').options).toHaveLength(30);
-      element<HTMLSelectElement>('roll-key').value = '-3:minor';
+      // G minor: its tonic among the twelve, and its scale.
+      expect(element<HTMLSelectElement>('roll-key').value).toBe('7');
+      expect(element<HTMLSelectElement>('roll-scale').value).toBe('minor');
+      expect(element<HTMLSelectElement>('roll-key').options).toHaveLength(12);
+      element<HTMLSelectElement>('roll-key').value = '0';
       element<HTMLSelectElement>('roll-key').dispatchEvent(new Event('change'));
       expect(sketches.find(sketch?.id ?? '')?.key).toEqual({ fifths: -3, mode: 'minor' });
       expect(sketch?.noteCount).toBe(7);
@@ -6697,7 +6699,7 @@ describe('AppView', () => {
       tap(2_600, 68);
       expect(said()).toBe('C♯');
       const keyOfTheSketch = element<HTMLSelectElement>('roll-key');
-      keyOfTheSketch.value = '-2:major';
+      keyOfTheSketch.value = '10';
       keyOfTheSketch.dispatchEvent(new Event('change'));
       expect(said()).toBe('D♭');
 
@@ -6708,6 +6710,90 @@ describe('AppView', () => {
       function key(init: KeyboardEventInit): void {
         document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
       }
+    });
+
+    it('writes a sketch in a tonic and a scale chosen apart, its notes\' rows lit, its tonics spelt as the scale on each is', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            { kind: 'noteOn' as const, atMs: 0, midi: 62, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: 400, midi: 62 },
+          ],
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Modes',
+        1,
+        { fifths: 7, mode: 'major' },
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const tonic = element<HTMLSelectElement>('roll-key');
+      const scale = element<HTMLSelectElement>('roll-scale');
+      const tonics = (): string[] => [...tonic.options].map((option) => option.textContent ?? '');
+      const lit = (): number[] =>
+        [...element('roll-body').querySelectorAll<HTMLElement>(".roll__key[data-in-scale='true']")].map((key) =>
+          Number(key.dataset['midi']) % 12,
+        );
+      const choose = (pitchClass: string, name: string): void => {
+        tonic.value = pitchClass;
+        scale.value = name;
+        scale.dispatchEvent(new Event('change'));
+      };
+
+      // Begun in C sharp major, spelt as it is, the other tonics as their major keys are.
+      expect([...scale.options].map((option) => option.textContent)).toEqual([
+        'major',
+        'minor',
+        'harmonic minor',
+        'melodic minor',
+        'dorian',
+        'phrygian',
+        'lydian',
+        'mixolydian',
+        'locrian',
+      ]);
+      expect(scale.getAttribute('aria-label')).toBe('Scale');
+      expect([tonic.value, scale.value]).toEqual(['1', 'major']);
+      expect(tonics()).toEqual(['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B']);
+      expect(new Set(lit())).toEqual(new Set([1, 3, 5, 6, 8, 10, 0]));
+
+      // D dorian: the signature of C, the mode kept, its rows and its chords.
+      choose('2', 'dorian');
+      expect(sketches.find(sketch.id)?.key).toEqual({ fifths: 0, mode: 'minor', scale: 'dorian' });
+      expect(new Set(lit())).toEqual(new Set([2, 4, 5, 7, 9, 11, 0]));
+      expect(view.rollScene?.scaleRows.length).toBeGreaterThan(0);
+      // The tonics, as each dorian is spelt.
+      expect(tonics()).toEqual(['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'B♭', 'B']);
+      const drawn = (): (string | null)[] =>
+        [...element('roll-chords-list').querySelectorAll('[data-chord]')].slice(0, 7).map((chord) => chord.textContent);
+      element<HTMLButtonElement>('roll-chords-open').click();
+      expect(drawn()).toEqual(['Dmi', 'Emii', 'FIII', 'GIV', 'Amv', 'Bdimvi°', 'CVII']);
+      // Another scale with the same signature: other chords.
+      choose('0', 'major');
+      expect(drawn()).toEqual(['CI', 'Dmii', 'Emiii', 'FIV', 'GV', 'Amvi', 'Bdimvii°']);
+      // In minor, C sharp rather than D flat; the tonic kept as the scale changes.
+      choose('2', 'minor');
+      expect(tonics()[1]).toBe('C♯');
+      expect(sketches.find(sketch.id)?.key).toEqual({ fifths: -1, mode: 'minor' });
+      choose('9', 'harmonicMinor');
+      expect(sketches.find(sketch.id)?.key).toEqual({ fifths: 0, mode: 'minor', scale: 'harmonicMinor' });
+      expect(new Set(lit())).toEqual(new Set([9, 11, 0, 2, 4, 5, 8]));
+
+      // Another sketch opened says its own key in both lists.
+      sketches.begin(
+        { events: [], beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })) },
+        'Mixolydian',
+        2,
+        aKeyInTheScale(-2, 'mixolydian'),
+      );
+      element<HTMLButtonElement>('roll-close').click();
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      expect([tonic.value, scale.value]).toEqual(['5', 'mixolydian']);
     });
 
     it('writes a chord of the key from the drawer where the cursor is, to the next line of the grid, and moves the cursor on', async () => {
@@ -6829,7 +6915,8 @@ describe('AppView', () => {
 
       // In another key, its chords.
       const keyOfTheSketch = element<HTMLSelectElement>('roll-key');
-      keyOfTheSketch.value = '-2:minor';
+      keyOfTheSketch.value = '7';
+      element<HTMLSelectElement>('roll-scale').value = 'minor';
       keyOfTheSketch.dispatchEvent(new Event('change'));
       expect(chords()).toEqual(['Gmi', 'Adimii°', 'B♭III', 'Cmiv', 'Dmv', 'E♭VI', 'FVII']);
 

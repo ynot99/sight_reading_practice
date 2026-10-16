@@ -67,6 +67,14 @@ export function alterationSuffix(alter: Alteration): string {
   return alter > 0 ? '#'.repeat(alter) : 'b'.repeat(-alter);
 }
 
+/** `♯`, `♯♯`, `♭`, `♭♭` or an empty string: an alteration as a reader is shown it, as chord names are written. */
+export function alterationSign(alter: Alteration): string {
+  if (alter === 0) {
+    return '';
+  }
+  return alter > 0 ? '♯'.repeat(alter) : '♭'.repeat(-alter);
+}
+
 const PITCH_PATTERN = /^([A-Ga-g])(#{1,2}|b{1,2}|)(-?\d+)$/;
 
 /** Returns the {@link Step} at a diatonic position, wrapping every 7 letters. */

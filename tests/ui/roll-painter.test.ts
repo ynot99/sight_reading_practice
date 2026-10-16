@@ -33,6 +33,7 @@ const INKS: RollInks = {
   aside: 'aside',
   chosen: 'chosen',
   sounding: 'sounding',
+  scale: 'scale',
   right: 'right',
   left: 'left',
   tickDivision: 'tick-division',
@@ -269,6 +270,21 @@ describe('painting the grid', () => {
     expect(recorder.inked('correct')).toHaveLength(1);
     expect(recorder.inked('wrong')).toHaveLength(1);
     expect(recorder.inked('aside')).toHaveLength(1);
+  });
+
+  it('lights each row of the scale across the whole width, over the black keys\' shading and under the notes, none out of sight', () => {
+    const input = roll({ presses: [press({ midi: 40 }), press({ midi: 90 })] });
+    const scene = { ...sceneOf(input), scaleRows: [2, 50] };
+    const { surface: canvas, recorder } = surface(700, 140);
+
+    paintTheGrid(canvas, scene, at(), INKS, 1);
+
+    expect(recorder.inked('scale')).toEqual([expect.objectContaining({ x: 0, y: 2 * 14, wide: 700, tall: 14 })]);
+    expect(recorder.order.indexOf('row')).toBeLessThan(recorder.order.indexOf('scale'));
+    expect(recorder.order.indexOf('scale')).toBeLessThan(recorder.order.indexOf('correct'));
+    const { surface: plain, recorder: none } = surface(700, 140);
+    paintTheGrid(plain, sceneOf(input), at(), INKS, 1);
+    expect(none.inked('scale')).toEqual([]);
   });
 
   it('lays a band across the whole width of each row sounding, under the notes, and none out of sight', () => {

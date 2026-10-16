@@ -433,8 +433,8 @@ describe('painting the ruler and the pedal', () => {
       roll: roll({ beats: barsOfFour(3) }),
       barLabel: (ticks) => (ticks % (Duration.QUARTER.ticks * 4) === 0 ? String(ticks / (Duration.QUARTER.ticks * 4) + 1) : null),
       marks: [
-        { atMs: 4_000, says: '3/4', kind: 'metre' },
-        { atMs: 5_000, says: '\u2669=90', kind: 'pace' },
+        { atMs: 4_000, says: '3/4' },
+        { atMs: 5_000, says: '\u2669=90' },
       ],
     });
     const { surface: canvas, recorder } = surface(1_400, 19);

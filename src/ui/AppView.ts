@@ -60,7 +60,7 @@ import { alterationSign, midiToLabel } from '../domain/model/Pitch.js';
 import {
   barsAreHeardIn,
   takeWithTheKeyFrom,
-  theBarOfTheClickAt,
+  theBeatOfTheClickAt,
   theChangesOfTheClick,
   theKeyChangesOf,
   theKeyOfTheMusicAt,
@@ -269,7 +269,6 @@ import {
   timeFromTap,
   theHeadsOf,
   type FingerSpan,
-  type MarkKind,
   type PinchedFrom,
   type RollGhost,
   type RollHeads,
@@ -656,7 +655,7 @@ function theNameOfTheKeys(midis: readonly number[], fifths: number): string {
 }
 
 /** A button's title and label, and whether it is dimmed for the reason the title gives. */
-function sayWhetherIdle(button: HTMLButtonElement, says: string, idle: boolean): void {
+function sayWhetherIdle(button: HTMLElement, says: string, idle: boolean): void {
   button.title = says;
   button.setAttribute('aria-label', says);
   if (idle) {
@@ -664,6 +663,11 @@ function sayWhetherIdle(button: HTMLButtonElement, says: string, idle: boolean):
   } else {
     delete button.dataset['idle'];
   }
+}
+
+/** Where a beat is, as a change on it is named: "bar 3", or "bar 3, beat 2" inside the bar. */
+function thePlaceOfTheBeat(beat: { readonly bar: number; readonly beat: number }): string {
+  return beat.beat === 0 ? `bar ${String(beat.bar)}` : `bar ${String(beat.bar)}, beat ${String(beat.beat + 1)}`;
 }
 
 /** How loud a note is written: as the sketch's notes are on the whole, and moderately where it has none. */
@@ -2065,13 +2069,13 @@ export class AppView {
    */
   private chordsOfTheKeyOpen = false;
 
-  /** The bar a change of metre or pace is being asked about, while the sheet asking is open. */
-  private barAskedAbout: ReturnType<typeof theBarOfTheClickAt> = null;
+  /** The beat a change is being asked about, while the sheet asking is open. */
+  private beatAskedAbout: ReturnType<typeof theBeatOfTheClickAt> = null;
 
-  /** The flag over the ruler chosen to be changed or taken away - its moment on the run's own clock, and what it changes - or none. */
-  private markChosen: { readonly atMs: number; readonly kind: MarkKind } | null = null;
+  /** The flag over the ruler chosen to be changed or taken away, by its moment on the run's own clock, or none. */
+  private markChosenAtMs: number | null = null;
 
-  /** And the key that bar is in, and the one the bar before it is in - none before the first. */
+  /** And the key that beat is in, and the one the beat before it is in - none before the first. */
   private keyAskedAbout: { readonly here: KeyOfTheMusic; readonly before: KeyOfTheMusic | null } | null = null;
 
   /** Whether a tap on a chord kept in the drawer deletes it, rather than writing it. */
@@ -9370,17 +9374,17 @@ export class AppView {
       this.askForAChangeAtTheHead();
     });
     this.listen(this.el.rollMarkYes, 'click', () => {
-      this.changeFromTheBarAsked(this.el.rollMarkMetre.value, Number(this.el.rollMarkTempo.value), this.theKeyAskedFor());
+      this.changeFromTheBeatAsked(this.el.rollMarkMetre.value, Number(this.el.rollMarkTempo.value), this.theKeyAskedFor());
     });
     this.listen(this.el.rollMarkTempo, 'keydown', (event) => {
       if (event.key === 'Enter') {
-        this.changeFromTheBarAsked(this.el.rollMarkMetre.value, Number(this.el.rollMarkTempo.value), this.theKeyAskedFor());
+        this.changeFromTheBeatAsked(this.el.rollMarkMetre.value, Number(this.el.rollMarkTempo.value), this.theKeyAskedFor());
       }
     });
     // Escape and a tap outside press it too.
     this.listen(this.el.rollMarkNo, 'click', () => {
       this.el.sheetRollMark.hidden = true;
-      this.barAskedAbout = null;
+      this.beatAskedAbout = null;
     });
     this.listen(this.el.rollMarkRemove, 'click', () => {
       this.takeTheChangeAway();
@@ -12804,8 +12808,8 @@ export class AppView {
     }
   }
 
-  /** Where the sketch shown changes metre or pace, from its first bar, and what a mark there says: "3/4 ♩=90". */
-  private theMarksOfTheSketchShown(): readonly { readonly atMs: number; readonly says: string; readonly kind: MarkKind }[] {
+  /** Where the sketch shown changes key, metre or pace, from its first beat, and what a mark there says: "G major 3/4 ♩=90". */
+  private theMarksOfTheSketchShown(): readonly { readonly atMs: number; readonly says: string }[] {
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
     if (stored === null) {
@@ -12820,23 +12824,21 @@ export class AppView {
     ];
     const moments = [...new Set([...clicked.map((change) => change.atMs), ...keys.map((key) => key.atMs)])].sort((one, other) => one - other);
     const near = (one: number, other: number): boolean => Math.abs(one - other) < 1;
-    const marks: { atMs: number; says: string; kind: MarkKind }[] = [];
+    const marks: { atMs: number; says: string }[] = [];
     for (const atMs of moments) {
       if (marks.some((mark) => near(mark.atMs, atMs))) {
         continue;
       }
-      // A flag for each kind of change there, in the order a score writes them.
       const key = keys.find((each) => near(each.atMs, atMs));
       const change = clicked.find((each) => near(each.atMs, atMs));
-      if (key !== undefined) {
-        marks.push({ atMs, says: theNameOfTheKey(key), kind: 'key' });
-      }
-      if (change?.metre !== undefined) {
-        marks.push({ atMs, says: `${String(change.metre.beatsInBar)}/${String(change.metre.beatType)}`, kind: 'metre' });
-      }
-      if (change?.crotchetsPerMinute !== undefined) {
-        marks.push({ atMs, says: `\u2669=${String(change.crotchetsPerMinute)}`, kind: 'pace' });
-      }
+      marks.push({
+        atMs,
+        says: [
+          ...(key === undefined ? [] : [theNameOfTheKey(key)]),
+          ...(change?.metre === undefined ? [] : [`${String(change.metre.beatsInBar)}/${String(change.metre.beatType)}`]),
+          ...(change?.crotchetsPerMinute === undefined ? [] : [`\u2669=${String(change.crotchetsPerMinute)}`]),
+        ].join(' '),
+      });
     }
     return marks;
   }
@@ -13154,36 +13156,38 @@ export class AppView {
    * its notes where they were. Kept with the sketch, as its key is.
    */
   /**
-   * Asks what the bar the cursor is in is to change to: its metre and its
-   * pace, as they are there now, in a sheet over the drawing; and offers to
-   * take a change away where one begins on that bar.
+   * Asks what the music is to change to from the beat the cursor is on or
+   * after: its key, metre and pace, as they are there now, in a sheet over
+   * the drawing; and offers to take a change away where one is on that beat.
    */
   private askForAChangeAtTheHead(): void {
     const roll = this.theRoll();
-    if (roll !== null && this.askAboutTheBarAt(this.headIsAtMs() + rollBeganAtMs(roll))) {
+    if (roll !== null && this.askAboutTheBeatAt(this.headIsAtMs() + rollBeganAtMs(roll))) {
       this.showTheSheet(this.el.sheetRollMark);
     }
   }
 
   /**
-   * Sets the sheet to the bar a moment is in, on the run's own clock: its
-   * key, metre and pace, and whether a change begins on it. Says whether
-   * there is such a bar to ask about.
+   * Sets the sheet to the beat a moment is on or after, on the run's own
+   * clock: its key, metre and pace, and whether a change is on it. Says
+   * whether there is such a beat to ask about. A metre begins a bar, so
+   * chosen on a later beat it is counted from its bar's first, which the
+   * dimmed list says.
    */
-  private askAboutTheBarAt(atMs: number): boolean {
+  private askAboutTheBeatAt(atMs: number): boolean {
     const showing = this.theOtherRollShowing;
     const stored = showing?.sketch === undefined ? null : this.runtime.sketches.find(showing.sketch.id);
     if (showing === null || stored === null) {
       return false;
     }
-    const bar = theBarOfTheClickAt(stored.events, stored.beats, atMs);
+    const bar = theBeatOfTheClickAt(stored.events, stored.beats, atMs);
     if (bar === null) {
       return false;
     }
-    this.barAskedAbout = bar;
+    this.beatAskedAbout = bar;
     const begunIn = this.theKeyTheSketchBeginsIn(stored);
     const keyHere = theKeyOfTheMusicAt(stored.events, begunIn, bar.atMs);
-    // Just before the bar's first beat: what the bar before it is in.
+    // Just before the beat: what the beat before it is in.
     const keyBefore = bar.before === null ? null : theKeyOfTheMusicAt(stored.events, begunIn, bar.atMs - 1);
     this.keyAskedAbout = { here: keyHere, before: keyBefore };
     this.sayTheKeyIn(this.el.rollMarkKey, this.el.rollMarkScale, keyHere);
@@ -13202,17 +13206,26 @@ export class AppView {
         bar.before.crotchetsPerMinute !== bar.crotchetsPerMinute ||
         bar.before.metre.beatsInBar !== bar.metre.beatsInBar ||
         bar.before.metre.beatType !== bar.metre.beatType);
-    this.el.rollMarkTitle.textContent = `From bar ${String(bar.number)}, until the next change`;
+    const inside = bar.beat > 0;
+    sayWhetherIdle(
+      this.el.rollMarkMetre,
+      inside ? `A metre begins a bar: chosen here, it changes from the start of bar ${String(bar.bar)}` : 'Time signature',
+      inside,
+    );
+    // A score writes a key's signature at a bar line, so one changed inside a bar is printed from the next.
+    this.el.rollMarkTitle.textContent = inside
+      ? `From ${thePlaceOfTheBeat(bar)}, until the next change. The score shows a key changed here from the next bar.`
+      : `From ${thePlaceOfTheBeat(bar)}, until the next change`;
     this.el.rollMarkRemove.hidden = !changesHere;
     return true;
   }
 
-  /** The bar asked about given back what the bars before it are in: its changes taken away. */
+  /** The beat asked about given back what the beat before it is in: its changes taken away. */
   private takeTheChangeAway(): void {
-    const before = this.barAskedAbout?.before;
+    const before = this.beatAskedAbout?.before;
     const keyBefore = this.keyAskedAbout?.before;
     if (before !== null && before !== undefined && keyBefore !== null && keyBefore !== undefined) {
-      this.changeFromTheBarAsked(
+      this.changeFromTheBeatAsked(
         `${String(before.metre.beatsInBar)}/${String(before.metre.beatType)}`,
         before.crotchetsPerMinute,
         keyBefore,
@@ -13221,11 +13234,11 @@ export class AppView {
   }
 
   /**
-   * Answers a press on a flag over the ruler, or on a button under the
-   * chosen one; says whether it was one. A flag pressed puts the cursor on
-   * its bar; while the sketch is edited it is chosen, and pressed again once
-   * chosen - or its pencil - it is asked about in the sheet. Its bin takes
-   * it away.
+   * Answers a tap on a flag over the ruler, or on a button under the chosen
+   * one; says whether the tap was one. A flag tapped puts the cursor on its
+   * beat; while the sketch is edited it is chosen, and tapped again once
+   * chosen it is asked about in the sheet. Under the chosen flag, the pencil
+   * asks about it and the bin takes it away.
    */
   private answerTheFlags(event: Event): boolean {
     const target = event.target instanceof Element ? event.target : null;
@@ -13235,134 +13248,128 @@ export class AppView {
       return false;
     }
     const origin = rollBeganAtMs(roll);
-    const wrap = target.closest('.roll__mark-wrap');
-    const flag = wrap?.querySelector<HTMLElement>('.roll__mark') ?? null;
+    if (target.closest('.roll__mark-change') !== null && this.markChosenAtMs !== null) {
+      if (this.askAboutTheBeatAt(this.markChosenAtMs)) {
+        this.showTheSheet(this.el.sheetRollMark);
+      }
+      return true;
+    }
+    if (target.closest('.roll__mark-delete') !== null && this.markChosenAtMs !== null) {
+      this.takeTheMarkAway(this.markChosenAtMs);
+      return true;
+    }
+    const flag = target.closest<HTMLElement>('.roll__mark');
     const mark = flag === null ? undefined : scene.marks[Number(flag.dataset['mark'])];
     if (mark === undefined) {
       return true;
     }
-    const pressed = { atMs: mark.atMs + origin, kind: mark.kind };
-    const chosen = this.markChosen !== null && this.isTheMarkChosen(pressed);
-    // The pencil is under the chosen flag only, and asks about it as a second press does.
-    if (target.closest('.roll__mark-delete') !== null && chosen) {
-      this.takeTheMarkAway(pressed);
-      return true;
-    }
+    const atMs = mark.atMs + origin;
     this.putTheHeadAt(mark.atMs);
     if (this.theOtherRollShowing?.sketch?.editing !== true) {
       return true;
     }
-    if (chosen) {
-      if (this.askAboutTheBarAt(pressed.atMs)) {
+    if (this.markChosenAtMs !== null && Math.abs(this.markChosenAtMs - atMs) < 1) {
+      if (this.askAboutTheBeatAt(atMs)) {
         this.showTheSheet(this.el.sheetRollMark);
       }
     } else {
-      this.chooseTheMark(pressed);
+      this.chooseTheMark(atMs);
     }
     return true;
   }
 
-  /** Whether a mark - its moment on the run's own clock, and what it changes - is the one chosen. */
-  private isTheMarkChosen(mark: { readonly atMs: number; readonly kind: MarkKind }): boolean {
-    return this.markChosen !== null && this.markChosen.kind === mark.kind && Math.abs(this.markChosen.atMs - mark.atMs) < 1;
-  }
-
-  /** Chooses a flag, or lets go of the one chosen. */
-  private chooseTheMark(mark: { readonly atMs: number; readonly kind: MarkKind } | null): void {
-    if (mark === null && this.markChosen === null) {
+  /** Chooses the flag at a moment on the run's own clock, or lets go of the one chosen. */
+  private chooseTheMark(atMs: number | null): void {
+    if (atMs === this.markChosenAtMs) {
       return;
     }
-    this.markChosen = mark;
+    this.markChosenAtMs = atMs;
     this.showTheMarkChosen();
   }
 
   /**
-   * The chosen flag pressed, and the two buttons under it; its bin dimmed,
-   * with the reason, over the first bar, whose key, metre and pace are the
+   * The chosen flag pressed, and the two buttons under it; the bin dimmed,
+   * with the reason, over the first beat, whose key, metre and pace are the
    * sketch's own and only changed.
    */
   private showTheMarkChosen(): void {
     const scene = this.drawnScene;
     const roll = this.theRoll();
     const marks = this.rollHeads?.marks;
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
     if (marks === undefined || scene === null || roll === null) {
       return;
     }
+    // Where each flag is, as its title says it: a bar, or a beat inside one.
+    const placeOf = (atMs: number): string => {
+      const beat = stored === null ? null : theBeatOfTheClickAt(stored.events, stored.beats, atMs);
+      return beat === null ? '' : thePlaceOfTheBeat(beat);
+    };
     const origin = rollBeganAtMs(roll);
-    const chosen = scene.marks.findIndex((mark) => this.isTheMarkChosen({ atMs: mark.atMs + origin, kind: mark.kind }));
-    if (chosen < 0) {
+    const chosenAt = this.markChosenAtMs;
+    const chosen = chosenAt === null ? -1 : scene.marks.findIndex((mark) => Math.abs(mark.atMs + origin - chosenAt) < 1);
+    if (chosen < 0 && chosenAt !== null) {
       // Taken away, or moved off: nothing is chosen any more.
-      this.markChosen = null;
+      this.markChosenAtMs = null;
     }
-    const first = scene.marks[0]?.atMs;
-    const WHAT: Readonly<Record<MarkKind, string>> = { key: 'key', metre: 'metre', pace: 'pace' };
-    marks.querySelectorAll<HTMLElement>('.roll__mark-wrap').forEach((wrap) => {
-      const flag = wrap.querySelector<HTMLElement>('.roll__mark');
-      const at = Number(flag?.dataset['mark']);
-      const mark = scene.marks[at];
-      const tools = wrap.querySelector<HTMLElement>('.roll__mark-tools');
-      if (flag === null || mark === undefined || tools === null) {
-        return;
-      }
-      flag.setAttribute('aria-pressed', String(at === chosen));
-      flag.title = `Bar ${mark.after}: ${mark.says}. Tap to choose it, and again to change it.`;
+    marks.querySelectorAll<HTMLElement>('.roll__mark').forEach((flag) => {
+      flag.setAttribute('aria-pressed', String(Number(flag.dataset['mark']) === chosen));
+      const mark = scene.marks[Number(flag.dataset['mark'])];
+      const place = placeOf((mark?.atMs ?? 0) + origin);
+      flag.title = `${place.charAt(0).toUpperCase()}${place.slice(1)}: ${mark?.says ?? ''}. Tap to choose it, and again to change it.`;
       flag.setAttribute('aria-label', flag.title);
-      tools.hidden = at !== chosen;
-      const change = tools.querySelector<HTMLButtonElement>('.roll__mark-change');
-      const remove = tools.querySelector<HTMLButtonElement>('.roll__mark-delete');
-      if (change !== null) {
-        change.title = `Change what bar ${mark.after} is in`;
-        change.setAttribute('aria-label', change.title);
-      }
-      const atTheStart = first !== undefined && Math.abs(mark.atMs - first) < 1;
-      if (remove !== null) {
-        sayWhetherIdle(
-          remove,
-          atTheStart
-            ? "Take this change away. The first bar's key, metre and pace are the sketch's own: change them instead."
-            : `Take the change of ${WHAT[mark.kind]} at bar ${mark.after} away`,
-          atTheStart,
-        );
-      }
     });
+    const tools = marks.querySelector<HTMLElement>('.roll__mark-tools');
+    const mark = scene.marks[chosen];
+    if (tools === null) {
+      return;
+    }
+    tools.hidden = mark === undefined;
+    if (mark === undefined) {
+      return;
+    }
+    tools.style.setProperty('--roll-at', (mark.atMs / 1000).toFixed(3));
+    const place = placeOf(mark.atMs + origin);
+    const change = tools.querySelector<HTMLButtonElement>('.roll__mark-change');
+    const remove = tools.querySelector<HTMLButtonElement>('.roll__mark-delete');
+    if (change !== null) {
+      change.title = `Change what ${place} is in`;
+      change.setAttribute('aria-label', change.title);
+    }
+    if (remove !== null) {
+      sayWhetherIdle(
+        remove,
+        chosen === 0
+          ? "Take this change away. The first bar's key, metre and pace are the sketch's own: change them instead."
+          : `Take the change at ${place} away`,
+        chosen === 0,
+      );
+    }
+  }
+
+  /** Takes the changes at a flag away, its beat given back what the beat before it is in. The first has none before it, and keeps its own. */
+  private takeTheMarkAway(atMs: number): void {
+    if (this.askAboutTheBeatAt(atMs)) {
+      this.takeTheChangeAway();
+    }
   }
 
   /**
-   * Takes one change at a flag away - of the key, the metre or the pace - the
-   * bar given back what the bar before it is in for that, and keeping the
-   * rest. The first bar has none before it, and keeps its own.
-   */
-  private takeTheMarkAway(mark: { readonly atMs: number; readonly kind: MarkKind }): void {
-    if (!this.askAboutTheBarAt(mark.atMs)) {
-      return;
-    }
-    const bar = this.barAskedAbout;
-    const keys = this.keyAskedAbout;
-    if (bar === null || bar.before === null || keys === null || keys.before === null) {
-      return;
-    }
-    const metre = mark.kind === 'metre' ? bar.before.metre : bar.metre;
-    this.changeFromTheBarAsked(
-      `${String(metre.beatsInBar)}/${String(metre.beatType)}`,
-      mark.kind === 'pace' ? bar.before.crotchetsPerMinute : bar.crotchetsPerMinute,
-      mark.kind === 'key' ? keys.before : keys.here,
-    );
-  }
-
-  /**
-   * Changes the metre and the pace from the bar asked about, as far as the
-   * next change of each: one change, put back as one. A pace past what a
+   * Changes the key, the metre and the pace from the beat asked about, as far
+   * as the next change of each: one change, put back as one. A metre is
+   * counted from the first beat of the beat's bar. A pace past what a
    * metronome offers is held to it.
    */
-  private changeFromTheBarAsked(metre: string, crotchetsPerMinute: number, key: KeyOfTheMusic): void {
-    const bar = this.barAskedAbout;
+  private changeFromTheBeatAsked(metre: string, crotchetsPerMinute: number, key: KeyOfTheMusic): void {
+    const bar = this.beatAskedAbout;
     const keyHere = this.keyAskedAbout?.here ?? null;
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
     const [beatsInBar, beatType] = metre.split('/').map(Number);
     this.el.sheetRollMark.hidden = true;
-    this.barAskedAbout = null;
+    this.beatAskedAbout = null;
     this.keyAskedAbout = null;
     if (bar === null || keyHere === null || sketch === undefined || stored === null || beatsInBar === undefined || beatType === undefined) {
       return;
@@ -13376,8 +13383,8 @@ export class AppView {
     if (!metreChanges && !paceChanges && !keyChanges) {
       return;
     }
-    // The first bar's key is the sketch's own, which the drawer's lists say;
-    // any other bar's is a change among the notes, which moves with them.
+    // The first beat's key is the sketch's own, which the drawer's lists say;
+    // any other beat's is a change among the notes, which moves with them.
     let events = stored.events;
     if (keyChanges && bar.before === null) {
       this.runtime.sketches.changeTheKey(sketch.id, aKeyInTheScale(key.fifths, key.scale));
@@ -13385,7 +13392,7 @@ export class AppView {
     } else if (keyChanges) {
       events = takeWithTheKeyFrom(events, this.theKeyTheSketchBeginsIn(stored), bar.atMs, key);
     }
-    // The bar keeps its first beat whatever its metre, so the pace changes from the same place.
+    // The bar keeps its first beat whatever its metre, and its later beats where they fall, so the pace changes from the same place.
     const counted = metreChanges
       ? theClickInAnotherMetre(events, stored.beats, beatsInBar, beatType, bar.atMs)
       : stored.beats;
@@ -14517,14 +14524,14 @@ export class AppView {
     if (!this.theOtherRollShowing.sketch.editing) {
       return;
     }
-    if (this.markChosen !== null && (event.key === 'Escape' || event.key === 'Delete' || event.key === 'Backspace')) {
+    if (this.markChosenAtMs !== null && (event.key === 'Escape' || event.key === 'Delete' || event.key === 'Backspace')) {
       // A flag chosen answers first: let go of, or taken away.
       event.preventDefault();
       event.stopImmediatePropagation();
       if (event.key === 'Escape') {
         this.chooseTheMark(null);
       } else {
-        this.takeTheMarkAway(this.markChosen);
+        this.takeTheMarkAway(this.markChosenAtMs);
       }
       return;
     }

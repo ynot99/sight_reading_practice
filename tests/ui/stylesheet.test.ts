@@ -2269,9 +2269,11 @@ describe('searching the settings', () => {
       /opacity\s*:\s*0?\.\d+/,
     );
     expect(body('.roll-quantize, .roll-humanize')).toMatch(/flex\s*:\s*none/);
-    // The metre and the pace asked for from a bar, side by side, and wrapping on a phone.
+    // The key, the metre and the pace asked for from a beat, side by side,
+    // and wrapping on a phone; the metre dimmed inside a bar.
     expect(body('.roll-mark__fields')).toMatch(/display\s*:\s*flex/);
     expect(body('.roll-mark__fields')).toMatch(/flex-wrap\s*:\s*wrap/);
+    expect(body(".roll-mark__fields select[data-idle='true']")).toMatch(/opacity\s*:\s*0?\.\d+/);
     // And the row wraps on a phone rather than running off it, each name with
     // what it names, the slider's group taking the room.
     expect(body('.roll-velocity')).toMatch(/flex-wrap\s*:\s*wrap/);
@@ -2308,17 +2310,15 @@ describe('searching the settings', () => {
     expect(body('.roll-body')).toMatch(/cursor\s*:\s*pointer/);
     expect(body('.roll__grid')).not.toMatch(/cursor/);
     expect(body('.roll__keys-strip')).not.toMatch(/cursor/);
-    // The flags of a moment placed as the heads are, side by side, pressable
-    // where nothing else on the ruler is, filled when chosen; the buttons of
-    // each under it.
+    // The flags placed as the heads are, pressable where nothing else on the
+    // ruler is, filled when chosen; their buttons under them.
     expect(body('.roll__marks')).toMatch(/pointer-events\s*:\s*none/);
-    expect(body('.roll__mark-group')).toMatch(/transform\s*:\s*translateX\(calc\(var\(--roll-second\) \* var\(--roll-at, 0\) - var\(--roll-x\)\)\)/);
-    expect(body('.roll__mark-group')).toMatch(/display\s*:\s*flex/);
-    expect(body('.roll__mark-wrap')).toMatch(/pointer-events\s*:\s*auto/);
-    expect(body('.roll__mark-wrap')).toMatch(/position\s*:\s*relative/);
+    expect(body('.roll__mark')).toMatch(/transform\s*:\s*translateX\(calc\(var\(--roll-second\) \* var\(--roll-at, 0\) - var\(--roll-x\)\)\)/);
+    expect(body('.roll__mark')).toMatch(/pointer-events\s*:\s*auto/);
     expect(body(".roll__mark[aria-pressed='true']")).toMatch(/background\s*:\s*var\(--accent\)/);
     expect(body('.roll__mark-tools')).toMatch(/top\s*:\s*100%/);
-    expect(body('.roll__mark-tools')).toMatch(/position\s*:\s*absolute/);
+    expect(body('.roll__mark-tools')).toMatch(/transform\s*:\s*translateX\(calc\(var\(--roll-second\) \* var\(--roll-at, 0\) - var\(--roll-x\)\)\)/);
+    expect(body('.roll__mark-tools')).toMatch(/pointer-events\s*:\s*auto/);
     // The key of a chosen note outlined in the chosen note's ink.
     expect(body(".roll__key[data-chosen='true']")).toMatch(/box-shadow\s*:\s*inset 0 0 0 2px var\(--roll-ink-chosen\)/);
     // A key of the scale marked down its edge by an image, which neither the

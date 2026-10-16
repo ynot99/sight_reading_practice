@@ -3,7 +3,7 @@ import {
   barsAreHeardIn,
   damperIsDown,
   takeWithTheKeyFrom,
-  theBarOfTheClickAt,
+  theBeatOfTheClickAt,
   theChangesOfTheClick,
   theKeyChangesOf,
   theKeyOfTheMusicAt,
@@ -686,25 +686,51 @@ describe('a click changed from a bar on', () => {
     expect(theChangesOfTheClick(PLAYED, click(0, 600, 1))).toEqual([]);
   });
 
-  it('says the bar a moment is in: its number, metre and pace, and theirs before it, even past the playing', () => {
+  it('says the beat a moment is on or after: its bar and which beat of it, metre and pace, and theirs before it, even past the playing', () => {
     const changed = theClickInAnotherMetre(PLAYED, EIGHT_BARS, 3, 4, 4_000);
-    expect(theBarOfTheClickAt(PLAYED, changed, 5_600)).toEqual({
+    expect(theBeatOfTheClickAt(PLAYED, changed, 5_600)).toEqual({
       atMs: 5_500,
-      number: 4,
+      bar: 4,
+      beat: 0,
       metre: { beatsInBar: 3, beatType: 4 },
       crotchetsPerMinute: 120,
       before: { metre: { beatsInBar: 3, beatType: 4 }, crotchetsPerMinute: 120 },
     });
-    expect(theBarOfTheClickAt(PLAYED, changed, 4_000)?.before?.metre).toEqual({ beatsInBar: 4, beatType: 4 });
+    expect(theBeatOfTheClickAt(PLAYED, changed, 4_000)?.before?.metre).toEqual({ beatsInBar: 4, beatType: 4 });
+    // Every moment of the bar after its first beat: on its own beat, or the one before.
+    const slowed = thePlayingAtAnotherPace(PLAYED, changed, 60, 6_000);
+    for (let atMs = 5_500; atMs < 8_000; atMs += 50) {
+      const beat = theBeatOfTheClickAt(slowed.events, slowed.beats, atMs);
+      const on = atMs < 6_000 ? 0 : atMs < 7_000 ? 1 : 2;
+      expect([beat?.bar, beat?.beat, beat?.atMs]).toEqual([4, on, [5_500, 6_000, 7_000][on]]);
+    }
+    expect(theBeatOfTheClickAt(slowed.events, slowed.beats, 6_000)?.before).toEqual({ metre: { beatsInBar: 3, beatType: 4 }, crotchetsPerMinute: 120 });
+    expect(theBeatOfTheClickAt(slowed.events, slowed.beats, 6_000)?.crotchetsPerMinute).toBe(60);
     // A moment a hair before the bar line, as a beat worked out in crotchets may fall, is the bar's.
-    expect(theBarOfTheClickAt(PLAYED, changed, 3_999.8)?.number).toBe(3);
-    expect(theBarOfTheClickAt(PLAYED, changed, 0)?.before).toBeNull();
+    expect(theBeatOfTheClickAt(PLAYED, changed, 3_999.8)?.bar).toBe(3);
+    expect(theBeatOfTheClickAt(PLAYED, changed, 3_999.8)?.beat).toBe(0);
+    expect(theBeatOfTheClickAt(PLAYED, changed, 0)?.before).toBeNull();
     // A minute on, well past the last note, the click carried on to it.
-    expect(theBarOfTheClickAt(PLAYED, changed, 60_000)?.number).toBe(4 + Math.floor((60_000 - 5_500) / 1_500));
-    expect(theBarOfTheClickAt(PLAYED, click(0, 600, 1), 0)).toBeNull();
+    expect(theBeatOfTheClickAt(PLAYED, changed, 60_000)?.bar).toBe(4 + Math.floor((60_000 - 5_500) / 1_500));
+    expect(theBeatOfTheClickAt(PLAYED, click(0, 600, 1), 0)).toBeNull();
     // A click whose last two beats fall together goes no further, and is not waited on for ever.
     const stalled = [...click(0, 500, 2), { atMs: 500, beat: 2, beatsInBar: 4 }];
-    expect(theBarOfTheClickAt(PLAYED, stalled, 60_000)?.number).toBe(1);
+    expect(theBeatOfTheClickAt(PLAYED, stalled, 60_000)?.bar).toBe(1);
+  });
+
+  it('plays from a beat inside a bar at another pace, the beats before it as they were, and writes the tempo where it changes', () => {
+    // From the second beat of the third bar at 60.
+    const slow = thePlayingAtAnotherPace(PLAYED, EIGHT_BARS, 60, 4_600);
+    const struckAt = slow.events.filter((event) => event.kind === 'noteOn').map((event) => Math.round(event.atMs));
+    expect(struckAt.slice(7, 11)).toEqual([3_500, 4_000, 4_500, 5_500]);
+    expect(theChangesOfTheClick(slow.events, slow.beats).map((change) => [change.atMs, change.metre?.beatsInBar, change.crotchetsPerMinute])).toEqual([
+      [0, 4, 120],
+      [4_500, undefined, 60],
+    ]);
+    const document = readMidiFile(writeMidiFile(slow.events, { beats: slow.beats }));
+    expect(document.tempoChanges).toEqual([{ atTicks: 9 * BEAT, tempoBpm: 60 }]);
+    // The bar lines stay where they were: every fourth beat.
+    expect(document.metreChanges).toEqual([]);
   });
 
   it('moves what was played a little before the first bar with it, and nothing before a later one', () => {

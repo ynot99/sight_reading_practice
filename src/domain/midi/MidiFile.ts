@@ -266,6 +266,17 @@ function theBarAt(grid: readonly HeardBeat[], atMs: number): number {
   return bar;
 }
 
+/** The beat a moment is on or after: the first beat for a moment before it. */
+function theBeatAt(grid: readonly HeardBeat[], atMs: number): number {
+  let on = 0;
+  grid.forEach((beat, at) => {
+    if (beat.atMs <= atMs + SAME_MOMENT_MS) {
+      on = at;
+    }
+  });
+  return on;
+}
+
 /** How near two moments are to be one: what rounding a click's beats to the millisecond leaves. */
 const SAME_MOMENT_MS = 0.5;
 
@@ -425,18 +436,20 @@ export function theKeyChangesOf(events: readonly MidiFileEvent[]): readonly ({ r
 }
 
 /**
- * The bar of a take's click a moment is in, as a mark over it would be asked
- * about: where it begins and its number, the metre and the pace there, and
- * whether either changes on it - and what they were before it, which taking
- * the change away gives back. `null` where the click says nothing.
+ * The beat of a take's click a moment is on or after, as a mark on it would
+ * be asked about: when it falls, the bar it is in and which beat of it, the
+ * metre and the pace there - and what they were on the beat before, which
+ * taking a change away gives back. `null` where the click says nothing.
  */
-export function theBarOfTheClickAt(
+export function theBeatOfTheClickAt(
   events: readonly MidiFileEvent[],
   beats: readonly HeardBeat[],
   atMs: number,
 ): {
   readonly atMs: number;
-  readonly number: number;
+  readonly bar: number;
+  /** Which beat of its bar, the first being nought: a metre changes only on that one. */
+  readonly beat: number;
   readonly metre: { readonly beatsInBar: number; readonly beatType: number };
   readonly crotchetsPerMinute: number;
   readonly before: { readonly metre: { readonly beatsInBar: number; readonly beatType: number }; readonly crotchetsPerMinute: number } | null;
@@ -445,18 +458,19 @@ export function theBarOfTheClickAt(
   if (grid === null) {
     return null;
   }
-  const bar = theBarAt(grid, atMs);
-  const here = elementAt(grid, bar);
-  const before = grid[bar - 1];
+  const on = theBeatAt(grid, atMs);
+  const here = elementAt(grid, on);
+  const before = grid[on - 1];
   return {
     atMs: here.atMs,
-    number: grid.slice(0, bar + 1).filter((beat) => beat.beat === 0).length,
+    bar: grid.slice(0, on + 1).filter((beat) => beat.beat === 0).length,
+    beat: here.beat,
     metre: { beatsInBar: here.beatsInBar, beatType: valueOf(here) },
-    crotchetsPerMinute: thePaceOfTheBeat(grid, bar),
+    crotchetsPerMinute: thePaceOfTheBeat(grid, on),
     before:
       before === undefined
         ? null
-        : { metre: { beatsInBar: before.beatsInBar, beatType: valueOf(before) }, crotchetsPerMinute: thePaceOfTheBeat(grid, bar - 1) },
+        : { metre: { beatsInBar: before.beatsInBar, beatType: valueOf(before) }, crotchetsPerMinute: thePaceOfTheBeat(grid, on - 1) },
   };
 }
 
@@ -476,14 +490,15 @@ export function thePaceOfTheClick(events: readonly MidiFileEvent[], beats: reado
 }
 
 /**
- * Some playing at another pace from the bar a moment is in, as far as the
- * next beat whose pace is another - or to the end: every note, every pedal
- * and every beat there moved to where the same place in the bar falls at
- * that many crotchets a minute, from the first beat of that bar, which
- * stays. The notes keep their places in the bars and their lengths in beats,
- * and the music goes faster or slower there; before it nothing moves, and
- * after it everything keeps its own pace and moves by as much as the end of
- * the change did. Where the click says nothing it is given back as it was.
+ * Some playing at another pace from the beat a moment is on or after, as far
+ * as the next beat whose pace is another - or to the end: every note, every
+ * pedal and every beat there moved to where the same place in the bar falls
+ * at that many crotchets a minute, from that beat, which stays. A pace may
+ * change on any beat, as a tempo mark may stand over any note. The notes
+ * keep their places in the bars and their lengths in beats, and the music
+ * goes faster or slower there; before it nothing moves, and after it
+ * everything keeps its own pace and moves by as much as the end of the
+ * change did. Where the click says nothing it is given back as it was.
  * Asked of no moment, from the first bar - and what was played a little
  * before it moves with it.
  */
@@ -498,17 +513,17 @@ export function thePlayingAtAnotherPace(
     return { events, beats };
   }
   const { points } = theCrotchetsOfTheClick(grid);
-  const bar = theBarAt(grid, fromMs);
-  let next = bar + 1;
+  const on = theBeatAt(grid, fromMs);
+  let next = on + 1;
   while (next < grid.length && thePaceOfTheBeat(grid, next) === thePaceOfTheBeat(grid, next - 1)) {
     next += 1;
   }
-  const from = elementAt(points, bar);
+  const from = elementAt(points, on);
   const until = points[next];
   const perCrotchet = MILLISECONDS_PER_MINUTE / crotchetsPerMinute;
   const by = until === undefined ? 0 : from.atMs + (until.crotchets - from.crotchets) * perCrotchet - until.atMs;
   const moved = (atMs: number): number => {
-    if (bar > 0 && atMs < from.atMs) {
+    if (on > 0 && atMs < from.atMs) {
       return atMs;
     }
     if (until !== undefined && atMs >= until.atMs) {

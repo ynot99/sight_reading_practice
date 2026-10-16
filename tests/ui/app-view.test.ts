@@ -7315,6 +7315,8 @@ describe('AppView', () => {
         (view.rollScene?.notes ?? []).filter((note) => note.chosen === true).map((note) => note.fromMs);
       const says = 'Quantize: each chosen note begun on the nearest line of the grid, as long as it was';
 
+      // Its letter, its name and what it does in the title.
+      expect(quantize.textContent).toBe('Q');
       // Nothing chosen: dimmed, saying so, and doing nothing.
       expect(quantize.dataset['idle']).toBe('true');
       expect(quantize.title).toBe(`${says}. Choose a note first.`);
@@ -7380,6 +7382,8 @@ describe('AppView', () => {
         [750, 64],
       ];
 
+      // Its letter, its name and what it does in the title.
+      expect(humanize.textContent).toBe('H');
       // Nothing chosen: dimmed, saying so, and doing nothing.
       expect(humanize.dataset['idle']).toBe('true');
       expect(humanize.title).toBe(`${says}. Choose a note first.`);

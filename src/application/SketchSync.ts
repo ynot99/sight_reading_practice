@@ -174,6 +174,33 @@ export class SketchSync {
     this.deps.sketches.takeFromTheDrive(theirs.sketch, theirs.revision);
   }
 
+  /**
+   * Takes a sketch off the drive, where no device here has it: the one place
+   * an unwanted copy or an old sketch can be cleared from, since deleting one
+   * on a device leaves the drive's. A device that still has it sends it back
+   * at its next sync, as it would any sketch the drive lacks.
+   *
+   * Read again just before it is written, as a sync is, so a sketch another
+   * device sent meanwhile is not written over: settled again from what is
+   * there now, a few times, and then written anyway.
+   */
+  async deleteFromTheDrive(id: string): Promise<void> {
+    for (let attempt = 1; ; attempt += 1) {
+      const read = await this.readTheDrive();
+      if (!read.there.has(id)) {
+        return;
+      }
+      const next = new Map(read.there);
+      next.delete(id);
+      const again = await this.readTheDrive();
+      if (again.text !== read.text && attempt < SETTLED_AT_MOST) {
+        continue;
+      }
+      await this.deps.drive.write(SKETCHES_FILE, writeTheDrive(next), again.file?.id ?? null);
+      return;
+    }
+  }
+
   private async readTheDrive(): Promise<{
     readonly file: CloudFile | undefined;
     readonly text: string | null;

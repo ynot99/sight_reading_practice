@@ -8078,7 +8078,34 @@ export class AppView {
                 error instanceof Error ? error.message : 'That sketch could not be brought here.';
             });
         });
-        row.append(title, bring);
+        const remove = this.doc.createElement('button');
+        remove.type = 'button';
+        remove.className = 'button button--ghost';
+        remove.textContent = 'Delete from the drive';
+        remove.addEventListener('click', () => {
+          void this.askToTypeIt(
+            `Delete ${sketch.title} from the drive? A device that still has it will send it back at its next sync.`,
+          ).then((yes) => {
+            if (!yes) {
+              return;
+            }
+            remove.disabled = true;
+            bring.disabled = true;
+            void this.runtime.sketchSync
+              .deleteFromTheDrive(sketch.id)
+              .then(() => {
+                row.remove();
+                sayWhetherAny();
+              })
+              .catch((error: unknown) => {
+                remove.disabled = false;
+                bring.disabled = false;
+                this.el.driveStatus.textContent =
+                  error instanceof Error ? error.message : 'That sketch could not be taken off the drive.';
+              });
+          });
+        });
+        row.append(title, bring, remove);
         return row;
       }),
     );

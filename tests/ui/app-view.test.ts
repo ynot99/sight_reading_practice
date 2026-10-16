@@ -17514,6 +17514,67 @@ describe('the library on Google Drive', () => {
     expect(element('sketches-list').textContent).toContain('Renamed on the iPad');
   });
 
+  it('takes a sketch offered off the drive when the word is typed, and says so where it cannot', async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+    const other = new SketchLibrary(new InMemorySettingsStore(), () => 1);
+    const played = [
+      { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+      { kind: 'noteOff' as const, atMs: 400, midi: 60 },
+    ];
+    const beats = [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 }));
+    other.begin({ events: played, beats }, 'Unwanted', 5);
+    other.begin({ events: played, beats }, 'Wanted', 4);
+    await new SketchSync({ drive: rig.drive, sketches: other }).sync(null);
+    element<HTMLButtonElement>('drive-sync').click();
+    await waitFor(() => element('drive-status').textContent?.startsWith('Synced') === true);
+    const offered = element<HTMLUListElement>('drive-only-sketches');
+    const rowOf = (title: string): HTMLLIElement | undefined =>
+      [...offered.querySelectorAll('li')].find((row) => row.textContent?.includes(title) === true);
+    const removeOf = (title: string): HTMLButtonElement | null | undefined =>
+      [...(rowOf(title)?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+        (button) => button.textContent === 'Delete from the drive',
+      );
+    const onTheDrive = async (): Promise<string[]> =>
+      [...(await new SketchSync({ drive: rig.drive, sketches: new SketchLibrary(new InMemorySettingsStore(), () => 1) }).sync(null)).onlyOnTheDrive].map(
+        ({ title }) => title,
+      );
+
+    // Asked for in words, and refused without them.
+    removeOf('Unwanted')?.click();
+    expect(element('confirm-text').textContent).toBe(
+      'Delete Unwanted from the drive? A device that still has it will send it back at its next sync. Type DELETE to confirm.',
+    );
+    await confirmDeletion();
+    expect(await onTheDrive()).toEqual(['Unwanted', 'Wanted']);
+    // Cancelled, it stays.
+    element<HTMLButtonElement>('confirm-no').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(removeOf('Unwanted')?.disabled).toBe(false);
+    expect(await onTheDrive()).toEqual(['Unwanted', 'Wanted']);
+    removeOf('Unwanted')?.click();
+    await confirmByTyping();
+    await waitFor(() => rowOf('Unwanted') === undefined);
+    expect(await onTheDrive()).toEqual(['Wanted']);
+    expect(offered.hidden).toBe(false);
+    // Refused by the drive, it says so and can be asked again.
+    const write = rig.drive.write.bind(rig.drive);
+    rig.drive.write = () => Promise.reject(new Error('The drive refused it.'));
+    removeOf('Wanted')?.click();
+    await confirmByTyping();
+    await waitFor(() => element('drive-status').textContent === 'The drive refused it.');
+    expect(removeOf('Wanted')?.disabled).toBe(false);
+    expect(rowOf('Wanted')?.querySelector<HTMLButtonElement>('button')?.disabled).toBe(false);
+    rig.drive.write = write;
+    // The last gone, the list and its line go.
+    removeOf('Wanted')?.click();
+    await confirmByTyping();
+    await waitFor(() => offered.hidden === true);
+    expect(element('drive-only-sketches-said').hidden).toBe(true);
+    expect(await onTheDrive()).toEqual([]);
+    expect(rig.sketches.list()).toEqual([]);
+  });
+
   it('says so where a sketch offered is no longer on the drive when it is asked for', async () => {
     const rig = createRig();
     await rig.view.initialize();

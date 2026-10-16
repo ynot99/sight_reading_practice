@@ -68,6 +68,7 @@ function device(drive: FolderDrive) {
     sketches,
     sync: () => sync.sync(open),
     bring: (id: string) => sync.bringHere(id),
+    deleteFromTheDrive: (id: string) => sync.deleteFromTheDrive(id),
     edit: (id: string | null) => {
       open = id;
     },
@@ -318,6 +319,57 @@ describe('the sketches kept the same on every device that has them', () => {
     other.edit(idea.id);
     expect((await other.sync()).conflicts).toBe(0);
     expect(other.titles()).toEqual(['Elsewhere']);
+  });
+
+  it('takes a sketch off the drive and nothing else, and writes nothing where it is not there', async () => {
+    const drive = new FolderDrive();
+    const ipad = device(drive);
+    const pc = device(drive);
+    const kept = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Kept', 1);
+    const old = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Old', 2);
+    await ipad.sync();
+    ipad.sketches.remove(old.id);
+    const file = drive.files.get(SKETCHES_FILE)?.id;
+
+    await pc.deleteFromTheDrive(old.id);
+    expect(drive.holds()).toEqual([[kept.id, 'Kept', 1]]);
+    // Written over the one file, not beside it.
+    expect(drive.files.get(SKETCHES_FILE)?.id).toBe(file);
+    expect((await pc.sync()).onlyOnTheDrive.map(({ title }) => title)).toEqual(['Kept']);
+    // Not there, nothing is written.
+    const writes = drive.writes;
+    await pc.deleteFromTheDrive(old.id);
+    await pc.deleteFromTheDrive('sketch-nobody');
+    expect(drive.writes).toBe(writes);
+    // A device that still has it sends it back.
+    const again = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Again', 3);
+    await ipad.sync();
+    await pc.deleteFromTheDrive(again.id);
+    await ipad.sync();
+    expect(drive.holds().map(([, title]) => title).sort()).toEqual(['Again', 'Kept']);
+  });
+
+  it('takes a sketch off the drive without writing over one another device sent meanwhile', async () => {
+    const drive = new FolderDrive();
+    const ipad = device(drive);
+    const pc = device(drive);
+    const old = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Old', 1);
+    await ipad.sync();
+    const before = drive.files.get(SKETCHES_FILE)?.content ?? '';
+    const sent = device(drive);
+    const meanwhile = sent.sketches.begin({ events: PLAYED, beats: BEATS }, 'Sent meanwhile', 2);
+    await sent.sync();
+    const after = drive.files.get(SKETCHES_FILE)?.content ?? '';
+    // Put back to before it was sent, and sent just after the PC has read it.
+    const id = drive.files.get(SKETCHES_FILE)?.id ?? '';
+    drive.files.set(SKETCHES_FILE, { id, content: before });
+    drive.meanwhile = () => {
+      drive.meanwhile = null;
+      drive.files.set(SKETCHES_FILE, { id, content: after });
+    };
+
+    await pc.deleteFromTheDrive(old.id);
+    expect(drive.holds().map(([each]) => each)).toEqual([meanwhile.id]);
   });
 
   it('marks nothing sent where the drive could not be written, and sends it at the next sync', async () => {

@@ -1079,6 +1079,8 @@ const OPENING_LABELS: Readonly<Record<WhatOpens, string>> = {
   generated: 'A new exercise',
   last: 'The score I read last',
   random: 'One of my scores, at random',
+  lastSketch: 'The sketch I worked on last',
+  lastOfAll: 'Whatever I had open last',
 };
 
 const OPENING_DESCRIPTIONS: Readonly<Record<WhatOpens, string>> = {
@@ -1087,6 +1089,12 @@ const OPENING_DESCRIPTIONS: Readonly<Record<WhatOpens, string>> = {
   random:
     'Something to read is already there, so the question becomes whether to play it. ' +
     'Falls back to a new exercise while nothing is kept.',
+  lastSketch:
+    'The sketch you last edited or wrote down, written down as a score; the pencil beside it opens ' +
+    'it in the editor. Falls back to a new exercise while there is none.',
+  lastOfAll:
+    'The score you read last, or the sketch you worked on last, whichever was later. ' +
+    'Falls back to a new exercise while there is neither.',
 };
 
 const RULER_DESCRIPTIONS: Readonly<Record<RulerDivision, string>> = {
@@ -2989,8 +2997,23 @@ export class AppView {
 
     await this.runtime.scores.load();
     this.renderScores();
+    // The sketch opened last, where it is what was asked for - or, asked for
+    // whatever was open last, where it was opened after the score read last.
+    const sketch = this.runtime.sketches.openedLast;
+    const lastRead = this.runtime.scores.lastRead;
+    if (
+      sketch !== null &&
+      (wanted === 'lastSketch' || (wanted === 'lastOfAll' && (lastRead === null || sketch.atMs > lastRead.openedAtMs)))
+    ) {
+      await this.writeDownTheSketch(sketch.sketch.id, this.el.sheetScores);
+      return;
+    }
     const chosen =
-      wanted === 'last' ? this.runtime.scores.lastRead : this.runtime.scores.oneAtRandom(Math.random());
+      wanted === 'last' || wanted === 'lastOfAll'
+        ? lastRead
+        : wanted === 'random'
+          ? this.runtime.scores.oneAtRandom(Math.random())
+          : null;
     const exercise = chosen === null ? null : await this.runtime.scores.open(chosen.id);
     if (exercise === null) {
       // An empty library, or a score the database no longer has. Either way
@@ -10230,6 +10253,7 @@ export class AppView {
     if (sketch === null) {
       return;
     }
+    this.runtime.sketches.opened(id);
     const opened = await this.writeDown(sketch, sketch.title, from);
     this.theSketchOnThePage = opened === null ? null : { sketch, exercise: opened };
     this.showThePencilBesideThePills();
@@ -13027,6 +13051,7 @@ export class AppView {
     if (sketch === null) {
       return;
     }
+    this.runtime.sketches.opened(id);
     this.stopTheRoll();
     this.el.sheetTakes.hidden = true;
     this.el.sheetScores.hidden = true;

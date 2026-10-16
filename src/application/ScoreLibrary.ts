@@ -16,7 +16,7 @@ import type { IKeepsTheStore } from './ports/IStorageGauge.js';
  * from osu: something is there, and the question "shall I play this?" gets
  * asked instead of having to be thought of.
  */
-export const WHAT_OPENS = ['generated', 'last', 'random'] as const;
+export const WHAT_OPENS = ['generated', 'last', 'random', 'lastSketch', 'lastOfAll'] as const;
 
 /**
  * The orders the shelf can be read in.

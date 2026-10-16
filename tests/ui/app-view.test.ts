@@ -12171,6 +12171,109 @@ describe('AppView', () => {
       expect(rig.runtime.controller.openedExercise?.title).toBe('Read Later');
     });
 
+    it('puts back the sketch worked on last, written down, and a new exercise where there is none', async () => {
+      const played = {
+        events: [
+          { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+          { kind: 'noteOff' as const, atMs: 400, midi: 60 },
+        ],
+        beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+      };
+      const rig = createRig();
+      await rig.runtime.scores.keep(twoBarExercise({ title: 'Read Later' }), 1_000);
+      await rig.runtime.scores.markRead('Read Later', 3_000);
+      const older = rig.sketches.begin(played, 'Older idea', 1);
+      const idea = rig.sketches.begin(played, 'My idea', 2);
+      rig.sketches.opened(older.id);
+      rig.sketches.opened(idea.id);
+      rig.runtime.controller.updateSettings({ whatOpens: 'lastSketch' });
+
+      await rig.view.initialize();
+      await waitFor(() => rig.runtime.controller.openedExercise?.title === 'My idea');
+      const options = [...element<HTMLSelectElement>('what-opens').options].map((option) => [option.value, option.textContent]);
+      expect(options.slice(-2)).toEqual([
+        ['lastSketch', 'The sketch I worked on last'],
+        ['lastOfAll', 'Whatever I had open last'],
+      ]);
+      expect(element<HTMLSelectElement>('what-opens').value).toBe('lastSketch');
+      // And none opened, a new exercise.
+      mountRealMarkup();
+      const empty = createRig();
+      empty.sketches.begin(played, 'Never opened', 1);
+      empty.runtime.controller.updateSettings({ whatOpens: 'lastSketch' });
+      await empty.view.initialize();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(empty.runtime.controller.openedExercise).toBeNull();
+    });
+
+    it('puts back whatever was open last, the score read or the sketch worked on', async () => {
+      const played = {
+        events: [
+          { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+          { kind: 'noteOff' as const, atMs: 400, midi: 60 },
+        ],
+        beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+      };
+      // The sketch opened after the score was read.
+      const rig = createRig();
+      await rig.runtime.scores.keep(twoBarExercise({ title: 'Read Earlier' }), 1_000);
+      await rig.runtime.scores.markRead('Read Earlier', Date.now() - 60_000);
+      rig.sketches.opened(rig.sketches.begin(played, 'Worked on since', 1).id);
+      rig.runtime.controller.updateSettings({ whatOpens: 'lastOfAll' });
+      await rig.view.initialize();
+      await waitFor(() => rig.runtime.controller.openedExercise?.title === 'Worked on since');
+
+      // The score read after the sketch was opened.
+      mountRealMarkup();
+      const later = createRig();
+      later.sketches.opened(later.sketches.begin(played, 'Opened earlier', 1).id);
+      await later.runtime.scores.keep(twoBarExercise({ title: 'Read Since' }), 1_000);
+      await later.runtime.scores.markRead('Read Since', Date.now() + 60_000);
+      later.runtime.controller.updateSettings({ whatOpens: 'lastOfAll' });
+      await later.view.initialize();
+      await waitFor(() => later.runtime.controller.openedExercise?.title === 'Read Since');
+
+      // Only a score, it; only a sketch, it.
+      mountRealMarkup();
+      const scoreOnly = createRig();
+      await scoreOnly.runtime.scores.keep(twoBarExercise({ title: 'Only Read' }), 1_000);
+      await scoreOnly.runtime.scores.markRead('Only Read', 3_000);
+      scoreOnly.runtime.controller.updateSettings({ whatOpens: 'lastOfAll' });
+      await scoreOnly.view.initialize();
+      await waitFor(() => scoreOnly.runtime.controller.openedExercise?.title === 'Only Read');
+      mountRealMarkup();
+      const sketchOnly = createRig();
+      sketchOnly.sketches.opened(sketchOnly.sketches.begin(played, 'Only Sketched', 1).id);
+      sketchOnly.runtime.controller.updateSettings({ whatOpens: 'lastOfAll' });
+      await sketchOnly.view.initialize();
+      await waitFor(() => sketchOnly.runtime.controller.openedExercise?.title === 'Only Sketched');
+    });
+
+    it('counts a sketch opened in the editor or written down as the one worked on last', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      const played = {
+        events: [
+          { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+          { kind: 'noteOff' as const, atMs: 400, midi: 60 },
+        ],
+        beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+      };
+      const edited = rig.sketches.begin(played, 'Edited', 1);
+      const written = rig.sketches.begin(played, 'Written', 2);
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      const row = (title: string): HTMLLIElement | undefined =>
+        [...element('sketches-list').querySelectorAll('li')].find((each) => each.textContent?.includes(title) === true);
+      row('Edited')?.querySelector<HTMLButtonElement>('button[title="Edit this sketch"]')?.click();
+      expect(rig.sketches.openedLast?.sketch.id).toBe(edited.id);
+      element<HTMLButtonElement>('roll-close').click();
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      row('Written')?.querySelector<HTMLButtonElement>('button[title="Write this sketch down as a score"]')?.click();
+      expect(rig.sketches.openedLast?.sketch.id).toBe(written.id);
+    });
+
     it('offers one of the kept scores at random', async () => {
       const rig = createRig();
       await rig.runtime.scores.keep(twoBarExercise({ title: 'One' }), 1_000);

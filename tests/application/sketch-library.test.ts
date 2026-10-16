@@ -166,6 +166,41 @@ describe('the sketches being written', () => {
     }
   });
 
+  it('keeps which sketch was opened last, and when, across visits', () => {
+    const store = new InMemorySettingsStore();
+    let now = 5_000;
+    const library = new SketchLibrary(store, () => now);
+    const first = library.begin({ events: PLAYED, beats: THREE }, 'First', 1);
+    const second = library.begin({ events: PLAYED, beats: THREE }, 'Second', 2);
+    expect(library.openedLast).toBeNull();
+    // Both sent to the drive, so a change would show.
+    library.sentAt(first.id, 1);
+    library.sentAt(second.id, 1);
+
+    library.opened(second.id);
+    now = 7_000;
+    library.opened(first.id);
+    // One nobody has is no answer.
+    library.opened('sketch-nobody');
+    expect(library.openedLast).toEqual({ sketch: first, atMs: 7_000 });
+    const next = new SketchLibrary(store, () => now);
+    next.load();
+    expect(next.openedLast?.sketch.id).toBe(first.id);
+    expect(next.openedLast?.atMs).toBe(7_000);
+    // Opening one is no change to it, to send to the drive.
+    expect(next.forTheDrive().map(({ unsent }) => unsent)).toEqual([false, false]);
+
+    // Deleted, there is none.
+    next.remove(first.id);
+    expect(next.openedLast).toBeNull();
+    // Anything else read back is none.
+    for (const opened of ['x', [first.id], [first.id, 'later'], [7, 7_000], [first.id, Number.NaN]]) {
+      store.write({ version: 1, sketches: [{ ...first, events: [], beats: [] }], opened });
+      next.load();
+      expect(next.openedLast, JSON.stringify(opened)).toBeNull();
+    }
+  });
+
   it('keeps the chords the writer keeps across visits, each key once, low to high, and lets go of them', () => {
     const store = new InMemorySettingsStore();
     const library = new SketchLibrary(store, () => 0);

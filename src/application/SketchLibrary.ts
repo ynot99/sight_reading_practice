@@ -188,6 +188,7 @@ export class SketchLibrary {
   private readonly unsent = new Set<string>();
   private changedAtMs = 0;
   private chords: (readonly number[])[] = [];
+  private lastOpened: { readonly id: string; readonly atMs: number } | null = null;
 
   constructor(store: ISettingsStore, now: () => number) {
     this.store = store;
@@ -219,6 +220,12 @@ export class SketchLibrary {
     }
     const changed = isRecord(raw) ? raw['changedAtMs'] : undefined;
     this.changedAtMs = typeof changed === 'number' && Number.isFinite(changed) ? changed : 0;
+    const opened = isRecord(raw) ? raw['opened'] : undefined;
+    const [openedId, openedAtMs] = Array.isArray(opened) ? (opened as unknown[]) : [];
+    this.lastOpened =
+      typeof openedId === 'string' && typeof openedAtMs === 'number' && Number.isFinite(openedAtMs)
+        ? { id: openedId, atMs: openedAtMs }
+        : null;
     const chords: unknown[] = isRecord(raw) && Array.isArray(raw['chords']) ? raw['chords'] : [];
     this.chords = chords.flatMap((chord) => {
       const keys = Array.isArray(chord) ? (chord as unknown[]) : [];
@@ -226,6 +233,25 @@ export class SketchLibrary {
       const once = eachKeyOnce(keys as number[]);
       return fit && once.length >= 2 ? [once] : [];
     });
+  }
+
+  /**
+   * Marks a sketch the one opened last, now - in the editor, or written down
+   * as a score - so that the page can open on it again. Kept on this device
+   * only: which was opened last is this device's question.
+   */
+  opened(id: string): void {
+    if (this.find(id) === null) {
+      return;
+    }
+    this.lastOpened = { id, atMs: this.now() };
+    this.persist();
+  }
+
+  /** The sketch opened last, and when, or `null` where none has been or it is gone. */
+  get openedLast(): { readonly sketch: StoredSketch; readonly atMs: number } | null {
+    const sketch = this.lastOpened === null ? null : this.find(this.lastOpened.id);
+    return sketch === null || this.lastOpened === null ? null : { sketch, atMs: this.lastOpened.atMs };
   }
 
   /**
@@ -415,6 +441,7 @@ export class SketchLibrary {
       })),
       changedAtMs: this.changedAtMs,
       ...(this.chords.length > 0 ? { chords: this.chords } : {}),
+      ...(this.lastOpened === null ? {} : { opened: [this.lastOpened.id, this.lastOpened.atMs] }),
     });
   }
 }

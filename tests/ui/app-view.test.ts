@@ -7517,6 +7517,92 @@ describe('AppView', () => {
       expect(notes()).toBe(2);
     });
 
+    it('sets how hard the chosen notes are struck by the marks a score writes, switched to from the slider in its place', async () => {
+      const { view, sketches, runtime } = createRig();
+      await view.initialize();
+      const played = [
+        [0, 60, 64],
+        [500, 62, 96],
+        [1_000, 64, 100],
+      ].flatMap(([atMs = 0, midi = 0, level = 0]) => [
+        { kind: 'noteOn' as const, atMs, midi, velocity: level / 127 },
+        { kind: 'noteOff' as const, atMs: atMs + 400, midi },
+      ]);
+      const sketch = sketches.begin({ events: played, beats: [] }, 'Marked', 1);
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const loudness = (): number[] =>
+        (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'noteOn' ? [Math.round(event.velocity * 127)] : []));
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const scrolledDown = (): number =>
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      const tapOn = (fromMs: number): void => {
+        const note = view.rollScene?.notes.find((each) => each.fromMs === fromMs);
+        tapTheDrawing({ clientX: ((fromMs + 100) / 1000) * zoom, clientY: ((note?.row ?? 0) + 0.5) * 13 - scrolledDown(), shiftKey: true });
+      };
+      const undo = (): void => {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'z', code: 'KeyZ', ctrlKey: true }));
+      };
+      const as = element<HTMLButtonElement>('roll-velocity-as');
+      const marks = element('roll-dynamics');
+      const track = element('roll-velocity-level').closest<HTMLElement>('.roll-velocity__track');
+      const said = element('roll-velocity-said');
+      const mark = (level: string): HTMLButtonElement | null => marks.querySelector<HTMLButtonElement>(`[data-dynamic="${level}"]`);
+      const pressed = (): string[] =>
+        [...marks.querySelectorAll<HTMLButtonElement>('[data-dynamic]')].filter((button) => button.getAttribute('aria-pressed') === 'true').map((button) => button.textContent);
+
+      // The slider first, the switch saying what it would show instead.
+      expect(as.getAttribute('aria-checked')).toBe('false');
+      expect(as.title).toBe('Set how hard by the marks a score writes, pp to ff');
+      expect(as.getAttribute('aria-label')).toBe(as.title);
+      expect([marks.hidden, track?.hidden, said.hidden]).toEqual([true, false, false]);
+      // Switched: the marks in its place, and kept with the settings.
+      as.click();
+      expect(as.getAttribute('aria-checked')).toBe('true');
+      expect(as.title).toBe('Set how hard by a slider, from 1 to 127');
+      expect([marks.hidden, track?.hidden, said.hidden]).toEqual([false, true, true]);
+      expect(runtime.controller.settings.velocityAsDynamics).toBe(true);
+      expect([...marks.querySelectorAll('[data-dynamic]')].map((button) => button.textContent)).toEqual(['pp', 'p', 'mp', 'mf', 'f', 'ff']);
+
+      // Nothing chosen, none pressed; each says so and does nothing.
+      expect(pressed()).toEqual([]);
+      expect(mark('f')?.title).toBe('Strike the chosen notes f, at 99. Choose a note first.');
+      expect(mark('f')?.getAttribute('aria-label')).toBe(mark('f')?.title);
+      mark('f')?.click();
+      expect(loudness()).toEqual([64, 96, 100]);
+      // Two chosen, at no mark: none pressed.
+      tapOn(0);
+      tapOn(500);
+      expect(pressed()).toEqual([]);
+      expect(mark('f')?.title).toBe('Strike the chosen notes f, at 99');
+      // Struck at f, both - the one not chosen left - and f pressed.
+      mark('f')?.click();
+      expect(loudness()).toEqual([99, 99, 100]);
+      expect(pressed()).toEqual(['f']);
+      // With the one at 100 chosen too, they differ, and none is pressed.
+      tapOn(1_000);
+      expect(pressed()).toEqual([]);
+      tapOn(1_000);
+      expect(pressed()).toEqual(['f']);
+      // At pp; pressed again, nothing more to put back.
+      mark('pp')?.click();
+      expect(loudness()).toEqual([25, 25, 100]);
+      expect(pressed()).toEqual(['pp']);
+      mark('pp')?.click();
+      undo();
+      expect(loudness()).toEqual([99, 99, 100]);
+      undo();
+      expect(loudness()).toEqual([64, 96, 100]);
+
+      // Switched back, the slider.
+      as.click();
+      expect([marks.hidden, track?.hidden, said.hidden]).toEqual([true, false, false]);
+      expect(runtime.controller.settings.velocityAsDynamics).toBe(false);
+    });
+
     it('sets how hard the chosen notes of a sketch are struck, by as much each, in the passage row', async () => {
       const { view, sketches } = createRig();
       await view.initialize();

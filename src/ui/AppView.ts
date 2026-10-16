@@ -9,6 +9,7 @@ import {
 } from '../application/modes/challengeModes.js';
 import { barCells } from '../domain/scoring/barCells.js';
 import { nameOfThePitchClass, nameTheChord } from '../domain/harmony/chordName.js';
+import { DYNAMIC_VELOCITY, type DynamicLevel } from '../domain/model/Exercise.js';
 import { eachKeyOnce, sameKeys, theChordsOfTheKey } from '../domain/harmony/chordsOfTheKey.js';
 import { barsOfThePicture, tiersOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
@@ -457,6 +458,18 @@ function theMiddleOf(loudness: readonly number[]): number {
 }
 
 /** A loudness MIDI can strike a note at: 1 to 127, since nought is no note. */
+/**
+ * The marks a sketch's notes can be set to, quietest first: the six the
+ * ladder's highest grades write, which are what a piano piece is mostly
+ * marked in. Struck as the importer plays a score marked so.
+ */
+const DYNAMICS_OFFERED: readonly DynamicLevel[] = ['pp', 'p', 'mp', 'mf', 'f', 'ff'];
+
+/** How hard a mark is struck, from 1 to 127: as a score's notes marked so are played. */
+function theLoudnessOfTheDynamic(level: DynamicLevel): number {
+  return clampTheLoudness(Math.round(DYNAMIC_VELOCITY[level] * 127));
+}
+
 function clampTheLoudness(level: number): number {
   return Math.min(127, Math.max(1, level));
 }
@@ -2281,6 +2294,8 @@ export class AppView {
     rollPassage: HTMLElement;
     rollVelocity: HTMLElement;
     rollVelocityLevel: HTMLInputElement;
+    rollVelocityAs: HTMLButtonElement;
+    rollDynamics: HTMLElement;
     rollVelocityTicks: HTMLElement;
     rollVelocitySaid: HTMLOutputElement;
     rollHands: HTMLElement;
@@ -2659,6 +2674,8 @@ export class AppView {
       rollPassage: requireElement(doc, 'roll-passage'),
       rollVelocity: requireElement(doc, 'roll-velocity'),
       rollVelocityLevel: requireElement(doc, 'roll-velocity-level'),
+      rollVelocityAs: requireElement(doc, 'roll-velocity-as'),
+      rollDynamics: requireElement(doc, 'roll-dynamics'),
       rollVelocityTicks: requireElement(doc, 'roll-velocity-ticks'),
       rollVelocitySaid: requireElement(doc, 'roll-velocity-said'),
       rollHands: requireElement(doc, 'roll-hands'),
@@ -9058,6 +9075,26 @@ export class AppView {
     this.listen(this.el.rollVelocityLevel, 'change', () => {
       this.setTheLoudnessAsked();
     });
+    this.el.rollDynamics.replaceChildren(
+      ...DYNAMICS_OFFERED.map((level) => {
+        const button = this.doc.createElement('button');
+        button.type = 'button';
+        button.className = 'button';
+        button.dataset['dynamic'] = level;
+        button.textContent = level;
+        button.setAttribute('aria-pressed', 'false');
+        this.listen(button, 'click', () => {
+          this.strikeTheChosenAt(level);
+        });
+        return button;
+      }),
+    );
+    this.listen(this.el.rollVelocityAs, 'click', () => {
+      this.runtime.controller.updateSettings({
+        velocityAsDynamics: !this.runtime.controller.settings.velocityAsDynamics,
+      });
+      this.sayHowLoudTheChosenAre();
+    });
     fillSelect(
       this.el.rollKey,
       EVERY_KEY.map((key) => ({ value: keyValue(key), label: key.name })),
@@ -12596,6 +12633,7 @@ export class AppView {
     this.el.rollVelocityLevel.setAttribute('aria-label', this.el.rollVelocityLevel.title);
     this.el.rollVelocityLevel.value = String(theMiddleOf(loudness));
     this.markTheLoudness(loudness);
+    this.sayTheDynamicOfTheChosen(loudness);
     this.sayWhichHand();
     const quantizes = 'Quantize: each chosen note begun on the nearest line of the grid, as long as it was';
     if (loudness.length === 0) {
@@ -12800,6 +12838,59 @@ export class AppView {
     const loud = Math.max(...loudness);
     this.el.rollVelocitySaid.value =
       loudness.length === 0 ? '' : soft === loud ? String(soft) : `${String(soft)}\u2013${String(loud)}`;
+  }
+
+  /**
+   * The marks in the slider's place, where they are asked for: the one every
+   * chosen note is struck at pressed, and none where they differ or are at
+   * none of them; each saying what it would do. The switch says which is
+   * shown, and what pressing it would show instead.
+   */
+  private sayTheDynamicOfTheChosen(loudness: readonly number[]): void {
+    const asMarks = this.runtime.controller.settings.velocityAsDynamics;
+    this.el.rollVelocityAs.setAttribute('aria-checked', String(asMarks));
+    this.el.rollVelocityAs.title = asMarks
+      ? 'Set how hard by a slider, from 1 to 127'
+      : 'Set how hard by the marks a score writes, pp to ff';
+    this.el.rollVelocityAs.setAttribute('aria-label', this.el.rollVelocityAs.title);
+    this.el.rollDynamics.hidden = !asMarks;
+    for (const hidden of [this.el.rollVelocityLevel.closest<HTMLElement>('.roll-velocity__track'), this.el.rollVelocitySaid]) {
+      if (hidden !== null) {
+        hidden.hidden = asMarks;
+      }
+    }
+    for (const button of this.el.rollDynamics.querySelectorAll<HTMLButtonElement>('[data-dynamic]')) {
+      const level = button.dataset['dynamic'] as DynamicLevel;
+      const struck = theLoudnessOfTheDynamic(level);
+      button.setAttribute('aria-pressed', String(loudness.length > 0 && loudness.every((each) => each === struck)));
+      button.title =
+        loudness.length === 0
+          ? `Strike the chosen notes ${level}, at ${String(struck)}. Choose a note first.`
+          : `Strike the chosen notes ${level}, at ${String(struck)}`;
+      button.setAttribute('aria-label', button.title);
+    }
+  }
+
+  /** Every chosen note struck at a mark's loudness: one change, and none where all are already. */
+  private strikeTheChosenAt(level: DynamicLevel): void {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const struck = theLoudnessOfTheDynamic(level);
+    const loudness = this.theLoudnessOfTheChosen();
+    if (sketch === undefined || stored === null || loudness.every((each) => each === struck)) {
+      return;
+    }
+    const changes: KeyChange[] = this.theChosenKeys().map((key) => ({
+      key,
+      midi: key.midi,
+      downAtMs: key.downAtMs,
+      upAtMs: key.upAtMs,
+      velocity: struck / 127,
+    }));
+    const events = takeWithTheKeysChanged(stored.events, changes);
+    if (events !== null) {
+      this.changeTheSketchShowing(events, [...sketch.before, asItWas(stored, sketch.chosen)], sketch.chosen);
+    }
   }
 
   /** The chosen notes as loud as the slider is being moved to: shown, not kept. */

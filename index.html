@@ -732,6 +732,19 @@
             </span>
             <span class="roll-velocity__group roll-velocity__group--wide">
               <label class="roll-velocity__name" for="roll-velocity-level">Velocity</label>
+              <!--
+                Which of the two it is set by: the slider, or the marks a score
+                writes. One small switch, its two faces stacked, the one in
+                use lit, so the row keeps its width either way.
+              -->
+              <button id="roll-velocity-as" type="button" class="roll-velocity__as" role="switch" aria-checked="false">
+                <svg viewBox="0 0 24 12" aria-hidden="true" focusable="false" class="roll-velocity__as-slider">
+                  <path d="M2 5h20v2H2z" />
+                  <circle cx="9" cy="6" r="4" />
+                </svg>
+                <span class="roll-velocity__as-marks" aria-hidden="true">mf</span>
+              </button>
+              <span id="roll-dynamics" class="roll-dynamics" role="group" aria-label="How hard the chosen notes are struck, as a score marks it" hidden></span>
               <span class="roll-velocity__track">
                 <input id="roll-velocity-level" type="range" min="1" max="127" step="1" value="64" />
                 <span id="roll-velocity-ticks" class="roll-velocity__ticks" aria-hidden="true"></span>

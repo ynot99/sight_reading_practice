@@ -1688,6 +1688,77 @@ textarea {
   width: 100%;
 }
 
+/* The switch between the slider and the marks: two small faces, one above the other. */
+.roll-velocity__as {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 28px;
+  height: 36px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.roll-velocity__as-slider {
+  width: 18px;
+  height: 9px;
+  fill: currentColor;
+}
+
+/* Written as a score writes it: bold italic, in a serif. */
+.roll-velocity__as-marks,
+.roll-dynamics .button {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-weight: 700;
+}
+
+.roll-velocity__as-marks {
+  font-size: 11px;
+  line-height: 1;
+}
+
+/* The face in use lit, the other faint. */
+.roll-velocity__as[aria-checked='false'] .roll-velocity__as-slider,
+.roll-velocity__as[aria-checked='true'] .roll-velocity__as-marks {
+  color: var(--accent);
+}
+
+.roll-velocity__as[aria-checked='false'] .roll-velocity__as-marks,
+.roll-velocity__as[aria-checked='true'] .roll-velocity__as-slider {
+  opacity: 0.4;
+}
+
+/* The marks in the slider's room, giving it up first as the slider does. */
+.roll-dynamics {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 4px;
+  min-width: 0;
+}
+
+.roll-dynamics .button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 6px 2px;
+}
+
+.roll-dynamics .button[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--surface);
+}
+
+.roll-velocity[data-idle='true'] .roll-dynamics {
+  opacity: 0.45;
+}
+
 .roll-velocity[data-idle='true'] .roll-velocity__track {
   opacity: 0.45;
 }

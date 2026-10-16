@@ -2265,7 +2265,27 @@ describe('searching the settings', () => {
     expect(body('.roll-velocity')).toMatch(/flex-wrap\s*:\s*wrap/);
     expect(body('.roll-velocity__group')).toMatch(/flex\s*:\s*none/);
     expect(body('.roll-velocity__group--wide')).toMatch(/flex\s*:\s*1 1 14em/);
-    expect(HTML).toMatch(/<span class="roll-velocity__group roll-velocity__group--wide">\s*<label[^>]*>Velocity<\/label>\s*<span class="roll-velocity__track">/);
+    expect(HTML).toMatch(
+      /<span class="roll-velocity__group roll-velocity__group--wide">\s*<label[^>]*>Velocity<\/label>\s*(?:<!--[\s\S]*?-->\s*)?<button id="roll-velocity-as"[\s\S]*?<\/button>\s*<span id="roll-dynamics"[^>]*><\/span>\s*<span class="roll-velocity__track">/,
+    );
+  });
+
+  it('switches between the slider and the marks in one small control, the face in use lit, the marks in the slider\'s room', () => {
+    const body = (selector: string): string => rules().find((rule) => rule.selector === selector)?.body ?? '';
+    // Its two faces one above the other, so the row keeps its width.
+    expect(body('.roll-velocity__as')).toMatch(/flex-direction\s*:\s*column/);
+    expect(body('.roll-velocity__as')).toMatch(/flex\s*:\s*none/);
+    expect(body(".roll-velocity__as[aria-checked='false'] .roll-velocity__as-slider, .roll-velocity__as[aria-checked='true'] .roll-velocity__as-marks")).toMatch(
+      /color\s*:\s*var\(--accent\)/,
+    );
+    expect(body(".roll-velocity__as[aria-checked='false'] .roll-velocity__as-marks, .roll-velocity__as[aria-checked='true'] .roll-velocity__as-slider")).toMatch(
+      /opacity\s*:\s*0?\.\d+/,
+    );
+    // The marks give up their room first, as the slider does, and say which is struck.
+    expect(body('.roll-dynamics')).toMatch(/min-width\s*:\s*0/);
+    expect(body('.roll-dynamics .button')).toMatch(/min-width\s*:\s*0/);
+    expect(body(".roll-dynamics .button[aria-pressed='true']")).toMatch(/background\s*:\s*var\(--accent\)/);
+    expect(body(".roll-velocity[data-idle='true'] .roll-dynamics")).toMatch(/opacity\s*:\s*0?\.\d+/);
   });
 
   it('shows the mouse what it would take hold of on a sketch: a note, or its end', () => {

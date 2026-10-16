@@ -388,6 +388,124 @@ describe('the sketches kept the same on every device that has them', () => {
     expect(drive.holds()).toEqual([[idea.id, 'Renamed', 2]]);
   });
 
+  it('takes the chords kept on one device to another, and those let go of on either off both', async () => {
+    const drive = new FolderDrive();
+    const ipad = device(drive);
+    const pc = device(drive);
+    ipad.sketches.keepTheChord([60, 64, 67]);
+    ipad.sketches.keepTheChord([57, 60, 64]);
+    expect(ipad.sketches.unsentSinceMs).not.toBeNull();
+    // With no sketch to send, the chords are still sent.
+    await ipad.sync();
+    expect(ipad.sketches.unsentSinceMs).toBeNull();
+    await pc.sync();
+    expect(pc.sketches.keptChords()).toEqual([[60, 64, 67], [57, 60, 64]]);
+    expect(pc.sketches.unsentSinceMs).toBeNull();
+
+    pc.sketches.letGoOfTheChord([60, 64, 67]);
+    await pc.sync();
+    await ipad.sync();
+    expect(ipad.sketches.keptChords()).toEqual([[57, 60, 64]]);
+    // The last let go of, the drive says none rather than nothing.
+    ipad.sketches.letGoOfTheChord([57, 60, 64]);
+    await ipad.sync();
+    await pc.sync();
+    expect(pc.sketches.keptChords()).toEqual([]);
+    // In step, the drive is not written again.
+    const writes = drive.writes;
+    await pc.sync();
+    await ipad.sync();
+    expect(drive.writes).toBe(writes);
+  });
+
+  it('keeps what each device kept, and lets go of what each let go of, where both changed the chords between syncs', async () => {
+    const drive = new FolderDrive();
+    const ipad = device(drive);
+    const pc = device(drive);
+    // Kept on each before either ever synced: both kept.
+    ipad.sketches.keepTheChord([60, 64, 67]);
+    pc.sketches.keepTheChord([53, 57, 60]);
+    await ipad.sync();
+    await pc.sync();
+    await ipad.sync();
+    expect(ipad.sketches.keptChords()).toEqual([[60, 64, 67], [53, 57, 60]]);
+    expect(pc.sketches.keptChords()).toEqual([[60, 64, 67], [53, 57, 60]]);
+
+    ipad.sketches.letGoOfTheChord([60, 64, 67]);
+    ipad.sketches.keepTheChord([55, 59, 62]);
+    pc.sketches.letGoOfTheChord([53, 57, 60]);
+    pc.sketches.keepTheChord([57, 60, 64]);
+    await pc.sync();
+    await ipad.sync();
+    await pc.sync();
+    expect(ipad.sketches.keptChords()).toEqual([[57, 60, 64], [55, 59, 62]]);
+    expect(pc.sketches.keptChords()).toEqual([[57, 60, 64], [55, 59, 62]]);
+  });
+
+  it('settles the chords again where another device wrote the drive between this one\'s reading it and writing it', async () => {
+    const drive = new FolderDrive();
+    const ipad = device(drive);
+    const pc = device(drive);
+    ipad.sketches.keepTheChord([60, 64, 67]);
+    await ipad.sync();
+    await pc.sync();
+    const id = drive.files.get(SKETCHES_FILE)?.id ?? '';
+    pc.sketches.keepTheChord([53, 57, 60]);
+    await pc.sync();
+    const after = drive.files.get(SKETCHES_FILE)?.content ?? '';
+    drive.files.set(SKETCHES_FILE, { id, content: JSON.stringify({ version: 1, sketches: [], chords: [[60, 64, 67]] }) });
+    // The PC's chord lands on the drive just after the iPad has read it.
+    drive.meanwhile = () => {
+      drive.meanwhile = null;
+      drive.files.set(SKETCHES_FILE, { id, content: after });
+    };
+    ipad.sketches.keepTheChord([55, 59, 62]);
+    await ipad.sync();
+    expect(ipad.sketches.keptChords()).toEqual([[60, 64, 67], [53, 57, 60], [55, 59, 62]]);
+    await pc.sync();
+    expect(pc.sketches.keptChords()).toEqual([[60, 64, 67], [53, 57, 60], [55, 59, 62]]);
+  });
+
+  it('leaves the chords here as they were where the drive could not be written, and sends them at the next sync', async () => {
+    const drive = new FolderDrive();
+    const ipad = device(drive);
+    ipad.sketches.keepTheChord([60, 64, 67]);
+    drive.failing = true;
+    await expect(ipad.sync()).rejects.toThrow('could not be reached');
+    expect(ipad.sketches.unsentSinceMs).not.toBeNull();
+    drive.failing = false;
+    await ipad.sync();
+    expect(ipad.sketches.unsentSinceMs).toBeNull();
+    await device(drive).sync();
+    expect(JSON.parse(drive.files.get(SKETCHES_FILE)?.content ?? '{}')).toMatchObject({ chords: [[60, 64, 67]] });
+  });
+
+  it('keeps the chords on the drive where a sketch is taken off it, and takes this device\'s where the drive has none', async () => {
+    const drive = new FolderDrive();
+    const ipad = device(drive);
+    const old = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Old', 1);
+    ipad.sketches.keepTheChord([60, 64, 67]);
+    await ipad.sync();
+    await ipad.deleteFromTheDrive(old.id);
+    const pc = device(drive);
+    await pc.sync();
+    expect(pc.sketches.keptChords()).toEqual([[60, 64, 67]]);
+
+    // A file from before the drive had chords: this device's are the list.
+    const id = drive.files.get(SKETCHES_FILE)?.id ?? '';
+    drive.files.set(SKETCHES_FILE, { id, content: JSON.stringify({ version: 1, sketches: [] }) });
+    await pc.sync();
+    expect(pc.sketches.keptChords()).toEqual([[60, 64, 67]]);
+    expect(JSON.parse(drive.files.get(SKETCHES_FILE)?.content ?? '{}')).toMatchObject({ chords: [[60, 64, 67]] });
+    // Chords on the drive that do not hold together are left out.
+    drive.files.set(SKETCHES_FILE, {
+      id,
+      content: JSON.stringify({ version: 1, sketches: [], chords: [[60, 64, 67], [60], [60, 128], 'C', [57, 64, 60]] }),
+    });
+    await pc.sync();
+    expect(pc.sketches.keptChords()).toEqual([[60, 64, 67], [57, 60, 64]]);
+  });
+
   it('reads past what on the drive it cannot, and a file that is no list at all as an empty drive', async () => {
     const drive = new FolderDrive();
     const pc = device(drive);

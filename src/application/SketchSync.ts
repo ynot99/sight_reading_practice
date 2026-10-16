@@ -1,5 +1,6 @@
 import type { CloudFile, ICloudDrive } from './ports/ICloudDrive.js';
-import { sketchAsKept, sketchFromKept, type SketchLibrary, type StoredSketch } from './SketchLibrary.js';
+import { sameKeys, theChordsMerged } from '../domain/harmony/chordsOfTheKey.js';
+import { readTheChords, sketchAsKept, sketchFromKept, type SketchLibrary, type StoredSketch } from './SketchLibrary.js';
 
 /** The one file on the drive that holds every sketch. */
 export const SKETCHES_FILE = 'sketches.json';
@@ -64,6 +65,12 @@ export interface SketchSyncDependencies {
  * its undo is of what is here - and waits for the next sync. That a sketch is
  * sent is marked here once the drive has it, so a sync that fails partway is
  * simply done again.
+ *
+ * The chords kept in the palette go in the same file, as one list for every
+ * sketch. A chord has nothing in it to change, only to be kept or let go of,
+ * so the lists are merged rather than one taken: whatever was kept or let go
+ * of here since the last sync is done to the drive's list, and nothing is
+ * ever a conflict (see `theChordsMerged`).
  */
 export class SketchSync {
   private readonly deps: SketchSyncDependencies;
@@ -93,16 +100,20 @@ export class SketchSync {
       const round = this.settle(read.there, open);
       brought += round.brought;
       conflicts += round.conflicts;
-      if (round.sentAt.length > 0) {
+      const { kept, inStep } = this.deps.sketches.chordsForTheDrive();
+      const chords = theChordsMerged(read.chords, kept, inStep);
+      const chordsToSend = read.chords === null ? chords.length > 0 : !theSameChords(chords, read.chords);
+      if (round.sentAt.length > 0 || chordsToSend) {
         const again = await this.readTheDrive();
         if (again.text !== read.text && attempt < SETTLED_AT_MOST) {
           continue;
         }
-        await this.deps.drive.write(SKETCHES_FILE, writeTheDrive(round.next), again.file?.id ?? null);
+        await this.deps.drive.write(SKETCHES_FILE, writeTheDrive(round.next, chords), again.file?.id ?? null);
       }
       for (const [id, revision] of round.sentAt) {
         this.deps.sketches.sentAt(id, revision);
       }
+      this.deps.sketches.chordsSettled(chords, kept);
       return {
         sent: round.sentAt.length,
         brought,
@@ -196,7 +207,7 @@ export class SketchSync {
       if (again.text !== read.text && attempt < SETTLED_AT_MOST) {
         continue;
       }
-      await this.deps.drive.write(SKETCHES_FILE, writeTheDrive(next), again.file?.id ?? null);
+      await this.deps.drive.write(SKETCHES_FILE, writeTheDrive(next, again.chords), again.file?.id ?? null);
       return;
     }
   }
@@ -205,12 +216,13 @@ export class SketchSync {
     readonly file: CloudFile | undefined;
     readonly text: string | null;
     readonly there: ReadonlyMap<string, SketchThere>;
+    readonly chords: readonly (readonly number[])[] | null;
   }> {
     const { drive } = this.deps;
     await drive.connect();
     const file = (await drive.list()).find((each) => each.name === SKETCHES_FILE);
     const text = file === undefined ? null : await drive.read(file.id);
-    return { file, text, there: text === null ? new Map() : readTheDrive(text) };
+    return { file, text, ...(text === null ? { there: new Map(), chords: null } : readTheDrive(text)) };
   }
 }
 
@@ -227,10 +239,16 @@ function onlyOnTheDrive(there: ReadonlyMap<string, SketchThere>, library: Sketch
     .sort((one, other) => other.begunAtMs - one.begunAtMs);
 }
 
-function writeTheDrive(sketches: ReadonlyMap<string, SketchThere>): string {
+/** Whether two lists of chords are the same chords in the same order. */
+function theSameChords(one: readonly (readonly number[])[], other: readonly (readonly number[])[]): boolean {
+  return one.length === other.length && one.every((chord, at) => sameKeys(chord, other[at] ?? []));
+}
+
+function writeTheDrive(sketches: ReadonlyMap<string, SketchThere>, chords: readonly (readonly number[])[] | null): string {
   return JSON.stringify({
     version: VERSION,
     sketches: [...sketches.values()].map(({ sketch, revision }) => ({ ...sketchAsKept(sketch), revision })),
+    ...(chords === null ? {} : { chords }),
   });
 }
 
@@ -239,15 +257,18 @@ function writeTheDrive(sketches: ReadonlyMap<string, SketchThere>): string {
  * itself: an entry that does not hold together is left out rather than
  * trusted, and a file that is not one at all is an empty drive.
  */
-function readTheDrive(text: string): ReadonlyMap<string, SketchThere> {
+function readTheDrive(text: string): {
+  readonly there: ReadonlyMap<string, SketchThere>;
+  readonly chords: readonly (readonly number[])[] | null;
+} {
   const sketches = new Map<string, SketchThere>();
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
-    return sketches;
+    return { there: sketches, chords: null };
   }
-  const read = parsed as { sketches?: unknown } | null;
+  const read = parsed as { sketches?: unknown; chords?: unknown } | null;
   for (const entry of Array.isArray(read?.sketches) ? (read.sketches as unknown[]) : []) {
     const sketch = sketchFromKept(entry);
     const revision = (entry as { revision?: unknown } | null)?.revision;
@@ -255,5 +276,5 @@ function readTheDrive(text: string): ReadonlyMap<string, SketchThere> {
       sketches.set(sketch.id, { sketch, revision });
     }
   }
-  return sketches;
+  return { there: sketches, chords: readTheChords(read?.chords) };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { eachKeyOnce, sameKeys, theChordsOfTheKey } from '../../src/domain/harmony/chordsOfTheKey.js';
+import { eachKeyOnce, sameKeys, theChordsMerged, theChordsOfTheKey } from '../../src/domain/harmony/chordsOfTheKey.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { STEPS } from '../../src/domain/model/Pitch.js';
 
@@ -18,6 +18,33 @@ describe('the keys of a chord', () => {
     expect(sameKeys([60, 64, 67], [48, 64, 67])).toBe(false);
     expect(sameKeys([60, 64, 67], [60, 64, 67, 71])).toBe(false);
     expect(sameKeys([60, 64, 67, 71], [60, 64, 67])).toBe(false);
+  });
+});
+
+describe('two lists of kept chords brought together', () => {
+  const C = [60, 64, 67];
+  const F = [53, 57, 60];
+  const G = [55, 59, 62];
+  const AM = [57, 60, 64];
+  const DM = [50, 53, 57];
+
+  it('does to the other list what this one kept and let go of since they were the same, and keeps what the other did', () => {
+    const cases: [string, number[][] | null, number[][], number[][] | null, number[][]][] = [
+      // [what, theirs, mine, inStep, merged]
+      ['no other list: this one is the list', null, [C, F], [C, G], [C, F]],
+      ['never the same: both kept, the other\'s first', [G, C], [C, F], null, [G, C, F]],
+      ['kept here since: after the other\'s', [C, G], [C, F], [C], [C, G, F]],
+      ['let go of here since: gone from the other', [C, F, G], [C], [C, F], [C, G]],
+      ['let go of there since: stays gone', [C], [C, F], [C, F], [C]],
+      ['kept there since: stays', [C, F, AM], [C, F], [C, F], [C, F, AM]],
+      ['kept on both since: once', [C, DM], [C, DM], [C], [C, DM]],
+      ['let go of on both since: gone', [C], [C], [C, F], [C]],
+      ['each kept one and let go of one', [C, AM], [F, G], [C, F], [AM, G]],
+      ['the same keys however written', [[67, 64, 60]], [[60, 64, 67, 60], F], [[64, 60, 67]], [[67, 64, 60], F]],
+    ];
+    for (const [what, theirs, mine, inStep, merged] of cases) {
+      expect(theChordsMerged(theirs, mine, inStep), what).toEqual(merged);
+    }
   });
 });
 

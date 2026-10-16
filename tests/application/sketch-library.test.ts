@@ -242,6 +242,54 @@ describe('the sketches being written', () => {
     expect(library.keptChords()).toEqual([]);
   });
 
+  it('asks for a sync where a chord is kept or let go of, until one has settled them, across visits', () => {
+    const store = new InMemorySettingsStore();
+    let now = 1_000;
+    const library = new SketchLibrary(store, () => now);
+    expect(library.unsentSinceMs).toBeNull();
+
+    library.keepTheChord([60, 64, 67]);
+    expect(library.unsentSinceMs).toBe(1_000);
+    library.chordsSettled([[60, 64, 67]], [[60, 64, 67]]);
+    expect(library.unsentSinceMs).toBeNull();
+    // Nothing changed, nothing asked for: one kept again, or one let go of that never was.
+    now = 2_000;
+    library.keepTheChord([67, 64, 60]);
+    library.letGoOfTheChord([57, 60, 64]);
+    expect(library.unsentSinceMs).toBeNull();
+
+    now = 3_000;
+    library.letGoOfTheChord([60, 64, 67]);
+    expect(library.unsentSinceMs).toBe(3_000);
+    // Kept again, it is as the drive has it.
+    library.keepTheChord([60, 64, 67]);
+    expect(library.unsentSinceMs).toBeNull();
+    now = 4_000;
+    library.keepTheChord([57, 60, 64]);
+    // One let go of that is not kept puts the sync off no later.
+    now = 5_000;
+    library.letGoOfTheChord([55, 59, 62]);
+    expect(library.unsentSinceMs).toBe(4_000);
+    // What the drive had, and that this one is not sent, kept across a visit.
+    const next = new SketchLibrary(store, () => 0);
+    next.load();
+    expect(next.chordsForTheDrive()).toEqual({ kept: [[60, 64, 67], [57, 60, 64]], inStep: [[60, 64, 67]] });
+    expect(next.unsentSinceMs).toBe(4_000);
+  });
+
+  it('keeps a chord kept while a sync was away at the drive, to send at the next', () => {
+    const library = new SketchLibrary(new InMemorySettingsStore(), () => 1_000);
+    library.keepTheChord([60, 64, 67]);
+    const { kept } = library.chordsForTheDrive();
+    // Kept and let go of meanwhile, the drive having one from elsewhere.
+    library.keepTheChord([57, 60, 64]);
+    library.letGoOfTheChord([60, 64, 67]);
+    library.chordsSettled([[60, 64, 67], [55, 59, 62]], kept);
+    expect(library.keptChords()).toEqual([[55, 59, 62], [57, 60, 64]]);
+    expect(library.chordsForTheDrive().inStep).toEqual([[60, 64, 67], [55, 59, 62]]);
+    expect(library.unsentSinceMs).toBe(1_000);
+  });
+
   it('keeps the beats a sketch is counted in across visits, its notes as they were', () => {
     const store = new InMemorySettingsStore();
     const library = new SketchLibrary(store, () => 0);

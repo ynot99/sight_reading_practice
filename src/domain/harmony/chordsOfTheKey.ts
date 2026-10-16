@@ -31,6 +31,30 @@ export function sameKeys(one: readonly number[], other: readonly number[]): bool
   return left.length === right.length && left.every((midi, at) => midi === right[at]);
 }
 
+/**
+ * Two lists of kept chords brought together, where each may have kept some
+ * and let go of some since they were last the same (`inStep`): the other
+ * list (`theirs`), less what this one (`mine`) let go of since, with what it
+ * kept since after it. Nothing is a conflict, since a chord has nothing in it
+ * to change. With no list once the same, nothing here was let go of; with no
+ * other list at all, this one is the list.
+ */
+export function theChordsMerged(
+  theirs: readonly (readonly number[])[] | null,
+  mine: readonly (readonly number[])[],
+  inStep: readonly (readonly number[])[] | null,
+): readonly (readonly number[])[] {
+  if (theirs === null) {
+    return mine;
+  }
+  const among = (list: readonly (readonly number[])[], chord: readonly number[]): boolean =>
+    list.some((other) => sameKeys(other, chord));
+  const before = inStep ?? [];
+  const letGo = before.filter((chord) => !among(mine, chord));
+  const keptSince = mine.filter((chord) => !among(before, chord) && !among(theirs, chord));
+  return [...theirs.filter((chord) => !among(letGo, chord)), ...keptSince];
+}
+
 /** Middle C as a staff position: the fourth octave, counted in letters. */
 const MIDDLE_C_INDEX = 4 * STEPS.length;
 

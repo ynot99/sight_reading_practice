@@ -18199,6 +18199,38 @@ describe('the library on Google Drive', () => {
     ]);
   });
 
+  it('shows in the open drawer the chords a sync brought from another device', async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+    rig.sketches.begin(
+      {
+        events: [
+          { kind: 'noteOn' as const, atMs: 2_000, midi: 60, velocity: 0.5 },
+          { kind: 'noteOff' as const, atMs: 2_400, midi: 60 },
+        ],
+        beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+      },
+      'Synced chords',
+      1,
+    );
+    element<HTMLButtonElement>('focus-scores').click();
+    element<HTMLButtonElement>('scores-show-sketches').click();
+    rowButton('sketches-list', 'Edit this sketch').click();
+    element<HTMLButtonElement>('roll-chords-open').click();
+    const names = (): string[] =>
+      [...element('roll-chords-list').querySelectorAll('.roll-chords__chord--kept .roll-chords__name')].map(
+        (name) => name.textContent ?? '',
+      );
+    expect(names()).toEqual([]);
+
+    const other = new SketchLibrary(new InMemorySettingsStore(), () => 1);
+    other.keepTheChord([57, 60, 64]);
+    await new SketchSync({ drive: rig.drive, sketches: other }).sync(null);
+    element<HTMLButtonElement>('drive-sync').click();
+    await waitFor(() => element('drive-status').textContent?.startsWith('Synced') === true);
+    expect(names()).toEqual(['Am']);
+  });
+
   it('says what went wrong rather than nothing', async () => {
     const rig = createRig();
     await rig.view.initialize();

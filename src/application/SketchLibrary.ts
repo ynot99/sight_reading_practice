@@ -1,7 +1,7 @@
 import { barsAreHeardIn, type HeardBeat, type MidiFileEvent } from '../domain/midi/MidiFile.js';
 import { barLines, elapsedMsAt, type Exercise } from '../domain/model/Exercise.js';
 import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
-import { eachKeyOnce, sameKeys } from '../domain/harmony/chordsOfTheKey.js';
+import { eachKeyOnce, sameKeys, theChordsMerged } from '../domain/harmony/chordsOfTheKey.js';
 import type { ISettingsStore } from './ports/ISettingsStore.js';
 import { pack, packBeat, theBeatsIfWhole, unpack } from './packedPlaying.js';
 import { rollAsEvents, rollBeganAtMs, rollOfTheScore } from './session/RunRoll.js';
@@ -36,6 +36,23 @@ export interface SketchKey {
 
 /** The key of a sketch nothing gave one. */
 export const C_MAJOR: SketchKey = { fifths: 0, mode: 'major' };
+
+/**
+ * Kept chords read back, each its keys once, low to high: a chord of fewer
+ * than two keys, or of a key no keyboard has, is left out. `null` where
+ * there is no list at all - which a sync tells apart from an empty one.
+ */
+export function readTheChords(raw: unknown): (readonly number[])[] | null {
+  if (!Array.isArray(raw)) {
+    return null;
+  }
+  return (raw as unknown[]).flatMap((chord) => {
+    const keys = Array.isArray(chord) ? (chord as unknown[]) : [];
+    const fit = keys.every((midi) => Number.isInteger(midi) && (midi as number) >= 0 && (midi as number) <= 127);
+    const once = eachKeyOnce(keys as number[]);
+    return fit && once.length >= 2 ? [once] : [];
+  });
+}
 
 /** A key read back, where it is one a key signature can have. */
 function readKey(value: unknown): SketchKey {
@@ -188,6 +205,8 @@ export class SketchLibrary {
   private readonly unsent = new Set<string>();
   private changedAtMs = 0;
   private chords: (readonly number[])[] = [];
+  /** The kept chords as the drive had them when last in step, or `null` before any sync: what a sync merges from. */
+  private chordsInStep: (readonly number[])[] | null = null;
   private lastOpened: { readonly id: string; readonly atMs: number } | null = null;
 
   constructor(store: ISettingsStore, now: () => number) {
@@ -226,13 +245,8 @@ export class SketchLibrary {
       typeof openedId === 'string' && typeof openedAtMs === 'number' && Number.isFinite(openedAtMs)
         ? { id: openedId, atMs: openedAtMs }
         : null;
-    const chords: unknown[] = isRecord(raw) && Array.isArray(raw['chords']) ? raw['chords'] : [];
-    this.chords = chords.flatMap((chord) => {
-      const keys = Array.isArray(chord) ? (chord as unknown[]) : [];
-      const fit = keys.every((midi) => Number.isInteger(midi) && (midi as number) >= 0 && (midi as number) <= 127);
-      const once = eachKeyOnce(keys as number[]);
-      return fit && once.length >= 2 ? [once] : [];
-    });
+    this.chords = readTheChords(isRecord(raw) ? raw['chords'] : undefined) ?? [];
+    this.chordsInStep = readTheChords(isRecord(raw) ? raw['chordsInStep'] : undefined);
   }
 
   /**
@@ -270,12 +284,34 @@ export class SketchLibrary {
       return;
     }
     this.chords = [...this.chords, once];
+    this.changedAtMs = this.now();
     this.persist();
   }
 
   /** Takes a chord out of the palette. */
   letGoOfTheChord(midis: readonly number[]): void {
-    this.chords = this.chords.filter((chord) => !sameKeys(chord, midis));
+    const left = this.chords.filter((chord) => !sameKeys(chord, midis));
+    if (left.length === this.chords.length) {
+      return;
+    }
+    this.chords = left;
+    this.changedAtMs = this.now();
+    this.persist();
+  }
+
+  /** The kept chords as a sync sees them: as they are here, and as the drive had them when last in step. */
+  chordsForTheDrive(): { readonly kept: readonly (readonly number[])[]; readonly inStep: readonly (readonly number[])[] | null } {
+    return { kept: this.chords, inStep: this.chordsInStep };
+  }
+
+  /**
+   * The kept chords as a sync settled them, the drive having them now - and
+   * whatever was kept or let go of here while it was away at the drive, since
+   * the list it settled from (`from`), done to them, to go at the next.
+   */
+  chordsSettled(chords: readonly (readonly number[])[], from: readonly (readonly number[])[]): void {
+    this.chords = [...theChordsMerged(chords, this.chords, from)];
+    this.chordsInStep = [...chords];
     this.persist();
   }
 
@@ -376,7 +412,15 @@ export class SketchLibrary {
    * it has had everything: for a sync to be pressed half a minute after.
    */
   get unsentSinceMs(): number | null {
-    return this.unsent.size > 0 ? this.changedAtMs : null;
+    return this.unsent.size > 0 || this.chordsUnsent() ? this.changedAtMs : null;
+  }
+
+  /** Whether the kept chords are other than the drive had them when last in step: some kept or let go of since. */
+  private chordsUnsent(): boolean {
+    const inStep = this.chordsInStep ?? [];
+    return (
+      this.chords.length !== inStep.length || this.chords.some((chord) => !inStep.some((other) => sameKeys(chord, other)))
+    );
   }
 
   /** A sketch sent to the drive at a revision: in step with it, and nothing unsent. */
@@ -441,6 +485,7 @@ export class SketchLibrary {
       })),
       changedAtMs: this.changedAtMs,
       ...(this.chords.length > 0 ? { chords: this.chords } : {}),
+      ...(this.chordsInStep === null ? {} : { chordsInStep: this.chordsInStep }),
       ...(this.lastOpened === null ? {} : { opened: [this.lastOpened.id, this.lastOpened.atMs] }),
     });
   }

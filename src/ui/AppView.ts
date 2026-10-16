@@ -8046,6 +8046,8 @@ export class AppView {
       this.showTheSketchesOnlyTheDriveHas(sketches.onlyOnTheDrive);
       this.renderScores();
       this.renderSketches();
+      // Chords kept on another device are in the drawer, if it is open.
+      this.showTheChordsOfTheKey();
     } catch (error) {
       const why = error instanceof Error ? error.message : 'Google Drive could not be reached.';
       this.el.driveStatus.textContent = why;

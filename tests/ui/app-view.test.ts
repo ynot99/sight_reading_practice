@@ -12190,6 +12190,12 @@ describe('AppView', () => {
 
       await rig.view.initialize();
       await waitFor(() => rig.runtime.controller.openedExercise?.title === 'My idea');
+      // Open in the editor, over it written down.
+      expect(element('sheet-roll').hidden).toBe(false);
+      expect(element('roll-title').textContent).toBe('My idea');
+      expect(element('roll-edit').getAttribute('aria-pressed')).toBe('true');
+      element<HTMLButtonElement>('roll-close').click();
+      expect(rig.runtime.controller.openedExercise?.title).toBe('My idea');
       const options = [...element<HTMLSelectElement>('what-opens').options].map((option) => [option.value, option.textContent]);
       expect(options.slice(-2)).toEqual([
         ['lastSketch', 'The sketch I worked on last'],
@@ -12232,6 +12238,8 @@ describe('AppView', () => {
       later.runtime.controller.updateSettings({ whatOpens: 'lastOfAll' });
       await later.view.initialize();
       await waitFor(() => later.runtime.controller.openedExercise?.title === 'Read Since');
+      // A score is read on the page: no editor over it.
+      expect(element('sheet-roll').hidden).toBe(true);
 
       // Only a score, it; only a sketch, it.
       mountRealMarkup();
@@ -12247,6 +12255,7 @@ describe('AppView', () => {
       sketchOnly.runtime.controller.updateSettings({ whatOpens: 'lastOfAll' });
       await sketchOnly.view.initialize();
       await waitFor(() => sketchOnly.runtime.controller.openedExercise?.title === 'Only Sketched');
+      expect(element('roll-title').textContent).toBe('Only Sketched');
     });
 
     it('counts a sketch opened in the editor or written down as the one worked on last', async () => {

@@ -1090,8 +1090,8 @@ const OPENING_DESCRIPTIONS: Readonly<Record<WhatOpens, string>> = {
     'Something to read is already there, so the question becomes whether to play it. ' +
     'Falls back to a new exercise while nothing is kept.',
   lastSketch:
-    'The sketch you last edited or wrote down, written down as a score; the pencil beside it opens ' +
-    'it in the editor. Falls back to a new exercise while there is none.',
+    'The sketch you last edited or wrote down, open in the editor, and written down as a score ' +
+    'under it. Falls back to a new exercise while there is none.',
   lastOfAll:
     'The score you read last, or the sketch you worked on last, whichever was later. ' +
     'Falls back to a new exercise while there is neither.',
@@ -3005,7 +3005,10 @@ export class AppView {
       sketch !== null &&
       (wanted === 'lastSketch' || (wanted === 'lastOfAll' && (lastRead === null || sketch.atMs > lastRead.openedAtMs)))
     ) {
+      // In the editor, where a sketch is worked on, over it written down,
+      // which is what the page shows once the editor is shut.
       await this.writeDownTheSketch(sketch.sketch.id, this.el.sheetScores);
+      this.showTheSketch(sketch.sketch.id);
       return;
     }
     const chosen =

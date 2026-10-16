@@ -17,7 +17,7 @@ import {
   unplug,
 } from './audioTime.js';
 import { timeTheStart } from '../../shared/timeTheStart.js';
-import { noteANoteHanded } from '../../shared/playbackTimings.js';
+import { noteANoteHanded, noteAnEvent } from '../../shared/playbackTimings.js';
 
 export type AudioFetcher = (url: string) => Promise<ArrayBuffer>;
 
@@ -431,6 +431,9 @@ export class SampledPitchPlayer
 
   private async loadAll(): Promise<void> {
     const context = this.ensureContext();
+    // For the playback's timings: fetching and decoding thirty recordings is
+    // work the first playback of a page does beside its first notes.
+    noteAnEvent("the piano's recordings asked for");
     await Promise.all(
       PIANO_SAMPLES.map(async (sample) => {
         try {
@@ -441,6 +444,7 @@ export class SampledPitchPlayer
         }
       }),
     );
+    noteAnEvent(`the piano's recordings decoded, ${String(this.buffers.size)} of ${String(PIANO_SAMPLES.length)}`);
   }
 
   private ensureContext(): AudioContext {

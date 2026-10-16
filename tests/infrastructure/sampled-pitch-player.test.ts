@@ -724,6 +724,22 @@ describe('SampledPitchPlayer', () => {
 });
 
 describe('the playback timings, as the instrument sees them', () => {
+  it('tells when the recordings are asked for and how many were decoded', async () => {
+    const { player } = createPlayer({ failing: [PIANO_SAMPLES[0]?.name ?? ''] });
+    beginThePlaybackTimings();
+
+    await player.load();
+
+    const said = thePlaybackTimingsText('')
+      .split('\n')
+      .filter((line) => line.includes('recordings'))
+      .map((line) => line.trim().replace(/^\+?\d+ +/, ''));
+    expect(said).toEqual([
+      "the piano's recordings asked for",
+      `the piano's recordings decoded, ${String(PIANO_SAMPLES.length - 1)} of ${String(PIANO_SAMPLES.length)}`,
+    ]);
+  });
+
   it('counts each note handed over, and each dropped as gone', async () => {
     const { player } = createPlayer();
     await player.load();

@@ -5,6 +5,9 @@ import { sketchAsKept, sketchFromKept, type SketchLibrary, type StoredSketch } f
 export const SKETCHES_FILE = 'sketches.json';
 const VERSION = 1;
 
+/** How many times a sync is settled again where another device wrote the drive meanwhile. */
+const SETTLED_AT_MOST = 3;
+
 /** What a copy of a sketch changed on two devices at once is called, after its own name. */
 export const CONFLICTING_COPY = 'conflicting copy';
 
@@ -69,13 +72,62 @@ export class SketchSync {
     this.deps = dependencies;
   }
 
-  /** One sync, leaving as it is the sketch open on the page (`open`), if any. */
+  /**
+   * One sync, leaving as it is the sketch open on the page (`open`), if any.
+   *
+   * Two devices syncing at once each read the drive before the other wrote
+   * it, each sent its own change at the same revision, and the second write
+   * took the first's place: both then counted themselves in step, with
+   * different notes, for ever. So the drive is read again just before it is
+   * written, and where another device has written it since, the sync is
+   * settled again from what is there now - a few times, and then written
+   * anyway: what still slips through is a sketch at the drive's revision
+   * with other notes than the drive's, which the next sync keeps as a copy
+   * (see `settle`).
+   */
   async sync(open: string | null): Promise<SketchSyncOutcome> {
-    const { sketches: library } = this.deps;
-    const { file, there } = await this.readTheDrive();
+    let brought = 0;
+    let conflicts = 0;
+    for (let attempt = 1; ; attempt += 1) {
+      const read = await this.readTheDrive();
+      const round = this.settle(read.there, open);
+      brought += round.brought;
+      conflicts += round.conflicts;
+      if (round.sentAt.length > 0) {
+        const again = await this.readTheDrive();
+        if (again.text !== read.text && attempt < SETTLED_AT_MOST) {
+          continue;
+        }
+        await this.deps.drive.write(SKETCHES_FILE, writeTheDrive(round.next), again.file?.id ?? null);
+      }
+      for (const [id, revision] of round.sentAt) {
+        this.deps.sketches.sentAt(id, revision);
+      }
+      return {
+        sent: round.sentAt.length,
+        brought,
+        conflicts,
+        onlyOnTheDrive: onlyOnTheDrive(round.next, this.deps.sketches),
+      };
+    }
+  }
 
+  /**
+   * Settles each sketch here against the drive's: what the drive is to hold,
+   * and which sketches go to it at which revision - marked sent only once it
+   * has them. Taking the drive's, and keeping a copy, are done here at once:
+   * they are this device catching up, whatever is written after.
+   *
+   * A sketch at the drive's revision, unchanged here since, whose notes are
+   * not the drive's has been written over by another device at that same
+   * revision; it is kept as a copy, as a change made on both is.
+   */
+  private settle(
+    there: ReadonlyMap<string, SketchThere>,
+    open: string | null,
+  ): { readonly next: Map<string, SketchThere>; readonly sentAt: [string, number][]; readonly brought: number; readonly conflicts: number } {
+    const library = this.deps.sketches;
     const next = new Map<string, SketchThere>(there);
-    // Settled here only once the drive has it.
     const sentAt: [string, number][] = [];
     let brought = 0;
     let conflicts = 0;
@@ -89,11 +141,14 @@ export class SketchSync {
       };
       if (theirs === undefined) {
         send(mine.revision + 1);
-      } else if (theirs.revision > mine.revision) {
+        continue;
+      }
+      const writtenOver = theirs.revision === mine.revision && !mine.unsent && !theSame(theirs.sketch, sketch);
+      if (theirs.revision > mine.revision || writtenOver) {
         if (sketch.id === open) {
           continue;
         }
-        if (mine.unsent) {
+        if (mine.unsent || writtenOver) {
           const copy = library.keepACopy(sketch.id, `${sketch.title} (${CONFLICTING_COPY})`);
           if (copy !== null) {
             next.set(copy.id, { sketch: copy, revision: 1 });
@@ -107,14 +162,7 @@ export class SketchSync {
         send(Math.max(mine.revision, theirs.revision) + 1);
       }
     }
-
-    if (sentAt.length > 0) {
-      await this.deps.drive.write(SKETCHES_FILE, writeTheDrive(next), file?.id ?? null);
-    }
-    for (const [id, revision] of sentAt) {
-      library.sentAt(id, revision);
-    }
-    return { sent: sentAt.length, brought, conflicts, onlyOnTheDrive: onlyOnTheDrive(next, library) };
+    return { next, sentAt, brought, conflicts };
   }
 
   /** Takes a sketch the drive has onto this device, as the drive has it now. */
@@ -128,13 +176,20 @@ export class SketchSync {
 
   private async readTheDrive(): Promise<{
     readonly file: CloudFile | undefined;
+    readonly text: string | null;
     readonly there: ReadonlyMap<string, SketchThere>;
   }> {
     const { drive } = this.deps;
     await drive.connect();
     const file = (await drive.list()).find((each) => each.name === SKETCHES_FILE);
-    return { file, there: file === undefined ? new Map() : readTheDrive(await drive.read(file.id)) };
+    const text = file === undefined ? null : await drive.read(file.id);
+    return { file, text, there: text === null ? new Map() : readTheDrive(text) };
   }
+}
+
+/** Whether two sketches say the same thing, as they are kept. */
+function theSame(one: StoredSketch, other: StoredSketch): boolean {
+  return JSON.stringify(sketchAsKept(one)) === JSON.stringify(sketchAsKept(other));
 }
 
 /** What the drive has that the library here does not, newest first. */

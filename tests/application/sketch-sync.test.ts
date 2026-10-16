@@ -11,6 +11,8 @@ class FolderDrive implements ICloudDrive {
   readonly files = new Map<string, { id: string; content: string }>();
   writes = 0;
   failing = false;
+  /** Run as each read is answered: another device writing between this one's read and its write. */
+  meanwhile: (() => void) | null = null;
   private made = 0;
 
   prepare(): void {}
@@ -25,7 +27,9 @@ class FolderDrive implements ICloudDrive {
 
   read(id: string): Promise<string> {
     const found = [...this.files.values()].find((file) => file.id === id);
-    return found === undefined ? Promise.reject(new Error('gone')) : Promise.resolve(found.content);
+    const answer = found === undefined ? Promise.reject(new Error('gone')) : Promise.resolve(found.content);
+    this.meanwhile?.();
+    return answer;
   }
 
   write(name: string, content: string, replacing: string | null): Promise<CloudFile> {
@@ -207,6 +211,113 @@ describe('the sketches kept the same on every device that has them', () => {
 
     expect((await ipad.sync()).sent).toBe(1);
     expect(drive.holds()).toEqual([[idea.id, 'Thrice', 4]]);
+  });
+
+  it('loses nothing where two devices change one sketch and sync at the same moment', async () => {
+    const drive = new FolderDrive();
+    const ipad = device(drive);
+    const pc = device(drive);
+    const idea = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Idea', 1);
+    await ipad.sync();
+    await pc.bring(idea.id);
+
+    ipad.sketches.rename(idea.id, 'Idea, iPad');
+    pc.sketches.rename(idea.id, 'Idea, PC');
+    await Promise.all([ipad.sync(), pc.sync()]);
+    // However the two went, a sync each after and both changes are on both.
+    await ipad.sync();
+    await pc.sync();
+    await ipad.sync();
+    for (const each of [ipad, pc]) {
+      const titles = each.titles();
+      const offered = (await each.sync()).onlyOnTheDrive.map(({ title }) => title);
+      expect([...titles, ...offered].sort().join(' | ')).toMatch(/^Idea, (iPad|PC) \| Idea, (iPad|PC) \(conflicting copy\)$/);
+    }
+    expect(drive.holds().map(([, title]) => title).sort()).toEqual(
+      [ipad.sketches.find(idea.id)?.title ?? '', `${ipad.sketches.find(idea.id)?.title === 'Idea, iPad' ? 'Idea, PC' : 'Idea, iPad'} (${CONFLICTING_COPY})`].sort(),
+    );
+    expect(pc.sketches.find(idea.id)?.title).toBe(ipad.sketches.find(idea.id)?.title);
+  });
+
+  it('settles again where another device wrote the drive between this one\'s reading it and writing it', async () => {
+    const drive = new FolderDrive();
+    const ipad = device(drive);
+    const pc = device(drive);
+    const idea = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Idea', 1);
+    await ipad.sync();
+    await pc.bring(idea.id);
+    ipad.sketches.rename(idea.id, 'Idea, iPad');
+    await ipad.sync();
+    const theIpads = drive.files.get(SKETCHES_FILE)?.content ?? '';
+    // Put back to the PC's last sight of it, and the iPad's written again
+    // just after the PC has read it.
+    ipad.sketches.rename(idea.id, 'Idea, iPad');
+    pc.sketches.rename(idea.id, 'Idea, PC');
+    drive.files.set(SKETCHES_FILE, { id: drive.files.get(SKETCHES_FILE)?.id ?? '', content: theIpads.replace('"revision":2', '"revision":1').replace('Idea, iPad', 'Idea') });
+    let reads = 0;
+    drive.meanwhile = () => {
+      reads += 1;
+      if (reads === 1) {
+        drive.files.set(SKETCHES_FILE, { id: drive.files.get(SKETCHES_FILE)?.id ?? '', content: theIpads });
+      }
+    };
+
+    expect(await pc.sync()).toEqual({ sent: 1, brought: 1, conflicts: 1, onlyOnTheDrive: [] });
+    expect(pc.titles()).toEqual(['Idea, PC (conflicting copy)', 'Idea, iPad']);
+    expect(drive.holds().map(([, title]) => title)).toEqual(['Idea, iPad', 'Idea, PC (conflicting copy)']);
+  });
+
+  it('writes after settling three times, however often another device writes meanwhile', async () => {
+    const drive = new FolderDrive();
+    const pc = device(drive);
+    const ipad = device(drive);
+    const mine = pc.sketches.begin({ events: PLAYED, beats: BEATS }, 'Mine', 1);
+    const shared = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Shared', 2);
+    await ipad.sync();
+    await pc.sync();
+    await pc.bring(shared.id);
+    // Changed on the iPad, to be brought in the first round only.
+    ipad.sketches.rename(shared.id, 'Shared, renamed');
+    await ipad.sync();
+    pc.sketches.rename(mine.id, 'Mine, again');
+    let reads = 0;
+    drive.meanwhile = () => {
+      reads += 1;
+      const file = drive.files.get(SKETCHES_FILE);
+      drive.files.set(SKETCHES_FILE, { id: file?.id ?? '', content: `${file?.content ?? ''} ` });
+    };
+
+    const synced = await pc.sync();
+    expect([synced.sent, synced.brought]).toEqual([1, 1]);
+    // Read twice a time, three times.
+    expect(reads).toBe(6);
+    expect(drive.holds().map(([, title]) => title).sort()).toEqual(['Mine, again', 'Shared, renamed']);
+  });
+
+  it('keeps as a copy a sketch written over at its own revision, the drive\'s taken under its name', async () => {
+    const drive = new FolderDrive();
+    const ipad = device(drive);
+    const pc = device(drive);
+    const idea = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Idea', 1);
+    await ipad.sync();
+    // The PC in step at revision 1, with other notes than the drive's.
+    pc.sketches.takeFromTheDrive({ ...idea, title: 'Idea, PC' }, 1);
+
+    expect(await pc.sync()).toEqual({ sent: 1, brought: 1, conflicts: 1, onlyOnTheDrive: [] });
+    expect(pc.titles()).toEqual(['Idea', `Idea, PC (${CONFLICTING_COPY})`]);
+    // In step and the same: nothing.
+    expect(await ipad.sync()).toEqual({
+      sent: 0,
+      brought: 0,
+      conflicts: 0,
+      onlyOnTheDrive: [{ id: `${idea.id}-copy`, title: `Idea, PC (${CONFLICTING_COPY})`, begunAtMs: 1, noteCount: 2 }],
+    });
+    // Open, it is left for the sync after.
+    const other = device(drive);
+    other.sketches.takeFromTheDrive({ ...idea, title: 'Elsewhere' }, 1);
+    other.edit(idea.id);
+    expect((await other.sync()).conflicts).toBe(0);
+    expect(other.titles()).toEqual(['Elsewhere']);
   });
 
   it('marks nothing sent where the drive could not be written, and sends it at the next sync', async () => {

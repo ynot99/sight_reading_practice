@@ -116,7 +116,7 @@ import {
   AccuracyScoringStrategy,
   TimingWeightedScoringStrategy,
 } from '../domain/scoring/strategies.js';
-import { keepAudioAwake, type AudioSessionLike } from '../infrastructure/audio/keepAudioAwake.js';
+import { keepAudioAwake } from '../infrastructure/audio/keepAudioAwake.js';
 import { WebAudioMetronome, createAudioContextFactory } from '../infrastructure/audio/WebAudioMetronome.js';
 import { AudioClockReading } from '../infrastructure/audio/audioTime.js';
 import { WebAudioPitchPlayer } from '../infrastructure/audio/WebAudioPitchPlayer.js';
@@ -346,14 +346,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   // hearing one have to be the same moment: that is what playing with a
   // metronome means.
   const waking =
-    typeof document === 'undefined'
-      ? null
-      : keepAudioAwake(
-          audioContextFactory,
-          document,
-          document,
-          (navigator as Navigator & { audioSession?: AudioSessionLike }).audioSession ?? null,
-        );
+    typeof document === 'undefined' ? null : keepAudioAwake(audioContextFactory, document);
 
   // One crossing between the page's clock and the audio clock for the click
   // and the notes beside it, or a note placed from a tick lands elsewhere on

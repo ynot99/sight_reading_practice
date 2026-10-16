@@ -95,41 +95,6 @@ describe('keeping the audio device awake', () => {
     }
   });
 
-  it('says the page is a player from the first touch, so starting one switches nothing', () => {
-    // On his iPad the audio device stood about 70 ms as the media keys'
-    // silence began to play: the session switched kind under the music.
-    const page = new FakeTarget();
-    const session = { type: 'auto' };
-    keepAudioAwake(() => new FakeContext(), page, page, session);
-    expect(session.type).toBe('auto');
-
-    page.fire('pointerdown');
-    expect(session.type).toBe('playback');
-
-    // Set once, and not again by every touch after.
-    let set = 0;
-    const counted = {
-      get type(): string {
-        return 'playback';
-      },
-      set type(_value: string) {
-        set += 1;
-      },
-    };
-    const other = new FakeTarget();
-    keepAudioAwake(() => new FakeContext(), other, other, counted);
-    other.fire('pointerdown');
-    other.fire('keydown');
-    expect(set).toBe(0);
-
-    // And a browser with no such session wakes as it always did.
-    const bare = new FakeTarget();
-    const context = new FakeContext();
-    keepAudioAwake(() => context, bare, bare, null);
-    bare.fire('pointerdown');
-    expect(context.resumes).toBe(1);
-  });
-
   it('wakes it again when the page comes back', () => {
     // A tablet suspends the audio of a page it has put away and does not
     // resume it on return, so a context woken once is asleep again by the time

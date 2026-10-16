@@ -8455,8 +8455,6 @@ export class AppView {
       view?.navigator?.userAgent ?? 'an unknown browser',
       `${String(view?.innerWidth ?? 0)}x${String(view?.innerHeight ?? 0)} at ${String(view?.devicePixelRatio ?? 1)}x`,
       `falling notes ${this.runtime.controller.settings.keysShown === 'falling-notes' ? 'on' : 'off'}`,
-      // Whether the browser lets the page say it is a player, and what it is now.
-      `audio session ${(view?.navigator as (Navigator & { audioSession?: { type: string } }) | undefined)?.audioSession?.type ?? 'not offered'}`,
     ].join('; ');
     return thePlaybackTimingsText(device);
   }

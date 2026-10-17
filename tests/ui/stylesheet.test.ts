@@ -1441,6 +1441,8 @@ describe('the stylesheet', () => {
     expect(ruleOf('.button')).toMatch(/padding\s*:\s*8px 14px/);
     // The chords stand in the column itself, sharing its height with the keep button.
     expect(ruleOf('.roll-chords__list')).toMatch(/display\s*:\s*contents/);
+    // A finger slides over the chords, each heard in turn, rather than scrolling them.
+    expect(ruleOf('.roll-chords__chord')).toMatch(/touch-action\s*:\s*none/);
   });
 
   it('keeps a caret out of the range iOS magnifies the page for', () => {

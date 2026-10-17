@@ -2163,6 +2163,18 @@ export class AppView {
   private pointerOnTheChords = '';
 
   /**
+   * The chord of the drawer a pointer is held down on, sounding until it is
+   * let go of: by its place there, or none where the pointer has slid off
+   * the chords; its keys, and when they were struck.
+   */
+  private chordHeld: {
+    readonly pointerId: number;
+    readonly at: number | null;
+    readonly keys: readonly number[];
+    readonly struckAtMs: number;
+  } | null = null;
+
+  /**
    * The notes last copied in this page, for the paste button where the
    * clipboard cannot be read - an app's browser without the API, or a page
    * not served securely - and where it holds something else.
@@ -9562,13 +9574,36 @@ export class AppView {
       }
       if (this.chordsBeingForgotten) {
         this.forgetTheChordInTheDrawer(Number(chord.dataset['chord']));
-      } else {
-        this.writeTheChordAtTheHead(Number(chord.dataset['chord']));
+      } else if (event.detail === 0) {
+        // A key's click - Enter or Space on a chord - counts no presses. A
+        // pointer's writes the chord it is let go of on, and was answered
+        // there: see `letGoOfTheChord`.
+        const written = this.writeTheChordAtTheHead(Number(chord.dataset['chord']));
+        const now = this.runtime.clock.now();
+        for (const { midi } of written === null ? [] : written.pasted) {
+          this.runtime.pitchPlayer.play(midi, written?.velocity ?? 0, now);
+          this.runtime.pitchPlayer.stop(midi, now + (written?.lengthMs ?? 0));
+        }
       }
     });
     this.listen(this.el.rollChordsList, 'pointerdown', (event) => {
       this.pointerOnTheChords = event.pointerType;
+      this.holdTheChord(event);
     });
+    // Asked of the document, as the keys on the screen are: a finger's
+    // events keep going to the chord it went down on, wherever it has slid.
+    this.listen(this.doc, 'pointermove', (event) => {
+      if (event instanceof PointerEvent && this.chordHeld?.pointerId === event.pointerId) {
+        this.slideOverTheChords(event);
+      }
+    });
+    for (const type of ['pointerup', 'pointercancel'] as const) {
+      this.listen(this.doc, type, (event) => {
+        if (event instanceof PointerEvent && this.chordHeld?.pointerId === event.pointerId) {
+          this.letGoOfTheChord(type === 'pointerup' ? this.theChordUnder(event) : null);
+        }
+      });
+    }
     // Over a chord - a mouse resting on it, or a finger on it until it is
     // lifted - its notes are shown where it would write them. Let go of, a
     // finger leaves it, and the click writes them there.
@@ -13230,22 +13265,98 @@ export class AppView {
    * follows it, and a progression is written by tapping it through. A key of
    * it already sounding there is left out, as a paste leaves it.
    */
-  private writeTheChordAtTheHead(at: number): void {
+  private writeTheChordAtTheHead(
+    at: number,
+  ): { readonly pasted: readonly KeyNamed[]; readonly velocity: number; readonly lengthMs: number } | null {
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
     const written = this.theChordWrittenAtTheHead(at);
     if (sketch === undefined || stored === null || written === null || written.pasted.length === 0) {
-      return;
+      return null;
     }
     const { events, pasted, fromMs, untilMs, velocity } = written;
-    const now = this.runtime.clock.now();
-    for (const { midi } of pasted) {
-      this.runtime.pitchPlayer.play(midi, velocity, now);
-      this.runtime.pitchPlayer.stop(midi, now + (untilMs - fromMs));
-    }
     this.changeTheSketchShowing(events, [...sketch.before, asItWas(stored, sketch.chosen)], pasted);
     // Moved on, the cursor takes what is shown ahead with it: see `showTheChordsOfTheKey`.
     this.putTheHeadAt(untilMs);
+    return { pasted, velocity, lengthMs: untilMs - fromMs };
+  }
+
+  /**
+   * Strikes the chord of the drawer a pointer goes down on - the mouse's
+   * left button, a finger or a pen - to sound until it is let go of, and
+   * holds it there to slide over the others. Deleting, the drawer only
+   * deletes: the sound is a hearing of what would be written.
+   */
+  private holdTheChord(event: PointerEvent): void {
+    const chord = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-chord]') : null;
+    if (chord === null || this.chordsBeingForgotten || (event.pointerType === 'mouse' && event.button !== 0)) {
+      return;
+    }
+    this.letGoOfTheChord(null);
+    this.chordHeld = { pointerId: event.pointerId, at: null, keys: [], struckAtMs: 0 };
+    this.strikeTheChord(Number(chord.dataset['chord']));
+  }
+
+  /**
+   * Takes the chord held to the one the pointer has slid onto, letting go of
+   * the one before as a hand sliding over keys does - and to none, silent,
+   * off the chords - and shows where it would be written.
+   */
+  private slideOverTheChords(event: PointerEvent): void {
+    const at = this.theChordUnder(event);
+    if (at !== this.chordHeld?.at) {
+      this.strikeTheChord(at);
+      this.pointAtTheChord(at);
+    }
+  }
+
+  /**
+   * Silences the chord held, if one is sounding, and strikes the one at a
+   * place of the drawer, as loud as the sketch is on the whole: all its keys,
+   * those the sketch already has there too, so the chord is heard whole.
+   */
+  private strikeTheChord(at: number | null): void {
+    const held = this.chordHeld;
+    if (held === null) {
+      return;
+    }
+    for (const midi of held.keys) {
+      this.runtime.pitchPlayer.stop(midi);
+    }
+    const written = at === null ? null : this.theChordWrittenAtTheHead(at);
+    const keys = written === null ? [] : written.chord;
+    const now = this.runtime.clock.now();
+    for (const midi of keys) {
+      this.runtime.pitchPlayer.play(midi, written?.velocity ?? 0, now);
+    }
+    this.chordHeld = { ...held, at: written === null ? null : at, keys, struckAtMs: now };
+  }
+
+  /**
+   * Lets go of the chord held, writing the one the pointer is let go of on,
+   * or none. Written, it sounds on for as long as it is written, so a quick
+   * tap is heard as a note of it and not cut short; held longer, it ends as
+   * it is let go of. Its one strike is the hearing: the writing strikes
+   * nothing again.
+   */
+  private letGoOfTheChord(at: number | null): void {
+    const held = this.chordHeld;
+    if (held === null) {
+      return;
+    }
+    this.chordHeld = null;
+    const written = at === null ? null : this.writeTheChordAtTheHead(at);
+    const endsAtMs = Math.max(this.runtime.clock.now(), held.struckAtMs + (written?.lengthMs ?? 0));
+    for (const midi of held.keys) {
+      this.runtime.pitchPlayer.stop(midi, endsAtMs);
+    }
+  }
+
+  /** The chord of the drawer under a point, by its place there; `null` off the chords. */
+  private theChordUnder(event: PointerEvent): number | null {
+    const under = this.doc.elementFromPoint(event.clientX, event.clientY);
+    const chord = under?.closest<HTMLElement>('[data-chord]') ?? null;
+    return chord === null ? null : Number(chord.dataset['chord']);
   }
 
   /**
@@ -13256,6 +13367,8 @@ export class AppView {
    * One answer, for writing it and for showing it ahead.
    */
   private theChordWrittenAtTheHead(at: number): {
+    /** The chord's keys, every one: what is heard of it. */
+    readonly chord: readonly number[];
     readonly events: readonly MidiFileEvent[];
     readonly pasted: readonly KeyNamed[];
     readonly fromMs: number;
@@ -13281,7 +13394,7 @@ export class AppView {
       chord.midis.map((midi) => ({ afterMs: 0, lengthMs: untilMs - fromMs, midi, velocity })),
       fromMs + origin,
     );
-    return { events, pasted, fromMs, untilMs, velocity };
+    return { chord: chord.midis, events, pasted, fromMs, untilMs, velocity };
   }
 
   /** Points at a chord of the drawer, or at none, and shows its notes where it would write them. */

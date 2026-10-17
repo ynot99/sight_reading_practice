@@ -8197,6 +8197,160 @@ describe('AppView', () => {
       }
     });
 
+    it('sounds a chord of the drawer while it is held, slid over the others, and writes the one let go of', async () => {
+      // jsdom lays nothing out, so where a pointer is says which chord it is
+      // over: y is the chord's place in the drawer, and anywhere else is off it.
+      Object.defineProperty(document, 'elementFromPoint', {
+        configurable: true,
+        value: (_x: number, y: number): Element | null =>
+          element('roll-chords-list').querySelector(`[data-chord="${String(y)}"] .roll-chords__name`) ?? document.body,
+      });
+      try {
+        const { view, sketches, instrument, clock } = createRig();
+        await view.initialize();
+        const sketch = sketches.begin(
+          {
+            events: [
+              { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+              { kind: 'noteOff' as const, atMs: 1_000, midi: 60 },
+            ],
+            beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+          },
+          'Palette',
+          1,
+        );
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-sketches').click();
+        rowButton('sketches-list', 'Edit this sketch').click();
+        element<HTMLButtonElement>('roll-chords-open').click();
+        const chord = (at: number): HTMLElement => {
+          const found = element('roll-chords-list').querySelector<HTMLElement>(`[data-chord="${String(at)}"]`);
+          if (found === null) {
+            throw new Error(`No chord ${String(at)} in the drawer.`);
+          }
+          return found;
+        };
+        const pointer = (type: string, on: EventTarget, at: number, more: PointerEventInit = {}): void => {
+          on.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 7, pointerType: 'touch', clientY: at, ...more }));
+        };
+        const written = (): number[][] =>
+          (sketches.find(sketch.id)?.events ?? [])
+            .filter((event) => event.kind === 'noteOn')
+            .map((event) => [event.atMs, event.midi])
+            .slice(1);
+        const heard = (): (number | undefined)[][] => instrument.played.map((note) => [note.midi, note.atMs]);
+        const silenced = (): (number | undefined)[][] => instrument.stopped.map((note) => [note.midi, note.atMs]);
+        const [C, , , F, , Am] = [0, 1, 2, 3, 4, 5];
+        const begun = clock.now();
+        instrument.played.length = 0;
+        instrument.stopped.length = 0;
+
+        // Pressed, heard whole and at once; nothing written until it is let go of.
+        pointer('pointerdown', chord(Am), Am);
+        expect(heard()).toEqual([
+          [69, begun],
+          [72, begun],
+          [76, begun],
+        ]);
+        expect(written()).toEqual([]);
+        // Slid onto another, the one before let go of and this one struck.
+        clock.advance(100);
+        pointer('pointermove', chord(Am), F);
+        expect(silenced()).toEqual([
+          [69, undefined],
+          [72, undefined],
+          [76, undefined],
+        ]);
+        expect(heard().slice(3)).toEqual([
+          [65, begun + 100],
+          [69, begun + 100],
+          [72, begun + 100],
+        ]);
+        // Let go of at once, it is written there, struck nothing more, and
+        // sounds on as long as it is written: to the next line of the grid.
+        pointer('pointerup', chord(Am), F);
+        chord(F).dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+        expect(written()).toEqual([
+          [0, 65],
+          [0, 69],
+          [0, 72],
+        ]);
+        expect(heard()).toHaveLength(6);
+        expect(silenced().slice(3)).toEqual([
+          [65, begun + 100 + 500],
+          [69, begun + 100 + 500],
+          [72, begun + 100 + 500],
+        ]);
+
+        // Held longer than it is written, it ends as it is let go of; and
+        // heard whole, though the key the sketch already holds there is not
+        // written again.
+        instrument.stopped.length = 0;
+        pointer('pointerdown', chord(C), C);
+        expect(heard().slice(6)).toEqual([
+          [60, begun + 100],
+          [64, begun + 100],
+          [67, begun + 100],
+        ]);
+        clock.advance(2_000);
+        pointer('pointerup', chord(C), C);
+        expect(written().slice(3)).toEqual([
+          [500, 64],
+          [500, 67],
+        ]);
+        expect(silenced()).toEqual([
+          [60, begun + 2_100],
+          [64, begun + 2_100],
+          [67, begun + 2_100],
+        ]);
+
+        // Slid off the chords, silent, and let go of there, it writes nothing.
+        instrument.stopped.length = 0;
+        pointer('pointerdown', chord(C), C);
+        pointer('pointermove', chord(C), -1);
+        expect(silenced()).toEqual([
+          [60, undefined],
+          [64, undefined],
+          [67, undefined],
+        ]);
+        pointer('pointerup', chord(C), -1);
+        expect(written()).toHaveLength(5);
+        expect(heard()).toHaveLength(12);
+
+        // A mouse's right button only deletes, and is not heard.
+        pointer('pointerdown', chord(C), C, { pointerType: 'mouse', button: 2 });
+        expect(heard()).toHaveLength(12);
+
+        // Taken from the finger by the browser, it is let go of and writes nothing.
+        instrument.stopped.length = 0;
+        pointer('pointerdown', chord(C), C);
+        pointer('pointercancel', chord(C), C);
+        expect(silenced().map(([midi]) => midi)).toEqual([60, 64, 67]);
+        expect(written()).toHaveLength(5);
+
+        // A second finger on the chords lets go of what the first held.
+        instrument.stopped.length = 0;
+        pointer('pointerdown', chord(C), C);
+        pointer('pointerdown', chord(Am), Am, { pointerId: 8 });
+        expect(silenced().map(([midi]) => midi)).toEqual([60, 64, 67]);
+        pointer('pointerup', chord(Am), -1, { pointerId: 8 });
+
+        // Deleting, a chord is only deleted: neither heard nor written.
+        element<HTMLButtonElement>('roll-chords-keep').click();
+        element<HTMLButtonElement>('roll-chords-forget').click();
+        const kept = 7;
+        const before = heard().length;
+        pointer('pointerdown', chord(kept), kept, { pointerType: 'mouse', button: 0 });
+        pointer('pointerup', chord(kept), kept, { pointerType: 'mouse', button: 0 });
+        chord(kept).dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+        expect(heard()).toHaveLength(before);
+        expect(written()).toHaveLength(5);
+        expect(element('roll-chords-list').querySelector(`[data-chord="${String(kept)}"]`)).toBeNull();
+      } finally {
+        Reflect.deleteProperty(document, 'elementFromPoint');
+      }
+    });
+
     it('keeps the chosen notes as a chord in the drawer, writes it, and lets go of it', async () => {
       const { view, sketches } = createRig();
       await view.initialize();

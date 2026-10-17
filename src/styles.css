@@ -1293,6 +1293,11 @@ textarea {
   padding: 4px;
 }
 
+/*
+ * A finger held on a chord slides over the others, each heard as it is
+ * reached, rather than scrolling the column: where the drawing is too short
+ * for all of them, the column is scrolled by a finger on the tools over them.
+ */
 .roll-chords__chord {
   display: flex;
   flex: 1 0 44px;
@@ -1300,6 +1305,7 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: 2px;
+  touch-action: none;
 }
 
 .roll-chords__name {

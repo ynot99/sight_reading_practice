@@ -6914,7 +6914,7 @@ describe('AppView', () => {
     });
 
     it('changes the key from the bar the cursor is in, marked over the bar, its chords and its keys followed by the cursor', async () => {
-      const { view, sketches } = createRig();
+      const { view, sketches, clock } = createRig();
       await view.initialize();
       const sketch = sketches.begin(
         {
@@ -6975,6 +6975,29 @@ describe('AppView', () => {
       cursorAt(1_000);
       expect(firstChord()).toBe('CI');
       expect([inScale(66), inScale(65)]).toEqual([false, true]);
+      // Carried past the change by a playback, they follow it there; still short of it, they wait.
+      vi.useFakeTimers();
+      try {
+        element<HTMLButtonElement>('roll-play').click();
+        const playOn = (ms: number): void => {
+          for (let gone = 0; gone < ms; gone += 100) {
+            clock.advance(100);
+            vi.advanceTimersByTime(100);
+          }
+        };
+        // Nothing marked again on the strip while it stays in one key.
+        const marking = new MutationObserver(() => undefined);
+        marking.observe(element('roll-body'), { subtree: true, attributeFilter: ['data-in-scale'] });
+        playOn(2_800);
+        expect([inScale(66), inScale(65), firstChord()]).toEqual([false, true, 'CI']);
+        expect(marking.takeRecords()).toEqual([]);
+        marking.disconnect();
+        playOn(400);
+        expect([inScale(66), inScale(65), firstChord()]).toEqual([true, false, 'GI']);
+        element<HTMLButtonElement>('roll-stop').click();
+      } finally {
+        vi.useRealTimers();
+      }
       // Put back as one change.
       element<HTMLButtonElement>('roll-undo').click();
       expect(marks()).toEqual(['1: C major 4/4 \u2669=120']);

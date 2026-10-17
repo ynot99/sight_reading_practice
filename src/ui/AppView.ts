@@ -2134,6 +2134,8 @@ export class AppView {
    * from, which is what makes a tap on the grid mean anything at all.
    */
   private rollAtMs = 0;
+  /** The sketch and the key the head was last found in, so it is followed into another only when it gets there. */
+  private keyAtTheHeadFollowed = '';
 
   /**
    * Whether the drawer of the chords of the key is open beside a sketch being
@@ -13056,6 +13058,24 @@ export class AppView {
     });
   }
 
+  /**
+   * Follows the head into another key wherever it has gone: put there, or
+   * carried past a change of key by a playback or a recording. Only when
+   * the key there is another, since this is asked on every step of a
+   * playback and the strip and the drawer written again each time would be
+   * work for nothing.
+   */
+  private followTheKeyWhereTheHeadGoes(): void {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const found = stored === null ? '' : `${stored.id} ${JSON.stringify(this.theKeyAtTheHead(stored))}`;
+    if (found === this.keyAtTheHeadFollowed) {
+      return;
+    }
+    this.keyAtTheHeadFollowed = found;
+    this.followTheKeyAtTheHead();
+  }
+
   /** What follows the cursor into another key: the drawer's chords, the strip's marks, the chosen chord's spelling. */
   private followTheKeyAtTheHead(): void {
     this.markTheScaleOnTheStrip();
@@ -16118,7 +16138,6 @@ export class AppView {
       this.clickAheadOfTheRoll();
     }
     this.describeTheRoll();
-    this.followTheKeyAtTheHead();
   }
 
   private followTheRoll(): void {
@@ -16310,6 +16329,7 @@ export class AppView {
       this.el.rollPlay.setAttribute('aria-label', label);
     }
     this.sayWhereBackGoes(sounding);
+    this.followTheKeyWhereTheHeadGoes();
 
     const drawn = this.el.rollBody.firstElementChild;
     if (!(drawn instanceof HTMLElement)) {

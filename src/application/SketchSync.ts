@@ -1,6 +1,7 @@
 import type { CloudFile, ICloudDrive } from './ports/ICloudDrive.js';
 import { sameKeys, theChordsMerged } from '../domain/harmony/chordsOfTheKey.js';
 import { readTheChords, sketchAsKept, sketchFromKept, type SketchLibrary, type StoredSketch } from './SketchLibrary.js';
+import type { SyncProgress } from './SyncProgress.js';
 
 /** The one file on the drive that holds every sketch. */
 export const SKETCHES_FILE = 'sketches.json';
@@ -8,6 +9,15 @@ const VERSION = 1;
 
 /** How many times a sync is settled again where another device wrote the drive meanwhile. */
 const SETTLED_AT_MOST = 3;
+
+/** The requests reading the drive's sketches takes: the folder listed, and the file read. */
+const REQUESTS_TO_READ = 2;
+
+/**
+ * The most one settling of the sketches asks the drive: read, read again
+ * just before writing, and written.
+ */
+export const SKETCH_REQUESTS_AT_MOST = 2 * REQUESTS_TO_READ + 1;
 
 /** What a copy of a sketch changed on two devices at once is called, after its own name. */
 export const CONFLICTING_COPY = 'conflicting copy';
@@ -92,11 +102,16 @@ export class SketchSync {
    * with other notes than the drive's, which the next sync keeps as a copy
    * (see `settle`).
    */
-  async sync(open: string | null): Promise<SketchSyncOutcome> {
+  async sync(open: string | null, progress?: SyncProgress): Promise<SketchSyncOutcome> {
+    const drive = progress === undefined ? this.deps.drive : progress.counting(this.deps.drive);
     let brought = 0;
     let conflicts = 0;
     for (let attempt = 1; ; attempt += 1) {
-      const read = await this.readTheDrive();
+      // Settled again, after the first time: as much again may be asked.
+      if (attempt > 1) {
+        progress?.expect(SKETCH_REQUESTS_AT_MOST);
+      }
+      const read = await this.readTheDrive(drive, progress);
       const round = this.settle(read.there, open);
       brought += round.brought;
       conflicts += round.conflicts;
@@ -104,11 +119,15 @@ export class SketchSync {
       const chords = theChordsMerged(read.chords, kept, inStep);
       const chordsToSend = read.chords === null ? chords.length > 0 : !theSameChords(chords, read.chords);
       if (round.sentAt.length > 0 || chordsToSend) {
-        const again = await this.readTheDrive();
+        const again = await this.readTheDrive(drive, progress);
         if (again.text !== read.text && attempt < SETTLED_AT_MOST) {
+          // Not written this time round, but settled again.
+          progress?.spare(1);
           continue;
         }
-        await this.deps.drive.write(SKETCHES_FILE, writeTheDrive(round.next, chords), again.file?.id ?? null);
+        await drive.write(SKETCHES_FILE, writeTheDrive(round.next, chords), again.file?.id ?? null);
+      } else {
+        progress?.spare(REQUESTS_TO_READ + 1);
       }
       for (const [id, revision] of round.sentAt) {
         this.deps.sketches.sentAt(id, revision);
@@ -178,7 +197,7 @@ export class SketchSync {
 
   /** Takes a sketch the drive has onto this device, as the drive has it now. */
   async bringHere(id: string): Promise<void> {
-    const theirs = (await this.readTheDrive()).there.get(id);
+    const theirs = (await this.readTheDrive(this.deps.drive)).there.get(id);
     if (theirs === undefined) {
       throw new Error('That sketch is no longer on the drive.');
     }
@@ -197,13 +216,13 @@ export class SketchSync {
    */
   async deleteFromTheDrive(id: string): Promise<void> {
     for (let attempt = 1; ; attempt += 1) {
-      const read = await this.readTheDrive();
+      const read = await this.readTheDrive(this.deps.drive);
       if (!read.there.has(id)) {
         return;
       }
       const next = new Map(read.there);
       next.delete(id);
-      const again = await this.readTheDrive();
+      const again = await this.readTheDrive(this.deps.drive);
       if (again.text !== read.text && attempt < SETTLED_AT_MOST) {
         continue;
       }
@@ -212,15 +231,21 @@ export class SketchSync {
     }
   }
 
-  private async readTheDrive(): Promise<{
+  /** The drive's sketches, as `drive` reads them: where the file is not there yet, `progress` is spared reading it. */
+  private async readTheDrive(
+    drive: ICloudDrive,
+    progress?: SyncProgress,
+  ): Promise<{
     readonly file: CloudFile | undefined;
     readonly text: string | null;
     readonly there: ReadonlyMap<string, SketchThere>;
     readonly chords: readonly (readonly number[])[] | null;
   }> {
-    const { drive } = this.deps;
     await drive.connect();
     const file = (await drive.list()).find((each) => each.name === SKETCHES_FILE);
+    if (file === undefined) {
+      progress?.spare(1);
+    }
     const text = file === undefined ? null : await drive.read(file.id);
     return { file, text, ...(text === null ? { there: new Map(), chords: null } : readTheDrive(text)) };
   }

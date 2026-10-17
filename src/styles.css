@@ -4302,6 +4302,7 @@ body[data-take-on-keys='true'] .focus-bar__row > #focus-speed {
  * this corner: small, quiet, and gone the moment what it offers is on screen.
  */
 .score__reading {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -4329,6 +4330,48 @@ body[data-take-on-keys='true'] .focus-bar__row > #focus-speed {
 .score__reading[data-sync='by-hand'] {
   color: var(--pending);
   border-color: var(--pending);
+}
+
+/*
+ * How far a sync has got, round the edge of its button as a clock's hand
+ * goes round from twelve: the share of its requests to the drive answered,
+ * in the accent, since nothing here is a verdict. Before it is known how
+ * many there will be, the whole edge breathes instead. Drawn over the
+ * border, so the button keeps its size.
+ */
+@property --ring-turned {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+.score__reading[data-sync='syncing']::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  padding: 2px;
+  border-radius: inherit;
+  pointer-events: none;
+  --ring-turned: var(--sync-share, 0);
+  background: conic-gradient(var(--accent) calc(var(--ring-turned) * 1turn), transparent 0);
+  transition: --ring-turned 0.3s linear;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+
+.score__reading[data-sync='syncing'][data-sync-measured='false']::before {
+  background: var(--accent);
+  animation: ring-breathes 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes ring-breathes {
+  from {
+    opacity: 0.2;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .score__today {

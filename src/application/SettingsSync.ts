@@ -1,11 +1,15 @@
 import type { ICloudDrive } from './ports/ICloudDrive.js';
 import type { PracticeSettings } from './PracticeController.js';
 import type { SettingsRepository, SharedSettings } from './SettingsRepository.js';
+import type { SyncProgress } from './SyncProgress.js';
 
 const FILE = 'settings.json';
 const VERSION = 1;
 
 export type SettingsSyncOutcome = 'sent' | 'brought' | 'same';
+
+/** The most a sync of the settings asks the drive: the folder listed, the settings read, and written. */
+export const SETTINGS_REQUESTS_AT_MOST = 3;
 
 export interface SettingsSyncDependencies {
   readonly drive: ICloudDrive;
@@ -30,16 +34,22 @@ export class SettingsSync {
     this.deps = dependencies;
   }
 
-  async sync(): Promise<SettingsSyncOutcome> {
-    const { drive, settings } = this.deps;
+  /** One sync of the settings, its requests to the drive counted by `progress` where one is given. */
+  async sync(progress?: SyncProgress): Promise<SettingsSyncOutcome> {
+    const { settings } = this.deps;
+    const drive = progress === undefined ? this.deps.drive : progress.counting(this.deps.drive);
     await drive.connect();
     const file = (await drive.list()).find((each) => each.name === FILE);
+    if (file === undefined) {
+      progress?.spare(1);
+    }
     const theirs = file === undefined ? null : readSettings(await drive.read(file.id));
     const mine = settings.sharedSettings();
     if (
       theirs !== null &&
       (theirs.changedAtMs > mine.changedAtMs || (mine.changedAtMs === 0 && theirs.changedAtMs === 0))
     ) {
+      progress?.spare(1);
       if (JSON.stringify(theirs.values) === JSON.stringify(mine.values)) {
         return 'same';
       }
@@ -47,6 +57,7 @@ export class SettingsSync {
       return 'brought';
     }
     if (theirs !== null && theirs.changedAtMs === mine.changedAtMs) {
+      progress?.spare(1);
       return 'same';
     }
     await drive.write(

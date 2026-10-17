@@ -54,6 +54,27 @@ describe('the stylesheet', () => {
     expect(beside?.body).toMatch(/flex\s*:\s*none/);
   });
 
+  it('draws how far a sync has got round the edge of its button, over the border, and breathes until it knows', () => {
+    const ring = rules().find((rule) => rule.selector === ".score__reading[data-sync='syncing']::before")?.body ?? '';
+    const breathing =
+      rules().find((rule) => rule.selector === ".score__reading[data-sync='syncing'][data-sync-measured='false']::before")
+        ?.body ?? '';
+
+    expect(rules().find((rule) => rule.selector === '.score__reading')?.body).toMatch(/position\s*:\s*relative/);
+    expect(ring).toMatch(/position\s*:\s*absolute/);
+    // On the border rather than inside it, so the button keeps its size.
+    expect(ring).toMatch(/inset\s*:\s*-1px/);
+    expect(ring).toMatch(/--ring-turned\s*:\s*var\(--sync-share, 0\)/);
+    expect(ring).toMatch(/conic-gradient\(var\(--accent\) calc\(var\(--ring-turned\) \* 1turn\), transparent 0\)/);
+    // Only the edge: what is inside the padding is cut away, on Safari as well.
+    expect(ring).toMatch(/[^-]mask\s*:[^;]*content-box exclude/);
+    expect(ring).toMatch(/-webkit-mask-composite\s*:\s*xor/);
+    expect(ring).toMatch(/pointer-events\s*:\s*none/);
+    expect(breathing).toMatch(/background\s*:\s*var\(--accent\)/);
+    expect(breathing).toMatch(/animation\s*:\s*ring-breathes /);
+    expect(CSS).toMatch(/@keyframes ring-breathes/);
+  });
+
   it('lights the grade being read', () => {
     const lit = rules().find((rule) => rule.selector === ".grades__grade[aria-pressed='true']");
     expect(lit?.body).toMatch(/background\s*:\s*var\(--accent\)/);

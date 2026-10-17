@@ -1,8 +1,9 @@
 import type { LibrarySync, SyncOutcome } from './LibrarySync.js';
 import type { StoredScoreSummary } from './ports/IScoreStore.js';
 import type { SettingsRepository } from './SettingsRepository.js';
-import type { SettingsSync, SettingsSyncOutcome } from './SettingsSync.js';
-import type { SketchSync, SketchSyncOutcome } from './SketchSync.js';
+import { SETTINGS_REQUESTS_AT_MOST, type SettingsSync, type SettingsSyncOutcome } from './SettingsSync.js';
+import { SKETCH_REQUESTS_AT_MOST, type SketchSync, type SketchSyncOutcome } from './SketchSync.js';
+import { SyncProgress, type SyncProgressShown } from './SyncProgress.js';
 
 /**
  * How long after the last change here the Sync button presses itself.
@@ -53,12 +54,17 @@ export class DriveSync {
 
   /**
    * One sync of everything, leaving as it is the sketch open on the page
-   * (`openSketch`): see `SketchSync`.
+   * (`openSketch`): see `SketchSync`. How far it has got is told as it goes,
+   * in requests to the drive: see `SyncProgress`.
    */
-  async sync(progress?: (done: number, total: number) => void, openSketch: string | null = null): Promise<DriveSyncOutcome> {
+  async sync(tell?: (shown: SyncProgressShown) => void, openSketch: string | null = null): Promise<DriveSyncOutcome> {
+    // The library is synced first, and the settings and the sketches after
+    // it are held back for until it knows how much it will ask.
+    const progress =
+      tell === undefined ? undefined : new SyncProgress(tell, SETTINGS_REQUESTS_AT_MOST + SKETCH_REQUESTS_AT_MOST);
     const library = await this.deps.library.sync(progress);
-    const settings = await this.deps.settings.sync();
-    const sketches = await this.deps.sketches.sync(openSketch);
+    const settings = await this.deps.settings.sync(progress);
+    const sketches = await this.deps.sketches.sync(openSketch, progress);
     // At least as late as anything now here: a score brought from a device
     // whose clock runs ahead would otherwise look like a change made since.
     this.deps.repository.rememberTheSync(Math.max(this.deps.now(), this.latestChange()));

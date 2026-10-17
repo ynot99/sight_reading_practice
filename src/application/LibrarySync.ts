@@ -1,10 +1,14 @@
 import type { CloudFile, ICloudDrive } from './ports/ICloudDrive.js';
 import { CLICK_PATTERNS, type ClickPattern } from './ports/IMetronome.js';
 import type { IScoreStore, SavedPassage, StoredScore, StoredScoreSummary } from './ports/IScoreStore.js';
+import type { SyncProgress } from './SyncProgress.js';
 
 /** The list of what the drive holds, beside the documents themselves. */
 const INDEX = 'library.json';
 const VERSION = 1;
+
+/** The requests a sync of the library ends with: the list written, and the folder listed again. */
+const REQUESTS_TO_CLOSE = 2;
 
 /** What the drive knows about one score, beside its document. */
 export interface DriveScore {
@@ -61,8 +65,10 @@ export class LibrarySync {
     this.deps = dependencies;
   }
 
-  async sync(progress?: (done: number, total: number) => void): Promise<SyncOutcome> {
-    const { drive, store } = this.deps;
+  /** One sync of the library, its requests to the drive counted by `progress` where one is given. */
+  async sync(progress?: SyncProgress): Promise<SyncOutcome> {
+    const { store } = this.deps;
+    const drive = progress === undefined ? this.deps.drive : progress.counting(this.deps.drive);
     await drive.connect();
     this.files = await drive.list();
     const named = new Map(this.files.map((file) => [file.name, file]));
@@ -73,39 +79,33 @@ export class LibrarySync {
     let sent = 0;
     let brought = 0;
 
-    for (const [done, mine] of here.entries()) {
-      const theirs = there.get(mine.id);
-      const documentIsTheirs = theirs !== undefined && theirs.savedAtMs > mine.savedAtMs;
-      const marksAreTheirs = theirs !== undefined && theirs.markedAtMs > markedAt(mine);
-      const document = documentIsTheirs ? theirs : mine;
-      const marks = marksAreTheirs ? theirs : mine;
-      const file = theirs?.file ?? documentName(mine.title);
-      const agreed: DriveScore = {
-        id: mine.id,
-        title: document.title,
-        bars: document.bars,
-        savedAtMs: document.savedAtMs,
-        openedAtMs: Math.max(mine.openedAtMs, theirs?.openedAtMs ?? 0),
-        markedAtMs: Math.max(markedAt(mine), theirs?.markedAtMs ?? 0),
-        passages: marks.passages,
-        ...(marks.clickPattern === undefined ? {} : { clickPattern: marks.clickPattern }),
-        ...(marks.stars === undefined ? {} : { stars: marks.stars }),
-        file,
-      };
+    // Every score settled before the drive is asked anything for one, so it
+    // is known how much it will be asked.
+    const settlings = here.map((mine) => theSettlingOf(mine, there.get(mine.id)));
+    progress?.expect(
+      settlings.filter((settling) => settling.sends).length +
+        settlings.filter((settling) => settling.theirDocument !== null).length +
+        REQUESTS_TO_CLOSE,
+    );
 
-      if (theirs === undefined || mine.savedAtMs > theirs.savedAtMs) {
+    for (const { mine, agreed, sends, theirDocument, marksAreTheirs } of settlings) {
+      const documentIsTheirs = theirDocument !== null;
+      if (sends) {
         const kept = await store.read(mine.id);
-        if (kept !== null) {
-          await drive.write(file, kept.musicXml, named.get(file)?.id ?? null);
+        if (kept === null) {
+          progress?.spare(1);
+        } else {
+          await drive.write(agreed.file, kept.musicXml, named.get(agreed.file)?.id ?? null);
           sent += 1;
         }
       }
       const takesFromTheDrive =
         documentIsTheirs || marksAreTheirs || agreed.openedAtMs !== mine.openedAtMs;
       if (takesFromTheDrive) {
-        const musicXml = documentIsTheirs
-          ? await this.readDocument(theirs.file)
-          : ((await store.read(mine.id))?.musicXml ?? null);
+        const musicXml =
+          theirDocument !== null
+            ? await this.readDocument(theirDocument, drive, progress)
+            : ((await store.read(mine.id))?.musicXml ?? null);
         if (musicXml !== null) {
           await store.write(storedFrom(agreed, musicXml));
           if (documentIsTheirs || marksAreTheirs) {
@@ -114,7 +114,6 @@ export class LibrarySync {
         }
       }
       settled.set(mine.id, agreed);
-      progress?.(done + 1, here.length);
     }
 
     await drive.write(INDEX, writeIndex(settled), index?.id ?? null);
@@ -133,7 +132,7 @@ export class LibrarySync {
   /** Takes a score the drive has onto this device, with everything said about it. */
   async bringHere(score: DriveScore): Promise<void> {
     await this.deps.drive.connect();
-    const musicXml = await this.readDocument(score.file);
+    const musicXml = await this.readDocument(score.file, this.deps.drive);
     if (musicXml === null) {
       throw new Error(`"${score.title}" is no longer on the drive.`);
     }
@@ -141,14 +140,62 @@ export class LibrarySync {
     await this.deps.reload();
   }
 
-  private async readDocument(name: string): Promise<string | null> {
+  /**
+   * A document on the drive, by name, or nothing where it is not there. A
+   * sync expects one read for it: the folder listed again to find it is one
+   * request more, and none at all where it is not found.
+   */
+  private async readDocument(name: string, drive: ICloudDrive, progress?: SyncProgress): Promise<string | null> {
     let file = this.files.find((each) => each.name === name);
     if (file === undefined) {
-      this.files = await this.deps.drive.list();
+      progress?.expect(1);
+      this.files = await drive.list();
       file = this.files.find((each) => each.name === name);
     }
-    return file === undefined ? null : this.deps.drive.read(file.id);
+    if (file === undefined) {
+      progress?.spare(1);
+      return null;
+    }
+    return drive.read(file.id);
   }
+}
+
+/** How one score kept here is settled against the drive's word on it, before anything is asked of the drive. */
+interface Settling {
+  readonly mine: StoredScoreSummary;
+  /** What the drive's list is to say of it. */
+  readonly agreed: DriveScore;
+  /** Whether its document goes to the drive. */
+  readonly sends: boolean;
+  /** The drive's document, by name, where it is newer than the one here and is brought. */
+  readonly theirDocument: string | null;
+  readonly marksAreTheirs: boolean;
+}
+
+function theSettlingOf(mine: StoredScoreSummary, theirs: DriveScore | undefined): Settling {
+  const documentIsTheirs = theirs !== undefined && theirs.savedAtMs > mine.savedAtMs;
+  const marksAreTheirs = theirs !== undefined && theirs.markedAtMs > markedAt(mine);
+  const document = documentIsTheirs ? theirs : mine;
+  const marks = marksAreTheirs ? theirs : mine;
+  const agreed: DriveScore = {
+    id: mine.id,
+    title: document.title,
+    bars: document.bars,
+    savedAtMs: document.savedAtMs,
+    openedAtMs: Math.max(mine.openedAtMs, theirs?.openedAtMs ?? 0),
+    markedAtMs: Math.max(markedAt(mine), theirs?.markedAtMs ?? 0),
+    passages: marks.passages,
+    ...(marks.clickPattern === undefined ? {} : { clickPattern: marks.clickPattern }),
+    ...(marks.stars === undefined ? {} : { stars: marks.stars }),
+    file: theirs?.file ?? documentName(mine.title),
+  };
+  return {
+    mine,
+    agreed,
+    sends: theirs === undefined || mine.savedAtMs > theirs.savedAtMs,
+    theirDocument: documentIsTheirs ? theirs.file : null,
+    marksAreTheirs,
+  };
 }
 
 /**

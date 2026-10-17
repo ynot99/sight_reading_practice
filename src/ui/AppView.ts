@@ -174,6 +174,7 @@ import { sizeOf, theStorageAccount } from './storageReport.js';
 import { drawTheShareBar } from './shareBar.js';
 import { findAll, wordsIn, type Found } from './settingsSearch.js';
 import type { DriveScore } from '../application/LibrarySync.js';
+import type { SyncProgressShown } from '../application/SyncProgress.js';
 import type { SettingsSyncOutcome } from '../application/SettingsSync.js';
 
 /** What happened to the settings, as the status line says it. */
@@ -8193,13 +8194,13 @@ export class AppView {
     const change = this.runtime.driveSync.latestChangeAtMs;
     this.el.driveSync.disabled = true;
     this.el.scoreSync.disabled = true;
-    this.el.driveStatus.textContent = 'Syncing…';
+    this.showHowFarTheSyncHasGot({ answered: 0, expected: null });
     this.offerToSync();
     try {
       // The sketch open on the page is left as it is, to be settled at the next sync.
       const open = this.el.sheetRoll.hidden ? null : (this.theOtherRollShowing?.sketch?.id ?? null);
-      const { library, settings, sketches } = await this.runtime.driveSync.sync((done, total) => {
-        this.el.driveStatus.textContent = `Syncing… ${String(done)} of ${String(total)}`;
+      const { library, settings, sketches } = await this.runtime.driveSync.sync((shown) => {
+        this.showHowFarTheSyncHasGot(shown);
       }, open);
       this.el.driveStatus.textContent = `Synced. Sent ${String(library.sent)}, brought here ${String(library.brought)}. ${theSketchesSynced(sketches)} Settings ${SETTINGS_WENT[settings]}.`;
       this.showWhatOnlyTheDriveHas(library.onlyOnTheDrive);
@@ -8214,10 +8215,34 @@ export class AppView {
       this.syncFailed = { change, why };
     } finally {
       this.syncing = false;
+      this.showHowFarTheSyncHasGot(null);
       this.el.driveSync.disabled = false;
       this.el.scoreSync.disabled = false;
       this.offerToSync();
     }
+  }
+
+  /**
+   * Says how far the sync under way has got, as the share of its requests
+   * to the drive answered: round the edge of the button by the clock, and
+   * in words in the settings. Before it is known how many there will be,
+   * the edge breathes and the words say only that it syncs. `null` once
+   * none is under way.
+   */
+  private showHowFarTheSyncHasGot(shown: SyncProgressShown | null): void {
+    const button = this.el.scoreSync;
+    const share = shown === null || shown.expected === null ? null : shown.answered / shown.expected;
+    if (share === null) {
+      button.style.removeProperty('--sync-share');
+    } else {
+      button.style.setProperty('--sync-share', share.toFixed(3));
+    }
+    if (shown === null) {
+      delete button.dataset['syncMeasured'];
+      return;
+    }
+    button.dataset['syncMeasured'] = String(share !== null);
+    this.el.driveStatus.textContent = share === null ? 'Syncing…' : `Syncing… ${String(Math.round(share * 100))}%`;
   }
 
   /** Stands the Sync button by the clock or takes it away, and sets it to press itself. */

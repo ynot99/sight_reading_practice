@@ -19926,12 +19926,22 @@ describe('the Sync button pressing itself', () => {
     });
   });
 
-  it('says it is syncing on the button while it does', async () => {
+  it('says it is syncing on the button while it does, and how far it has got', async () => {
     const rig = await signedInWithAScoreToSend();
     let answer: (files: readonly CloudFile[]) => void = () => undefined;
+    const list = rig.drive.list.bind(rig.drive);
     rig.drive.list = () =>
       new Promise((resolve) => {
         answer = resolve;
+      });
+    let written: () => void = () => undefined;
+    const write = rig.drive.write.bind(rig.drive);
+    rig.drive.write = (name, content, replacing) =>
+      new Promise((resolve) => {
+        written = () => {
+          rig.drive.write = write;
+          resolve(write(name, content, replacing));
+        };
       });
 
     await vi.advanceTimersByTimeAsync(31_000);
@@ -19940,7 +19950,29 @@ describe('the Sync button pressing itself', () => {
     expect(button.hidden).toBe(false);
     expect(element('score-sync-text').textContent).toBe('Syncing…');
     expect(button.dataset['sync']).toBe('syncing');
+    // Before the drive has said what it holds, there is no knowing how much there is to do.
+    expect(button.dataset['syncMeasured']).toBe('false');
+    expect(button.style.getPropertyValue('--sync-share')).toBe('');
+    expect(element('drive-status').textContent).toBe('Syncing…');
+
+    // An empty folder: the score to send, the list written and the folder
+    // listed again, and the settings and the sketches as much as they can
+    // ask - one of twelve answered.
+    rig.drive.list = list;
     answer([]);
+    await vi.waitFor(() => {
+      expect(button.dataset['syncMeasured']).toBe('true');
+    });
+    expect(button.style.getPropertyValue('--sync-share')).toBe((1 / 12).toFixed(3));
+    expect(element('drive-status').textContent).toBe('Syncing… 8%');
+
+    written();
+    await vi.waitFor(() => {
+      expect(element('drive-status').textContent).toMatch(/^Synced\./);
+    });
+    // Done, the edge is the button's own again.
+    expect(button.dataset['syncMeasured']).toBeUndefined();
+    expect(button.style.getPropertyValue('--sync-share')).toBe('');
   });
 
   it('waits for a press, and says so, where Google would have to be asked', async () => {

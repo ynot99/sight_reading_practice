@@ -9586,6 +9586,7 @@ export class AppView {
         return;
       }
       this.sliceLaidByThePress = false;
+      this.followThePointerPastTheDrawing(event);
       if (event.button === 0 && this.isOnTheRuler(event)) {
         this.watchForASliceHold(event);
       }
@@ -14150,14 +14151,6 @@ export class AppView {
       adds: addsToTheChoice(event),
       drawn: false,
     };
-    // Followed past the edge of the drawing, as a box dragged off a desktop is.
-    if (typeof this.el.rollBody.setPointerCapture === 'function') {
-      try {
-        this.el.rollBody.setPointerCapture(event.pointerId);
-      } catch {
-        // A pointer the page no longer has: the box ends where the drawing does.
-      }
-    }
     return true;
   }
 
@@ -14318,14 +14311,6 @@ export class AppView {
     this.runtime.pitchPlayer.play(midi, theUsualLoudness(rollAsEvents(roll)));
     this.keyHeldOnTheStrip = { pointerId: event.pointerId, midi };
     this.panned = true;
-    // Heard until let go of wherever the pointer has gone by then.
-    if (typeof this.el.rollBody.setPointerCapture === 'function') {
-      try {
-        this.el.rollBody.setPointerCapture(event.pointerId);
-      } catch {
-        // A pointer the page no longer has: it is let go of where it leaves.
-      }
-    }
     this.lightTheSoundingRows();
     return true;
   }
@@ -14364,6 +14349,25 @@ export class AppView {
     }
     // The grid stands still over the run, which is where the view says.
     return timeFromTap(clientX - grid.getBoundingClientRect().left + this.rollScroller.x, Number(this.el.rollZoom.value));
+  }
+
+  /**
+   * Keeps a press on the drawing the drawing's until it is let go of, wherever
+   * the pointer goes by then: a note, the pedal, a box, a slice or the
+   * drawing itself dragged past its edge goes on following it, and a key
+   * held on the strip goes on sounding. Without it a mouse leaving the
+   * drawing ended whatever it was dragging there - a finger the browser
+   * keeps to where it went down anyway.
+   */
+  private followThePointerPastTheDrawing(event: PointerEvent): void {
+    if (typeof this.el.rollBody.setPointerCapture !== 'function') {
+      return;
+    }
+    try {
+      this.el.rollBody.setPointerCapture(event.pointerId);
+    } catch {
+      // A pointer the page no longer has: what it began ends where it leaves.
+    }
   }
 
   /** The press of the pedal drawn at a moment from the run's start, if there is one. */

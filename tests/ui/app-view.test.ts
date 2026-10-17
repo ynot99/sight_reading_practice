@@ -17958,13 +17958,27 @@ describe('AppView', () => {
       element<HTMLButtonElement>('roll-undo').click();
       expect(struck()).toEqual(before);
 
-      // Off the grid where the marker is put exactly, with the mouse as well.
+      // Off the grid where the marker is put exactly, with the mouse as well -
+      // which the drawing keeps hold of past its edge until it lets go.
+      const captured: number[] = [];
+      element('roll-body').setPointerCapture = (pointerId: number) => {
+        captured.push(pointerId);
+      };
       element<HTMLInputElement>('roll-snap').click();
       tap(second);
+      captured.length = 0;
       point('pointerdown', second, 'mouse');
+      expect(captured).toEqual([3]);
       point('pointermove', { x: second.x + 0.15 * zoom, y: second.y }, 'mouse');
       point('pointerup', { x: second.x + 0.15 * zoom, y: second.y }, 'mouse');
       expect(struck()[1]).toEqual([62, (before[1]?.[1] ?? 0) + 150]);
+      // The right button is the menu's, and the drawing takes no hold of it.
+      for (const type of ['pointerdown', 'pointerup']) {
+        element('roll-body').dispatchEvent(
+          new PointerEvent(type, { bubbles: true, pointerId: 4, pointerType: 'mouse', button: 2, clientX: second.x, clientY: second.y }),
+        );
+      }
+      expect(captured).toEqual([3]);
 
       // Taken away rather than let go of: nothing changes.
       const now = struck();

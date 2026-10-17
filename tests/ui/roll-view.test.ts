@@ -10,6 +10,7 @@ import {
   theCanvasesOf,
   theSceneOfTheRoll,
   whatThePedalSaysAt,
+  whatTheChordsSayAt,
   theKeyAt,
   theKeysInABox,
   whatTheGridSaysAt,
@@ -175,6 +176,14 @@ describe('drawing a run as a piano roll', () => {
     );
 
     expect(theCanvasesOf(view)).not.toBeNull();
+    // The lanes in the order they stand: the chords between the notes and the pedal.
+    expect([...view.children].map((child) => child.className)).toEqual([
+      'roll__ruler',
+      'roll__keys',
+      'roll__grid',
+      'roll__chords',
+      'roll__pedal',
+    ]);
     expect([...(view.querySelector('.roll__grid')?.children ?? [])].map((child) => child.className)).toEqual([
       'roll__paint',
       'roll__head',
@@ -385,6 +394,67 @@ describe('drawing a run as a piano roll', () => {
     );
 
     expect(scene.pedal).toEqual([{ fromMs: 500, untilMs: 2500, open: false, says: 'Pedal' }]);
+  });
+
+  it('names the chords the notes make, bar by bar, only where they are asked for', () => {
+    // C for a bar, then F and G a half each, a second after the run began.
+    const held = (midis: readonly number[], downAtMs: number, upAtMs: number | null): RolledPress[] =>
+      midis.map((midi) => press({ midi, downAtMs, upAtMs }));
+    const input = roll({
+      beats: [...barOfFour(0, 1000), ...barOfFour(1, 5000)],
+      presses: [
+        ...held([60, 64, 67], 1000, 5000),
+        ...held([65, 69, 72], 5000, 7000),
+        // Still down when the run ended: to the end of the last bar, a beat after its last beat.
+        ...held([67, 71, 74], 7000, null),
+      ],
+    });
+    const cMajor = [{ fromMs: Number.NEGATIVE_INFINITY, fifths: 0, scale: 'major' as const }];
+    const named = (scene: RollScene): string[][] =>
+      scene.chords.map((chord) => [String(chord.fromMs), String(chord.untilMs), chord.name, chord.numeral, String(chord.exactly)]);
+
+    expect(sceneOf(input).chords).toEqual([]);
+    const scene = theSceneOfTheRoll({ roll: input, barLabel: () => null, chordsIn: cMajor });
+    expect(named(scene)).toEqual([
+      ['0', '4000', 'C', 'I', 'true'],
+      ['4000', '6000', 'F', 'IV', 'true'],
+      ['6000', '8000', 'G', 'V', 'true'],
+    ]);
+    // What a pointer resting on one is told, and nothing between them.
+    expect(whatTheChordsSayAt(scene, 4500)).toBe('F (IV): the chord the notes here make');
+    expect(whatTheChordsSayAt(scene, 6000)).toBe('G (V): the chord the notes here make');
+    expect(whatTheChordsSayAt(scene, 9000)).toBeNull();
+    // In the key it is in, by its degree there.
+    const inG = theSceneOfTheRoll({
+      roll: input,
+      barLabel: () => null,
+      chordsIn: [{ fromMs: Number.NEGATIVE_INFINITY, fifths: 1, scale: 'major' }],
+    });
+    expect(inG.chords.map((chord) => chord.numeral)).toEqual(['IV', '♭VII', 'I']);
+  });
+
+  it('reads a bar of beats as one, so a chord broken across it a beat at a time is that chord', () => {
+    const input = roll({
+      beats: barOfFour(0, 0),
+      presses: [60, 64, 67, 72].map((midi, beat) => press({ midi, downAtMs: beat * 1000, upAtMs: (beat + 1) * 1000 })),
+    });
+    const scene = theSceneOfTheRoll({ roll: input, barLabel: () => null, chordsIn: [] });
+
+    expect(scene.chords.map((chord) => [chord.fromMs, chord.untilMs, chord.name])).toEqual([[0, 4000, 'C']]);
+  });
+
+  it('says a chord is only most of the notes where a melody passes over it', () => {
+    const input = roll({
+      beats: barOfFour(0, 0),
+      presses: [
+        ...[57, 60, 64].map((midi) => press({ midi, downAtMs: 0, upAtMs: 4000 })),
+        press({ midi: 71, downAtMs: 0, upAtMs: 500 }),
+      ],
+    });
+    const scene = theSceneOfTheRoll({ roll: input, barLabel: () => null, chordsIn: [] });
+
+    expect(scene.chords.map((chord) => [chord.name, chord.exactly])).toEqual([['Am', false]]);
+    expect(whatTheChordsSayAt(scene, 100)).toBe('Am (vi): the chord most of the notes here make, by how long they sound');
   });
 
   it('runs a pedal still down to the edge, and says so', () => {

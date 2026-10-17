@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   asCanvasColour,
+  paintTheChords,
   paintThePedal,
   paintTheGrid,
   paintTheRuler,
@@ -41,6 +42,9 @@ const INKS: RollInks = {
   tickDownbeat: 'tick-downbeat',
   bar: 'bar',
   pedal: 'pedal',
+  chord: 'chord',
+  chordEdge: 'chord-edge',
+  chordName: 'chord-name',
   velocity: 'velocity',
   font: 'serif',
 };
@@ -524,6 +528,66 @@ describe('painting the ruler and the pedal', () => {
 
     expect(recorder.inked('pedal')).toMatchObject([{ x: 70, y: 4, tall: 7, corners: 4 }]);
     expect(recorder.inked('pedal')[0]?.wide).toBeCloseTo(280, 6);
+  });
+});
+
+describe('painting the chords the notes make', () => {
+  /** A scene with these chords in its lane, each a block from one second to another. */
+  const withChords = (chords: readonly [number, number, string, string, boolean][]): RollScene => ({
+    ...sceneOf(roll({ beats: barsOfFour(4) })),
+    chords: chords.map(([from, until, name, numeral, exactly]) => ({
+      fromMs: from * 1000,
+      untilMs: until * 1000,
+      name,
+      numeral,
+      exactly,
+      says: name,
+    })),
+  });
+
+  it('paints a block for each chord as long as it lasts, its name and degree written in it', () => {
+    const { surface: canvas, recorder } = surface(700, 30);
+
+    paintTheChords(canvas, withChords([[0, 2, 'C', 'I', true], [2, 4, 'Am', 'vi', false]]), at(), INKS, 1);
+
+    // A second is 140 pixels: blocks a pixel in from the line between them.
+    expect(recorder.inked('chord').map(({ x, y, wide, tall }) => [x, y, wide, tall])).toEqual([
+      [1, 2, 278, 26],
+      [281, 2, 278, 26],
+    ]);
+    // Edged whole where it is every note, in dashes where it is most of them.
+    expect(recorder.inked('chord-edge').map((mark) => mark.dashes)).toEqual([[], [3, 2]]);
+    // The name, then the degree after it: six pixels a letter here.
+    expect(recorder.inked('chord-name').map(({ words, x, y }) => [words, x, y])).toEqual([
+      ['C', 6, 15],
+      ['Am', 286, 15],
+    ]);
+    expect(recorder.inked('bar').map(({ words, x }) => [words, x])).toEqual([
+      ['I', 6 + 6 + 5],
+      ['vi', 286 + 12 + 5],
+    ]);
+  });
+
+  it('keeps the words of a chord begun off the left edge in sight, as far as they still fit in it', () => {
+    const { surface: canvas, recorder } = surface(700, 30);
+    // Scrolled a second and a half in, through a chord of two seconds.
+    paintTheChords(canvas, withChords([[0, 2, 'Dm7', 'ii7', true]]), at({ scrolledPx: 210 }), INKS, 1);
+    expect(recorder.inked('chord-name').map(({ x }) => x)).toEqual([5]);
+
+    // Further, until they would run out of it: they stay at its end.
+    const further = surface(700, 30);
+    paintTheChords(further.surface, withChords([[0, 2, 'Dm7', 'ii7', true]]), at({ scrolledPx: 260 }), INKS, 1);
+    expect(further.recorder.inked('chord-name').map(({ x }) => x)).toEqual([2 * 140 - 260 - 1 - 5 - 18]);
+  });
+
+  it('leaves the words out of a block too short to hold them, and the degree out of one that holds only the name', () => {
+    const { surface: canvas, recorder } = surface(700, 30);
+    // A tenth of a second is fourteen pixels; a fifth, twenty-eight.
+    paintTheChords(canvas, withChords([[0, 0.1, 'G7', 'V7', true], [1, 1.2, 'C', 'I', true]]), at(), INKS, 1);
+
+    expect(recorder.inked('chord')).toHaveLength(2);
+    expect(recorder.inked('chord-name').map((mark) => mark.words)).toEqual(['C']);
+    expect(recorder.inked('bar')).toEqual([]);
   });
 });
 

@@ -11,6 +11,7 @@ import { barCells } from '../domain/scoring/barCells.js';
 import { nameOfThePitchClass, nameTheChord, theChordTheNotesMake } from '../domain/harmony/chordName.js';
 import { DYNAMIC_VELOCITY, type DynamicLevel } from '../domain/model/Exercise.js';
 import { eachKeyOnce, sameKeys, theChordsOfTheScale } from '../domain/harmony/chordsOfTheKey.js';
+import type { KeyFrom } from '../domain/harmony/chordsAlong.js';
 import {
   SCALES,
   SCALE_NAMES,
@@ -233,6 +234,7 @@ import {
   type GridChoice,
 } from '../application/session/RunRoll.js';
 import {
+  paintTheChords,
   paintThePedal,
   paintTheGrid,
   type NoteShownAhead,
@@ -254,6 +256,7 @@ import {
   stretchesIn,
   thePitchesOfTheRun,
   theSceneOfTheRoll,
+  whatTheChordsSayAt,
   whatThePedalSaysAt,
   theKeyAt,
   theKeysInABox,
@@ -1909,7 +1912,7 @@ export class AppView {
   /** Which of the scores sheet's two lists it shows; see `showTheList`. */
   private scoresListShown: 'scores' | 'sketches' = 'scores';
   /** How tall a row is, and the ruler and the pedal lane, as last measured. */
-  private rollLook = { rowPx: 13, rulerTallPx: 0, pedalTallPx: 0 };
+  private rollLook = { rowPx: 13, rulerTallPx: 0, chordsTallPx: 0, pedalTallPx: 0 };
   /** The frame a fling is going on in, if one is. */
   private flingFrame: number | null = null;
   /**
@@ -9566,6 +9569,8 @@ export class AppView {
       this.chordsOfTheKeyOpen = !this.chordsOfTheKeyOpen;
       this.chordsBeingForgotten = false;
       this.showTheChordsOfTheKey();
+      // The lane under the notes naming the chords they make comes and goes with them.
+      this.drawTheRollInto();
     });
     this.listen(this.el.rollChordsList, 'click', (event) => {
       const chord = (event.target as Element | null)?.closest<HTMLElement>('[data-chord]');
@@ -12320,6 +12325,7 @@ export class AppView {
     this.rollLook = {
       rowPx,
       rulerTallPx: lane(canvases.ruler).tallPx,
+      chordsTallPx: lane(canvases.chords).tallPx,
       pedalTallPx: lane(canvases.pedal).tallPx,
     };
     this.rollScroller.size(grid, {
@@ -12926,7 +12932,7 @@ export class AppView {
   private showTheChordsOfTheKey(): void {
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
-    const open = this.chordsOfTheKeyOpen && sketch?.editing === true && stored !== null;
+    const open = this.theChordsOfTheKeyAreOpen();
     this.el.rollChordsOpen.setAttribute('aria-pressed', String(this.chordsOfTheKeyOpen));
     this.el.rollChordsOpen.title = this.chordsOfTheKeyOpen
       ? 'Put the chords away'
@@ -13167,6 +13173,14 @@ export class AppView {
 
   /** The scales the sketch shown is written in, each from where it begins, or none where no sketch is shown. */
   private theScalesOfTheSketchShown(): readonly { readonly fromMs: number; readonly pitchClasses: readonly number[] }[] {
+    return this.theKeysOfTheSketchShown().map((key) => ({
+      fromMs: key.fromMs,
+      pitchClasses: thePitchClassesOfTheScale(key.fifths, key.scale),
+    }));
+  }
+
+  /** The keys the sketch shown is in, each from where it begins: the one it begins in from the very beginning. */
+  private theKeysOfTheSketchShown(): readonly KeyFrom[] {
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
     if (stored === null) {
@@ -13175,8 +13189,15 @@ export class AppView {
     const begunIn = this.theKeyTheSketchBeginsIn(stored);
     return [{ atMs: Number.NEGATIVE_INFINITY, ...begunIn }, ...theKeyChangesOf(stored.events)].map((key) => ({
       fromMs: key.atMs,
-      pitchClasses: thePitchClassesOfTheScale(key.fifths, key.scale),
+      fifths: key.fifths,
+      scale: key.scale,
     }));
+  }
+
+  /** Whether the chords of the key are open beside a sketch being edited. */
+  private theChordsOfTheKeyAreOpen(): boolean {
+    const sketch = this.theOtherRollShowing?.sketch;
+    return this.chordsOfTheKeyOpen && sketch?.editing === true && this.runtime.sketches.find(sketch.id) !== null;
   }
 
   /**
@@ -15494,6 +15515,7 @@ export class AppView {
       freely: this.nothingOnTheDrawingIsJudged(),
       scales: this.theScalesOfTheSketchShown(),
       marks: this.theMarksOfTheSketchShown(),
+      chordsIn: this.theChordsOfTheKeyAreOpen() ? this.theKeysOfTheSketchShown() : undefined,
     });
   }
 
@@ -15517,6 +15539,8 @@ export class AppView {
     const stage = this.el.rollBody.closest<HTMLElement>('.roll-stage');
     if (stage !== null) {
       stage.dataset['editing'] = String(this.theOtherRollShowing?.sketch?.editing === true);
+      // And with the chords open, the lane naming those the notes make.
+      stage.dataset['chords'] = String(this.theChordsOfTheKeyAreOpen());
     }
     this.el.rollBody.replaceChildren(drawTheRoll(scene));
     this.rollHeads = theHeadsOf(this.el.rollBody);
@@ -15581,6 +15605,7 @@ export class AppView {
     answer(canvases.ruler, (scene, atMs, _row, pxPerSecond) =>
       whatTheRulerSaysAt(scene, atMs, pxPerSecond),
     );
+    answer(canvases.chords, (scene, atMs) => whatTheChordsSayAt(scene, atMs));
     answer(canvases.pedal, (scene, atMs, _row, pxPerSecond) =>
       whatThePedalSaysAt(scene, atMs, pxPerSecond),
     );
@@ -15636,6 +15661,7 @@ export class AppView {
       this.notesBeingRecorded,
     );
     paintTheRuler(sized(canvases.ruler, scrolled.viewWidePx, look.rulerTallPx), scene, view, this.rollInks, density);
+    paintTheChords(sized(canvases.chords, scrolled.viewWidePx, look.chordsTallPx), scene, view, this.rollInks, density);
     paintThePedal(sized(canvases.pedal, scrolled.viewWidePx, look.pedalTallPx), scene, view, this.rollInks, density);
   }
 

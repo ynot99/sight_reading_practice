@@ -1899,7 +1899,7 @@ describe('the rows of the drawing and the pitch map beside them', () => {
     const map = body('.roll-pitch-map');
 
     expect(declared(map, 'margin-top')).toBe('var(--roll-ruler)');
-    expect(declared(map, 'margin-bottom')).toBe('var(--roll-pedal)');
+    expect(declared(map, 'margin-bottom')).toBe('calc(var(--roll-chords) + var(--roll-pedal))');
     // Named where both can read them: set on the drawing, the map beside it
     // would find nothing there.
     expect(declared(body('.roll-stage'), '--roll-ruler')).toBeDefined();
@@ -1913,6 +1913,27 @@ describe('the rows of the drawing and the pitch map beside them', () => {
     expect(pill).toMatch(/position\s*:\s*absolute/);
     expect(pill).toMatch(/top\s*:\s*calc\(var\(--roll-ruler\)/);
     expect(pill).toMatch(/pointer-events\s*:\s*none/);
+  });
+
+  it('gives the lane of chords room only while the chords are open, between the notes and the pedal', () => {
+    expect(declared(body('.roll-stage'), '--roll-chords')).toBe('0px');
+    expect(Number.parseFloat(declared(body(".roll-stage[data-chords='true']"), '--roll-chords') ?? '0')).toBeGreaterThanOrEqual(28);
+    // A row of the drawing's grid of its own, the pedal's under it.
+    expect(declared(body('.roll'), 'grid-template-rows')).toBe(
+      'var(--roll-ruler) minmax(0, 1fr) var(--roll-chords) var(--roll-pedal)',
+    );
+    expect(declared(body('.roll__chords'), 'grid-row')).toBe('3');
+    expect(declared(body('.roll__pedal'), 'grid-row')).toBe('4');
+    expect(declared(body('.roll__chords'), 'overflow')).toBe('hidden');
+    // And the rows share what is left once it has its room.
+    expect(declared(body('.roll'), '--roll-row')).toContain('- var(--roll-chords)');
+    // Edged only where it has a height, or a pixel of edge would stand there.
+    expect(declared(body('.roll__chords'), 'border-top')).toBeUndefined();
+    expect(declared(body(".roll-stage[data-chords='true'] .roll__chords"), 'border-top')).toBe('1px solid var(--border)');
+    // Painted in the page's own colours: no verdict's.
+    for (const ink of ['chord', 'chord-edge', 'chord-name']) {
+      expect(declared(body('.roll'), `--roll-ink-${ink}`), ink).not.toMatch(/correct|wrong|pending|good|miss/);
+    }
   });
 
   it('makes the pedal lane taller while a sketch is edited, for a finger to draw on', () => {

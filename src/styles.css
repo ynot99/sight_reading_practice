@@ -1418,12 +1418,19 @@ textarea {
   flex: 1 1 auto;
   min-height: 0;
   /*
-   * How tall the ruler and the pedal lane are, named here and not on the
-   * drawing: the pitch map beside it stands between the same two, and a
-   * sibling cannot read what is set on the drawing.
+   * How tall the ruler, the lane of chords and the pedal lane are, named
+   * here and not on the drawing: the pitch map beside it stands between the
+   * ruler and the two lanes, and a sibling cannot read what is set on the
+   * drawing. The lane of chords has no height until they are asked for.
    */
   --roll-ruler: 20px;
+  --roll-chords: 0px;
   --roll-pedal: 16px;
+}
+
+/* The chords of a sketch open to be written: the chords its notes make, named under them. */
+.roll-stage[data-chords='true'] {
+  --roll-chords: 30px;
 }
 
 /*
@@ -1601,7 +1608,7 @@ textarea {
    * pixel, one outside the ruler and one inside the margin.
    */
   margin-top: var(--roll-ruler);
-  margin-bottom: var(--roll-pedal);
+  margin-bottom: calc(var(--roll-chords) + var(--roll-pedal));
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -1938,7 +1945,7 @@ textarea {
   --roll-row-asked: 13px;
   --roll-row: max(
     var(--roll-row-asked),
-    calc((100cqh - var(--roll-ruler) - var(--roll-pedal) - 2px) / var(--roll-rows, 12))
+    calc((100cqh - var(--roll-ruler) - var(--roll-pedal) - var(--roll-chords) - 2px) / var(--roll-rows, 12))
   );
   --roll-keys: 44px;
   /*
@@ -2029,6 +2036,10 @@ textarea {
   --roll-ink-tick-downbeat: var(--accent);
   --roll-ink-bar: var(--text-muted);
   --roll-ink-pedal: color-mix(in srgb, var(--accent) 70%, transparent);
+  /* A chord the notes make, in the lane under them: the page's own colours, no verdict. */
+  --roll-ink-chord: var(--surface-strong);
+  --roll-ink-chord-edge: var(--border);
+  --roll-ink-chord-name: var(--text);
   /*
    * How hard a note was struck, as a bar along its top: in the text's own
    * colour, which is no verdict and stands out on every note - dark on the
@@ -2037,7 +2048,7 @@ textarea {
   --roll-ink-velocity: color-mix(in srgb, var(--text) 75%, transparent);
   display: grid;
   grid-template-columns: var(--roll-keys) minmax(0, 1fr);
-  grid-template-rows: var(--roll-ruler) minmax(0, 1fr) var(--roll-pedal);
+  grid-template-rows: var(--roll-ruler) minmax(0, 1fr) var(--roll-chords) var(--roll-pedal);
   overflow: hidden;
   /*
    * Every finger is the drawing's: one scrolls it and two zoom it, both done
@@ -2321,9 +2332,26 @@ textarea {
 .roll__pedal {
   position: relative;
   overflow: hidden;
+  grid-row: 4;
+  grid-column: 2;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+/*
+ * The chords the notes make, between them and the pedal, kept in sight as
+ * the pedal is. No border where it has no height, or a pixel of it would
+ * stand there.
+ */
+.roll__chords {
+  position: relative;
+  overflow: hidden;
   grid-row: 3;
   grid-column: 2;
   background: var(--surface);
+}
+
+.roll-stage[data-chords='true'] .roll__chords {
   border-top: 1px solid var(--border);
 }
 

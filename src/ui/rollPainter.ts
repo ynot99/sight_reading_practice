@@ -57,6 +57,10 @@ export interface RollInks {
   readonly tickDownbeat: string;
   readonly bar: string;
   readonly pedal: string;
+  /** A chord's block in the lane under the notes, its edge and its name: no verdict, the page's own. */
+  readonly chord: string;
+  readonly chordEdge: string;
+  readonly chordName: string;
   /** The bar along the top of a note that says how hard it was struck: no verdict, so the text's. */
   readonly velocity: string;
   /** The typeface of the bar numbers, which is the page's. */
@@ -89,6 +93,9 @@ export const INKS: Readonly<Record<Exclude<keyof RollInks, 'font'>, string>> = {
   tickDownbeat: 'tick-downbeat',
   bar: 'bar',
   pedal: 'pedal',
+  chord: 'chord',
+  chordEdge: 'chord-edge',
+  chordName: 'chord-name',
   velocity: 'velocity',
 };
 
@@ -595,6 +602,63 @@ export function paintTheRuler(
   for (const bar of momentsIn(scene.bars, fromMs - ms(BAR_NAME_WIDEST_PX), untilMs)) {
     if (!flagged(bar.atMs)) {
       paint.fillText(bar.name, x(bar.atMs) + BAR_NAME_IN_PX, BAR_NAME_DOWN_PX);
+    }
+  }
+}
+
+/** How far a chord's block stands in from the edges of its lane and from the next, and how round it is. */
+const CHORD_IN_PX = 2;
+const CHORD_CORNER_PX = 4;
+/** How far its words stand in from its left edge, and from each other. */
+const CHORD_WORDS_IN_PX = 5;
+const CHORD_NAME_PX = 13;
+const CHORD_NUMERAL_PX = 11;
+
+/**
+ * Paints the part of the lane of chords a canvas covers: a block for each
+ * chord as long as it lasts, its name and its degree written in it - kept in
+ * sight at the left of the screen while the block goes on past it, and left
+ * out where the block is too short to hold them, which a pointer resting on
+ * it still says. Edged in dashes where it is only most of the notes.
+ */
+export function paintTheChords(
+  surface: Surface,
+  scene: RollScene,
+  view: RollViewport,
+  inks: RollInks,
+  density: number,
+): void {
+  const ready = readied(surface, density);
+  if (ready === null) {
+    return;
+  }
+  const { paint, widePx, tallPx } = ready;
+  const { x, fromMs, untilMs } = across(view, widePx);
+  paint.textBaseline = 'middle';
+  for (const chord of stretchesIn(scene.chords, fromMs, untilMs)) {
+    const left = x(chord.fromMs) + CHORD_IN_PX / 2;
+    const right = x(chord.untilMs) - CHORD_IN_PX / 2;
+    box(paint, left, CHORD_IN_PX, right - left, tallPx - 2 * CHORD_IN_PX, CHORD_CORNER_PX);
+    paint.fillStyle = inks.chord;
+    paint.fill();
+    paint.strokeStyle = inks.chordEdge;
+    paint.lineWidth = 1;
+    paint.setLineDash(chord.exactly ? [] : [3, 2]);
+    paint.stroke();
+    paint.setLineDash([]);
+    paint.font = `700 ${String(CHORD_NAME_PX)}px ${inks.font}`;
+    const nameWide = paint.measureText(chord.name).width;
+    const words = Math.min(Math.max(left, 0) + CHORD_WORDS_IN_PX, right - CHORD_WORDS_IN_PX - nameWide);
+    if (words < left + CHORD_WORDS_IN_PX) {
+      continue;
+    }
+    paint.fillStyle = inks.chordName;
+    paint.fillText(chord.name, words, tallPx / 2);
+    paint.font = `${String(CHORD_NUMERAL_PX)}px ${inks.font}`;
+    const numeralAt = words + nameWide + CHORD_WORDS_IN_PX;
+    if (numeralAt + paint.measureText(chord.numeral).width <= right - CHORD_WORDS_IN_PX) {
+      paint.fillStyle = inks.bar;
+      paint.fillText(chord.numeral, numeralAt, tallPx / 2);
     }
   }
 }

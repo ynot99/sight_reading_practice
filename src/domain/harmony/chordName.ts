@@ -16,6 +16,10 @@ export interface ChordKind {
    * fifth is what the chord is - diminished, augmented, half-diminished.
    */
   readonly fifthMayGo: boolean;
+  /** Whether its third is minor, which writes its degree in lower case. */
+  readonly minor: boolean;
+  /** What its degree is written with after the numeral: G7 is V7, B diminished vii°. */
+  readonly afterTheNumeral: string;
 }
 
 /**
@@ -24,27 +28,27 @@ export interface ChordKind {
  * first. C E G A over an E is A minor seventh before it is C sixth.
  */
 export const CHORD_KINDS: readonly ChordKind[] = [
-  { suffix: '', intervals: [0, 4, 7], fifthMayGo: false },
-  { suffix: 'm', intervals: [0, 3, 7], fifthMayGo: false },
-  { suffix: 'dim', intervals: [0, 3, 6], fifthMayGo: false },
-  { suffix: '+', intervals: [0, 4, 8], fifthMayGo: false },
-  { suffix: 'sus4', intervals: [0, 5, 7], fifthMayGo: false },
-  { suffix: 'sus2', intervals: [0, 2, 7], fifthMayGo: false },
-  { suffix: '7', intervals: [0, 4, 7, 10], fifthMayGo: true },
-  { suffix: 'maj7', intervals: [0, 4, 7, 11], fifthMayGo: true },
-  { suffix: 'm7', intervals: [0, 3, 7, 10], fifthMayGo: true },
-  { suffix: 'm7♭5', intervals: [0, 3, 6, 10], fifthMayGo: false },
-  { suffix: 'dim7', intervals: [0, 3, 6, 9], fifthMayGo: false },
-  { suffix: 'm(maj7)', intervals: [0, 3, 7, 11], fifthMayGo: true },
-  { suffix: '7sus4', intervals: [0, 5, 7, 10], fifthMayGo: false },
-  { suffix: '6', intervals: [0, 4, 7, 9], fifthMayGo: false },
-  { suffix: 'm6', intervals: [0, 3, 7, 9], fifthMayGo: false },
-  { suffix: 'add9', intervals: [0, 2, 4, 7], fifthMayGo: false },
-  { suffix: 'm(add9)', intervals: [0, 2, 3, 7], fifthMayGo: false },
-  { suffix: '9', intervals: [0, 2, 4, 7, 10], fifthMayGo: true },
-  { suffix: 'maj9', intervals: [0, 2, 4, 7, 11], fifthMayGo: true },
-  { suffix: 'm9', intervals: [0, 2, 3, 7, 10], fifthMayGo: true },
-  { suffix: '5', intervals: [0, 7], fifthMayGo: false },
+  { suffix: '', intervals: [0, 4, 7], fifthMayGo: false, minor: false, afterTheNumeral: '' },
+  { suffix: 'm', intervals: [0, 3, 7], fifthMayGo: false, minor: true, afterTheNumeral: '' },
+  { suffix: 'dim', intervals: [0, 3, 6], fifthMayGo: false, minor: true, afterTheNumeral: '°' },
+  { suffix: '+', intervals: [0, 4, 8], fifthMayGo: false, minor: false, afterTheNumeral: '+' },
+  { suffix: 'sus4', intervals: [0, 5, 7], fifthMayGo: false, minor: false, afterTheNumeral: 'sus4' },
+  { suffix: 'sus2', intervals: [0, 2, 7], fifthMayGo: false, minor: false, afterTheNumeral: 'sus2' },
+  { suffix: '7', intervals: [0, 4, 7, 10], fifthMayGo: true, minor: false, afterTheNumeral: '7' },
+  { suffix: 'maj7', intervals: [0, 4, 7, 11], fifthMayGo: true, minor: false, afterTheNumeral: 'maj7' },
+  { suffix: 'm7', intervals: [0, 3, 7, 10], fifthMayGo: true, minor: true, afterTheNumeral: '7' },
+  { suffix: 'm7♭5', intervals: [0, 3, 6, 10], fifthMayGo: false, minor: true, afterTheNumeral: 'ø7' },
+  { suffix: 'dim7', intervals: [0, 3, 6, 9], fifthMayGo: false, minor: true, afterTheNumeral: '°7' },
+  { suffix: 'm(maj7)', intervals: [0, 3, 7, 11], fifthMayGo: true, minor: true, afterTheNumeral: '(maj7)' },
+  { suffix: '7sus4', intervals: [0, 5, 7, 10], fifthMayGo: false, minor: false, afterTheNumeral: '7sus4' },
+  { suffix: '6', intervals: [0, 4, 7, 9], fifthMayGo: false, minor: false, afterTheNumeral: '6' },
+  { suffix: 'm6', intervals: [0, 3, 7, 9], fifthMayGo: false, minor: true, afterTheNumeral: '6' },
+  { suffix: 'add9', intervals: [0, 2, 4, 7], fifthMayGo: false, minor: false, afterTheNumeral: 'add9' },
+  { suffix: 'm(add9)', intervals: [0, 2, 3, 7], fifthMayGo: false, minor: true, afterTheNumeral: '(add9)' },
+  { suffix: '9', intervals: [0, 2, 4, 7, 10], fifthMayGo: true, minor: false, afterTheNumeral: '9' },
+  { suffix: 'maj9', intervals: [0, 2, 4, 7, 11], fifthMayGo: true, minor: false, afterTheNumeral: 'maj9' },
+  { suffix: 'm9', intervals: [0, 2, 3, 7, 10], fifthMayGo: true, minor: true, afterTheNumeral: '9' },
+  { suffix: '5', intervals: [0, 7], fifthMayGo: false, minor: false, afterTheNumeral: '5' },
 ];
 
 /**
@@ -75,6 +79,18 @@ export function nameOfThePitchClass(pitchClass: number, fifths: number | null): 
  * fifth and another without it, on the same footing with the bass.
  */
 export function nameTheChord(midis: readonly number[], fifths: number | null = null): string | null {
+  const read = readTheChord(midis);
+  if (read === null) {
+    return null;
+  }
+  const name = `${nameOfThePitchClass(read.root, fifths)}${read.kind.suffix}`;
+  return read.root === read.bass ? name : `${name}/${nameOfThePitchClass(read.bass, fifths)}`;
+}
+
+/** The root and the kind of the chord some keys make exactly, and their bass: see `nameTheChord`. */
+function readTheChord(
+  midis: readonly number[],
+): { readonly root: number; readonly kind: ChordKind; readonly bass: number } | null {
   const held = [...new Set(midis.map((midi) => ((midi % 12) + 12) % 12))];
   const bass = ((Math.min(...midis) % 12) + 12) % 12;
   const readings: { readonly root: number; readonly kindAt: number }[] = [];
@@ -90,17 +106,17 @@ export function nameTheChord(midis: readonly number[], fifths: number | null = n
   const best = readings.sort(
     (left, right) => Number(right.root === bass) - Number(left.root === bass) || left.kindAt - right.kindAt,
   )[0];
-  if (best === undefined) {
-    return null;
-  }
-  const name = `${nameOfThePitchClass(best.root, fifths)}${CHORD_KINDS[best.kindAt]?.suffix ?? ''}`;
-  return best.root === bass ? name : `${name}/${nameOfThePitchClass(bass, fifths)}`;
+  const kind = best === undefined ? undefined : CHORD_KINDS[best.kindAt];
+  return best === undefined || kind === undefined ? null : { root: best.root, kind, bass };
 }
 
 /** A chord some notes make, and whether they make exactly it or only mostly. */
 export interface ChordHeard {
   readonly name: string;
   readonly exactly: boolean;
+  /** Its root, as a pitch class, C being nought. */
+  readonly root: number;
+  readonly kind: ChordKind;
 }
 
 /**
@@ -115,9 +131,37 @@ const MOSTLY = 0.5;
 
 /**
  * The chord some notes make: exactly, where they make one this knows (see
- * `nameTheChord`), or otherwise the one most of their sounding is - a bar of
- * a broken chord with a melody over it is that chord, though the melody's
- * passing notes make the whole set none.
+ * `nameTheChord`), or otherwise the one most of their sounding is (see
+ * `theChordMostOfTheNotesMake`). The notes chosen are what is asked about,
+ * so a set that makes a chord is named as that chord.
+ */
+export function theChordTheNotesMake(
+  notes: readonly { readonly midi: number; readonly lengthMs: number }[],
+  fifths: number | null = null,
+): ChordHeard | null {
+  const midis = notes.map((note) => note.midi);
+  const exactly = readTheChord(midis);
+  return exactly === null
+    ? theChordMostOfTheNotesMake(notes, fifths)
+    : { name: nameTheChord(midis, fifths) ?? '', exactly: true, root: exactly.root, kind: exactly.kind };
+}
+
+/** A chord most of the sounding of some notes is, and what that reading is worth. */
+export interface ChordMostlyHeard extends ChordHeard {
+  /**
+   * What its tones weigh, less what they cost, in the notes' own lengths:
+   * how much of the sounding it accounts for, so two readings of the same
+   * notes - as one chord, or as two one after the other - can be weighed.
+   */
+  readonly worth: number;
+}
+
+/**
+ * The chord most of the sounding of some notes is - a bar of a broken chord
+ * with a melody over it is that chord, though the melody's passing notes
+ * make the whole set some other one, or none: what a stretch of music is
+ * heard as, where every note sounding in it is counted, the passing ones
+ * too. Exactly that chord only where it is every note.
  *
  * Each pitch class weighs as long as its notes sound. A reading is a root
  * and a kind whose every tone is there (the fifth may go where the kind lets
@@ -126,17 +170,10 @@ const MOSTLY = 0.5;
  * two are worth the same, as an exact one does. Said over the lowest note
  * where that is another tone of it.
  */
-export function theChordTheNotesMake(
+export function theChordMostOfTheNotesMake(
   notes: readonly { readonly midi: number; readonly lengthMs: number }[],
   fifths: number | null = null,
-): ChordHeard | null {
-  const exactly = nameTheChord(
-    notes.map((note) => note.midi),
-    fifths,
-  );
-  if (exactly !== null) {
-    return { name: exactly, exactly: true };
-  }
+): ChordMostlyHeard | null {
   const weight = new Map<number, number>();
   for (const note of notes) {
     const pitchClass = ((note.midi % 12) + 12) % 12;
@@ -165,12 +202,40 @@ export function theChordTheNotesMake(
       Number(right.root === bass) - Number(left.root === bass) ||
       left.kindAt - right.kindAt,
   )[0];
-  if (found === undefined) {
+  const kind = found === undefined ? undefined : CHORD_KINDS[found.kindAt];
+  if (found === undefined || kind === undefined) {
     return null;
   }
-  const name = `${nameOfThePitchClass(found.root, fifths)}${CHORD_KINDS[found.kindAt]?.suffix ?? ''}`;
+  const name = `${nameOfThePitchClass(found.root, fifths)}${kind.suffix}`;
   const overTheBass = bass !== found.root && found.tones.includes(bass);
-  return { name: overTheBass ? `${name}/${nameOfThePitchClass(bass, fifths)}` : name, exactly: false };
+  return {
+    name: overTheBass ? `${name}/${nameOfThePitchClass(bass, fifths)}` : name,
+    exactly: found.tones.length === weight.size,
+    root: found.root,
+    kind,
+    worth: found.worth,
+  };
+}
+
+const NUMERALS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'] as const;
+
+/**
+ * A chord's degree in a scale, in roman numerals: upper case where its third
+ * is major, lower where minor, and what its kind adds after (see
+ * `afterTheNumeral`). A root the scale does not have is written from the
+ * degree a semitone above it, flattened - B flat in C major is ♭VII - or,
+ * where the scale has none there, from the one below, sharpened.
+ */
+export function theNumeralOfTheChord(
+  chord: { readonly root: number; readonly kind: ChordKind },
+  pitchClassesOfTheScale: readonly number[],
+): string {
+  const degree = (pitchClass: number): number => pitchClassesOfTheScale.indexOf(((pitchClass % 12) + 12) % 12);
+  const on = degree(chord.root);
+  const above = degree(chord.root + 1);
+  const [sign, at] = on >= 0 ? ['', on] : above >= 0 ? ['♭', above] : ['♯', degree(chord.root - 1)];
+  const numeral = NUMERALS[at] ?? '';
+  return `${sign}${chord.kind.minor ? numeral.toLowerCase() : numeral}${chord.kind.afterTheNumeral}`;
 }
 
 function sameNumbers(left: readonly number[], right: readonly number[]): boolean {

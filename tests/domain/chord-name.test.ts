@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { CHORD_KINDS, nameOfThePitchClass, nameTheChord, theChordTheNotesMake } from '../../src/domain/harmony/chordName.js';
+import {
+  CHORD_KINDS,
+  nameOfThePitchClass,
+  nameTheChord,
+  theChordTheNotesMake,
+  theNumeralOfTheChord,
+  type ChordHeard,
+} from '../../src/domain/harmony/chordName.js';
+import { theChordsOfTheScale } from '../../src/domain/harmony/chordsOfTheKey.js';
+import { SCALE_NAMES, thePitchClassesOfTheScale } from '../../src/domain/harmony/scales.js';
 
 /** Middle C's octave, so a chord built on a root lies where a hand would play it. */
 const C4 = 60;
@@ -111,9 +120,12 @@ describe('naming the chord held', () => {
 describe('the chord some notes mostly make', () => {
   const A2 = 45;
   const note = (midi: number, lengthMs: number): { midi: number; lengthMs: number } => ({ midi, lengthMs });
+  /** What a reading says: its name, and whether exactly. */
+  const heard = (chord: ChordHeard | null): { name: string; exactly: boolean } | null =>
+    chord === null ? null : { name: chord.name, exactly: chord.exactly };
 
   it('names a chord they make exactly as such', () => {
-    expect(theChordTheNotesMake([note(C4, 500), note(C4 + 4, 500), note(C4 + 7, 500)])).toEqual({ name: 'C', exactly: true });
+    expect(heard(theChordTheNotesMake([note(C4, 500), note(C4 + 4, 500), note(C4 + 7, 500)]))).toEqual({ name: 'C', exactly: true });
     expect(theChordTheNotesMake([])).toBeNull();
   });
 
@@ -121,23 +133,23 @@ describe('the chord some notes mostly make', () => {
     // A minor held in the left hand, and B, D and G passing over it.
     const notes = [note(A2, 1_000), note(C4, 1_000), note(C4 + 4, 1_000), note(C4 + 11, 200), note(C4 + 14, 200), note(C4 + 7, 100)];
     expect(nameTheChord(notes.map((each) => each.midi))).toBeNull();
-    expect(theChordTheNotesMake(notes)).toEqual({ name: 'Am', exactly: false });
+    expect(heard(theChordTheNotesMake(notes))).toEqual({ name: 'Am', exactly: false });
     // Where the G sounds as long as the rest, it is the seventh: on the bass,
     // where A minor seventh and C sixth are the same notes.
     const seventh = [note(A2, 1_000), note(C4, 1_000), note(C4 + 4, 1_000), note(C4 + 7, 1_000), note(C4 + 14, 100)];
-    expect(theChordTheNotesMake(seventh)).toEqual({ name: 'Am7', exactly: false });
+    expect(heard(theChordTheNotesMake(seventh))).toEqual({ name: 'Am7', exactly: false });
     // Over the lowest note where that is another tone of it; and in a key, spelled as it spells.
     const overE = [note(C4 - 8, 1_000), note(C4, 1_000), note(C4 + 7, 1_000), note(C4 + 6, 100)];
-    expect(theChordTheNotesMake(overE)).toEqual({ name: 'C/E', exactly: false });
+    expect(heard(theChordTheNotesMake(overE))).toEqual({ name: 'C/E', exactly: false });
     // And not over a note passing under it.
     const passingUnder = [note(C4 - 18, 100), note(C4, 1_000), note(C4 + 4, 1_000), note(C4 + 7, 1_000)];
-    expect(theChordTheNotesMake(passingUnder)).toEqual({ name: 'C', exactly: false });
+    expect(heard(theChordTheNotesMake(passingUnder))).toEqual({ name: 'C', exactly: false });
     // The same notes as A minor seventh, on C: C sixth, the bass deciding.
     const onC = [note(C4 - 12, 1_000), note(C4 + 4, 1_000), note(C4 + 7, 1_000), note(C4 + 9, 1_000), note(C4 + 14, 100)];
-    expect(theChordTheNotesMake(onC)).toEqual({ name: 'C6', exactly: false });
+    expect(heard(theChordTheNotesMake(onC))).toEqual({ name: 'C6', exactly: false });
     expect(theChordTheNotesMake([note(C4 + 1, 900), note(C4 + 5, 900), note(C4 + 8, 900), note(C4 + 7, 50)], -4)?.name).toBe('D♭');
     // The fifth left out of a seventh, as a pianist leaves it.
-    expect(theChordTheNotesMake([note(C4, 900), note(C4 + 4, 900), note(C4 + 10, 900), note(C4 + 2, 50), note(C4 + 6, 50)])).toEqual({
+    expect(heard(theChordTheNotesMake([note(C4, 900), note(C4 + 4, 900), note(C4 + 10, 900), note(C4 + 2, 50), note(C4 + 6, 50)]))).toEqual({
       name: 'C7',
       exactly: false,
     });
@@ -147,7 +159,7 @@ describe('the chord some notes mostly make', () => {
     // C, E and G a tenth of a second each, against an F sharp of a length swept across the line.
     for (let sharp = 1; sharp <= 600; sharp += 1) {
       const named = theChordTheNotesMake([note(C4, 100), note(C4 + 4, 100), note(C4 + 7, 100), note(C4 + 6, sharp)]);
-      expect(named).toEqual(sharp <= 300 ? { name: 'C', exactly: false } : null);
+      expect(heard(named)).toEqual(sharp <= 300 ? { name: 'C', exactly: false } : null);
     }
   });
 
@@ -160,5 +172,42 @@ describe('the chord some notes mostly make', () => {
       const total = 3_010 + ninth;
       expect(theChordTheNotesMake(notes)?.name).toBe(ninth > 0.15 * total ? 'Am(add9)' : 'Am');
     }
+  });
+});
+
+describe('the degree of a chord in a scale', () => {
+  const readOf = (midis: readonly number[]): ChordHeard => {
+    const chord = theChordTheNotesMake(midis.map((midi) => ({ midi, lengthMs: 500 })));
+    if (chord === null) {
+      throw new Error(`No chord in ${midis.join(' ')}.`);
+    }
+    return chord;
+  };
+
+  it('writes each chord of every scale as the drawer of chords does', () => {
+    for (const scale of SCALE_NAMES) {
+      for (let fifths = -7; fifths <= 7; fifths += 1) {
+        const pitchClasses = thePitchClassesOfTheScale(fifths, scale);
+        for (const chord of theChordsOfTheScale(fifths, scale)) {
+          expect(theNumeralOfTheChord(readOf(chord.midis), pitchClasses), `${chord.name} in ${String(fifths)} ${scale}`).toBe(chord.numeral);
+        }
+      }
+    }
+  });
+
+  it('writes what a kind adds after the numeral, and a root the scale has not from the degree beside it', () => {
+    const cMajor = thePitchClassesOfTheScale(0, 'major');
+    const said = (midis: readonly number[], scale: readonly number[] = cMajor): string => theNumeralOfTheChord(readOf(midis), scale);
+    expect(said([C4 + 7, C4 + 11, C4 + 14, C4 + 17])).toBe('V7');
+    expect(said([C4 - 3, C4, C4 + 4, C4 + 7])).toBe('vi7');
+    expect(said([C4, C4 + 4, C4 + 7, C4 + 11])).toBe('Imaj7');
+    expect(said([C4 - 1, C4 + 2, C4 + 5, C4 + 9])).toBe('viiø7');
+    expect(said([C4 + 7, C4 + 12, C4 + 14])).toBe('Vsus4');
+    // B flat in C major: a semitone under B, the seventh degree.
+    expect(said([C4 - 2, C4 + 2, C4 + 5])).toBe('♭VII');
+    expect(said([C4 + 3, C4 + 7, C4 + 10])).toBe('♭III');
+    // F sharp in A harmonic minor, which has neither G nor F sharp: a
+    // semitone over F, its sixth degree.
+    expect(said([C4 + 6, C4 + 10, C4 + 13], thePitchClassesOfTheScale(0, 'harmonicMinor'))).toBe('♯VI');
   });
 });

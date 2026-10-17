@@ -8197,6 +8197,51 @@ describe('AppView', () => {
       }
     });
 
+    it('names the chords the notes make in a lane under them while the chords are open, and none once they are put away', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      // C for a bar of four beats, and A minor for the next, at half a second a beat.
+      const held = (midis: readonly number[], atMs: number, upAtMs: number) =>
+        midis.flatMap((midi) => [
+          { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+          { kind: 'noteOff' as const, atMs: upAtMs, midi },
+        ]);
+      sketches.begin(
+        {
+          events: [...held([60, 64, 67], 0, 2_000), ...held([57, 60, 64], 2_000, 4_000)],
+          beats: Array.from({ length: 8 }, (_, beat) => ({ atMs: beat * 500, beat: beat % 4, beatsInBar: 4 })),
+        },
+        'Lane',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const stage = (): HTMLElement | null => element('roll-body').closest<HTMLElement>('.roll-stage');
+      const lane = (): string[] => (view.rollScene?.chords ?? []).map((chord) => `${String(chord.fromMs)}-${String(chord.untilMs)} ${chord.name} ${chord.numeral}`);
+
+      expect(stage()?.dataset['chords']).toBe('false');
+      expect(lane()).toEqual([]);
+      element<HTMLButtonElement>('roll-chords-open').click();
+      expect(stage()?.dataset['chords']).toBe('true');
+      expect(lane()).toEqual(['0-2000 C I', '2000-4000 Am vi']);
+
+      // A pointer resting on one is told what it is.
+      const canvas = element('roll-body').querySelector<HTMLCanvasElement>('.roll__chords > .roll__paint');
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      canvas?.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 2.5 * zoom }));
+      expect(canvas?.title).toBe('Am (vi): the chord the notes here make');
+
+      // Put away, and listening rather than editing, there is no lane.
+      element<HTMLButtonElement>('roll-chords-open').click();
+      expect(stage()?.dataset['chords']).toBe('false');
+      expect(lane()).toEqual([]);
+      element<HTMLButtonElement>('roll-chords-open').click();
+      element<HTMLButtonElement>('roll-edit').click();
+      expect(stage()?.dataset['chords']).toBe('false');
+      expect(lane()).toEqual([]);
+    });
+
     it('sounds a chord of the drawer while it is held, slid over the others, and writes the one let go of', async () => {
       // jsdom lays nothing out, so where a pointer is says which chord it is
       // over: y is the chord's place in the drawer, and anywhere else is off it.

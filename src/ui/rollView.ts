@@ -4,6 +4,7 @@ import {
   rollBeganAtMs,
   rollEndedAtMs,
   theGrid,
+  theMusicsBeats,
   theRushes,
   theWaits,
   type GridChoice,
@@ -14,6 +15,7 @@ import {
   type RunRoll,
 } from '../application/session/RunRoll.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
+import { theChordsAlongTheBars, type BarOfBeats, type KeyFrom } from '../domain/harmony/chordsAlong.js';
 import { HIGHEST_KEY, LOWEST_KEY } from './replayKeys.js';
 import { HANDS_SPLIT_AT_MIDI } from '../domain/midi/MidiFile.js';
 
@@ -83,6 +85,13 @@ export interface RollDrawing {
   readonly scales?: readonly { readonly fromMs: number; readonly pitchClasses: readonly number[] }[];
   /** Where the music changes metre or pace, on the run's own clock, and what a mark there says. */
   readonly marks?: readonly { readonly atMs: number; readonly says: string }[];
+  /**
+   * The keys the music is in, each from where it begins on the run's own
+   * clock, where the chords its notes make are to be named in a lane under
+   * them: a sketch's, while its chords are open to be written. None, and
+   * there is no lane.
+   */
+  readonly chordsIn?: readonly KeyFrom[];
   /**
    * Whether every key of the piano has its row, rather than the notes played
    * and a little room round them: so a note being edited can be taken to any
@@ -293,6 +302,15 @@ export interface ScenePedal extends SceneStretch {
   readonly open: boolean;
 }
 
+/** A chord the notes make for a stretch, named in the lane under them: see {@link RollDrawing.chordsIn}. */
+export interface SceneChord extends SceneStretch {
+  readonly name: string;
+  /** Its degree in the key the music is in there. */
+  readonly numeral: string;
+  /** Whether it is every note sounding there, rather than most of them. */
+  readonly exactly: boolean;
+}
+
 /** An instant of the run, and what it says to a pointer resting on it, if anything. */
 export interface SceneMoment {
   readonly atMs: number;
@@ -351,6 +369,8 @@ export interface RollScene {
   readonly ghosts: readonly SceneRowed[];
   readonly bars: readonly SceneBar[];
   readonly pedal: readonly ScenePedal[];
+  /** The chords the notes make, where they are asked for: see {@link RollDrawing.chordsIn}. */
+  readonly chords: readonly SceneChord[];
 }
 
 /** A list in the order its marks begin, which a sort that keeps ties as they came leaves alone. */
@@ -1088,7 +1108,51 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
         says: span.upAtMs === null ? 'Pedal, still down' : 'Pedal',
       })),
     ),
+    chords:
+      drawing.chordsIn === undefined
+        ? []
+        : theChordsAlongTheBars(
+            roll.presses.map((press) => ({ midi: press.midi, fromMs: press.downAtMs, untilMs: press.upAtMs ?? endMs })),
+            theBarsOfTheRoll(roll),
+            drawing.chordsIn,
+          ).map((chord) => ({
+            fromMs: chord.fromMs - origin,
+            untilMs: chord.untilMs - origin,
+            name: chord.name,
+            numeral: chord.numeral,
+            exactly: chord.exactly,
+            says: chord.exactly
+              ? `${chord.name} (${chord.numeral}): the chord the notes here make`
+              : `${chord.name} (${chord.numeral}): the chord most of the notes here make, by how long they sound`,
+          })),
   };
+}
+
+/**
+ * The bars of a roll, each with its beats, from the music's own clicks: a
+ * bar from each downbeat to the next, and the last as long again as its
+ * last beat was.
+ */
+function theBarsOfTheRoll(roll: RunRoll): readonly BarOfBeats[] {
+  const beats = theMusicsBeats(roll, { beats: true, parts: 1 });
+  const bars: { beatsMs: number[]; untilMs: number }[] = [];
+  for (const [at, beat] of beats.entries()) {
+    const bar = bars.at(-1);
+    if (beat.weight === 'downbeat' || bar === undefined) {
+      if (bar !== undefined) {
+        bar.untilMs = beat.atMs;
+      }
+      bars.push({ beatsMs: [beat.atMs], untilMs: beat.atMs });
+    } else {
+      bar.beatsMs.push(beat.atMs);
+    }
+    const last = bars.at(-1);
+    if (at === beats.length - 1 && last !== undefined) {
+      const before = beats[at - 1]?.atMs ?? beat.atMs;
+      last.untilMs = beat.atMs + (beat.atMs - before);
+    }
+  }
+  return bars;
 }
 
 /**
@@ -1305,6 +1369,11 @@ export function whatTheRulerSaysAt(scene: RollScene, atMs: number, pxPerSecond: 
   );
 }
 
+/** What the lane of chords says to a pointer resting on it: the chord there, and why it is named. */
+export function whatTheChordsSayAt(scene: RollScene, atMs: number): string | null {
+  return stretchesIn(scene.chords, atMs, atMs).find((chord) => chord.untilMs > atMs)?.says ?? null;
+}
+
 /** What the pedal lane says to a pointer resting on it. */
 export function whatThePedalSaysAt(scene: RollScene, atMs: number, pxPerSecond: number): string | null {
   const narrowestMs = (NARROWEST_PX / pxPerSecond) * 1000;
@@ -1321,8 +1390,9 @@ export function rowFromTap(offsetPx: number, rowPx: number): number | null {
 }
 
 /**
- * The frame a run is painted into: a ruler, the keys, the grid and a lane for
- * the pedal, in a box that does not scroll.
+ * The frame a run is painted into: a ruler, the keys, the grid, a lane for
+ * the chords the notes make and one for the pedal, in a box that does not
+ * scroll. The chords' lane has no height but where they are asked for.
  *
  * The run was an element a mark, then a canvas the page scrolled under, then
  * tiles the page scrolled; each was the page moving the run on its own while
@@ -1403,17 +1473,21 @@ export function drawTheRoll(scene: RollScene): HTMLElement {
   const grid = element('div', 'roll__grid');
   grid.append(element('canvas', 'roll__paint'), element('div', 'roll__head'));
 
+  const chords = element('div', 'roll__chords');
+  chords.append(element('canvas', 'roll__paint'));
+
   const pedal = element('div', 'roll__pedal');
   pedal.append(element('canvas', 'roll__paint'));
 
-  view.append(ruler, keys, grid, pedal);
+  view.append(ruler, keys, grid, chords, pedal);
   return view;
 }
 
-/** The three canvases a drawing is painted on. */
+/** The canvases a drawing is painted on. */
 export interface RollCanvases {
   readonly ruler: HTMLCanvasElement;
   readonly grid: HTMLCanvasElement;
+  readonly chords: HTMLCanvasElement;
   readonly pedal: HTMLCanvasElement;
 }
 
@@ -1421,8 +1495,9 @@ export interface RollCanvases {
 export function theCanvasesOf(within: ParentNode): RollCanvases | null {
   const ruler = within.querySelector<HTMLCanvasElement>('.roll__ruler > .roll__paint');
   const grid = within.querySelector<HTMLCanvasElement>('.roll__grid > .roll__paint');
+  const chords = within.querySelector<HTMLCanvasElement>('.roll__chords > .roll__paint');
   const pedal = within.querySelector<HTMLCanvasElement>('.roll__pedal > .roll__paint');
-  return ruler === null || grid === null || pedal === null ? null : { ruler, grid, pedal };
+  return ruler === null || grid === null || chords === null || pedal === null ? null : { ruler, grid, chords, pedal };
 }
 
 /** The column of keys' moving strip, which the view moves up and down. */

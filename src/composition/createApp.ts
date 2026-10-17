@@ -227,6 +227,8 @@ export interface AppRuntime {
   readonly timeToday: TimeToday;
   /** Plays a kept take back, so an idea can be heard rather than only listed. */
   readonly takePlayer: TakePlayer;
+  /** Every input at once - the instrument, the computer's keys and the keys on the screen - as the recorder hears them: what is recorded into a sketch. */
+  readonly midi: IMidiSource;
   /** Carries everything off this device, since an installed app cannot see the tab's. */
   readonly backup: BackupService;
   /** What the device keeps for the trainer, and whether it will be kept. */
@@ -586,6 +588,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     ladder,
     recorder,
     takePlayer,
+    midi,
     backup,
     storage,
     trail: new KeptTrail(browserStorage()),

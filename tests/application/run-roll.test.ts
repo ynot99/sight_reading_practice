@@ -8,6 +8,7 @@ import {
   theWaits,
   theBeatNearest,
   theBarsAcross,
+  takeWithThePlayingRecorded,
   theNextLineOfTheGrid,
   theLineOfTheGridUnder,
   theEndAKeyFitsTo,
@@ -567,6 +568,49 @@ describe('the beat a run was measured against', () => {
     expect(theBeatNearest(played, 620)).toBe(1000);
     expect(theBeatNearest(played, 1400)).toBe(1000);
     expect(theBeatNearest(played, 5000)).toBe(2000);
+  });
+
+  it('records playing into a take from a moment, over what is there, its pedal with it, letting go of what was still down', () => {
+    const there: MidiFileEvent[] = [
+      { kind: 'noteOn', atMs: 1_000, midi: MIDI.C4, velocity: 0.5 },
+      { kind: 'noteOff', atMs: 1_400, midi: MIDI.C4 },
+    ];
+    const played: MidiFileEvent[] = [
+      // A little before its nought, as a downbeat is often struck.
+      { kind: 'noteOn', atMs: -30, midi: MIDI.E4, velocity: 0.8 },
+      { kind: 'sustain', atMs: 0, value: 1 },
+      // Over the C already there: left out.
+      { kind: 'noteOn', atMs: 50, midi: MIDI.C4, velocity: 0.6 },
+      { kind: 'noteOff', atMs: 200, midi: MIDI.C4 },
+      { kind: 'noteOff', atMs: 300, midi: MIDI.E4 },
+      { kind: 'sustain', atMs: 350, value: 0 },
+      // Still down when it stopped.
+      { kind: 'noteOn', atMs: 450, midi: MIDI.G4, velocity: 0.7 },
+      { kind: 'sustain', atMs: 500, value: 1 },
+    ];
+    const { events, pasted } = takeWithThePlayingRecorded(there, played, 1_000, 600);
+    expect(pasted).toEqual([
+      { midi: MIDI.E4, downAtMs: 970 },
+      { midi: MIDI.G4, downAtMs: 1_450 },
+    ]);
+    expect(events).toEqual([
+      { kind: 'noteOn', atMs: 970, midi: MIDI.E4, velocity: 0.8 },
+      { kind: 'sustain', atMs: 1_000, value: 1 },
+      { kind: 'noteOn', atMs: 1_000, midi: MIDI.C4, velocity: 0.5 },
+      { kind: 'noteOff', atMs: 1_300, midi: MIDI.E4 },
+      { kind: 'sustain', atMs: 1_350, value: 0 },
+      { kind: 'noteOff', atMs: 1_400, midi: MIDI.C4 },
+      { kind: 'noteOn', atMs: 1_450, midi: MIDI.G4, velocity: 0.7 },
+      { kind: 'sustain', atMs: 1_500, value: 1 },
+      { kind: 'noteOff', atMs: 1_600, midi: MIDI.G4 },
+      { kind: 'sustain', atMs: 1_600, value: 0 },
+    ]);
+    // Somewhere the C is free, it goes in; with the pedal let go of, nothing is added for it.
+    const later = takeWithThePlayingRecorded(there, played.slice(0, 6), 3_000, 600);
+    expect(later.pasted.map((key) => key.midi)).toEqual([MIDI.E4, MIDI.C4]);
+    expect(later.events.filter((event) => event.kind === 'sustain')).toHaveLength(2);
+    // Nothing played, nothing changes.
+    expect(takeWithThePlayingRecorded(there, [], 3_000, 600)).toEqual({ events: there, pasted: [] });
   });
 
   it('slices whole bars between two moments, either way round, across the whole run', () => {

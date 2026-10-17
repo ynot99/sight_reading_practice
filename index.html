@@ -539,6 +539,19 @@
               </svg>
             </button>
             <!--
+              Records the instrument into the sketch from the cursor, over
+              what is there, after a count-in of as many bars as the
+              settings say; pressed again, or stopped, it is written in.
+              There only while a sketch is edited.
+            -->
+            <button id="roll-record" type="button" class="button" title="Record into the sketch from the cursor"
+              aria-label="Record into the sketch from the cursor" aria-pressed="false" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
+                class="take-transport__icon">
+                <path d="M12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12z" />
+              </svg>
+            </button>
+            <!--
               The run, kept where the takes are kept. It is the same kind of
               thing: a stream of notes with times on it, played by the same
               player and written to the same file format. His: "MIDI viewer -

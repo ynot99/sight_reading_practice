@@ -1,5 +1,5 @@
 import type { NoteVerdict } from '../../domain/matching/ChordMatcher.js';
-import { inTheOrderPlayed, theClickOfTheTake, type Hand, type MidiFileEvent } from '../../domain/midi/MidiFile.js';
+import { damperIsDown, inTheOrderPlayed, theClickOfTheTake, type Hand, type MidiFileEvent } from '../../domain/midi/MidiFile.js';
 import { Duration } from '../../domain/model/Duration.js';
 import {
   barLines,
@@ -1403,6 +1403,37 @@ export function takeWithTheNotesPasted(
     }
   }
   return { events: taken, pasted };
+}
+
+/**
+ * A take's events with some playing recorded into them from a moment on, and
+ * the keys of it put in: the playing timed from its own nought, which falls
+ * on that moment. Recorded over what is there, as a paste is - a key that
+ * would sound over another of its pitch is left out - and its pedal with it.
+ * A key or the pedal still down when the recording stopped is let go of
+ * there, or it would ring for ever.
+ */
+export function takeWithThePlayingRecorded(
+  events: readonly MidiFileEvent[],
+  played: readonly MidiFileEvent[],
+  atMs: number,
+  stoppedAtMs: number,
+): { readonly events: readonly MidiFileEvent[]; readonly pasted: readonly KeyNamed[] } {
+  const notes: NoteCopied[] = theKeysOfTheTake(played).map((key) => ({
+    afterMs: key.downAtMs,
+    lengthMs: Math.max(0, (key.upAtMs ?? stoppedAtMs) - key.downAtMs),
+    midi: key.midi,
+    velocity: key.velocity,
+  }));
+  const pedal = played.flatMap((event) => (event.kind === 'sustain' ? [{ ...event, atMs: Math.round(atMs + event.atMs) }] : []));
+  const lastPedal = pedal[pedal.length - 1];
+  const held = lastPedal !== undefined && damperIsDown(lastPedal.value);
+  const released: MidiFileEvent[] = held ? [{ kind: 'sustain', atMs: Math.round(atMs + stoppedAtMs), value: 0 }] : [];
+  const { events: withTheNotes, pasted } = takeWithTheNotesPasted(events, notes, atMs);
+  return {
+    events: pedal.length === 0 ? withTheNotes : inTheOrderPlayed([...withTheNotes, ...pedal, ...released]),
+    pasted,
+  };
 }
 
 /** Which way a chord broken goes through its keys: up, down, or up and back down. */

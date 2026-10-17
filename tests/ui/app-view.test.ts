@@ -486,6 +486,7 @@ function createRig(
     ladder,
     recorder,
     takePlayer,
+    midi,
     backup,
     storage,
     trail,
@@ -7384,6 +7385,157 @@ describe('AppView', () => {
       expect(ahead()).not.toEqual([]);
       element<HTMLButtonElement>('roll-chords-open').click();
       expect(ahead()).toEqual([]);
+    });
+
+    it('records the instrument into a sketch from the cursor after a count-in, over what is there, to the sketch\'s own beat', async () => {
+      const { view, sketches, runtime, clock, metronome, midi } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ countInBars: 1 });
+      const sketch = sketches.begin(
+        {
+          events: Array.from({ length: 16 }, (_, at) => [
+            { kind: 'noteOn' as const, atMs: at * 500, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: at * 500 + 400, midi: 60 },
+          ]).flat(),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Recorded',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const record = element<HTMLButtonElement>('roll-record');
+      const player = runtime.takePlayer;
+      const struck = (pitch: number): number[] =>
+        (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'noteOn' && event.midi === pitch ? [event.atMs] : []));
+      const pedal = (): number[][] =>
+        (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'sustain' ? [[event.atMs, event.value]] : []));
+      const chosen = (): number[] => (view.rollScene?.notes ?? []).filter((note) => note.chosen === true).map((note) => note.fromMs);
+      element<HTMLInputElement>('roll-click').checked = true;
+      // How many are listening to the instrument from here on: one while it records.
+      let listening = 0;
+      const subscribe = midi.subscribe.bind(midi);
+      vi.spyOn(midi, 'subscribe').mockImplementation((listener) => {
+        listening += 1;
+        const off = subscribe(listener);
+        return () => {
+          listening -= 1;
+          off();
+        };
+      });
+
+      // There while the sketch is edited, saying how long the count-in is.
+      expect([record.hidden, record.dataset['away']]).toEqual([false, undefined]);
+      expect(record.title).toBe('Record into the sketch from the cursor, after 1 bar counted in');
+      // The cursor on the second bar.
+      tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: 2.05 * zoom, clientY: 20 });
+
+      vi.useFakeTimers();
+      try {
+        metronome.clicks.length = 0;
+        const pressedAt = clock.now();
+        record.click();
+        expect(record.getAttribute('aria-pressed')).toBe('true');
+        expect(record.title).toBe('Stop recording, and write in what was played');
+        // A bar counted in at the sketch's own pace, and nothing sounding yet.
+        expect(metronome.clicks.map((click) => [(click.atMs ?? 0) - pressedAt, click.weight])).toEqual([
+          [0, 'downbeat'],
+          [500, 'beat'],
+          [1_000, 'beat'],
+          [1_500, 'beat'],
+        ]);
+        expect(player.playing).toBeNull();
+        expect(listening).toBe(1);
+        // Struck a little before the first beat: the first beat's. Earlier: not recorded.
+        midi.noteOn(64, pressedAt + 1_000);
+        midi.noteOff(64, pressedAt + 1_100);
+        midi.noteOn(67, pressedAt + 1_900);
+        clock.set(pressedAt + 2_000);
+        vi.advanceTimersByTime(2_000);
+        // Then what is written sounds from the cursor, under the playing, and the beat goes on.
+        expect(player.playing).not.toBeNull();
+        expect(player.positionMs).toBe(2_000);
+        expect(metronome.clicks.map((click) => (click.atMs ?? 0) - pressedAt).slice(4, 5)).toEqual([2_000]);
+        midi.noteOff(67, pressedAt + 2_200);
+        midi.pedal(true, pressedAt + 2_300);
+        midi.noteOn(65, pressedAt + 2_750);
+        for (let step = 0; step < 10; step += 1) {
+          clock.advance(100);
+          vi.advanceTimersByTime(80);
+        }
+        expect(metronome.clicks.map((click) => (click.atMs ?? 0) - pressedAt).slice(4, 7)).toEqual([2_000, 2_500, 3_000]);
+        expect(headAt(element('roll-body'))).toBe('3.000');
+        // Pressed again: written in from the cursor, a key and the pedal still down let go of there.
+        record.click();
+      } finally {
+        vi.useRealTimers();
+      }
+      expect(record.getAttribute('aria-pressed')).toBe('false');
+      expect(player.playing).toBeNull();
+      expect(listening).toBe(0);
+      expect([struck(64), struck(67), struck(65)]).toEqual([[], [1_900], [2_750]]);
+      expect(pedal()).toEqual([
+        [2_300, 1],
+        [3_000, 0],
+      ]);
+      expect(chosen()).toEqual([1_900, 2_750]);
+      // One change, put back as one.
+      element<HTMLButtonElement>('roll-undo').click();
+      expect([struck(67), struck(65), pedal()]).toEqual([[], [], []]);
+
+      // Stopped while it counts in, nothing is written; nor is anything played then.
+      vi.useFakeTimers();
+      try {
+        record.click();
+        midi.noteOn(69, clock.now() + 1_800);
+        element<HTMLButtonElement>('roll-stop').click();
+        expect(record.getAttribute('aria-pressed')).toBe('false');
+        vi.advanceTimersByTime(3_000);
+        expect(struck(69)).toEqual([]);
+        expect(player.playing).toBeNull();
+
+        // With no count-in it records at once; listened to from there, it is written in.
+        runtime.controller.updateSettings({ countInBars: 0 });
+        tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: 5.05 * zoom, clientY: 20 });
+        metronome.clicks.length = 0;
+        record.click();
+        expect(record.title).toBe('Stop recording, and write in what was played');
+        midi.noteOn(71, clock.now() + 10);
+        clock.advance(400);
+        vi.advanceTimersByTime(0);
+        midi.noteOff(71, clock.now());
+        element<HTMLButtonElement>('roll-edit').click();
+        expect(struck(71)).toEqual([5_010]);
+        expect(record.dataset['away']).toBe('true');
+        element<HTMLButtonElement>('roll-edit').click();
+        expect(record.title).toBe('Record into the sketch from the cursor');
+
+        // Past what is written, the cursor goes on by itself.
+        tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: 7.55 * zoom, clientY: 20 });
+        record.click();
+        for (let step = 0; step < 15; step += 1) {
+          clock.advance(100);
+          vi.advanceTimersByTime(80);
+        }
+        expect(headAt(element('roll-body'))).toBe('9.000');
+        record.click();
+
+        // Counted in at the sketch's pace where it goes in: a crotchet a second.
+        runtime.controller.updateSettings({ countInBars: 1 });
+        const tempo = element<HTMLInputElement>('roll-tempo');
+        tempo.value = '60';
+        tempo.dispatchEvent(new Event('change'));
+        tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: 0.05 * zoom, clientY: 20 });
+        metronome.clicks.length = 0;
+        const slowAt = clock.now();
+        record.click();
+        expect(metronome.clicks.map((click) => (click.atMs ?? 0) - slowAt)).toEqual([0, 1_000, 2_000, 3_000]);
+        element<HTMLButtonElement>('roll-stop').click();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('lays a slice of whole bars on the ruler by a press held and dragged, or a click with a key held, and takes it away by a press held on it', async () => {

@@ -47,6 +47,7 @@ import {
   dropoutCycleBars,
   type ChosenClickWhen,
   type ClickPattern,
+  type BeatWeight,
 } from '../application/ports/IMetronome.js';
 import type { SessionScore } from '../domain/scoring/IScoringStrategy.js';
 import {
@@ -203,6 +204,7 @@ import {
   type ArpeggioWay,
   takeWithThePedalAt,
   theBarsAcross,
+  takeWithThePlayingRecorded,
   theChangeOnTheClipboard,
   theClipboardTextOf,
   theClipboardTextOfTheChange,
@@ -440,6 +442,14 @@ const TAKE_TICK_MS = 80;
  * is laid on are whole milliseconds, worked out from crotchets.
  */
 const SLICE_EDGE_MS = 1;
+
+const MILLISECONDS_A_MINUTE = 60_000;
+
+/** How far a sketch's beat is carried on past its end to be clicked under a recording: a quarter of an hour at 120. */
+const RECORDED_BEATS_PAST_THE_END = 2_000;
+
+/** How early a key may be struck and still be recorded, where there is no beat to say: as a downbeat is often struck. */
+const EARLY_BY_AT_MOST_MS = 150;
 
 /**
  * How long a held step button waits before its `count`th step after the
@@ -1965,6 +1975,24 @@ export class AppView {
   /** Whether the click that ends a press which laid a slice is to be let pass. */
   private sliceLaidByThePress = false;
   /**
+   * Playing being recorded into the sketch shown, while it is: which sketch,
+   * the moment of it it goes in at, from the drawing's beginning, and when
+   * on the clock that moment falls - after the count-in. What has been
+   * played, timed from then; and the clicks of the sketch's beat to sound
+   * under it, the next of them still to be handed over.
+   */
+  private recording: {
+    readonly sketchId: string;
+    readonly fromMs: number;
+    readonly beginsAtMs: number;
+    readonly played: MidiFileEvent[];
+    readonly clicks: readonly { readonly atMs: number; readonly weight: BeatWeight }[];
+    nextClick: number;
+    readonly stopListening: () => void;
+    begins: ReturnType<typeof setTimeout> | null;
+    tick: ReturnType<typeof setInterval> | null;
+  } | null = null;
+  /**
    * A run being shown again on the notes, and where the showing has got to.
    * See `replayTheRun`.
    */
@@ -2485,6 +2513,7 @@ export class AppView {
     rollPlay: HTMLButtonElement;
     rollPlayIcon: SVGPathElement;
     rollStop: HTMLButtonElement;
+    rollRecord: HTMLButtonElement;
     rollStopIcon: SVGPathElement;
     rollClose: HTMLElement;
     sheetSettings: HTMLElement;
@@ -2879,6 +2908,7 @@ export class AppView {
       rollPlay: requireElement(doc, 'roll-play'),
       rollPlayIcon: requireElement(doc, 'roll-play-icon'),
       rollStop: requireElement(doc, 'roll-stop'),
+      rollRecord: requireElement(doc, 'roll-record'),
       rollStopIcon: requireElement(doc, 'roll-stop-icon'),
       rollClose: requireElement(doc, 'roll-close'),
       sheetSettings: requireElement(doc, 'sheet-settings'),
@@ -6527,6 +6557,10 @@ export class AppView {
 
   /** Starts the drawing playing, or holds it where it has got to. */
   private togglePlayingTheRoll(): void {
+    if (this.recording !== null) {
+      this.writeInWhatWasRecorded();
+      return;
+    }
     if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
       this.holdTheRoll();
       return;
@@ -9167,6 +9201,13 @@ export class AppView {
     });
     this.listen(this.el.rollStop, 'click', () => {
       this.goBackInTheRoll();
+    });
+    this.listen(this.el.rollRecord, 'click', () => {
+      if (this.recording === null) {
+        this.recordIntoTheSketch();
+      } else {
+        this.writeInWhatWasRecorded();
+      }
     });
     this.el.rollBody.addEventListener(
       'wheel',
@@ -12653,7 +12694,7 @@ export class AppView {
     this.el.rollEdit.setAttribute('aria-label', this.el.rollEdit.title);
     this.el.rollSelect.setAttribute('aria-pressed', String(sketch === undefined ? this.boxOnTheViewer : sketch.tool === 'selection'));
     // Only a sketch has them, and they are there only while it is edited.
-    for (const button of [this.el.rollDelete, this.el.rollUndo, this.el.rollRedo, this.el.rollMark, this.el.rollChordsOpen]) {
+    for (const button of [this.el.rollDelete, this.el.rollUndo, this.el.rollRedo, this.el.rollMark, this.el.rollChordsOpen, this.el.rollRecord]) {
       button.hidden = sketch === undefined;
       if (editing) {
         delete button.dataset['away'];
@@ -12661,6 +12702,7 @@ export class AppView {
         button.dataset['away'] = 'true';
       }
     }
+    this.sayWhetherItRecords();
     // The box chooses notes on any drawing: on a sketch while it is edited,
     // and on anything else to copy them out of.
     this.el.rollSelect.hidden = false;
@@ -13942,6 +13984,8 @@ export class AppView {
    * way: a choice belongs to the editing it was made in.
    */
   private editTheSketch(editing: boolean): void {
+    // Listened to from here, what was being recorded is written in first.
+    this.writeInWhatWasRecorded();
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
     if (showing === null || sketch === undefined) {
@@ -15555,6 +15599,10 @@ export class AppView {
    * transport's rewind and stop as one button.
    */
   private goBackInTheRoll(): void {
+    if (this.recording !== null) {
+      this.writeInWhatWasRecorded();
+      return;
+    }
     const sounding = this.runtime.takePlayer.playing === RUN_ROLL_ID;
     if (!sounding && this.rollAtMs === this.rollPlacedAtMs) {
       this.stopTheRoll();
@@ -15573,6 +15621,162 @@ export class AppView {
     this.clicksHandedOver(0);
     this.letTheRollTickGo();
     this.describeTheRoll();
+  }
+
+  /**
+   * Records the instrument into the sketch being edited from where the
+   * cursor is: a count-in of as many bars as the settings say, at the
+   * sketch's pace and metre there, and then whatever is played, heard over
+   * what is already written and the sketch's own beat. Nothing is written
+   * until it stops: see `writeInWhatWasRecorded`.
+   */
+  private recordIntoTheSketch(): void {
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    if (showing === null || sketch === undefined || !sketch.editing || stored === null) {
+      return;
+    }
+    if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
+      this.holdTheRoll();
+    }
+    const origin = rollBeganAtMs(showing.roll);
+    const fromMs = this.headIsAtMs();
+    const now = this.runtime.clock.now();
+    // The beat where it goes in, which the count-in is counted at; a sketch
+    // with no beat is recorded into at once.
+    const beat = theBeatOfTheClickAt(stored.events, stored.beats, fromMs + origin);
+    const beatMs = beat === null ? 0 : ((MILLISECONDS_A_MINUTE / beat.crotchetsPerMinute) * 4) / beat.metre.beatType;
+    const countIn = beat === null ? 0 : this.runtime.controller.settings.countInBars * beat.metre.beatsInBar;
+    const beginsAtMs = now + countIn * beatMs;
+    for (let at = 0; at < countIn; at += 1) {
+      this.runtime.metronomeClick.click(now + at * beatMs, beat !== null && at % beat.metre.beatsInBar === 0 ? 'downbeat' : 'beat');
+    }
+    // The sketch's beat from there on, carried past its end, to be clicked under the playing.
+    const carried = theClickOfTheTake(stored.events, stored.beats, RECORDED_BEATS_PAST_THE_END) ?? [];
+    const clicks = carried
+      .filter((each) => each.atMs >= fromMs + origin - SLICE_EDGE_MS)
+      .map((each) => ({
+        atMs: beginsAtMs + (each.atMs - origin - fromMs),
+        weight: (each.beat === 0 ? 'downbeat' : 'beat') as BeatWeight,
+      }));
+    // A key struck a little before the first beat, as a downbeat often is, is the first beat's.
+    const earliest = beginsAtMs - (beatMs > 0 ? beatMs / 2 : EARLY_BY_AT_MOST_MS);
+    const played: MidiFileEvent[] = [];
+    const stopListening = this.runtime.midi.subscribe((event) => {
+      const atMs = event.timestampMs;
+      if (atMs < earliest) {
+        return;
+      }
+      if (event.type === 'noteon') {
+        played.push({ kind: 'noteOn', atMs: atMs - beginsAtMs, midi: event.midi, velocity: event.velocity });
+      } else if (event.type === 'noteoff') {
+        played.push({ kind: 'noteOff', atMs: atMs - beginsAtMs, midi: event.midi });
+      } else if (event.type === 'pedal') {
+        played.push({ kind: 'sustain', atMs: atMs - beginsAtMs, value: event.value });
+      }
+    });
+    this.recording = { sketchId: sketch.id, fromMs, beginsAtMs, played, clicks, nextClick: 0, stopListening, begins: null, tick: null };
+    const recording = this.recording;
+    recording.begins = setTimeout(() => {
+      recording.begins = null;
+      this.goOnRecording();
+    }, beginsAtMs - now);
+    this.sayWhetherItRecords();
+  }
+
+  /**
+   * The recording under way: what is written sounds from where the cursor
+   * is now, as the cursor walks on, and the beat is handed over a little
+   * ahead, as a playback's is. Started when the count-in ends, and then a
+   * tick at a time.
+   */
+  private goOnRecording(): void {
+    const recording = this.recording;
+    const roll = this.theRoll();
+    if (recording === null || roll === null) {
+      return;
+    }
+    const now = this.runtime.clock.now();
+    const atMs = recording.fromMs + Math.max(0, now - recording.beginsAtMs);
+    const player = this.runtime.takePlayer;
+    if (recording.tick === null) {
+      if (roll.presses.length > 0) {
+        player.setSpeed(1);
+        player.play(RUN_ROLL_ID, rollAsEvents(roll), atMs);
+      }
+      recording.tick = setInterval(() => this.goOnRecording(), TAKE_TICK_MS);
+    } else if (player.playing === RUN_ROLL_ID) {
+      player.pump();
+      // Past what was written, the cursor goes on by itself.
+      if (player.finished) {
+        player.stop();
+      }
+    }
+    if (this.el.rollClick.checked) {
+      for (let next = recording.clicks[recording.nextClick]; next !== undefined && next.atMs <= now + ROLL_CLICK_LEAD_MS; ) {
+        this.runtime.metronomeClick.click(next.atMs, next.weight);
+        recording.nextClick += 1;
+        next = recording.clicks[recording.nextClick];
+      }
+    }
+    this.rollAtMs = atMs;
+    this.describeTheRoll();
+  }
+
+  /**
+   * Stops recording and writes in what was played, from where it went in,
+   * over what is there: one change, put back as one, the keys of it chosen.
+   * Stopped during the count-in, nothing was recorded. The cursor stays
+   * where the recording stopped, and the marker where it began.
+   */
+  private writeInWhatWasRecorded(): void {
+    const recording = this.recording;
+    if (recording === null) {
+      return;
+    }
+    this.recording = null;
+    recording.stopListening();
+    if (recording.begins !== null) {
+      clearTimeout(recording.begins);
+    }
+    if (recording.tick !== null) {
+      clearInterval(recording.tick);
+    }
+    this.runtime.metronomeClick.takeBackTheClicks();
+    if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
+      this.runtime.takePlayer.stop();
+    }
+    const stoppedAtMs = this.runtime.clock.now() - recording.beginsAtMs;
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    const stored = this.runtime.sketches.find(recording.sketchId);
+    this.sayWhetherItRecords();
+    if (stoppedAtMs < 0 || showing === null || sketch === undefined || sketch.id !== recording.sketchId || stored === null) {
+      this.describeTheRoll();
+      return;
+    }
+    const origin = rollBeganAtMs(showing.roll);
+    const { events, pasted } = takeWithThePlayingRecorded(stored.events, recording.played, recording.fromMs + origin, stoppedAtMs);
+    this.rollPlacedAtMs = recording.fromMs;
+    this.rollAtMs = recording.fromMs + stoppedAtMs;
+    if (events !== stored.events) {
+      this.changeTheSketchShowing(events, [...sketch.before, asItWas(stored, sketch.chosen)], pasted);
+    }
+    this.describeTheRoll();
+  }
+
+  /** The record button pressed while it records - counting in or under way - and saying what a press would do. */
+  private sayWhetherItRecords(): void {
+    const recording = this.recording !== null;
+    const bars = this.runtime.controller.settings.countInBars;
+    this.el.rollRecord.setAttribute('aria-pressed', String(recording));
+    this.el.rollRecord.title = recording
+      ? 'Stop recording, and write in what was played'
+      : bars > 0
+        ? `Record into the sketch from the cursor, after ${String(bars)} ${bars === 1 ? 'bar' : 'bars'} counted in`
+        : 'Record into the sketch from the cursor';
+    this.el.rollRecord.setAttribute('aria-label', this.el.rollRecord.title);
   }
 
   /** Which drawing is shown, as a slice laid on it is kept by: a sketch, a recording, or whatever else by what it is. */
@@ -15754,6 +15958,7 @@ export class AppView {
   }
 
   private stopTheRoll(): void {
+    this.writeInWhatWasRecorded();
     if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
       this.runtime.takePlayer.stop();
     }

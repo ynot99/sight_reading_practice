@@ -431,6 +431,10 @@ describe('drawing a run as a piano roll', () => {
     expect(flag?.textContent).toBe('G major');
     expect(flag?.getAttribute('type')).toBe('button');
     expect(ruler?.querySelector<HTMLElement>('.roll__marks > .roll__mark-tools')?.hidden).toBe(true);
+    // And a slice, hidden for the view to place, under the flags.
+    const slice = ruler?.querySelector<HTMLElement>('.roll__marks > .roll__slice');
+    expect(slice?.hidden).toBe(true);
+    expect(ruler?.querySelector('.roll__marks')?.firstElementChild).toBe(slice);
     expect([...(ruler?.querySelectorAll('.roll__mark-tools > .button') ?? [])].map((button) => button.classList[1])).toEqual([
       'roll__mark-change',
       'roll__mark-copy',

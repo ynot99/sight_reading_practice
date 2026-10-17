@@ -7,6 +7,7 @@ import {
   theRushes,
   theWaits,
   theBeatNearest,
+  theBarsAcross,
   theNextLineOfTheGrid,
   theLineOfTheGridUnder,
   theEndAKeyFitsTo,
@@ -566,6 +567,40 @@ describe('the beat a run was measured against', () => {
     expect(theBeatNearest(played, 620)).toBe(1000);
     expect(theBeatNearest(played, 1400)).toBe(1000);
     expect(theBeatNearest(played, 5000)).toBe(2000);
+  });
+
+  it('slices whole bars between two moments, either way round, across the whole run', () => {
+    // Two bars of 4/4 at 120, a note through them.
+    const run = rollOfTheTake({
+      events: [
+        { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.5 },
+        { kind: 'noteOff', atMs: 3_900, midi: 60 },
+      ],
+      beats: [0, 500, 1_000, 1_500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+    });
+    expect(theMusicsBeats(run, { beats: false, parts: 1 }).map((line) => line.atMs - rollBeganAtMs(run))).toEqual([0, 2_000, 4_000]);
+    const barOf = (at: number): number => (at < 2_000 - 1 ? 0 : 1);
+    for (let one = 0; one < 4_000; one += 125) {
+      for (let other = 0; other < 4_000; other += 375) {
+        const first = Math.min(barOf(one), barOf(other));
+        const last = Math.max(barOf(one), barOf(other));
+        expect(theBarsAcross(run, one, other), `${String(one)} ${String(other)}`).toEqual({ fromMs: first * 2_000, toMs: (last + 1) * 2_000 });
+      }
+    }
+    // A moment a hair before a bar line, in whole milliseconds, is on it.
+    expect(theBarsAcross(run, 1_999.6, 1_999.6)).toEqual({ fromMs: 2_000, toMs: 4_000 });
+    // Past the last bar line it ends where the run does.
+    expect(theBarsAcross(run, 4_100, 4_100)).toEqual({ fromMs: 4_000, toMs: rollEndedAtMs(run) - rollBeganAtMs(run) });
+    // With no bars, from the earlier moment to the end.
+    const free = rollOfTheTake({
+      events: [
+        { kind: 'noteOn', atMs: 500, midi: 60, velocity: 0.5 },
+        { kind: 'noteOff', atMs: 3_000, midi: 60 },
+      ],
+      beats: [],
+    });
+    // Its end measured, as every moment here is, from its own beginning.
+    expect(theBarsAcross(free, 2_000, 700)).toEqual({ fromMs: 700, toMs: rollEndedAtMs(free) - 500 });
   });
 
   it('steps to the next line of the grid either way, from a line or from between two, across the whole run', () => {

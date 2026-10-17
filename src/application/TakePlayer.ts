@@ -17,6 +17,12 @@ const MOST_OF_ITS_SPEED = 1;
 
 const LOOK_AHEAD_MS = 250;
 
+/** A stretch of a take played round and round, in the take's own time: from where it begins to where it ends. */
+export interface TakeLoop {
+  readonly fromMs: number;
+  readonly toMs: number;
+}
+
 /**
  * Plays a kept take back.
  *
@@ -65,6 +71,14 @@ export class TakePlayer {
   private startedAtMs: number | null = null;
   private offsetMs = 0;
   private playingId: string | null = null;
+  /** The stretch played round and round, or none. */
+  private loop: TakeLoop | null = null;
+  /**
+   * How many times the stretch has been begun again as far as the notes
+   * handed over have got: the notes of the next lap go over within the
+   * look-ahead, as any others do, so it follows on with no gap.
+   */
+  private lapsHanded = 0;
 
   constructor(dependencies: TakePlayerDependencies) {
     this.instrument = dependencies.instrument;
@@ -94,10 +108,59 @@ export class TakePlayer {
     if (this.startedAtMs === null) {
       return this.offsetMs;
     }
-    return Math.min(
-      this.lengthMs,
-      this.offsetMs + (this.clock.now() - this.startedAtMs) * this.rate,
-    );
+    const heard = this.theTimeHeard();
+    // Round the stretch, it is back at its beginning each time it reaches its end.
+    const loop = this.theLoopPlayed();
+    if (loop !== null && heard >= loop.toMs) {
+      return loop.fromMs + ((heard - loop.toMs) % (loop.toMs - loop.fromMs));
+    }
+    return Math.min(this.lengthMs, heard);
+  }
+
+  /**
+   * How many times the stretch being played round has been begun again
+   * since it was set going, or moved: none where nothing goes round. What
+   * a follower counts the clicks of each lap by.
+   */
+  get lap(): number {
+    const loop = this.theLoopPlayed();
+    if (this.startedAtMs === null || loop === null) {
+      return 0;
+    }
+    const heard = this.theTimeHeard();
+    return heard < loop.toMs ? 0 : 1 + Math.floor((heard - loop.toMs) / (loop.toMs - loop.fromMs));
+  }
+
+  /** The stretch being played round, while one is: what a follower lays the clicks of each lap by. */
+  get goingRound(): TakeLoop | null {
+    return this.startedAtMs === null ? null : this.theLoopPlayed();
+  }
+
+  /**
+   * Plays a stretch round and round from now on, or none: a seek to where
+   * it already is, so what is handed over ahead is handed over again for
+   * the stretch as it is now. A stretch of nothing is none.
+   */
+  setLoop(loop: TakeLoop | null): void {
+    const at = this.positionMs;
+    this.loop = loop !== null && loop.toMs > loop.fromMs ? loop : null;
+    if (this.startedAtMs !== null) {
+      this.seek(at);
+    }
+  }
+
+  /**
+   * The stretch, where it is being played round: begun before its end.
+   * Begun after it, the take plays on, as one set going past the end of a
+   * loop does in any player.
+   */
+  private theLoopPlayed(): TakeLoop | null {
+    return this.loop !== null && this.offsetMs < this.loop.toMs ? this.loop : null;
+  }
+
+  /** How far along the take the sound has got since it was set going, counting every lap of a stretch played round. */
+  private theTimeHeard(): number {
+    return this.offsetMs + (this.clock.now() - (this.startedAtMs ?? this.clock.now())) * this.rate;
   }
 
   /** How fast it is playing, as a multiple of the take's own time. */
@@ -126,9 +189,9 @@ export class TakePlayer {
     this.seek(at);
   }
 
-  /** True once the take has run out, which is what stops a scrubber. */
+  /** True once the take has run out, which is what stops a scrubber - never while a stretch of it goes round. */
   get finished(): boolean {
-    return this.startedAtMs !== null && this.positionMs >= this.lengthMs;
+    return this.startedAtMs !== null && this.theLoopPlayed() === null && this.positionMs >= this.lengthMs;
   }
 
   /**
@@ -137,14 +200,20 @@ export class TakePlayer {
    * Notes already sounding at that point are struck at the seek rather than
    * skipped: a listener who drops into the middle of a held chord should hear
    * the chord, not the silence between its attack and its release.
+   *
+   * A stretch of it may be played round and round: see {@link setLoop}. It
+   * is the caller's, and goes with what is played - a take played after it
+   * goes round nothing unless it is told.
    */
-  play(id: string, events: readonly MidiFileEvent[], fromMs = 0): void {
+  play(id: string, events: readonly MidiFileEvent[], fromMs = 0, loop: TakeLoop | null = null): void {
     this.stop();
     this.lengthMs = events.reduce((longest, event) => Math.max(longest, event.atMs), 0);
     this.notes = soundingNotes(events, this.lengthMs);
     this.playingId = id;
+    this.loop = loop !== null && loop.toMs > loop.fromMs ? loop : null;
     this.offsetMs = Math.max(0, Math.min(this.lengthMs, fromMs));
     this.startedAtMs = this.clock.now();
+    this.lapsHanded = 0;
     this.rewindTo(0);
     this.pump();
   }
@@ -159,12 +228,38 @@ export class TakePlayer {
     if (this.startedAtMs === null) {
       return;
     }
-    const at = this.positionMs;
-    const until = at + LOOK_AHEAD_MS;
+    const until = this.theTimeHeard() + LOOK_AHEAD_MS;
+    const loop = this.theLoopPlayed();
+    for (;;) {
+      const lapEnded = this.handOverALap(until, loop);
+      // The next lap begins within the look-ahead: its notes go over now.
+      if (loop === null || !lapEnded || loop.toMs + this.lapsHanded * (loop.toMs - loop.fromMs) > until) {
+        return;
+      }
+      this.lapsHanded += 1;
+      const from = this.notes.findIndex((note) => note.keyUpMs > loop.fromMs);
+      this.rewindTo(from < 0 ? this.notes.length : from);
+    }
+  }
 
+  /**
+   * Hands over what is due within the look-ahead of the lap being handed
+   * over - the whole take where nothing goes round - and says whether every
+   * note of it has gone. A lap after the first begins where the stretch
+   * does, and every note in it ends by where it ends.
+   */
+  private handOverALap(until: number, loop: TakeLoop | null): boolean {
+    // Where each note of this lap is heard, counting the laps before it.
+    const shift = loop === null ? 0 : this.lapsHanded * (loop.toMs - loop.fromMs);
+    const begins = loop === null || this.lapsHanded === 0 ? this.offsetMs : loop.fromMs;
+    let ended = true;
     for (let index = this.handedOver; index < this.notes.length; index += 1) {
       const note = this.notes[index];
-      if (note === undefined || note.startMs > until) {
+      if (note === undefined || (loop !== null && note.startMs >= loop.toMs)) {
+        break;
+      }
+      if (note.startMs + shift > until) {
+        ended = false;
         break;
       }
       if (this.handed.has(index)) {
@@ -177,7 +272,7 @@ export class TakePlayer {
       // The key coming up is what counts here, not the damper falling: under
       // a long pedal half the take is still ringing at any moment, and
       // striking all of it again at the seek would be a chord nobody played.
-      if (note.keyUpMs <= this.offsetMs && note.startMs < this.offsetMs) {
+      if (note.keyUpMs <= begins && note.startMs < begins) {
         this.handed.add(index);
         continue;
       }
@@ -193,9 +288,10 @@ export class TakePlayer {
       // A note straddling the seek is struck there rather than skipped: a
       // listener who drops into the middle of a held chord should hear the
       // chord, not the silence between its attack and its release.
-      const startsAt = Math.max(note.startMs, this.offsetMs);
-      this.instrument.play(note.midi, note.velocity, this.whenHeard(startsAt));
-      this.instrument.stop(note.midi, this.whenHeard(Math.max(note.endMs, startsAt)));
+      const startsAt = Math.max(note.startMs, begins);
+      const endsAt = loop === null ? note.endMs : Math.min(note.endMs, loop.toMs);
+      this.instrument.play(note.midi, note.velocity, this.whenHeard(startsAt + shift));
+      this.instrument.stop(note.midi, this.whenHeard(Math.max(endsAt, startsAt) + shift));
       this.handed.add(index);
     }
 
@@ -203,6 +299,7 @@ export class TakePlayer {
       this.handed.delete(this.handedOver);
       this.handedOver += 1;
     }
+    return ended;
   }
 
   /** Stops, keeping where it had got to so that play resumes from there. */
@@ -215,7 +312,7 @@ export class TakePlayer {
     this.silence();
   }
 
-  /** Stops and forgets the position. */
+  /** Stops and forgets the position. A stretch set going round goes with what is played next: see `play`. */
   stop(): void {
     this.startedAtMs = null;
     this.offsetMs = 0;
@@ -236,6 +333,7 @@ export class TakePlayer {
     this.silence();
     this.offsetMs = at;
     this.startedAtMs = this.clock.now();
+    this.lapsHanded = 0;
     const from = this.notes.findIndex((note) => note.keyUpMs > at);
     this.rewindTo(from < 0 ? this.notes.length : from);
     this.pump();

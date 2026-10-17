@@ -202,6 +202,7 @@ import {
   theMusicsBeats,
   type ArpeggioWay,
   takeWithThePedalAt,
+  theBarsAcross,
   theChangeOnTheClipboard,
   theClipboardTextOf,
   theClipboardTextOfTheChange,
@@ -432,6 +433,12 @@ const NEWLINE = String.fromCharCode(10);
 
 /** How often the take slider is moved while something is sounding. */
 const TAKE_TICK_MS = 80;
+
+/**
+ * How near a slice's end a moment is to be on it: the beats and bar lines it
+ * is laid on are whole milliseconds, worked out from crotchets.
+ */
+const SLICE_EDGE_MS = 1;
 
 /**
  * How long a held step button waits before its `count`th step after the
@@ -1931,6 +1938,31 @@ export class AppView {
   private pitchMarksDrawn = '';
   /** Clicks of the run already handed to the metronome by this playback. */
   private rollClicksSent = 0;
+  /** The lap of a slice going round those clicks were counted in: see `soundTheBeat`. */
+  private rollLapClicked = 0;
+  /** And how many clicks of the lap after it were handed over ahead, as its notes are. */
+  private rollClicksOfTheNextLap = 0;
+  /**
+   * The bars of the drawing a playback goes round, in milliseconds from its
+   * beginning, and which drawing they are of - so another one shown has
+   * none until one is laid on it. Kept while the page is, and no longer.
+   */
+  private rollSlice: { readonly of: string; readonly fromMs: number; readonly toMs: number } | null = null;
+  /**
+   * A press on the ruler that may lay a slice: held still long enough it
+   * does, and then the finger drags the slice's far end until it is let go.
+   * Where it was held, once it has been, or `null` where that took a slice away.
+   */
+  private sliceHold: {
+    readonly pointerId: number;
+    readonly clientX: number;
+    readonly clientY: number;
+    timer: ReturnType<typeof setTimeout> | null;
+    held: boolean;
+    anchorMs: number | null;
+  } | null = null;
+  /** Whether the click that ends a press which laid a slice is to be let pass. */
+  private sliceLaidByThePress = false;
   /**
    * A run being shown again on the notes, and where the showing has got to.
    * See `replayTheRun`.
@@ -9198,6 +9230,11 @@ export class AppView {
       if (this.pinched || this.panned) {
         return;
       }
+      // A slice laid by a press held on the ruler, which is not a tap there.
+      if (this.sliceLaidByThePress) {
+        this.sliceLaidByThePress = false;
+        return;
+      }
       // A flag pressed was answered as it went down; one clicked by the keys
       // is a click with no press before it.
       if (event.target instanceof Element && event.target.closest('.roll__marks') !== null) {
@@ -9220,7 +9257,12 @@ export class AppView {
       // The ruler places the marker whatever the drawing is for: editing, the
       // notes under it answer a tap, and the marker still has to be put
       // somewhere to listen from.
-      const onTheRuler = event.target instanceof Element && event.target.closest('.roll__ruler') !== null;
+      const onTheRuler = this.isOnTheRuler(event);
+      const mouse = event as MouseEvent;
+      if (onTheRuler && (mouse.ctrlKey || mouse.metaKey || mouse.altKey)) {
+        this.sliceByAClick(mouse);
+        return;
+      }
       if (!onTheRuler && this.theOtherRollShowing?.sketch?.editing === true) {
         this.chooseTheKeyTapped(event);
         return;
@@ -9470,6 +9512,10 @@ export class AppView {
         event.preventDefault();
         return;
       }
+      this.sliceLaidByThePress = false;
+      if (event.button === 0 && this.isOnTheRuler(event)) {
+        this.watchForASliceHold(event);
+      }
       if (
         !middle &&
         this.rollFingers.size === 0 &&
@@ -9510,6 +9556,9 @@ export class AppView {
       if (this.fingersOnTheDrawing.has(event.pointerId)) {
         this.fingersOnTheDrawing.set(event.pointerId, { x: event.clientX, y: event.clientY });
       }
+      if (this.dragTheSlice(event)) {
+        return;
+      }
       if (this.rollPedalDrag?.pointerId === event.pointerId) {
         this.dragThePedal(event);
         return;
@@ -9535,6 +9584,9 @@ export class AppView {
     for (const ending of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
       this.listen(this.el.rollBody, ending, (event) => {
         this.fingersOnTheDrawing.delete(event.pointerId);
+        if (this.letGoOfTheSliceHold(event)) {
+          return;
+        }
         if (this.keyHeldOnTheStrip?.pointerId === event.pointerId) {
           this.letGoOfTheKeyOnTheStrip();
           return;
@@ -9576,7 +9628,7 @@ export class AppView {
       const roll = this.theRoll();
       if (roll !== null) {
         this.takeBackTheRollsClicks();
-        this.rollClicksSent = clicksBefore(roll, this.headIsAtMs(), this.theRollsGrid());
+        this.clicksHandedOver(clicksBefore(roll, this.headIsAtMs(), this.theRollsGrid()));
         this.clickAheadOfTheRoll();
       }
     });
@@ -9587,7 +9639,7 @@ export class AppView {
       const roll = this.theRoll();
       if (roll !== null) {
         this.takeBackTheRollsClicks();
-        this.rollClicksSent = clicksBefore(roll, this.headIsAtMs(), this.theRollsGrid());
+        this.clicksHandedOver(clicksBefore(roll, this.headIsAtMs(), this.theRollsGrid()));
         this.clickAheadOfTheRoll();
       }
       this.describeTheRoll();
@@ -13951,8 +14003,7 @@ export class AppView {
     if (!boxes) {
       return false;
     }
-    const onTheRuler = event.target instanceof Element && event.target.closest('.roll__ruler') !== null;
-    if (onTheRuler) {
+    if (this.isOnTheRuler(event)) {
       return false;
     }
     // Where the stage and the notes are, read once: the box is placed in the
@@ -14163,6 +14214,16 @@ export class AppView {
     this.lightTheSoundingRows();
   }
 
+  /**
+   * Whether an event is on the ruler over the notes. The ruler stands over
+   * the top of them, so a note scrolled under it is not to be taken hold of
+   * through it: pressed there, it was chosen and the drawing drawn again
+   * under the pointer, and the click on the ruler never came.
+   */
+  private isOnTheRuler(event: Event): boolean {
+    return event.target instanceof Element && event.target.closest('.roll__ruler') !== null;
+  }
+
   /** Whether an event is on the pedal's lane under the notes. */
   private isOnThePedal(event: Event): boolean {
     return event.target instanceof Element && event.target.closest('.roll__pedal') !== null;
@@ -14321,7 +14382,14 @@ export class AppView {
   private cutTheKeyUnder(event: PointerEvent): boolean {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
-    if (showing === null || sketch?.editing !== true || !event.altKey || event.pointerType === 'touch' || event.button !== 0) {
+    if (
+      showing === null ||
+      sketch?.editing !== true ||
+      !event.altKey ||
+      event.pointerType === 'touch' ||
+      event.button !== 0 ||
+      this.isOnTheRuler(event)
+    ) {
       return false;
     }
     const key = this.theKeyUnder(event);
@@ -14360,7 +14428,7 @@ export class AppView {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
     const scene = this.drawnScene;
-    if (showing === null || sketch === undefined || !sketch.editing || this.rollDrag !== null || scene === null) {
+    if (showing === null || sketch === undefined || !sketch.editing || this.rollDrag !== null || scene === null || this.isOnTheRuler(event)) {
       return false;
     }
     const key = this.theKeyUnder(event);
@@ -15100,6 +15168,7 @@ export class AppView {
     this.soundingRowsSaid = '';
     this.markTheScaleOnTheStrip();
     this.showTheMarkChosen();
+    this.showTheSlice();
     this.rollPitches = thePitchesOfTheRun(roll, ghosts, this.theOtherRollShowing?.sketch?.editing === true, {
       freely: this.nothingOnTheDrawingIsJudged(),
       chosen: this.theNotesChosen(),
@@ -15377,9 +15446,9 @@ export class AppView {
     this.describeTakeTransport();
     // From wherever the head stands, which is nought unless the reader has put
     // it somewhere - and the clicks behind it are already spent.
-    this.rollClicksSent = clicksBefore(roll, this.rollAtMs, this.theRollsGrid());
+    this.clicksHandedOver(clicksBefore(roll, this.rollAtMs, this.theRollsGrid()));
     this.runtime.takePlayer.setSpeed(this.theRollsSpeed());
-    this.runtime.takePlayer.play(RUN_ROLL_ID, rollAsEvents(roll), this.rollAtMs);
+    this.runtime.takePlayer.play(RUN_ROLL_ID, rollAsEvents(roll), this.rollAtMs, this.theSliceGoneRoundFrom(this.rollAtMs));
     this.clickAheadOfTheRoll();
     if (this.rollTick === null) {
       this.rollTick = setInterval(() => this.followTheRoll(), TAKE_TICK_MS);
@@ -15425,9 +15494,167 @@ export class AppView {
       this.runtime.takePlayer.stop();
     }
     this.rollAtMs = this.rollPlacedAtMs;
-    this.rollClicksSent = 0;
+    this.clicksHandedOver(0);
     this.letTheRollTickGo();
     this.describeTheRoll();
+  }
+
+  /** Which drawing is shown, as a slice laid on it is kept by: a sketch, a recording, or whatever else by what it is. */
+  private theDrawingsName(): string {
+    const showing = this.theOtherRollShowing;
+    if (showing === null) {
+      return 'the run just played';
+    }
+    return showing.sketch?.id ?? showing.recording ?? `${showing.what} ${showing.why}`;
+  }
+
+  /** The slice laid on the drawing shown, or none. */
+  private theSliceShown(): { readonly fromMs: number; readonly toMs: number } | null {
+    const slice = this.rollSlice;
+    return slice !== null && slice.of === this.theDrawingsName() ? slice : null;
+  }
+
+  /** The slice a playback from a moment goes round: the one it is inside, or none - from anywhere else it plays on as it always has. */
+  private theSliceGoneRoundFrom(atMs: number): { readonly fromMs: number; readonly toMs: number } | null {
+    const slice = this.theSliceShown();
+    return slice !== null && atMs >= slice.fromMs - SLICE_EDGE_MS && atMs < slice.toMs - SLICE_EDGE_MS ? slice : null;
+  }
+
+  /**
+   * Lays a slice on the drawing shown, or takes it away; a playback going
+   * on goes round it from now on where it is inside it, and its clicks are
+   * counted again from where it is.
+   */
+  private sliceTheDrawing(slice: { readonly fromMs: number; readonly toMs: number } | null): void {
+    this.rollSlice = slice === null ? null : { of: this.theDrawingsName(), fromMs: slice.fromMs, toMs: slice.toMs };
+    this.showTheSlice();
+    const player = this.runtime.takePlayer;
+    const roll = this.theRoll();
+    if (player.playing === RUN_ROLL_ID && roll !== null) {
+      player.setLoop(this.theSliceGoneRoundFrom(player.positionMs));
+      this.takeBackTheRollsClicks();
+      this.clicksHandedOver(clicksBefore(roll, player.positionMs, this.theRollsGrid()));
+      this.clickAheadOfTheRoll();
+    }
+  }
+
+  /** Places the band over the ruler where the slice is, or hides it. */
+  private showTheSlice(): void {
+    const band = this.rollHeads?.slice;
+    const slice = this.theSliceShown();
+    if (band === undefined) {
+      return;
+    }
+    band.hidden = slice === null;
+    if (slice !== null) {
+      band.style.setProperty('--roll-at', (slice.fromMs / 1000).toFixed(3));
+      band.style.setProperty('--roll-span', ((slice.toMs - slice.fromMs) / 1000).toFixed(3));
+    }
+  }
+
+  /** Starts the clock on a press on the ruler, which held still long enough lays a slice. */
+  private watchForASliceHold(event: PointerEvent): void {
+    this.letGoOfTheSliceHold(null);
+    const hold: NonNullable<AppView['sliceHold']> = {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      timer: null,
+      held: false,
+      anchorMs: null,
+    };
+    this.sliceHold = hold;
+    hold.timer = setTimeout(() => {
+      hold.timer = null;
+      this.holdTheRuler(hold);
+    }, HOLD_MS);
+  }
+
+  /**
+   * A press on the ruler held long enough: on the slice, takes it away;
+   * anywhere else, lays one on the bar under it, whose far end the finger
+   * then drags. The finger is the slice's from now on, not the drawing's.
+   */
+  private holdTheRuler(hold: NonNullable<AppView['sliceHold']>): void {
+    const roll = this.theRoll();
+    const at = this.theMomentUnder(hold.clientX);
+    if (roll === null || at === null || this.sliceHold !== hold) {
+      return;
+    }
+    hold.held = true;
+    this.rollFingers.delete(hold.pointerId);
+    this.rollPan = null;
+    const shown = this.theSliceShown();
+    if (shown !== null && at >= shown.fromMs && at < shown.toMs) {
+      this.sliceTheDrawing(null);
+      return;
+    }
+    hold.anchorMs = at;
+    this.sliceTheDrawing(theBarsAcross(roll, at, at));
+  }
+
+  /**
+   * Follows a press on the ruler: one that wanders before it is held is
+   * a drag, and no slice; one held drags the slice's far end to the bar
+   * under it. Says whether the move was the slice's.
+   */
+  private dragTheSlice(event: PointerEvent): boolean {
+    const hold = this.sliceHold;
+    if (hold === null || hold.pointerId !== event.pointerId) {
+      return false;
+    }
+    if (!hold.held) {
+      if (Math.hypot(event.clientX - hold.clientX, event.clientY - hold.clientY) > TAP_SLOP_PX) {
+        this.letGoOfTheSliceHold(null);
+      }
+      return false;
+    }
+    const roll = this.theRoll();
+    const at = this.theMomentUnder(event.clientX);
+    if (hold.anchorMs !== null && roll !== null && at !== null) {
+      const slice = theBarsAcross(roll, hold.anchorMs, at);
+      const shown = this.theSliceShown();
+      if (shown === null || shown.fromMs !== slice.fromMs || shown.toMs !== slice.toMs) {
+        this.sliceTheDrawing(slice);
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Lets go of a press on the ruler, or of any where none is named; says
+   * whether it was one that was held, whose click is then let pass.
+   */
+  private letGoOfTheSliceHold(event: PointerEvent | null): boolean {
+    const hold = this.sliceHold;
+    if (hold === null || (event !== null && hold.pointerId !== event.pointerId)) {
+      return false;
+    }
+    if (hold.timer !== null) {
+      clearTimeout(hold.timer);
+    }
+    this.sliceHold = null;
+    this.sliceLaidByThePress = hold.held;
+    return hold.held;
+  }
+
+  /**
+   * A click on the ruler with a key held, as an editor on a computer takes
+   * one: with Ctrl or Cmd the slice begins at the bar clicked, with Alt it
+   * ends with it - the other end kept where it still can be.
+   */
+  private sliceByAClick(event: MouseEvent): void {
+    const roll = this.theRoll();
+    const at = this.theMomentUnder(event.clientX);
+    if (roll === null || at === null) {
+      return;
+    }
+    const shown = this.theSliceShown();
+    const fromHere = event.ctrlKey || event.metaKey;
+    const other = fromHere
+      ? shown !== null && shown.toMs > at + SLICE_EDGE_MS ? shown.toMs - SLICE_EDGE_MS : at
+      : shown !== null && shown.fromMs < at ? shown.fromMs : at;
+    this.sliceTheDrawing(theBarsAcross(roll, at, other));
   }
 
   /** Says which of the two the button would do, and dims it where neither has anywhere to go. */
@@ -15457,7 +15684,7 @@ export class AppView {
     // Back to the beginning, which is what stopping means and pausing does not.
     this.rollAtMs = 0;
     this.rollPlacedAtMs = 0;
-    this.rollClicksSent = 0;
+    this.clicksHandedOver(0);
     this.letTheRollTickGo();
     this.describeTheRoll();
   }
@@ -15535,9 +15762,11 @@ export class AppView {
     this.rollAtMs = at;
     this.rollPlacedAtMs = at;
     this.takeBackTheRollsClicks();
-    this.rollClicksSent = clicksBefore(roll, at, this.theRollsGrid());
+    this.clicksHandedOver(clicksBefore(roll, at, this.theRollsGrid()));
     if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
       this.runtime.takePlayer.seek(at);
+      // Put inside the slice it goes round it; put outside, it plays on.
+      this.runtime.takePlayer.setLoop(this.theSliceGoneRoundFrom(at));
       this.clickAheadOfTheRoll();
     }
     this.describeTheRoll();
@@ -15600,7 +15829,36 @@ export class AppView {
     if (roll === null) {
       return;
     }
-    this.rollClicksSent = this.clickTheRunsBeats(roll, this.rollClicksSent, positionMs);
+    const player = this.runtime.takePlayer;
+    const round = player.playing === RUN_ROLL_ID ? player.goingRound : null;
+    if (round === null) {
+      this.rollClicksSent = this.clickTheRunsBeats(roll, this.rollClicksSent, positionMs);
+      return;
+    }
+    // Round a slice, each lap clicks its own bars, none past its end; and
+    // the first clicks of the next lap go over ahead, as its notes do, or its
+    // first beat would be a tick late.
+    const grid = this.theRollsGrid();
+    const first = clicksBefore(roll, round.fromMs, grid);
+    if (player.lap !== this.rollLapClicked) {
+      this.rollClicksSent = first + this.rollClicksOfTheNextLap;
+      this.rollClicksOfTheNextLap = 0;
+      this.rollLapClicked = player.lap;
+    }
+    this.rollClicksSent = this.clickTheRunsBeats(roll, this.rollClicksSent, positionMs, round.toMs);
+    if (positionMs + ROLL_CLICK_LEAD_MS >= round.toMs) {
+      // The next lap's beats, a lap's length later than they fall in the run.
+      const later = positionMs - (round.toMs - round.fromMs);
+      this.rollClicksOfTheNextLap =
+        this.clickTheRunsBeats(roll, first + this.rollClicksOfTheNextLap, later, round.toMs) - first;
+    }
+  }
+
+  /** Counts afresh the clicks handed over, from a place the head was put or began at. */
+  private clicksHandedOver(sent: number): void {
+    this.rollClicksSent = sent;
+    this.rollLapClicked = 0;
+    this.rollClicksOfTheNextLap = 0;
   }
 
   /**
@@ -15610,7 +15868,7 @@ export class AppView {
    * Asked by both ways a run is heard back - its picture and the notes - on the
    * one setting that says whether a run is heard back with its beat.
    */
-  private clickTheRunsBeats(roll: RunRoll, sent: number, positionMs: number): number {
+  private clickTheRunsBeats(roll: RunRoll, sent: number, positionMs: number, beforeMs = Number.POSITIVE_INFINITY): number {
     if (!this.el.rollClick.checked) {
       return sent;
     }
@@ -15620,10 +15878,12 @@ export class AppView {
     // when the reader stops, so placing a click early costs nothing, and a
     // second conversion here would be a rule with no consequence to test.
     const rate = this.runtime.takePlayer.speed;
+    // Short of the end of a slice going round: the beat on its last bar line
+    // is the next lap's first, a lap later.
     const due = clicksUpTo(
       roll,
       sent,
-      positionMs + ROLL_CLICK_LEAD_MS,
+      Math.min(positionMs + ROLL_CLICK_LEAD_MS, beforeMs - SLICE_EDGE_MS),
       this.theRollsGrid(),
     );
     const now = this.runtime.clock.now();

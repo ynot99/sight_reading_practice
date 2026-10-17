@@ -7283,6 +7283,251 @@ describe('AppView', () => {
       }
     });
 
+    it('lays a slice of whole bars on the ruler by a press held and dragged, or a click with a key held, and takes it away by a press held on it', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      sketches.begin(
+        {
+          events: Array.from({ length: 16 }, (_, at) => [
+            { kind: 'noteOn' as const, atMs: at * 500, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: at * 500 + 400, midi: 60 },
+          ]).flat(),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Sliced',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const body = element('roll-body');
+      const ruler = (): Element => body.querySelector('.roll__ruler') ?? body;
+      const band = (): HTMLElement | null => body.querySelector<HTMLElement>('.roll__marks > .roll__slice');
+      const slice = (): string | null =>
+        band()?.hidden === false
+          ? `${band()?.style.getPropertyValue('--roll-at') ?? ''}+${band()?.style.getPropertyValue('--roll-span') ?? ''}`
+          : null;
+      const clickTheRuler = (seconds: number, init: MouseEventInit = {}): void => {
+        tapTheDrawing({ pointerType: 'mouse', button: 0, isPrimary: true, clientX: seconds * zoom, clientY: 4, ...init }, ruler());
+      };
+      const touch = (type: string, seconds: number): void => {
+        ruler().dispatchEvent(
+          new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 41, pointerType: 'touch', isPrimary: true, button: 0, clientX: seconds * zoom, clientY: 4 }),
+        );
+      };
+      const head = (): string | undefined => headAt(body);
+
+      // None to begin with.
+      expect(slice()).toBeNull();
+      // Ctrl or Cmd and a click: the bar clicked, the head left where it was.
+      const before = head();
+      clickTheRuler(2.3, { ctrlKey: true });
+      expect([slice(), head()]).toEqual(['2.000+2.000', before]);
+      // Alt: on to the end of the bar clicked.
+      clickTheRuler(5.3, { altKey: true });
+      expect(slice()).toEqual('2.000+4.000');
+      // Ctrl again before it, or inside it: from there, its end kept.
+      clickTheRuler(0.5, { ctrlKey: true });
+      expect(slice()).toEqual('0.000+6.000');
+      clickTheRuler(4.5, { metaKey: true });
+      expect(slice()).toEqual('4.000+2.000');
+      // Alt before its start: from that bar to the end of its own.
+      clickTheRuler(0.5, { altKey: true });
+      expect(slice()).toEqual('0.000+2.000');
+
+      vi.useFakeTimers();
+      try {
+        // A finger held on the ruler lays the bar under it; dragged, it takes in the bars as far as it goes, either way.
+        touch('pointerdown', 6.3);
+        vi.advanceTimersByTime(HOLD_MS - 1);
+        expect(slice()).toEqual('0.000+2.000');
+        vi.advanceTimersByTime(1);
+        expect(slice()).toEqual('6.000+2.000');
+        touch('pointermove', 3.1);
+        expect(slice()).toEqual('2.000+6.000');
+        touch('pointermove', 7.9);
+        expect(slice()).toEqual('6.000+2.000');
+        touch('pointermove', 4.2);
+        touch('pointerup', 4.2);
+        // Its click is no tap on the ruler: the head stays.
+        ruler().dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 4.2 * zoom, clientY: 4 }));
+        expect([slice(), head()]).toEqual(['4.000+4.000', before]);
+        // A tap after it is one.
+        clickTheRuler(1.0);
+        expect(head()).toBe('1.000');
+
+        // A finger that wanders before it is held moves the drawing, and lays nothing.
+        touch('pointerdown', 1.0);
+        touch('pointermove', 1.5);
+        vi.advanceTimersByTime(HOLD_MS);
+        touch('pointerup', 1.5);
+        expect(slice()).toEqual('4.000+4.000');
+
+        // Held on the slice, it is taken away.
+        touch('pointerdown', 5.0);
+        vi.advanceTimersByTime(HOLD_MS);
+        expect(slice()).toBeNull();
+        touch('pointerup', 5.0);
+        expect(slice()).toBeNull();
+        // A tablet sends no click after a press held so long: the next tap,
+        // on the ruler or among the notes, is a tap.
+        tapTheDrawing({ pointerType: 'mouse', button: 0, isPrimary: true, clientX: 6.0 * zoom, clientY: 20 });
+        expect(head()).toBe('6.000');
+      } finally {
+        vi.useRealTimers();
+      }
+
+      // Drawn again, it is where it was.
+      clickTheRuler(2.2, { ctrlKey: true });
+      element<HTMLInputElement>('roll-slips').dispatchEvent(new Event('change'));
+      expect(slice()).toEqual('2.000+2.000');
+
+      // A note scrolled under the ruler is not taken hold of through it: the
+      // press is the ruler's, and so is the click after it.
+      const row = (view.rollScene?.highest ?? 0) - 60;
+      const scrolledDown =
+        Number.parseFloat(body.querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0') || 0;
+      const chosen = (): number => (view.rollScene?.notes ?? []).filter((note) => note.chosen === true).length;
+      tapTheDrawing({ pointerType: 'mouse', button: 0, isPrimary: true, clientX: 3.1 * zoom, clientY: (row + 0.5) * 13 - scrolledDown }, ruler());
+      expect([chosen(), head()]).toEqual([0, '3.000']);
+      // Nor cut through it: Alt is the slice's there, wherever the note under it would be cut.
+      tapTheDrawing(
+        { pointerType: 'mouse', button: 0, isPrimary: true, altKey: true, shiftKey: true, clientX: 5.2 * zoom, clientY: (row + 0.5) * 13 - scrolledDown },
+        ruler(),
+      );
+      expect([chosen(), slice()]).toEqual([0, '2.000+4.000']);
+      expect(view.rollScene?.notes).toHaveLength(16);
+    });
+
+    it('lays a slice on the picture of a run played, as on a sketch, and goes round it', async () => {
+      const { view, runtime, midi, metronome } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      metronome.advanceSubdivisions(16);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const body = element('roll-body');
+      const ruler = body.querySelector('.roll__ruler') ?? body;
+      tapTheDrawing({ pointerType: 'mouse', button: 0, isPrimary: true, ctrlKey: true, clientX: 0.1 * zoom, clientY: 4 }, ruler);
+      const band = body.querySelector<HTMLElement>('.roll__marks > .roll__slice');
+      expect(band?.hidden).toBe(false);
+      expect(band?.style.getPropertyValue('--roll-at')).toBe('0.000');
+      tapTheDrawing({ pointerType: 'mouse', button: 0, isPrimary: true, clientX: 0.1 * zoom, clientY: 4 }, ruler);
+      element<HTMLButtonElement>('roll-play').click();
+      expect(runtime.takePlayer.goingRound?.fromMs).toBe(0);
+      element<HTMLButtonElement>('roll-stop').click();
+    });
+
+    it('plays a slice round and round from inside it, its clicks a lap at a time, and plays on from outside it', async () => {
+      const { view, sketches, runtime, clock, metronome } = createRig();
+      await view.initialize();
+      const one = sketches.begin(
+        {
+          events: Array.from({ length: 16 }, (_, at) => [
+            { kind: 'noteOn' as const, atMs: at * 500, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: at * 500 + 400, midi: 60 },
+          ]).flat(),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Round',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const body = element('roll-body');
+      const ruler = (): Element => body.querySelector('.roll__ruler') ?? body;
+      const clickTheRuler = (seconds: number, init: MouseEventInit = {}): void => {
+        tapTheDrawing({ pointerType: 'mouse', button: 0, isPrimary: true, clientX: seconds * zoom, clientY: 4, ...init }, ruler());
+      };
+      const player = runtime.takePlayer;
+      const round = (): string | null => (player.goingRound === null ? null : `${String(player.goingRound.fromMs)}-${String(player.goingRound.toMs)}`);
+      element<HTMLInputElement>('roll-click').checked = true;
+
+      // The second bar sliced; the head in it.
+      clickTheRuler(2.2, { ctrlKey: true });
+      clickTheRuler(2.5);
+      vi.useFakeTimers();
+      try {
+        metronome.clicks.length = 0;
+        const startedAt = clock.now();
+        element<HTMLButtonElement>('roll-play').click();
+        expect(round()).toBe('2000-4000');
+        // Three laps and a half, every beat clicked once a lap and none past the slice's end.
+        for (let step = 0; step < 70; step += 1) {
+          clock.advance(100);
+          vi.advanceTimersByTime(80);
+        }
+        expect(player.positionMs).toBe(3_500);
+        const heard = metronome.clicks.map((click) => (click.atMs ?? 0) - startedAt).filter((atMs) => atMs < 7_000);
+        expect(heard).toEqual([0, 500, 1_000, 1_500, 2_000, 2_500, 3_000, 3_500, 4_000, 4_500, 5_000, 5_500, 6_000, 6_500]);
+        // The first beat of a lap is handed over before the lap begins, as its notes are.
+        clock.advance(400);
+        vi.advanceTimersByTime(80);
+        expect(player.positionMs).toBe(3_900);
+        expect(metronome.clicks.map((click) => (click.atMs ?? 0) - clock.now())).toContain(100);
+        // Put outside it, behind or ahead, the playback plays on; put back inside, round again.
+        clickTheRuler(6.5);
+        expect(round()).toBeNull();
+        clickTheRuler(0.5);
+        expect(round()).toBeNull();
+        metronome.clicks.length = 0;
+        clickTheRuler(3.0);
+        expect(round()).toBe('2000-4000');
+        // Its clicks from there on, none from behind it.
+        expect(metronome.clicks.map((click) => (click.atMs ?? 0) - clock.now())).toEqual([0]);
+        element<HTMLButtonElement>('roll-stop').click();
+        // Begun behind it, too, it plays on.
+        clickTheRuler(0.5);
+        element<HTMLButtonElement>('roll-play').click();
+        expect(round()).toBeNull();
+        element<HTMLButtonElement>('roll-stop').click();
+
+        // From outside it, it plays on as it always has; a slice laid round the head while it plays is gone round.
+        clickTheRuler(6.5);
+        element<HTMLButtonElement>('roll-play').click();
+        expect(round()).toBeNull();
+        clickTheRuler(6.2, { ctrlKey: true });
+        expect(round()).toBe('6000-8000');
+        element<HTMLButtonElement>('roll-stop').click();
+      } finally {
+        vi.useRealTimers();
+      }
+
+      // Another drawing has none of its own, and this one keeps its own while the page is open.
+      expect(one.id).toBeDefined();
+      sketches.begin(
+        {
+          events: [
+            { kind: 'noteOn', atMs: 0, midi: 62, velocity: 0.5 },
+            { kind: 'noteOff', atMs: 400, midi: 62 },
+          ],
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        // Called as the first is: a sketch is told apart by what it is, not by its name.
+        'Round',
+        2,
+      );
+      const edit = (which: number): void => {
+        element<HTMLButtonElement>('roll-close').click();
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-sketches').click();
+        element('sketches-list').querySelectorAll<HTMLButtonElement>('button[title="Edit this sketch"]')[which]?.click();
+      };
+      const shown = (): boolean => body.querySelector<HTMLElement>('.roll__slice')?.hidden === false;
+      // The two, one after the other: one has it, the other has none.
+      edit(0);
+      const first = shown();
+      edit(1);
+      expect([first, shown()].sort()).toEqual([false, true]);
+    });
+
     it('chooses a flag over the ruler by a tap, changes it by a second or the pencil under it, and takes it away by the bin or Delete', async () => {
       const { view, sketches } = createRig();
       await view.initialize();

@@ -2319,10 +2319,16 @@ describe('searching the settings', () => {
     expect(body('.roll__mark-tools')).toMatch(/top\s*:\s*100%/);
     expect(body('.roll__mark-tools')).toMatch(/transform\s*:\s*translateX\(calc\(var\(--roll-second\) \* var\(--roll-at, 0\) - var\(--roll-x\)\)\)/);
     expect(body('.roll__mark-tools')).toMatch(/pointer-events\s*:\s*auto/);
-    // Each of them takes the scroll and the zoom from the box they are set
-    // on, which nothing hands down by itself.
-    expect(body('.roll__mark, .roll__mark-tools')).toMatch(/--roll-x\s*:\s*inherit/);
-    expect(body('.roll__mark, .roll__mark-tools')).toMatch(/--roll-second\s*:\s*inherit/);
+    // Each of them, and the slice among them, takes the scroll and the zoom
+    // from the box they are set on, which nothing hands down by itself.
+    expect(body('.roll__mark, .roll__mark-tools, .roll__slice')).toMatch(/--roll-x\s*:\s*inherit/);
+    expect(body('.roll__mark, .roll__mark-tools, .roll__slice')).toMatch(/--roll-second\s*:\s*inherit/);
+    // The slice a band over the ruler from its moment, as wide as it lasts.
+    expect(body('.roll__slice')).toMatch(/transform\s*:\s*translateX\(calc\(var\(--roll-second\) \* var\(--roll-at, 0\) - var\(--roll-x\)\)\)/);
+    expect(body('.roll__slice')).toMatch(/width\s*:\s*calc\(var\(--roll-second\) \* var\(--roll-span, 0\)\)/);
+    expect(body('.roll__slice')).toMatch(/position\s*:\s*absolute/);
+    expect(body('.roll__slice')).toMatch(/top\s*:\s*0/);
+    expect(body('.roll__slice')).toMatch(/bottom\s*:\s*0/);
     // The key of a chosen note outlined in the chosen note's ink.
     expect(body(".roll__key[data-chosen='true']")).toMatch(/box-shadow\s*:\s*inset 0 0 0 2px var\(--roll-ink-chosen\)/);
     // A key of the scale marked down its edge by an image, which neither the

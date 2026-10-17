@@ -454,6 +454,8 @@ export interface RollHeads {
   readonly place: HTMLElement;
   /** The flags over the bars where the music changes, which scroll and zoom as the heads do. */
   readonly marks: HTMLElement;
+  /** The slice played round and round, among the flags and placed as they are: hidden while there is none. */
+  readonly slice: HTMLElement;
 }
 
 /** The head's marks in a drawing, or `null` where nothing has been drawn. */
@@ -462,7 +464,10 @@ export function theHeadsOf(within: ParentNode): RollHeads | null {
   const mark = within.querySelector<HTMLElement>('.roll__ruler > .roll__head-mark');
   const place = within.querySelector<HTMLElement>('.roll__ruler > .roll__place-mark');
   const marks = within.querySelector<HTMLElement>('.roll__ruler > .roll__marks');
-  return line === null || mark === null || place === null || marks === null ? null : { line, mark, place, marks };
+  const slice = marks?.querySelector<HTMLElement>(':scope > .roll__slice') ?? null;
+  return line === null || mark === null || place === null || marks === null || slice === null
+    ? null
+    : { line, mark, place, marks, slice };
 }
 
 /**
@@ -1339,6 +1344,11 @@ export function drawTheRoll(scene: RollScene): HTMLElement {
   // Where the music changes key, metre or pace: a flag over its beat, to be
   // chosen and then changed, copied, cut or taken away by the buttons under it.
   const marks = element('div', 'roll__marks');
+  // The slice a playback goes round, under the flags: where it is is the
+  // view's to say, and not the scene's, so it is drawn hidden and placed by it.
+  const slice = element('div', 'roll__slice');
+  slice.hidden = true;
+  marks.append(slice);
   scene.marks.forEach((mark, at) => {
     const flag = element('button', 'roll__mark');
     flag.setAttribute('type', 'button');

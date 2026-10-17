@@ -413,3 +413,186 @@ describe('taking a take slowly', () => {
     expect(player.speed).toBe(1);
   });
 });
+
+describe('playing a stretch of a take round and round', () => {
+  /** C, D, E and F, half a second each; E held on into F's time. */
+  const FOUR: readonly MidiFileEvent[] = [
+    { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.8 },
+    { kind: 'noteOff', atMs: 500, midi: 60 },
+    { kind: 'noteOn', atMs: 500, midi: 62, velocity: 0.8 },
+    { kind: 'noteOff', atMs: 1_000, midi: 62 },
+    { kind: 'noteOn', atMs: 1_000, midi: 64, velocity: 0.8 },
+    { kind: 'noteOff', atMs: 1_800, midi: 64 },
+    { kind: 'noteOn', atMs: 1_500, midi: 65, velocity: 0.8 },
+    { kind: 'noteOff', atMs: 2_000, midi: 65 },
+  ];
+  const D_TO_E = { fromMs: 500, toMs: 1_500 };
+  /** What was struck and stopped, by when, pumped every `stepMs` up to `untilMs`. */
+  const heard = (player: TakePlayer, clock: ManualClock, instrument: RecordingPitchPlayer, untilMs: number, stepMs: number) => {
+    while (clock.now() < untilMs) {
+      clock.advance(stepMs);
+      player.pump();
+    }
+    return {
+      struck: instrument.played.map((note) => [note.midi, note.atMs]),
+      stopped: instrument.stopped.map((note) => [note.midi, note.atMs]),
+    };
+  };
+
+  it('begins the stretch again where it ends, each lap handed over ahead as any note is, however often it is pumped', () => {
+    for (const stepMs of [10, 50, 80, 200]) {
+      const { clock, instrument, player } = rig();
+      player.play('take-1', FOUR, 600, D_TO_E);
+      // D was sounding where it began, so it is struck there; E is cut where
+      // the stretch ends; F, after it, is never heard.
+      expect(heard(player, clock, instrument, 2_900, stepMs), String(stepMs)).toEqual({
+        struck: [
+          [62, 0],
+          [64, 400],
+          [62, 900],
+          [64, 1_400],
+          [62, 1_900],
+          [64, 2_400],
+          [62, 2_900],
+        ],
+        stopped: [
+          [62, 400],
+          [64, 900],
+          [62, 1_400],
+          [64, 1_900],
+          [62, 2_400],
+          [64, 2_900],
+          [62, 3_400],
+        ],
+      });
+      expect(player.finished).toBe(false);
+    }
+  });
+
+  it('hands the next lap over within the look-ahead, before the end it begins at is reached', () => {
+    const { clock, instrument, player } = rig();
+    player.play('take-1', FOUR, 600, D_TO_E);
+    // A quarter of a second short of the end, the lap after it has its first note.
+    clock.set(649);
+    player.pump();
+    expect(instrument.played.map((note) => [note.midi, note.atMs])).not.toContainEqual([62, 900]);
+    clock.set(650);
+    player.pump();
+    expect(instrument.played.map((note) => [note.midi, note.atMs])).toContainEqual([62, 900]);
+    // And a lap after that one only as its own end comes near; then the take played again goes round from its own first lap.
+    expect(instrument.played.map((note) => note.atMs)).not.toContain(1_900);
+    player.play('take-1', FOUR, 600, D_TO_E);
+    expect(instrument.played.at(-1)).toEqual({ midi: 62, velocity: 0.8, atMs: 650 });
+  });
+
+  it('goes round a stretch that ends after the last note, the silence after it and all', () => {
+    const { clock, instrument, player } = rig();
+    player.play('take-1', FOUR, 1_600, { fromMs: 1_500, toMs: 3_000 });
+    // Past the last note and short of the stretch's end: still going, at the end of what there is.
+    clock.set(900);
+    expect([player.positionMs, player.finished, player.goingRound]).toEqual([2_000, false, { fromMs: 1_500, toMs: 3_000 }]);
+    // The next lap a second and a half after it began: E still down where it begins, and F.
+    expect(heard(player, clock, instrument, 1_450, 50).struck.slice(-2)).toEqual([
+      [64, 1_400],
+      [65, 1_400],
+    ]);
+    // Held, nothing goes round; played again from there, it does.
+    player.pause();
+    expect(player.goingRound).toBeNull();
+  });
+
+  it('says where it is in the stretch, and how many laps it has begun', () => {
+    const { clock, player } = rig();
+    player.play('take-1', FOUR, 600, D_TO_E);
+    const said: [number, number][] = [];
+    for (let at = 0; at <= 2_000; at += 100) {
+      clock.set(at);
+      said.push([player.positionMs, player.lap]);
+    }
+    expect(said).toEqual([
+      [600, 0], [700, 0], [800, 0], [900, 0], [1_000, 0], [1_100, 0], [1_200, 0], [1_300, 0], [1_400, 0],
+      [500, 1], [600, 1], [700, 1], [800, 1], [900, 1], [1_000, 1], [1_100, 1], [1_200, 1], [1_300, 1], [1_400, 1],
+      [500, 2], [600, 2],
+    ]);
+  });
+
+  it('goes round only what it was set going in front of the end of, and only while it is told', () => {
+    // Begun before the stretch, it plays into it and then round it.
+    {
+      const { clock, instrument, player } = rig();
+      player.play('take-1', FOUR, 0, D_TO_E);
+      expect(heard(player, clock, instrument, 1_600, 50).struck).toEqual([
+        [60, 0],
+        [62, 500],
+        [64, 1_000],
+        [62, 1_500],
+      ]);
+    }
+    // Begun after it, it plays on to the end.
+    {
+      const { clock, instrument, player } = rig();
+      player.play('take-1', FOUR, 1_600, D_TO_E);
+      expect(heard(player, clock, instrument, 600, 50).struck).toEqual([
+        [64, 0],
+        [65, 0],
+      ]);
+      expect(player.finished).toBe(true);
+    }
+    // Let go of partway, it plays on from where it is.
+    {
+      const { clock, instrument, player } = rig();
+      player.play('take-1', FOUR, 600, D_TO_E);
+      heard(player, clock, instrument, 600, 50);
+      player.setLoop(null);
+      expect(player.positionMs).toBe(1_200);
+      expect(heard(player, clock, instrument, 1_500, 50).struck.slice(-2)).toEqual([
+        [64, 600],
+        [65, 900],
+      ]);
+    }
+    // Set going round while it plays, it goes round from the next time it reaches the end.
+    {
+      const { clock, instrument, player } = rig();
+      player.play('take-1', FOUR, 600);
+      heard(player, clock, instrument, 100, 50);
+      player.setLoop(D_TO_E);
+      expect(player.positionMs).toBe(700);
+      expect(heard(player, clock, instrument, 1_000, 50).struck.slice(-2)).toEqual([
+        [64, 400],
+        [62, 900],
+      ]);
+    }
+    // A stretch of nothing goes round nothing; and a take played after it goes round nothing unless told.
+    {
+      const { clock, instrument, player } = rig();
+      player.play('take-1', FOUR, 0, { fromMs: 500, toMs: 500 });
+      heard(player, clock, instrument, 2_100, 50);
+      expect(player.finished).toBe(true);
+      player.play('take-1', FOUR, 0);
+      player.setLoop({ fromMs: 1_000, toMs: 1_000 });
+      heard(player, clock, instrument, 4_300, 50);
+      expect(player.finished).toBe(true);
+      player.play('take-1', FOUR, 600, D_TO_E);
+      player.stop();
+      player.play('take-2', FOUR, 600);
+      clock.advance(1_500);
+      expect(player.finished).toBe(true);
+    }
+  });
+
+  it('leaves the stretch where it is moved past its end, and stays in it where it is moved within', () => {
+    const { clock, instrument, player } = rig();
+    player.play('take-1', FOUR, 600, D_TO_E);
+    // A lap and more gone round, moved back into it: from there, laps counted afresh.
+    heard(player, clock, instrument, 1_200, 50);
+    player.seek(700);
+    expect(instrument.played.at(-1)).toEqual({ midi: 62, velocity: 0.8, atMs: 1_200 });
+    clock.advance(900);
+    expect([player.positionMs, player.lap]).toEqual([600, 1]);
+    player.seek(1_600);
+    clock.advance(500);
+    player.pump();
+    expect(player.finished).toBe(true);
+    expect(instrument.played.at(-1)?.midi).toBe(65);
+  });
+});

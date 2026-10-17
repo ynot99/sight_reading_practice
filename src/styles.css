@@ -2218,9 +2218,23 @@ textarea {
  * stood when it was drawn, and at the width a second has when nothing says.
  */
 .roll__mark,
-.roll__mark-tools {
+.roll__mark-tools,
+.roll__slice {
   --roll-x: inherit;
   --roll-second: inherit;
+}
+
+/* The bars a playback goes round: a band over the ruler from its first bar line to its last. */
+.roll__slice {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(var(--roll-second) * var(--roll-span, 0));
+  transform: translateX(calc(var(--roll-second) * var(--roll-at, 0) - var(--roll-x)));
+  border-inline: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  box-sizing: border-box;
 }
 
 .roll__mark {

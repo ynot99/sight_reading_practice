@@ -1155,6 +1155,26 @@ export function theLineOfTheGridUnder(roll: RunRoll, atMs: number, choice: GridC
   return theNextLineOfTheGrid(roll, atMs + 1, choice, -1) ?? atMs;
 }
 
+/** Only the bar lines, which is what a slice is laid on. */
+const BAR_LINES: GridChoice = { beats: false, parts: 1 };
+
+/**
+ * The stretch a slice laid between two moments takes in, in milliseconds
+ * from the roll's beginning: whole bars, from the bar line at or before the
+ * earlier to the one after the later - a moment on a bar line being in the
+ * bar it begins. Before the first bar line it begins where they are, and
+ * past the last it ends where the run does: a run with no bars at all is
+ * sliced from the earlier moment to its end.
+ */
+export function theBarsAcross(roll: RunRoll, oneMs: number, otherMs: number): { readonly fromMs: number; readonly toMs: number } {
+  const earlier = Math.min(oneMs, otherMs);
+  const later = Math.max(oneMs, otherMs);
+  return {
+    fromMs: theLineOfTheGridUnder(roll, earlier, BAR_LINES),
+    toMs: theNextLineOfTheGrid(roll, later, BAR_LINES, 1) ?? rollEndedAtMs(roll) - rollBeganAtMs(roll),
+  };
+}
+
 /** A take's events with a key added, struck and let go of, in its place in time. */
 export function takeWithAKeyAdded(
   events: readonly MidiFileEvent[],

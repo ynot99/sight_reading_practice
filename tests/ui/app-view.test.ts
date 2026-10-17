@@ -5381,7 +5381,13 @@ describe('AppView', () => {
       expect(copy.title).toContain('Choose some first');
       expect(chosen()).toEqual([]);
 
-      // A mouse draws a box from empty space: the C and the E inside it.
+      // Without the box asked for, a mouse's drag from empty space chooses nothing.
+      drag('mouse', at(-100, 69), at(700, 59));
+      expect(chosen()).toEqual([]);
+      expect(element('roll-box').hidden).toBe(true);
+      // Asked for, it draws one: the C and the E inside it.
+      select.click();
+      expect(select.getAttribute('aria-pressed')).toBe('true');
       drag('mouse', at(-100, 69), at(700, 59));
       expect(chosen()).toEqual([60, 64]);
       expect(copy.dataset['idle']).toBeUndefined();
@@ -5395,14 +5401,14 @@ describe('AppView', () => {
       expect(element('sheet-roll').hidden).toBe(false);
       expect(chord.hidden).toBe(true);
 
-      // A finger moves the drawing, until the box is asked for.
-      drag('touch', at(-100, 69), at(700, 59));
-      expect(chosen()).toEqual([]);
-      select.click();
-      expect(select.getAttribute('aria-pressed')).toBe('true');
+      // A finger draws one as well while it is asked for, and moves the drawing once it is not.
       drag('touch', at(-100, 69), at(700, 59));
       expect(chosen()).toEqual([60, 64]);
       select.click();
+      expect(select.getAttribute('aria-pressed')).toBe('false');
+      key({ key: 'Escape' });
+      drag('touch', at(-100, 69), at(700, 59));
+      expect(chosen()).toEqual([]);
 
       // Ctrl+A chooses every note, and Ctrl+C - or the button - copies them.
       expect(key({ key: 'a', code: 'KeyA', ctrlKey: true }).defaultPrevented).toBe(true);

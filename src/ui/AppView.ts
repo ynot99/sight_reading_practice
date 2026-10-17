@@ -2190,8 +2190,9 @@ export class AppView {
   private chosenToCopy: { readonly roll: RunRoll; readonly chosen: readonly KeyNamed[] } | null = null;
 
   /**
-   * Whether a finger on such a drawing draws a box to choose notes by, rather
-   * than moving it. A mouse draws one from empty space whatever this says.
+   * Whether a drag from empty space on such a drawing draws a box to choose
+   * notes by - a mouse's as a finger's, as the selection tool says on a
+   * sketch. Without it a finger moves the drawing and a mouse points.
    */
   private boxOnTheViewer = false;
   /** Whether the passage markers are on the page, which a tap turns over. */
@@ -14189,14 +14190,11 @@ export class AppView {
     if (event.button !== 0 || this.rollBoxDrawn !== null) {
       return false;
     }
-    // On a sketch, only while it is edited and with the selection tool, for
-    // a mouse as for a finger: without it, a drag from empty space moves the
-    // drawing. On anything else a mouse has no drag of its own - a click
-    // puts the marker - so it draws one; a finger, with the tool.
-    const boxes =
-      sketch === undefined
-        ? event.pointerType === 'mouse' || this.boxOnTheViewer
-        : sketch.editing && sketch.tool === 'selection';
+    // With the selection tool, for a mouse as for a finger - on a sketch
+    // only while it is edited. Without it, a finger's drag from empty space
+    // moves the drawing, and a mouse's, where nothing else answers it,
+    // points.
+    const boxes = sketch === undefined ? this.boxOnTheViewer : sketch.editing && sketch.tool === 'selection';
     if (!boxes) {
       return false;
     }

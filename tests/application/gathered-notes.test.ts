@@ -82,6 +82,39 @@ describe('the notes of a performance, gathered as it reaches them', () => {
     expect(grace).toBeLessThan(lastOfTheRoll);
   });
 
+  it('says of every note the staff it is written on, and of every ornament too', () => {
+    // Which says the hand that plays it, which the notes falling onto the
+    // keys are coloured by.
+    const base = twoBarExercise({ tempoBpm: 60 });
+    const [treble, bass] = base.staves;
+    if (treble === undefined || bass === undefined) {
+      throw new Error('the fixture has two staves');
+    }
+    const timeline = buildTimeline({
+      ...base,
+      staves: [
+        treble,
+        {
+          ...bass,
+          measures: [
+            bar(
+              noteEntry(p('C3'), Duration.WHOLE, [], [], null, false, {
+                graces: [{ pitches: [p('B2')], duration: Duration.EIGHTH, slashed: true }],
+              }),
+            ),
+            ...bass.measures.slice(1),
+          ],
+        },
+      ],
+    });
+
+    const staffOf = new Map(
+      everyNote(new GatheredNotes(timeline, null, 0, Number.POSITIVE_INFINITY)).map((note) => [note.midi, note.staffNumber]),
+    );
+
+    expect([staffOf.get(p('B2').midi), staffOf.get(p('C3').midi), staffOf.get(p('C4').midi), staffOf.get(p('G4').midi)]).toEqual([2, 2, 1, 1]);
+  });
+
   it('begins where the performance does, without gathering what comes before', () => {
     const timeline = buildTimeline(longExercise({ bars: 40 }));
     const from = timeline.steps[60];

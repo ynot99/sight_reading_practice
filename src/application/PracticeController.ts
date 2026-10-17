@@ -37,7 +37,7 @@ import { Duration } from '../domain/model/Duration.js';
 import type { IMidiSource, MidiEvent, MidiNoteOnEvent } from './ports/IMidiSource.js';
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import { ExercisePlayer } from './ExercisePlayer.js';
-import type { BarStart, KeyDown, PedalDown, PlaceInThePerformance, PlayerEventMap } from './ExercisePlayer.js';
+import type { BarStart, KeyDown, KeyDownOnAStaff, PedalDown, PlaceInThePerformance, PlayerEventMap } from './ExercisePlayer.js';
 import type { PassageHistory, PracticeHistory } from './PracticeHistory.js';
 import type {
   ChosenClickWhen,
@@ -2598,7 +2598,7 @@ export class PracticeController {
    * The keys the playback holds down between two moments on the clock - none
    * where nothing is playing. See `ExercisePlayer.keysDownBetween`.
    */
-  playbackKeysDownBetween(fromMs: number, untilMs: number): readonly KeyDown[] {
+  playbackKeysDownBetween(fromMs: number, untilMs: number): readonly KeyDownOnAStaff[] {
     return this.player?.keysDownBetween(fromMs, untilMs) ?? [];
   }
 

@@ -11528,8 +11528,9 @@ export class AppView {
    * The notes over the keyboard at this moment: the next few seconds of a
    * playback, or of the run being shown again.
    *
-   * A playback's are the notes the player will sound, lit as heard. A
-   * replay's are the run's presses, in the colours they were judged.
+   * A playback's are the notes the player will sound, lit as heard - the
+   * left hand's in its own ink. A replay's are the run's presses, in the
+   * colours they were judged.
    */
   get fallingScene(): readonly LaneNote[] {
     const controller = this.runtime.controller;
@@ -11559,7 +11560,7 @@ export class AppView {
         ? controller.replayPressesBetween(nowMs, until)
         : controller
             .playbackKeysDownBetween(nowMs, until)
-            .map((note) => ({ ...note, shade: 'heard' as const })),
+            .map((note) => ({ ...note, shade: note.staffNumber === LEFT_HAND_STAFF ? ('heard-left' as const) : ('heard' as const) })),
       nowMs,
       aheadMs,
     );

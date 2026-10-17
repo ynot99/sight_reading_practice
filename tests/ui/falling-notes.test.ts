@@ -26,6 +26,7 @@ const INKS: LaneInks = {
   wrong: 'wrong',
   aside: 'aside',
   heard: 'heard',
+  'heard-left': 'heard-left',
   edge: 'edge',
   line: 'line',
   font: 'serif',

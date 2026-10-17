@@ -3168,6 +3168,8 @@ body[data-notes-falling='true'] .focus-bar:has(:focus-visible) {
   --keys-aside: #94a3b8;
   /* Not a verdict: what the machine plays, nobody's press. */
   --keys-heard: #2563eb;
+  /* And what it plays in the left hand, as the drawing of a run colours that hand. */
+  --keys-heard-left: var(--star-8);
 
   /* The edge of a note, so one over the music stays a shape. */
   --keys-edge: rgb(15 23 42 / 70%);

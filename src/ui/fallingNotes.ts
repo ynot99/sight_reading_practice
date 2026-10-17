@@ -11,12 +11,20 @@ import { box, inksFrom, partlySeen, readied, type Surface } from './rollPainter.
  */
 export const FALLING_AHEAD_MS = 3_000;
 
+/**
+ * How a note in the lane is coloured: as the key it lands on is lit, or, of
+ * a playback, by the hand it is written for - the left in an ink of its own,
+ * as the drawing of a run colours a hand, so the two hands of what the
+ * machine plays are told apart as they fall. Nobody's press, so no verdict.
+ */
+export type LaneShade = KeyLight | 'heard-left';
+
 /** A note to fall onto its key: which key, from when to when, and lit how. */
 export interface FallingNote {
   readonly midi: number;
   readonly fromMs: number;
   readonly untilMs: number;
-  readonly shade: KeyLight;
+  readonly shade: LaneShade;
 }
 
 /**
@@ -25,7 +33,7 @@ export interface FallingNote {
  */
 export interface LaneNote {
   readonly midi: number;
-  readonly shade: KeyLight;
+  readonly shade: LaneShade;
   readonly top: number;
   readonly bottom: number;
 }
@@ -197,7 +205,7 @@ export function theFallingBarLines(
  * a bar line - and the typeface the bar numbers are set in, which is the
  * page's.
  */
-export type LaneInks = Readonly<Record<KeyLight | 'edge' | 'line', string>> & {
+export type LaneInks = Readonly<Record<LaneShade | 'edge' | 'line', string>> & {
   readonly font: string;
 };
 
@@ -211,6 +219,7 @@ const LANE_INKS: Readonly<Record<keyof Omit<LaneInks, 'font'>, string>> = {
   wrong: '--keys-wrong',
   aside: '--keys-aside',
   heard: '--keys-heard',
+  'heard-left': '--keys-heard-left',
   edge: '--keys-edge',
   line: '--keys-bar-line',
 };

@@ -84,6 +84,12 @@ describe('the stylesheet', () => {
     expect(rules().find((rule) => rule.selector === '.button.drive-only__way')?.body).toMatch(/padding\s*:\s*6px;/);
   });
 
+  it('gives the left hand of what the machine plays an ink of its own over the keys, the one the drawing gives that hand', () => {
+    const keys = rules().find((rule) => rule.selector === '.replay-keys')?.body ?? '';
+    expect(keys).toMatch(/--keys-heard-left\s*:\s*var\(--star-8\)/);
+    expect(CSS).toMatch(/--roll-ink-left\s*:\s*color-mix\(in srgb, var\(--star-8\)/);
+  });
+
   it('lights the grade being read', () => {
     const lit = rules().find((rule) => rule.selector === ".grades__grade[aria-pressed='true']");
     expect(lit?.body).toMatch(/background\s*:\s*var\(--accent\)/);

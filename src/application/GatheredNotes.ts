@@ -22,6 +22,8 @@ export interface ScheduledNote {
   readonly releasedMs: number;
   /** How hard to strike it, `0..1`, from the dynamics on the page. */
   readonly velocity: number;
+  /** The staff it is written on, which says the hand that plays it. */
+  readonly staffNumber: number;
 }
 
 /**
@@ -252,6 +254,7 @@ export class GatheredNotes {
           step.onsetTicks - measureStart,
           note.staffNumber,
         ),
+        staffNumber: note.staffNumber,
       });
     }
 
@@ -291,6 +294,7 @@ export class GatheredNotes {
               step.onsetTicks - measureStart,
               ornament.staffNumber,
             ),
+            staffNumber: ornament.staffNumber,
           });
         }
       }

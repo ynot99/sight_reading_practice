@@ -40,6 +40,11 @@ export interface KeyDown {
   readonly untilMs: number;
 }
 
+/** A key a performance holds down, and the staff its note is written on, which says the hand that plays it. */
+export interface KeyDownOnAStaff extends KeyDown {
+  readonly staffNumber: number;
+}
+
 /** The sustain pedal down, from when to when. */
 export interface PedalDown {
   readonly fromMs: number;
@@ -322,7 +327,7 @@ export class ExercisePlayer {
    * The keys of the notes handed to the instrument that may still be down,
    * at the moments it was given them.
    */
-  private handedOver: KeyDown[] = [];
+  private handedOver: KeyDownOnAStaff[] = [];
   /**
    * Places in the music inside the stretch, timed from where the first time
    * round begins and from where a lap does - worked out once for each list of
@@ -739,7 +744,7 @@ export class ExercisePlayer {
    * count-in will end: the count-in is beaten at one tempo, the one the music
    * is about to start at, so how long is left of it is one multiplication.
    */
-  keysDownBetween(fromMs: number, untilMs: number): readonly KeyDown[] {
+  keysDownBetween(fromMs: number, untilMs: number): readonly KeyDownOnAStaff[] {
     // Nothing either way once it has stopped: what it had handed over is
     // forgotten, and there is no list left to read.
     const began = this.startedAtMs ?? this.countedInToMs;
@@ -763,7 +768,7 @@ export class ExercisePlayer {
         break;
       }
       if (began + note.releasedMs > fromMs) {
-        down.push({ midi: note.midi, fromMs: began + note.atMs, untilMs: began + note.releasedMs });
+        down.push({ midi: note.midi, fromMs: began + note.atMs, untilMs: began + note.releasedMs, staffNumber: note.staffNumber });
       }
     }
     return down;
@@ -1210,6 +1215,7 @@ export class ExercisePlayer {
         midi: note.midi,
         fromMs: from + note.atMs,
         untilMs: from + note.releasedMs,
+        staffNumber: note.staffNumber,
       });
       this.deps.instrument.play(note.midi, note.velocity, from + note.atMs);
       timeTheStart(

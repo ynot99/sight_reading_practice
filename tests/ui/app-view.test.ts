@@ -1018,16 +1018,23 @@ describe('AppView', () => {
 
     // Three seconds of the music over the keys at sixty to the crotchet: the
     // first beat on its key, the next two coming down onto theirs, and the
-    // bass's whole note under all of them. Lit as heard, as the keys are.
+    // bass's whole note under all of them. Lit as heard, as the keys are -
+    // the bass, written for the left hand, in that hand's own ink.
     const scene = view.fallingScene
       .map((bar) => [bar.midi, bar.shade, Number(bar.top.toFixed(3)), Number(bar.bottom.toFixed(3))])
       .sort((left, right) => Number(left[0]) - Number(right[0]));
     expect(scene).toEqual([
-      [p('C3').midi, 'heard', 0, 1],
+      [p('C3').midi, 'heard-left', 0, 1],
       [p('C4').midi, 'heard', 0.667, 1],
       [p('D4').midi, 'heard', 0.333, 0.667],
       [p('E4').midi, 'heard', 0, 0.333],
     ]);
+    // Two beats on, the second bar's bass is coming down, not yet handed to
+    // the instrument, and in the left hand's ink as well.
+    metronome.advanceSubdivisions(2);
+    expect(
+      view.fallingScene.filter((bar) => bar.midi === p('G2').midi || bar.midi === p('D3').midi).map((bar) => bar.shade),
+    ).toEqual(['heard-left', 'heard-left']);
 
     lane.width = 300;
     element<HTMLButtonElement>('focus-stop').click();

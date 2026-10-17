@@ -52,7 +52,9 @@ import {
   rollOfTheTake,
   theKeysOfTheTake,
   theNotesOnTheClipboard,
+  theChangeOnTheClipboard,
   theClipboardTextOf,
+  theClipboardTextOfTheChange,
   theMusicsBeats,
   type RunRoll,
 } from '../../src/application/session/RunRoll.js';
@@ -7068,6 +7070,219 @@ describe('AppView', () => {
       expect(marks()).toEqual(['1: C major 4/4 \u2669=120', '3: G major 3/4']);
     });
 
+    it('copies and cuts a flag by the keys or its buttons, and pastes what it changes on the beat the cursor is on', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: Array.from({ length: 16 }, (_, at) => [
+            { kind: 'noteOn' as const, atMs: at * 500, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: at * 500 + 400, midi: 60 },
+          ]).flat(),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Copied',
+        1,
+      );
+      const written: string[] = [];
+      let readBack = (): Promise<string> => Promise.resolve(written.at(-1) ?? '');
+      Object.defineProperty(window.navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: (text: string): Promise<void> => {
+            written.push(text);
+            return Promise.resolve();
+          },
+          readText: (): Promise<string> => readBack(),
+        },
+      });
+      try {
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-sketches').click();
+        rowButton('sketches-list', 'Edit this sketch').click();
+        const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+        const body = element('roll-body');
+        const marks = (): string[] => (view.rollScene?.marks ?? []).map((each) => `${each.after}: ${each.says}`);
+        const flag = (text: string): HTMLElement | undefined =>
+          [...body.querySelectorAll<HTMLElement>('.roll__mark')].find((each) => each.textContent === text);
+        const pressed = (): (string | null)[] =>
+          [...body.querySelectorAll<HTMLElement>('.roll__mark')].filter((each) => each.getAttribute('aria-pressed') === 'true').map((each) => each.textContent);
+        // Pressed and let go, as a real press is: a press never let go of is a
+        // finger still down. Let go of over the drawing, which a flag chosen
+        // has drawn afresh under the pointer.
+        const pressAndLetGo = (on: Element | null | undefined): void => {
+          const init = { bubbles: true, cancelable: true, pointerId: 81, pointerType: 'mouse', button: 0 };
+          on?.dispatchEvent(new PointerEvent('pointerdown', init));
+          body.dispatchEvent(new PointerEvent('pointerup', init));
+        };
+        const press = (text: string): void => {
+          pressAndLetGo(flag(text));
+        };
+        const tool = (name: string): HTMLButtonElement | null => body.querySelector<HTMLButtonElement>(`.roll__mark-tools .roll__mark-${name}`);
+        const key = (init: KeyboardEventInit): KeyboardEvent => {
+          const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+          document.body.dispatchEvent(event);
+          return event;
+        };
+        const pasteEvent = (text: string): Event => {
+          const event = new Event('paste', { bubbles: true, cancelable: true });
+          Object.defineProperty(event, 'clipboardData', {
+            value: { getData: (type: string): string => (type === 'text/plain' ? text : '') },
+          });
+          document.body.dispatchEvent(event);
+          return event;
+        };
+        // The drawing follows the cursor across, so a tap is aimed where it is scrolled to.
+        const across = (ms: number): number =>
+          (ms / 1000) * zoom - (Number.parseFloat(body.querySelector<HTMLElement>('.roll__head')?.style.getPropertyValue('--roll-x') ?? '0') || 0);
+        const cursorAt = (ms: number): void => {
+          tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: across(ms), clientY: 20 });
+        };
+        // And down, to the row of middle C, which every note is on.
+        const onTheNoteAt = (ms: number): void => {
+          const scrolledDown =
+            Number.parseFloat(body.querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0') || 0;
+          const highest = view.rollScene?.highest ?? 0;
+          tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: across(ms), clientY: (highest - 60 + 0.5) * 13 - scrolledDown });
+        };
+        const chosenNotes = (): number[] => (view.rollScene?.notes ?? []).filter((note) => note.chosen === true).map((note) => note.fromMs);
+        const undo = (): void => {
+          key({ key: 'z', code: 'KeyZ', ctrlKey: true });
+        };
+
+        // The third bar in G major and 3/4.
+        cursorAt(4_200);
+        element<HTMLButtonElement>('roll-mark').click();
+        element<HTMLSelectElement>('roll-mark-key').value = '7';
+        element<HTMLSelectElement>('roll-mark-metre').value = '3/4';
+        element<HTMLButtonElement>('roll-mark-yes').click();
+        expect(marks()).toEqual(['1: C major 4/4 \u2669=120', '3: G major 3/4']);
+
+        // A note chosen, then the flag: the note let go of; and back.
+        onTheNoteAt(100);
+        expect(chosenNotes()).toEqual([0]);
+        press('3 G major 3/4');
+        expect([pressed(), chosenNotes()]).toEqual([['3 G major 3/4'], []]);
+        onTheNoteAt(600);
+        expect([pressed(), chosenNotes()]).toEqual([[], [500]]);
+
+        // Ctrl+C copies what the flag changes, and nothing it does not: no pace.
+        press('3 G major 3/4');
+        expect(key({ key: 'c', code: 'KeyC', ctrlKey: true }).defaultPrevented).toBe(true);
+        expect(written.map((text) => theChangeOnTheClipboard(text))).toEqual([
+          { key: { fifths: 1, scale: 'major' }, metre: { beatsInBar: 3, beatType: 4 } },
+        ]);
+        expect(marks()).toEqual(['1: C major 4/4 \u2669=120', '3: G major 3/4']);
+        expect(tool('copy')?.title).toBe('Copy the change at bar 3, to paste where the cursor is');
+        expect(tool('cut')?.title).toBe('Cut the change at bar 3, to paste where the cursor is');
+
+        // Pasted on the second bar: the change there, the third bar's now nothing new; the pasted flag chosen.
+        cursorAt(2_100);
+        expect(pasteEvent(written[0] ?? '').defaultPrevented).toBe(true);
+        expect(marks()).toEqual(['1: C major 4/4 \u2669=120', '2: G major 3/4']);
+        expect(pressed()).toEqual(['2 G major 3/4']);
+        // One change, put back as one.
+        undo();
+        expect(marks()).toEqual(['1: C major 4/4 \u2669=120', '3: G major 3/4']);
+
+        // Pasted on a beat inside a bar: the key from that beat, the metre from its bar.
+        cursorAt(1_000);
+        pasteEvent(written[0] ?? '');
+        expect(marks()).toEqual(['1: C major 3/4 \u2669=120', ': G major']);
+        undo();
+
+        // Ctrl+X copies it and takes it away. The drawer's button pastes what
+        // the clipboard holds, before what was copied here.
+        press('3 G major 3/4');
+        expect(key({ key: 'x', code: 'KeyX', metaKey: true }).defaultPrevented).toBe(true);
+        expect(marks()).toEqual(['1: C major 4/4 \u2669=120']);
+        expect(theChangeOnTheClipboard(written.at(-1) ?? '')).toEqual({ key: { fifths: 1, scale: 'major' }, metre: { beatsInBar: 3, beatType: 4 } });
+        readBack = (): Promise<string> => Promise.resolve(theClipboardTextOfTheChange({ key: { fifths: 2, scale: 'major' } }));
+        cursorAt(6_100);
+        element<HTMLButtonElement>('roll-chords-open').click();
+        const pasteButton = element<HTMLButtonElement>('roll-paste');
+        const pasted = async (): Promise<void> => {
+          pasteButton.click();
+          await Promise.resolve();
+          await Promise.resolve();
+        };
+        await pasted();
+        expect(marks()).toEqual(['1: C major 4/4 \u2669=120', '4: D major']);
+
+        // Its buttons: the copy copies, and the cut takes away. Copied after
+        // notes were, and with something else on the clipboard, the button
+        // pastes it rather than the notes.
+        onTheNoteAt(1_100);
+        key({ key: 'c', code: 'KeyC', ctrlKey: true });
+        expect(theNotesOnTheClipboard(written.at(-1) ?? '')).toHaveLength(1);
+        press('4 D major');
+        pressAndLetGo(tool('copy'));
+        expect(theChangeOnTheClipboard(written.at(-1) ?? '')).toEqual({ key: { fifths: 2, scale: 'major' } });
+        expect(marks()).toHaveLength(2);
+        pressAndLetGo(tool('cut'));
+        expect(marks()).toEqual(['1: C major 4/4 \u2669=120']);
+        readBack = (): Promise<string> => Promise.resolve('G major');
+        cursorAt(4_100);
+        const notesStruck = (): number => (sketches.find(sketch.id)?.events ?? []).filter((event) => event.kind === 'noteOn').length;
+        const notesBefore = notesStruck();
+        await pasted();
+        expect(marks()).toEqual(['1: C major 4/4 \u2669=120', '3: D major']);
+        expect(notesStruck()).toBe(notesBefore);
+
+        // Only what a flag changes is copied: a scale alone, on the signature
+        // of the bar before, is still a change of key; and a pace alone.
+        cursorAt(6_100);
+        element<HTMLButtonElement>('roll-mark').click();
+        element<HTMLSelectElement>('roll-mark-key').value = '11';
+        element<HTMLSelectElement>('roll-mark-scale').value = 'minor';
+        element<HTMLButtonElement>('roll-mark-yes').click();
+        expect(marks()).toEqual(['1: C major 4/4 \u2669=120', '3: D major', '4: B minor']);
+        press('4 B minor');
+        key({ key: 'c', code: 'KeyC', ctrlKey: true });
+        expect(theChangeOnTheClipboard(written.at(-1) ?? '')).toEqual({ key: { fifths: 2, scale: 'minor' } });
+        undo();
+        cursorAt(6_200);
+        element<HTMLButtonElement>('roll-mark').click();
+        element<HTMLInputElement>('roll-mark-tempo').value = '90';
+        element<HTMLButtonElement>('roll-mark-yes').click();
+        press('4 \u2669=90');
+        key({ key: 'c', code: 'KeyC', ctrlKey: true });
+        expect(theChangeOnTheClipboard(written.at(-1) ?? '')).toEqual({ crotchetsPerMinute: 90 });
+        undo();
+        expect(marks()).toEqual(['1: C major 4/4 \u2669=120', '3: D major']);
+
+        // The first flag is copied whole, and cut never: Ctrl+X and its dimmed button leave it.
+        press('1 C major 4/4 \u2669=120');
+        key({ key: 'c', code: 'KeyC', ctrlKey: true });
+        expect(theChangeOnTheClipboard(written.at(-1) ?? '')).toEqual({
+          key: { fifths: 0, scale: 'major' },
+          metre: { beatsInBar: 4, beatType: 4 },
+          crotchetsPerMinute: 120,
+        });
+        const copies = written.length;
+        key({ key: 'x', code: 'KeyX', ctrlKey: true });
+        expect(tool('cut')?.dataset['idle']).toBe('true');
+        pressAndLetGo(tool('cut'));
+        expect([written.length, marks()]).toEqual([copies, ['1: C major 4/4 \u2669=120', '3: D major']]);
+
+        // With no clipboard to cut to, a cut takes nothing away - but what it
+        // copied here is there for the paste button, which says so.
+        Reflect.deleteProperty(window.navigator, 'clipboard');
+        press('3 D major');
+        key({ key: 'x', code: 'KeyX', ctrlKey: true });
+        expect(marks()).toEqual(['1: C major 4/4 \u2669=120', '3: D major']);
+        expect(pasteButton.dataset['idle']).toBeUndefined();
+
+        // A change on the clipboard is not pasted onto a sketch only listened to.
+        element<HTMLButtonElement>('roll-edit').click();
+        cursorAt(6_300);
+        expect(pasteEvent(written[0] ?? '').defaultPrevented).toBe(false);
+        expect(marks()).toEqual(['1: C major 4/4 \u2669=120', '3: D major']);
+      } finally {
+        Reflect.deleteProperty(window.navigator, 'clipboard');
+      }
+    });
+
     it('chooses a flag over the ruler by a tap, changes it by a second or the pencil under it, and takes it away by the bin or Delete', async () => {
       const { view, sketches } = createRig();
       await view.initialize();
@@ -7630,7 +7845,7 @@ describe('AppView', () => {
         expect(copy.dataset['idle']).toBe('true');
         expect(copy.title).toContain('Choose one first');
         expect(paste.dataset['idle']).toBe('true');
-        expect(paste.title).toContain('Copy notes first');
+        expect(paste.title).toContain('Copy notes or a change first');
         await pasted();
         expect(notes()).toEqual(original);
 

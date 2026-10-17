@@ -718,6 +718,24 @@ describe('a click changed from a bar on', () => {
     expect(theBeatOfTheClickAt(PLAYED, stalled, 60_000)?.bar).toBe(1);
   });
 
+  it('changes the pace from the last beat of a click, where the playing ends, and from a beat past it', () => {
+    // Two bars of crotchets, the click's last beat on the bar line they end at.
+    const played = struck(...Array.from({ length: 8 }, (_, at) => at * 500));
+    const nine = click(0, 500, 9);
+    for (const fromMs of [4_000, 3_999.8, 6_000]) {
+      const slow = thePlayingAtAnotherPace(played, nine, 90, fromMs);
+      expect(
+        theChangesOfTheClick(slow.events, slow.beats).map((change) => [change.atMs, change.crotchetsPerMinute]),
+        String(fromMs),
+      ).toEqual([
+        [0, 120],
+        [fromMs === 6_000 ? 6_000 : 4_000, 90],
+      ]);
+      // What was played stays where it was.
+      expect(slow.events).toEqual(played);
+    }
+  });
+
   it('plays from a beat inside a bar at another pace, the beats before it as they were, and writes the tempo where it changes', () => {
     // From the second beat of the third bar at 60.
     const slow = thePlayingAtAnotherPace(PLAYED, EIGHT_BARS, 60, 4_600);

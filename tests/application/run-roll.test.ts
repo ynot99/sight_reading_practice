@@ -31,6 +31,8 @@ import {
   takeWithTheChordsBroken,
   theKeysInTurn,
   theClipboardTextOf,
+  theClipboardTextOfTheChange,
+  theChangeOnTheClipboard,
   theNotesCopied,
   theNotesOnTheClipboard,
   takeWithThePedalAt,
@@ -1456,6 +1458,51 @@ describe('changing a recording', () => {
       { afterMs: 200, lengthMs: 200, midi: MIDI.C4, velocity: 0.7 },
       { afterMs: 200, lengthMs: 400, midi: MIDI.G4, velocity: 0.25, hand: 'left' },
     ]);
+  });
+
+  it('reads back a change it wrote to the clipboard, any part of it, and nothing else', () => {
+    const whole = { key: { fifths: -7, scale: 'dorian' as const }, metre: { beatsInBar: 6, beatType: 8 }, crotchetsPerMinute: 92.5 };
+    expect(theChangeOnTheClipboard(theClipboardTextOfTheChange(whole))).toEqual(whole);
+    for (const part of [{ key: { fifths: 7, scale: 'major' as const } }, { metre: { beatsInBar: 1, beatType: 32 } }, { crotchetsPerMinute: 1 }]) {
+      expect(theChangeOnTheClipboard(theClipboardTextOfTheChange(part))).toEqual(part);
+    }
+    // A change of nothing is nothing to paste.
+    expect(theChangeOnTheClipboard(theClipboardTextOfTheChange({}))).toBeNull();
+    const written = JSON.parse(theClipboardTextOfTheChange(whole)) as { copied: string; change: Record<string, unknown> };
+    const withPart = (part: Record<string, unknown>): string => JSON.stringify({ ...written, change: { ...written.change, ...part } });
+    for (const part of [
+      { key: { fifths: 8, scale: 'major' } },
+      { key: { fifths: -8, scale: 'major' } },
+      { key: { fifths: 1.5, scale: 'major' } },
+      { key: { fifths: '1', scale: 'major' } },
+      { key: { fifths: 1, scale: 'blues' } },
+      { key: { fifths: 1 } },
+      { key: null },
+      { key: 'G major' },
+      { metre: { beatsInBar: 0, beatType: 4 } },
+      { metre: { beatsInBar: 33, beatType: 4 } },
+      { metre: { beatsInBar: 2.5, beatType: 4 } },
+      { metre: { beatsInBar: 3, beatType: 3 } },
+      { metre: { beatsInBar: 3, beatType: 64 } },
+      { metre: { beatsInBar: 3, beatType: '4' } },
+      { metre: { beatsInBar: '3', beatType: 4 } },
+      { metre: null },
+      { crotchetsPerMinute: 0 },
+      { crotchetsPerMinute: -60 },
+      { crotchetsPerMinute: '90' },
+      { crotchetsPerMinute: null },
+    ]) {
+      expect(theChangeOnTheClipboard(withPart(part)), JSON.stringify(part)).toBeNull();
+    }
+    expect(theChangeOnTheClipboard(withPart({ crotchetsPerMinute: 'endless' }).replace('"endless"', '1e999'))).toBeNull();
+    // Notes are not a change, nor a change notes.
+    expect(theChangeOnTheClipboard(theClipboardTextOf([{ afterMs: 0, lengthMs: 100, midi: 60, velocity: 0.5 }]))).toBeNull();
+    expect(theNotesOnTheClipboard(theClipboardTextOfTheChange(whole))).toBeNull();
+    // Called something else, it is not a change, whatever it holds.
+    expect(theChangeOnTheClipboard(JSON.stringify({ ...written, copied: 'sight-reading-practice/notes' }))).toBeNull();
+    for (const other of ['G major', '', 'null', '{"copied":"sight-reading-practice/change"}', '{"copied":"sight-reading-practice/change","change":null}']) {
+      expect(theChangeOnTheClipboard(other), other).toBeNull();
+    }
   });
 
   it('reads back the notes it wrote to the clipboard, and nothing else', () => {

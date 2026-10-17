@@ -1336,8 +1336,8 @@ export function drawTheRoll(scene: RollScene): HTMLElement {
   // над курсором".
   // And where the marker was last put, which a playback goes back to.
   ruler.append(element('canvas', 'roll__paint'), element('div', 'roll__place-mark'), element('div', 'roll__head-mark'));
-  // Where the music changes key, metre or pace: a flag over the bar, to be
-  // chosen and then changed or taken away by the two buttons under it.
+  // Where the music changes key, metre or pace: a flag over its beat, to be
+  // chosen and then changed, copied, cut or taken away by the buttons under it.
   const marks = element('div', 'roll__marks');
   scene.marks.forEach((mark, at) => {
     const flag = element('button', 'roll__mark');
@@ -1356,7 +1356,12 @@ export function drawTheRoll(scene: RollScene): HTMLElement {
   });
   const tools = element('div', 'roll__mark-tools');
   tools.hidden = true;
-  for (const [name, path] of [['roll__mark-change', 'M3 17.2V21h3.8l11-11-3.8-3.8-11 11zM20.7 7a1 1 0 0 0 0-1.4l-2.3-2.3a1 1 0 0 0-1.4 0l-1.8 1.8 3.8 3.8L20.7 7z'], ['roll__mark-delete', 'M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z']] as const) {
+  for (const [name, path] of [
+    ['roll__mark-change', 'M3 17.2V21h3.8l11-11-3.8-3.8-11 11zM20.7 7a1 1 0 0 0 0-1.4l-2.3-2.3a1 1 0 0 0-1.4 0l-1.8 1.8 3.8 3.8L20.7 7z'],
+    ['roll__mark-copy', 'M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z'],
+    ['roll__mark-cut', 'M9.64 7.64A4 4 0 1 0 6 10c.59 0 1.14-.13 1.64-.36L10 12l-2.36 2.36A4 4 0 1 0 10 18c0-.59-.13-1.14-.36-1.64L12 14l7 7h3v-1L9.64 7.64zM6 8a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm0 12a2 2 0 1 1 0-4 2 2 0 0 1 0 4zM19 3l-6 6 2 2 7-7V3z'],
+    ['roll__mark-delete', 'M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z'],
+  ] as const) {
     const button = element('button', `button ${name}`);
     button.setAttribute('type', 'button');
     button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="take-transport__icon"><path d="${path}" /></svg>`;

@@ -2239,7 +2239,7 @@ textarea {
   font-weight: 600;
 }
 
-/* Under the chosen flag, over the drawing: change it, or take it away. */
+/* Under the chosen flag, over the drawing: change it, copy it, cut it, or take it away. */
 .roll__mark-tools {
   position: absolute;
   top: 100%;

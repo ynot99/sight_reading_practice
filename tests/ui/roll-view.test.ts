@@ -431,7 +431,12 @@ describe('drawing a run as a piano roll', () => {
     expect(flag?.textContent).toBe('G major');
     expect(flag?.getAttribute('type')).toBe('button');
     expect(ruler?.querySelector<HTMLElement>('.roll__marks > .roll__mark-tools')?.hidden).toBe(true);
-    expect(ruler?.querySelectorAll('.roll__mark-tools > .button')).toHaveLength(2);
+    expect([...(ruler?.querySelectorAll('.roll__mark-tools > .button') ?? [])].map((button) => button.classList[1])).toEqual([
+      'roll__mark-change',
+      'roll__mark-copy',
+      'roll__mark-cut',
+      'roll__mark-delete',
+    ]);
   });
 
   it('shades the rows the black keys are on', () => {

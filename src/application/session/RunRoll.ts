@@ -10,6 +10,7 @@ import {
 } from '../../domain/model/Exercise.js';
 import { notesStruckAt, soundsFor, type ExerciseTimeline } from '../../domain/timeline/Timeline.js';
 import { createRng } from '../../domain/generation/Rng.js';
+import { isAScale, type ScaleName } from '../../domain/harmony/scales.js';
 import type { BeatWeight } from '../ports/IMetronome.js';
 import type {
   MidiNoteOffEvent,
@@ -1284,6 +1285,72 @@ export function theNotesOnTheClipboard(text: string): readonly NoteCopied[] | nu
     });
   }
   return notes.length === 0 ? null : notes;
+}
+
+/**
+ * A change of key, metre or pace as it is copied from a flag: only what
+ * changes there, to be changed to the same wherever it is pasted.
+ */
+export interface ChangeCopied {
+  readonly key?: { readonly fifths: number; readonly scale: ScaleName };
+  readonly metre?: { readonly beatsInBar: number; readonly beatType: number };
+  readonly crotchetsPerMinute?: number;
+}
+
+/** What a change copied is called on the clipboard, so a paste can tell it from notes and any other text. */
+const A_CHANGE_ON_THE_CLIPBOARD = 'sight-reading-practice/change';
+
+/** A change copied as the text the clipboard holds. */
+export function theClipboardTextOfTheChange(change: ChangeCopied): string {
+  return JSON.stringify({ copied: A_CHANGE_ON_THE_CLIPBOARD, change });
+}
+
+/**
+ * The change a clipboard's text holds, or `null` where it holds anything
+ * else - or a change of nothing. The text may have come from anywhere, so
+ * each part is asked of, and one that is not what it says refuses the
+ * whole: a key, a signature a key can have and a scale this program
+ * knows; a metre, a whole number of beats in a bar and a beat a note's
+ * value can be; a pace, some crotchets a minute.
+ */
+export function theChangeOnTheClipboard(text: string): ChangeCopied | null {
+  let read: unknown;
+  try {
+    read = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const said = read as { readonly copied?: unknown; readonly change?: unknown } | null;
+  if (typeof said !== 'object' || said === null || said.copied !== A_CHANGE_ON_THE_CLIPBOARD) {
+    return null;
+  }
+  const change = said.change as { readonly key?: unknown; readonly metre?: unknown; readonly crotchetsPerMinute?: unknown } | null;
+  if (typeof change !== 'object' || change === null) {
+    return null;
+  }
+  const key = change.key as { readonly fifths?: unknown; readonly scale?: unknown } | null | undefined;
+  const metre = change.metre as { readonly beatsInBar?: unknown; readonly beatType?: unknown } | null | undefined;
+  const pace = change.crotchetsPerMinute;
+  const keyIsOne =
+    typeof key === 'object' && key !== null && Number.isInteger(key.fifths) && Math.abs(Number(key.fifths)) <= 7 && isAScale(key.scale);
+  const metreIsOne =
+    typeof metre === 'object' &&
+    metre !== null &&
+    Number.isInteger(metre.beatsInBar) &&
+    Number(metre.beatsInBar) >= 1 &&
+    Number(metre.beatsInBar) <= 32 &&
+    Number.isInteger(metre.beatType) &&
+    [1, 2, 4, 8, 16, 32].includes(Number(metre.beatType));
+  const paceIsOne = Number.isFinite(pace) && Number(pace) > 0;
+  if ((key !== undefined && !keyIsOne) || (metre !== undefined && !metreIsOne) || (pace !== undefined && !paceIsOne)) {
+    return null;
+  }
+  const copied: ChangeCopied = {
+    ...(keyIsOne ? { key: { fifths: Number(key.fifths), scale: key.scale as ScaleName } } : {}),
+    ...(metreIsOne ? { metre: { beatsInBar: Number(metre.beatsInBar), beatType: Number(metre.beatType) } } : {}),
+    ...(paceIsOne ? { crotchetsPerMinute: Number(pace) } : {}),
+  };
+  return Object.keys(copied).length === 0 ? null : copied;
 }
 
 /**

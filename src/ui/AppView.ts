@@ -202,7 +202,10 @@ import {
   theMusicsBeats,
   type ArpeggioWay,
   takeWithThePedalAt,
+  theChangeOnTheClipboard,
   theClipboardTextOf,
+  theClipboardTextOfTheChange,
+  type ChangeCopied,
   theKeysOfTheTake,
   theNotesCopied,
   theNotesOnTheClipboard,
@@ -2090,6 +2093,13 @@ export class AppView {
    * not served securely - and where it holds something else.
    */
   private notesCopiedHere: readonly NoteCopied[] | null = null;
+
+  /**
+   * Or the change of key, metre or pace last copied from a flag. Copying it
+   * lets go of the notes copied here, and notes copied are pasted before it,
+   * so the paste button pastes whichever was copied last.
+   */
+  private changeCopiedHere: ChangeCopied | null = null;
 
   /**
    * Whether the control with the focus was given it by a pointer pressing
@@ -12737,8 +12747,12 @@ export class AppView {
     const chosen = sketch.chosen.length > 0;
     sayWhetherIdle(this.el.rollCopy, chosen ? 'Copy the chosen notes' : 'Copy the chosen notes. Choose one first.', !chosen);
     const canRead = typeof this.doc.defaultView?.navigator?.clipboard?.readText === 'function';
-    const toPaste = canRead || this.notesCopiedHere !== null;
-    sayWhetherIdle(this.el.rollPaste, toPaste ? 'Paste where the cursor is' : 'Paste where the cursor is. Copy notes first.', !toPaste);
+    const toPaste = canRead || this.notesCopiedHere !== null || this.changeCopiedHere !== null;
+    sayWhetherIdle(
+      this.el.rollPaste,
+      toPaste ? 'Paste where the cursor is' : 'Paste where the cursor is. Copy notes or a change first.',
+      !toPaste,
+    );
 
     // A chord is two keys or more chosen that go down together.
     const struckTogether = sketch.chosen.some((key) =>
@@ -13258,6 +13272,10 @@ export class AppView {
       this.takeTheMarkAway(this.markChosenAtMs);
       return true;
     }
+    if (target.closest('.roll__mark-copy') !== null || target.closest('.roll__mark-cut') !== null) {
+      this.copyTheMarkChosen(target.closest('.roll__mark-cut') !== null);
+      return true;
+    }
     const flag = target.closest<HTMLElement>('.roll__mark');
     const mark = flag === null ? undefined : scene.marks[Number(flag.dataset['mark'])];
     if (mark === undefined) {
@@ -13284,6 +13302,10 @@ export class AppView {
       return;
     }
     this.markChosenAtMs = atMs;
+    // One thing chosen at a time, so a copy, a cut or Delete is never a guess at which.
+    if (atMs !== null && this.theNotesChosen().length > 0) {
+      this.choose([]);
+    }
     this.showTheMarkChosen();
   }
 
@@ -13332,10 +13354,24 @@ export class AppView {
     tools.style.setProperty('--roll-at', (mark.atMs / 1000).toFixed(3));
     const place = placeOf(mark.atMs + origin);
     const change = tools.querySelector<HTMLButtonElement>('.roll__mark-change');
+    const copy = tools.querySelector<HTMLButtonElement>('.roll__mark-copy');
+    const cut = tools.querySelector<HTMLButtonElement>('.roll__mark-cut');
     const remove = tools.querySelector<HTMLButtonElement>('.roll__mark-delete');
     if (change !== null) {
       change.title = `Change what ${place} is in`;
       change.setAttribute('aria-label', change.title);
+    }
+    if (copy !== null) {
+      sayWhetherIdle(copy, `Copy the change at ${place}, to paste where the cursor is`, false);
+    }
+    if (cut !== null) {
+      sayWhetherIdle(
+        cut,
+        chosen === 0
+          ? "Cut this change. The first bar's key, metre and pace are the sketch's own: copy them instead."
+          : `Cut the change at ${place}, to paste where the cursor is`,
+        chosen === 0,
+      );
     }
     if (remove !== null) {
       sayWhetherIdle(
@@ -13346,6 +13382,73 @@ export class AppView {
         chosen === 0,
       );
     }
+  }
+
+  /**
+   * Copies what the chosen flag changes to the clipboard, as text a paste
+   * here can read back - into this sketch or another - and kept in the page
+   * for the paste button; cutting, takes it away too. The first beat's are
+   * the sketch's own, and are copied but never cut.
+   */
+  private copyTheMarkChosen(cutting: boolean): void {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const atMs = this.markChosenAtMs;
+    const beat = stored === null || atMs === null ? null : theBeatOfTheClickAt(stored.events, stored.beats, atMs);
+    if (stored === null || atMs === null || beat === null) {
+      return;
+    }
+    if (cutting && beat.before === null) {
+      return;
+    }
+    const begunIn = this.theKeyTheSketchBeginsIn(stored);
+    const key = theKeyOfTheMusicAt(stored.events, begunIn, beat.atMs);
+    const keyBefore = beat.before === null ? null : theKeyOfTheMusicAt(stored.events, begunIn, beat.atMs - 1);
+    const before = beat.before;
+    const change: ChangeCopied = {
+      ...(keyBefore === null || keyBefore.fifths !== key.fifths || keyBefore.scale !== key.scale ? { key } : {}),
+      ...(before === null || before.metre.beatsInBar !== beat.metre.beatsInBar || before.metre.beatType !== beat.metre.beatType
+        ? { metre: beat.metre }
+        : {}),
+      ...(before === null || before.crotchetsPerMinute !== beat.crotchetsPerMinute ? { crotchetsPerMinute: beat.crotchetsPerMinute } : {}),
+    };
+    this.changeCopiedHere = change;
+    this.notesCopiedHere = null;
+    // The paste button, which says whether there is anything to paste.
+    this.showTheChordsOfTheKey();
+    // A page not served securely has no clipboard, and a cut there would only take away, as a cut of notes would.
+    const clipboard = this.doc.defaultView?.navigator?.clipboard;
+    if (clipboard === undefined) {
+      return;
+    }
+    void clipboard.writeText(theClipboardTextOfTheChange(change)).catch(() => undefined);
+    if (cutting) {
+      this.takeTheMarkAway(atMs);
+    }
+  }
+
+  /**
+   * Changes the music from the beat the cursor is on or after to what a
+   * change copied says, as the sheet would: what it does not say stays as it
+   * is there. One change, put back as one; its flag chosen.
+   */
+  private pasteTheChange(change: ChangeCopied): void {
+    const roll = this.theRoll();
+    if (roll === null || !this.askAboutTheBeatAt(this.headIsAtMs() + rollBeganAtMs(roll))) {
+      return;
+    }
+    const beat = this.beatAskedAbout;
+    const keyHere = this.keyAskedAbout?.here;
+    if (beat === null || keyHere === undefined) {
+      return;
+    }
+    const metre = change.metre ?? beat.metre;
+    this.changeFromTheBeatAsked(
+      `${String(metre.beatsInBar)}/${String(metre.beatType)}`,
+      change.crotchetsPerMinute ?? beat.crotchetsPerMinute,
+      change.key ?? keyHere,
+    );
+    this.chooseTheMark(beat.atMs);
   }
 
   /** Takes the changes at a flag away, its beat given back what the beat before it is in. The first has none before it, and keeps its own. */
@@ -13799,6 +13902,10 @@ export class AppView {
     const sketch = showing?.sketch;
     const roll = this.theRoll();
     const chosen = keys.map((key) => ({ midi: key.midi, downAtMs: key.downAtMs }));
+    if (chosen.length > 0) {
+      // One thing chosen at a time: see `chooseTheMark`.
+      this.markChosenAtMs = null;
+    }
     if (showing !== null && sketch !== undefined) {
       this.theOtherRollShowing = { ...showing, sketch: { ...sketch, chosen } };
     } else if (sketch === undefined && roll !== null) {
@@ -14535,6 +14642,12 @@ export class AppView {
       }
       return;
     }
+    const copying = (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && (event.code === 'KeyC' || event.code === 'KeyX');
+    if (this.markChosenAtMs !== null && copying) {
+      event.preventDefault();
+      this.copyTheMarkChosen(event.code === 'KeyX');
+      return;
+    }
     if (event.key === 'Escape' && this.chordsBeingForgotten) {
       // The deleting ends first, then what is chosen, then the sheet.
       event.preventDefault();
@@ -14667,30 +14780,41 @@ export class AppView {
     ) {
       return;
     }
-    const notes = theNotesOnTheClipboard(event.clipboardData?.getData('text/plain') ?? '');
-    if (notes === null) {
-      return;
+    const text = event.clipboardData?.getData('text/plain') ?? '';
+    const notes = theNotesOnTheClipboard(text);
+    const change = theChangeOnTheClipboard(text);
+    if (notes !== null) {
+      event.preventDefault();
+      this.pasteTheNotes(notes);
+    } else if (change !== null) {
+      event.preventDefault();
+      this.pasteTheChange(change);
     }
-    event.preventDefault();
-    this.pasteTheNotes(notes);
   }
 
   /**
    * Pastes by the drawer's button, which has no paste event to read: the
    * clipboard is asked - which a browser may first ask the reader's leave
-   * for - and where it cannot be read or holds no notes, the notes last
-   * copied in this page are pasted.
+   * for - and where it cannot be read or holds neither notes nor a change,
+   * what was last copied in this page is pasted.
    */
   private pasteWithTheButton(): void {
     const clipboard = this.doc.defaultView?.navigator?.clipboard;
     const read =
       typeof clipboard?.readText === 'function'
-        ? clipboard.readText().then(theNotesOnTheClipboard, () => null)
-        : Promise.resolve(null);
-    void read.then((notes) => {
-      const toPaste = notes ?? this.notesCopiedHere;
-      if (toPaste !== null) {
-        this.pasteTheNotes(toPaste);
+        ? clipboard.readText().then((text) => text, () => '')
+        : Promise.resolve('');
+    void read.then((text) => {
+      const notes = theNotesOnTheClipboard(text);
+      const change = theChangeOnTheClipboard(text);
+      if (notes !== null) {
+        this.pasteTheNotes(notes);
+      } else if (change !== null) {
+        this.pasteTheChange(change);
+      } else if (this.notesCopiedHere !== null) {
+        this.pasteTheNotes(this.notesCopiedHere);
+      } else if (this.changeCopiedHere !== null) {
+        this.pasteTheChange(this.changeCopiedHere);
       }
     });
   }

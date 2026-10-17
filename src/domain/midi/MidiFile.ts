@@ -236,14 +236,18 @@ export function theClickOfTheTake(
 /**
  * The beats of a take's click, carried on past its playing as far as a
  * moment, where it is later: so a bar after the last note can be changed.
+ * And a beat past it, where asked: a pace is the gap after a beat, and the
+ * last beat has none to change.
  */
 function theClickReaching(
   events: readonly MidiFileEvent[],
   beats: readonly HeardBeat[],
   atMs: number,
+  andABeatPast = false,
 ): readonly HeardBeat[] | null {
   let grid = theClickOfTheTake(events, beats);
-  for (let after = 0; grid !== null && elementAt(grid, grid.length - 1).atMs < atMs; ) {
+  const short = (last: HeardBeat): boolean => last.atMs < atMs || (andABeatPast && last.atMs <= atMs + SAME_MOMENT_MS);
+  for (let after = 0; grid !== null && short(elementAt(grid, grid.length - 1)); ) {
     after += 8;
     const longer = theClickOfTheTake(events, beats, after);
     // A click that goes nowhere goes no further.
@@ -508,7 +512,7 @@ export function thePlayingAtAnotherPace(
   crotchetsPerMinute: number,
   fromMs = Number.NEGATIVE_INFINITY,
 ): { readonly events: readonly MidiFileEvent[]; readonly beats: readonly HeardBeat[] } {
-  const grid = theClickReaching(events, beats, fromMs);
+  const grid = theClickReaching(events, beats, fromMs, true);
   if (grid === null || !(crotchetsPerMinute > 0)) {
     return { events, beats };
   }

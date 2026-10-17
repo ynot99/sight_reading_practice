@@ -9387,7 +9387,9 @@ export class AppView {
         this.sliceByAClick(mouse);
         return;
       }
-      if (!onTheRuler && this.theOtherRollShowing?.sketch?.editing === true) {
+      // The lane of chords is not the notes: a tap there puts the marker, as
+      // the ruler's does.
+      if (!onTheRuler && !this.isOnTheChords(event) && this.theOtherRollShowing?.sketch?.editing === true) {
         this.chooseTheKeyTapped(event);
         return;
       }
@@ -9489,6 +9491,9 @@ export class AppView {
     // The menu a right click opens is taken on a note being edited: there it
     // takes the note out, as the trash would.
     this.listen(this.el.rollBody, 'contextmenu', (event) => {
+      if (this.isOnTheChords(event)) {
+        return;
+      }
       // And on a press of the pedal, the press.
       if (this.theOtherRollShowing?.sketch?.editing === true && this.isOnThePedal(event)) {
         const at = this.theMomentUnder((event as MouseEvent).clientX);
@@ -9683,9 +9688,9 @@ export class AppView {
         this.rollFingers.size === 0 &&
         (this.holdTheKeyOnTheStrip(event) ||
           this.takeHoldOfThePedal(event) ||
-          this.cutTheKeyUnder(event) ||
-          this.takeHoldOfAKey(event) ||
-          this.beginABox(event))
+          // A note is read off where the pointer is, which over the lane of
+          // chords is a row under the edge of the grid: nothing there is a note.
+          (!this.isOnTheChords(event) && (this.cutTheKeyUnder(event) || this.takeHoldOfAKey(event) || this.beginABox(event))))
       ) {
         return;
       }
@@ -14585,6 +14590,11 @@ export class AppView {
     return event.target instanceof Element && event.target.closest('.roll__ruler') !== null;
   }
 
+  /** Whether an event is on the lane of chords under the notes. */
+  private isOnTheChords(event: Event): boolean {
+    return event.target instanceof Element && event.target.closest('.roll__chords') !== null;
+  }
+
   /** Whether an event is on the pedal's lane under the notes. */
   private isOnThePedal(event: Event): boolean {
     return event.target instanceof Element && event.target.closest('.roll__pedal') !== null;
@@ -14893,7 +14903,7 @@ export class AppView {
    */
   private showTheGrip(event: PointerEvent): void {
     const editing = this.theOtherRollShowing?.sketch?.editing === true;
-    const key = editing ? this.theKeyUnder(event) : null;
+    const key = editing && !this.isOnTheChords(event) ? this.theKeyUnder(event) : null;
     if (key === null) {
       delete this.el.rollBody.dataset['grip'];
       return;

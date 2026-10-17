@@ -11,6 +11,7 @@ import {
   theSceneOfTheRoll,
   whatThePedalSaysAt,
   whatTheChordsSayAt,
+  theNotesOfTheChord,
   theKeyAt,
   theKeysInABox,
   whatTheGridSaysAt,
@@ -441,6 +442,35 @@ describe('drawing a run as a piano roll', () => {
     const scene = theSceneOfTheRoll({ roll: input, barLabel: () => null, chordsIn: [] });
 
     expect(scene.chords.map((chord) => [chord.fromMs, chord.untilMs, chord.name])).toEqual([[0, 4000, 'C']]);
+  });
+
+  it('takes the notes struck in a chord as its own, and calls it chosen only where all of them are', () => {
+    // A minor seventh for a bar, of which C, E and G are held through the
+    // next, which they make C: a chord with no note struck in it.
+    const input = roll({
+      beats: [...barOfFour(0, 0), ...barOfFour(1, 4000)],
+      presses: [
+        press({ midi: 57, downAtMs: 0, upAtMs: 4000 }),
+        ...[60, 64, 67].map((midi) => press({ midi, downAtMs: 0, upAtMs: 8000 })),
+      ],
+    });
+    const drawn = (chosen: readonly number[]): RollScene =>
+      theSceneOfTheRoll({
+        roll: input,
+        barLabel: () => null,
+        chordsIn: [],
+        chosen: chosen.map((midi) => ({ midi, downAtMs: 0 })),
+      });
+
+    expect(drawn([]).chords.map((chord) => [chord.name, chord.fromMs, chord.untilMs])).toEqual([
+      ['Am7', 0, 4000],
+      ['C', 4000, 8000],
+    ]);
+    expect(theNotesOfTheChord(input, 0, 4000).map((note) => note.midi)).toEqual([57, 60, 64, 67]);
+    expect(theNotesOfTheChord(input, 4000, 8000)).toEqual([]);
+    expect(drawn([]).chords.map((chord) => chord.chosen)).toEqual([false, false]);
+    expect(drawn([57, 60, 64]).chords.map((chord) => chord.chosen)).toEqual([false, false]);
+    expect(drawn([57, 60, 64, 67]).chords.map((chord) => chord.chosen)).toEqual([true, false]);
   });
 
   it('says a chord is only most of the notes where a melody passes over it', () => {

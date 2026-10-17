@@ -251,6 +251,8 @@ import {
   drawTheRoll,
   rowFromTap,
   theCanvasesOf,
+  theChordAt,
+  theNotesOfTheChord,
   theKeysStripOf,
   theMapOfThePitches,
   stretchesIn,
@@ -9387,6 +9389,9 @@ export class AppView {
         this.sliceByAClick(mouse);
         return;
       }
+      if (this.isOnTheChords(event) && this.chooseTheChordTapped(event)) {
+        return;
+      }
       // The lane of chords is not the notes: a tap there puts the marker, as
       // the ruler's does.
       if (!onTheRuler && !this.isOnTheChords(event) && this.theOtherRollShowing?.sketch?.editing === true) {
@@ -14588,6 +14593,27 @@ export class AppView {
    */
   private isOnTheRuler(event: Event): boolean {
     return event.target instanceof Element && event.target.closest('.roll__ruler') !== null;
+  }
+
+  /**
+   * Chooses the notes of the chord tapped in the lane - added to those
+   * chosen, with a key held, as a note tapped is - and puts the marker where
+   * the chord begins, to be heard from there. Says whether there was one.
+   */
+  private chooseTheChordTapped(event: MouseEvent): boolean {
+    const scene = this.drawnScene;
+    const roll = this.theRoll();
+    const at = this.thePointOnTheDrawing(event);
+    const chord = scene === null || at === null ? null : theChordAt(scene, at.atMs);
+    const sketch = this.theOtherRollShowing?.sketch;
+    if (chord === null || roll === null || sketch?.editing !== true) {
+      return false;
+    }
+    const notes = theNotesOfTheChord(roll, chord.fromMs, chord.untilMs).map((press) => ({ midi: press.midi, downAtMs: press.downAtMs }));
+    const adds = event.ctrlKey || event.metaKey || event.shiftKey;
+    this.choose(adds ? [...sketch.chosen.filter((key) => !notes.some((note) => sameKey(note, key))), ...notes] : notes);
+    this.putTheHeadAt(chord.fromMs);
+    return true;
   }
 
   /** Whether an event is on the lane of chords under the notes. */

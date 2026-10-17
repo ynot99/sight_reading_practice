@@ -309,6 +309,8 @@ export interface SceneChord extends SceneStretch {
   readonly numeral: string;
   /** Whether it is every note sounding there, rather than most of them. */
   readonly exactly: boolean;
+  /** Whether every note struck in it is among those chosen: see {@link theNotesOfTheChord}. */
+  readonly chosen: boolean;
 }
 
 /** An instant of the run, and what it says to a pointer resting on it, if anything. */
@@ -1121,11 +1123,30 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
             name: chord.name,
             numeral: chord.numeral,
             exactly: chord.exactly,
+            chosen: isEveryNoteChosen(theNotesOfTheChord(roll, chord.fromMs - origin, chord.untilMs - origin), drawing.chosen),
             says: chord.exactly
               ? `${chord.name} (${chord.numeral}): the chord the notes here make`
               : `${chord.name} (${chord.numeral}): the chord most of the notes here make, by how long they sound`,
           })),
   };
+}
+
+/**
+ * The notes of a chord in the lane: those struck from where it begins until
+ * where it ends, on the run's clock from its start. A note held into it from
+ * before belongs to the chord it was struck in.
+ */
+export function theNotesOfTheChord(roll: RunRoll, fromMs: number, untilMs: number): readonly RolledPress[] {
+  const origin = rollBeganAtMs(roll);
+  return roll.presses.filter((press) => press.downAtMs - origin >= fromMs && press.downAtMs - origin < untilMs);
+}
+
+/** Whether there are notes, and every one of them is among those chosen. */
+function isEveryNoteChosen(notes: readonly RolledPress[], chosen: RollDrawing['chosen']): boolean {
+  return (
+    notes.length > 0 &&
+    notes.every((note) => chosen?.some((each) => each.midi === note.midi && each.downAtMs === note.downAtMs) === true)
+  );
 }
 
 /**
@@ -1369,9 +1390,14 @@ export function whatTheRulerSaysAt(scene: RollScene, atMs: number, pxPerSecond: 
   );
 }
 
+/** The chord in the lane at a moment of the run from its start, if one is named there. */
+export function theChordAt(scene: RollScene, atMs: number): SceneChord | null {
+  return stretchesIn(scene.chords, atMs, atMs).find((chord) => chord.untilMs > atMs) ?? null;
+}
+
 /** What the lane of chords says to a pointer resting on it: the chord there, and why it is named. */
 export function whatTheChordsSayAt(scene: RollScene, atMs: number): string | null {
-  return stretchesIn(scene.chords, atMs, atMs).find((chord) => chord.untilMs > atMs)?.says ?? null;
+  return theChordAt(scene, atMs)?.says ?? null;
 }
 
 /** What the pedal lane says to a pointer resting on it. */

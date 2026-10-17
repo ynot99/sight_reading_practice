@@ -619,7 +619,8 @@ const CHORD_NUMERAL_PX = 11;
  * chord as long as it lasts, its name and its degree written in it - kept in
  * sight at the left of the screen while the block goes on past it, and left
  * out where the block is too short to hold them, which a pointer resting on
- * it still says. Edged in dashes where it is only most of the notes.
+ * it still says. Edged in dashes where it is only most of the notes, and
+ * in the ink of a chosen note where its notes are chosen.
  */
 export function paintTheChords(
   surface: Surface,
@@ -641,11 +642,13 @@ export function paintTheChords(
     box(paint, left, CHORD_IN_PX, right - left, tallPx - 2 * CHORD_IN_PX, CHORD_CORNER_PX);
     paint.fillStyle = inks.chord;
     paint.fill();
-    paint.strokeStyle = inks.chordEdge;
-    paint.lineWidth = 1;
+    // Chosen, rimmed as a chosen note is: its notes are the ones chosen.
+    paint.strokeStyle = chord.chosen ? inks.chosen : inks.chordEdge;
+    paint.lineWidth = chord.chosen ? 2 : 1;
     paint.setLineDash(chord.exactly ? [] : [3, 2]);
     paint.stroke();
     paint.setLineDash([]);
+    paint.lineWidth = 1;
     paint.font = `700 ${String(CHORD_NAME_PX)}px ${inks.font}`;
     const nameWide = paint.measureText(chord.name).width;
     const words = Math.min(Math.max(left, 0) + CHORD_WORDS_IN_PX, right - CHORD_WORDS_IN_PX - nameWide);

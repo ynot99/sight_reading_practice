@@ -533,14 +533,15 @@ describe('painting the ruler and the pedal', () => {
 
 describe('painting the chords the notes make', () => {
   /** A scene with these chords in its lane, each a block from one second to another. */
-  const withChords = (chords: readonly [number, number, string, string, boolean][]): RollScene => ({
+  const withChords = (chords: readonly [number, number, string, string, boolean, boolean?][]): RollScene => ({
     ...sceneOf(roll({ beats: barsOfFour(4) })),
-    chords: chords.map(([from, until, name, numeral, exactly]) => ({
+    chords: chords.map(([from, until, name, numeral, exactly, chosen]) => ({
       fromMs: from * 1000,
       untilMs: until * 1000,
       name,
       numeral,
       exactly,
+      chosen: chosen === true,
       says: name,
     })),
   });
@@ -578,6 +579,14 @@ describe('painting the chords the notes make', () => {
     const further = surface(700, 30);
     paintTheChords(further.surface, withChords([[0, 2, 'Dm7', 'ii7', true]]), at({ scrolledPx: 260 }), INKS, 1);
     expect(further.recorder.inked('chord-name').map(({ x }) => x)).toEqual([2 * 140 - 260 - 1 - 5 - 18]);
+  });
+
+  it('rims a chord whose notes are chosen as a chosen note is rimmed', () => {
+    const { surface: canvas, recorder } = surface(700, 30);
+
+    paintTheChords(canvas, withChords([[0, 2, 'C', 'I', true, true], [2, 4, 'Am', 'vi', true]]), at(), INKS, 1);
+
+    expect(recorder.marks.filter((mark) => mark.how === 'stroke').map((mark) => mark.ink)).toEqual(['chosen', 'chord-edge']);
   });
 
   it('leaves the words out of a block too short to hold them, and the degree out of one that holds only the name', () => {

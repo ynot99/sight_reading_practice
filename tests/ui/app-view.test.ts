@@ -8227,40 +8227,80 @@ describe('AppView', () => {
       expect(lane()).toEqual(['0-2000 C I', '2000-4000 Am vi']);
 
       // A pointer resting on one is told what it is.
-      const canvas = element('roll-body').querySelector<HTMLCanvasElement>('.roll__chords > .roll__paint');
+      // Asked for each time: the drawing is drawn again as notes are chosen.
+      const theLane = (): HTMLCanvasElement => {
+        const found = element('roll-body').querySelector<HTMLCanvasElement>('.roll__chords > .roll__paint');
+        if (found === null) {
+          throw new Error('No lane of chords.');
+        }
+        return found;
+      };
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
-      canvas?.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 2.5 * zoom }));
-      expect(canvas?.title).toBe('Am (vi): the chord the notes here make');
+      theLane().dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 2.5 * zoom }));
+      expect(theLane().title).toBe('Am (vi): the chord the notes here make');
 
       // Nothing on it is a note: a press there over where a note's row would
-      // be, read off the grid as a point is, takes hold of none, deletes none,
-      // and a second tap writes none.
+      // be, read off the grid as a point is, takes hold of none and deletes
+      // none, and a second tap writes none - over a chord it is the chord's.
       const highest = view.rollScene?.highest ?? 0;
       const scrolledDown =
         Number.parseFloat(
           element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
         ) || 0;
       const overE4 = { clientX: 1.2 * zoom, clientY: (highest - 64 + 0.5) * 13 - scrolledDown };
-      const notes = (): number => (sketches.list()[0]?.events ?? []).filter((event) => event.kind === 'noteOn').length;
-      const chosen = (): number => (view.rollScene?.notes ?? []).filter((note) => note.chosen === true).length;
-      expect(notes()).toBe(6);
-      if (canvas === null) {
-        throw new Error('No lane of chords.');
-      }
-      tapTheDrawing({ pointerType: 'mouse', button: 0, ...overE4 }, canvas);
-      tapTheDrawing({ pointerType: 'mouse', button: 0, ...overE4 }, canvas);
-      canvas.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, ...overE4 }));
-      canvas.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse', ...overE4 }));
-      // Nor over a row with no note, where two taps on the grid write one.
       const overD4 = { ...overE4, clientY: overE4.clientY + 2 * 13 };
-      tapTheDrawing({ pointerType: 'mouse', button: 0, ...overD4 }, canvas);
-      tapTheDrawing({ pointerType: 'mouse', button: 0, ...overD4 }, canvas);
-      expect([notes(), chosen()]).toEqual([6, 0]);
-      expect(element('roll-body').dataset['grip']).toBeUndefined();
+      const notes = (): number => (sketches.list()[0]?.events ?? []).filter((event) => event.kind === 'noteOn').length;
+      const chosenKeys = (): number[][] =>
+        (view.rollScene?.notes ?? [])
+          .filter((note) => note.chosen === true)
+          .map((note) => [note.fromMs, highest - note.row])
+          .sort(([a = 0, x = 0], [b = 0, y = 0]) => a - b || x - y);
+      const marker = (): string | undefined =>
+        element('roll-body').querySelector<HTMLElement>('.roll__place-mark')?.style.getPropertyValue('--roll-at');
+      const cChosen = [
+        [0, 60],
+        [0, 64],
+        [0, 67],
+      ];
+      expect(notes()).toBe(6);
+      for (const over of [overE4, overD4]) {
+        tapTheDrawing({ pointerType: 'mouse', button: 0, ...over }, theLane());
+        tapTheDrawing({ pointerType: 'mouse', button: 0, ...over }, theLane());
+        theLane().dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, ...over }));
+        theLane().dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse', ...over }));
+        expect(notes()).toBe(6);
+        expect(chosenKeys()).toEqual(cChosen);
+        expect(element('roll-body').dataset['grip']).toBeUndefined();
+      }
+      // Past the last chord, the same: nothing written, the choice let go of
+      // and the marker where it was tapped.
+      const pastTheChords = { ...overD4, clientX: 4.5 * zoom };
+      tapTheDrawing({ pointerType: 'mouse', button: 0, ...pastTheChords }, theLane());
+      tapTheDrawing({ pointerType: 'mouse', button: 0, ...pastTheChords }, theLane());
+      expect(notes()).toBe(6);
+      expect(marker()).toBe('4.500');
       // And the same press on the grid is on the note.
       const grid = element('roll-body').querySelector<HTMLElement>('.roll__grid > .roll__paint');
       grid?.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse', ...overE4 }));
       expect(element('roll-body').dataset['grip']).toBe('note');
+
+      // A tap on a chord chooses its notes, rims it, and puts the marker where it begins.
+      const overAm = { clientX: 2.5 * zoom, clientY: overE4.clientY };
+      tapTheDrawing({ pointerType: 'touch', button: 0, ...overAm }, theLane());
+      expect(chosenKeys()).toEqual([
+        [2000, 57],
+        [2000, 60],
+        [2000, 64],
+      ]);
+      expect((view.rollScene?.chords ?? []).map((chord) => chord.chosen)).toEqual([false, true]);
+      expect(marker()).toBe('2.000');
+      // With a key held, the other's added to them; without, chosen alone.
+      tapTheDrawing({ pointerType: 'mouse', button: 0, ctrlKey: true, ...overE4 }, theLane());
+      expect(chosenKeys()).toHaveLength(6);
+      expect((view.rollScene?.chords ?? []).map((chord) => chord.chosen)).toEqual([true, true]);
+      expect(marker()).toBe('0.000');
+      tapTheDrawing({ pointerType: 'mouse', button: 0, ...overE4 }, theLane());
+      expect(chosenKeys()).toEqual(cChosen);
 
       // Put away, and listening rather than editing, there is no lane.
       element<HTMLButtonElement>('roll-chords-open').click();

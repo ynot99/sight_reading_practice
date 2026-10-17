@@ -325,6 +325,13 @@ const FAINTEST_NOTE = 0.3;
  * is an outline nobody can see. His: "чи можеш зробити ghost ноти щоб вони
  * малювалися поверх моїх нот".
  */
+/** A note that would be written - by a chord pressed in the drawer - and where, from the drawing's beginning. */
+export interface NoteShownAhead {
+  readonly row: number;
+  readonly fromMs: number;
+  readonly untilMs: number;
+}
+
 export function paintTheGrid(
   surface: Surface,
   scene: RollScene,
@@ -332,6 +339,7 @@ export function paintTheGrid(
   inks: RollInks,
   density: number,
   soundingRows: readonly number[] = [],
+  ahead: readonly NoteShownAhead[] = [],
 ): void {
   const ready = readied(surface, density);
   if (ready === null) {
@@ -488,6 +496,23 @@ export function paintTheGrid(
     box(paint, left + 0.5, y(ghost.row) + 0.5, span - 1, rowPx - 1, CORNER_PX);
     paint.stroke();
   }
+
+  // The notes a chord would be written as, before it is: rimmed as a chosen
+  // note is, in the accent and no verdict, but dashed and empty, as nothing
+  // is there yet. Over everything, so a note already there shows through.
+  paint.strokeStyle = inks.chosen;
+  paint.lineWidth = CHOSEN_RIM_PX;
+  paint.setLineDash(DASHES);
+  for (const note of ahead) {
+    if (!shows(note.row)) {
+      continue;
+    }
+    const inset = CHOSEN_RIM_PX / 2;
+    box(paint, x(note.fromMs) + inset, y(note.row) + inset, wide(note.fromMs, note.untilMs) - CHOSEN_RIM_PX, rowPx - CHOSEN_RIM_PX, CORNER_PX);
+    paint.stroke();
+  }
+  paint.setLineDash([]);
+  paint.lineWidth = 1;
 }
 
 /** How tall a tick on the ruler stands, and how wide: tall for a bar, short for a beat. */

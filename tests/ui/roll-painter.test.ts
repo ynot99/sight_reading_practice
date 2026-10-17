@@ -182,6 +182,46 @@ describe('painting the grid', () => {
     expect(rim?.wide).toBeCloseTo(68, 6);
   });
 
+  it('rims the notes a chord would be written as where they would go, dashed in the accent, over everything', () => {
+    const scene = theSceneOfTheRoll({
+      roll: roll({ presses: [press({ verdict: null })] }),
+      barLabel: () => null,
+    });
+    const { surface: canvas, recorder } = surface();
+
+    paintTheGrid(canvas, scene, at(), INKS, 1, [], [
+      { row: 1, fromMs: 500, untilMs: 1_000 },
+      { row: 3, fromMs: 500, untilMs: 1_000 },
+      // Off the drawing, below its last row: not painted.
+      { row: 1_000, fromMs: 500, untilMs: 1_000 },
+    ]);
+
+    const ahead = recorder.inked('chosen');
+    expect(ahead.map((mark) => [mark.how, mark.y, mark.tall, mark.corners])).toEqual([
+      ['stroke', 1 * 14 + 1, 12, 2],
+      ['stroke', 3 * 14 + 1, 12, 2],
+    ]);
+    expect(ahead.every((mark) => (mark.dashes ?? []).length > 0)).toBe(true);
+    // Half a second in, at 140 pixels a second, inside its own edge.
+    expect(ahead[0]?.x).toBeCloseTo(71, 6);
+    expect(ahead[0]?.wide).toBeCloseTo(68, 6);
+    // The last thing painted.
+    expect(recorder.marks.slice(-2)).toEqual(ahead);
+    // And the next painting of the same canvas, which keeps how it was left, dashes nothing it did not.
+    const chosen = theSceneOfTheRoll({
+      roll: roll({ presses: [press({ verdict: null })] }),
+      barLabel: () => null,
+      chosen: [{ midi: press({}).midi, downAtMs: press({}).downAtMs }],
+    });
+    recorder.marks.length = 0;
+    paintTheGrid(canvas, chosen, at(), INKS, 1);
+    expect(recorder.inked('chosen').map((mark) => mark.dashes)).toEqual([[]]);
+    // None asked for, none painted.
+    const { surface: again, recorder: bare } = surface();
+    paintTheGrid(again, scene, at(), INKS, 1);
+    expect(bare.inked('chosen')).toEqual([]);
+  });
+
   it('fills a note nothing judged by the hand that plays it, as strongly as it was struck', () => {
     const presses = [
       // Said: the left hand, though its pitch is the right's.

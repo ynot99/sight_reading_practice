@@ -7297,6 +7297,95 @@ describe('AppView', () => {
       }
     });
 
+    it('shows the notes of a chord pointed at where it would write them, and writes them there', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      sketches.begin(
+        {
+          events: Array.from({ length: 16 }, (_, at) => [
+            { kind: 'noteOn' as const, atMs: at * 500, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: at * 500 + 400, midi: 60 },
+          ]).flat(),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Ahead',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      element<HTMLButtonElement>('roll-chords-open').click();
+      const chords = (): HTMLElement[] => [...element('roll-chords-list').querySelectorAll<HTMLElement>('[data-chord]')];
+      const over = (on: Element, init: PointerEventInit = {}): void => {
+        on.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse', ...init }));
+      };
+      const out = (from: Element, to: Element | null): void => {
+        from.dispatchEvent(new PointerEvent('pointerout', { bubbles: true, pointerType: 'mouse', relatedTarget: to }));
+      };
+      const ahead = (): string[] =>
+        view.rollNotesShownAhead.map((note) => `${String(note.fromMs)}-${String(note.untilMs)}:${String(note.row)}`).sort();
+      const notesAt = (fromMs: number): string[] =>
+        (view.rollScene?.notes ?? [])
+          .filter((note) => note.fromMs === fromMs)
+          .map((note) => `${String(note.fromMs)}-${String(note.untilMs)}:${String(note.row)}`)
+          .sort();
+      // The cursor on the fourth beat, between the notes already there.
+      tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: 1.55 * zoom, clientY: 20 });
+
+      expect(ahead()).toEqual([]);
+      const first = chords()[0];
+      if (first === undefined) {
+        throw new Error('expected a chord in the drawer');
+      }
+      // Pointed at: its notes where it would write them, from the cursor's line to the next.
+      over(first.querySelector('span') ?? first);
+      const shown = ahead();
+      expect(shown.length).toBeGreaterThan(1);
+      expect(shown.every((note) => note.startsWith('1500-2000:'))).toBe(true);
+      // Written: exactly those, and, still pointed at, shown where the next would go.
+      const before = notesAt(1_500);
+      first.click();
+      expect(notesAt(1_500).filter((note) => !before.includes(note))).toEqual(shown.filter((note) => !before.includes(note)));
+      expect(ahead().every((note) => note.startsWith('2000-2500:'))).toBe(true);
+      // A key already sounding where it would go is not shown, as it is not written:
+      // middle C sounds from two seconds.
+      const cRow = (view.rollScene?.highest ?? 0) - 60;
+      expect(ahead()).not.toContain(`2000-2500:${String(cRow)}`);
+
+      // Moved onto the next chord, its notes; off them all, none.
+      const second = chords()[1];
+      if (second === undefined) {
+        throw new Error('expected a second chord');
+      }
+      out(first, second);
+      over(second);
+      expect(ahead()).not.toEqual([]);
+      expect(ahead()).not.toEqual(shown.map((note) => note.replace('1500-2000', '2000-2500')));
+      out(second, element('roll-body'));
+      expect(ahead()).toEqual([]);
+      // Moving between the parts of one chord's button keeps it.
+      over(second);
+      const inside = second.querySelector('span');
+      out(second, inside);
+      expect(ahead()).not.toEqual([]);
+
+      // Deleting kept chords, or put away, the drawer shows nothing ahead -
+      // at once, under a pointer that has not moved.
+      element<HTMLButtonElement>('roll-chords-keep').click();
+      over(chords()[0] ?? first);
+      expect(ahead()).not.toEqual([]);
+      element<HTMLButtonElement>('roll-chords-forget').click();
+      expect(ahead()).toEqual([]);
+      over(chords()[0] ?? first);
+      expect(ahead()).toEqual([]);
+      element<HTMLButtonElement>('roll-chords-forget').click();
+      over(chords()[1] ?? second);
+      expect(ahead()).not.toEqual([]);
+      element<HTMLButtonElement>('roll-chords-open').click();
+      expect(ahead()).toEqual([]);
+    });
+
     it('lays a slice of whole bars on the ruler by a press held and dragged, or a click with a key held, and takes it away by a press held on it', async () => {
       const { view, sketches } = createRig();
       await view.initialize();

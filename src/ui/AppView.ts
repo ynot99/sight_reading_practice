@@ -231,6 +231,7 @@ import {
 import {
   paintThePedal,
   paintTheGrid,
+  type NoteShownAhead,
   paintTheRuler,
   theInksOf,
   type RollInks,
@@ -2068,6 +2069,10 @@ export class AppView {
   private keyHeldOnTheStrip: { readonly pointerId: number; readonly midi: number } | null = null;
   /** The rows of the keys sounding now: see `lightTheSoundingRows`. */
   private soundingRows: readonly number[] = [];
+  /** The chord of the drawer the pointer is on, by its place there, whose notes are shown where it would write them; or none. */
+  private chordPointedAt: number | null = null;
+  /** Those notes, where they would go: painted dashed over the drawing until the pointer leaves the chord. */
+  private notesShownAhead: readonly NoteShownAhead[] = [];
   /** What the rows sounding last were, so a frame that changes nothing draws nothing. */
   private soundingRowsSaid = '';
   /** The stretch of the run the map down the side last marked, to mark again when a key sounds. */
@@ -6418,6 +6423,11 @@ export class AppView {
     return this.drawnScene;
   }
 
+  /** And the notes it shows ahead, where a chord pointed at would write them: see `showTheChordAhead`. */
+  get rollNotesShownAhead(): readonly NoteShownAhead[] {
+    return this.notesShownAhead;
+  }
+
   /** True while the reader is being given their look at the page. */
   get isPreviewing(): boolean {
     return this.previewTimer !== null;
@@ -9461,6 +9471,18 @@ export class AppView {
     });
     this.listen(this.el.rollChordsList, 'pointerdown', (event) => {
       this.pointerOnTheChords = event.pointerType;
+    });
+    // Over a chord - a mouse resting on it, or a finger on it until it is
+    // lifted - its notes are shown where it would write them. Let go of, a
+    // finger leaves it, and the click writes them there.
+    this.listen(this.el.rollChordsList, 'pointerover', (event) => {
+      const chord = (event.target as Element | null)?.closest<HTMLElement>('[data-chord]');
+      this.pointAtTheChord(chord === null || chord === undefined ? null : Number(chord.dataset['chord']));
+    });
+    this.listen(this.el.rollChordsList, 'pointerout', (event) => {
+      const into = (event as PointerEvent).relatedTarget;
+      const chord = into instanceof Element ? into.closest<HTMLElement>('[data-chord]') : null;
+      this.pointAtTheChord(chord === null || !this.el.rollChordsList.contains(chord) ? null : Number(chord.dataset['chord']));
     });
     // The right button deletes a chord kept, as it deletes a note on the
     // drawing; a finger held there asks for nothing.
@@ -12752,6 +12774,7 @@ export class AppView {
     this.el.rollChordsOpen.setAttribute('aria-label', this.el.rollChordsOpen.title);
     this.el.rollChords.hidden = !open;
     if (!open || stored === null || sketch === undefined) {
+      this.pointAtTheChord(null);
       return;
     }
     const keyHere = this.theKeyAtTheHead(stored);
@@ -12820,6 +12843,10 @@ export class AppView {
     const keeping = this.whatKeepingWouldDo();
     this.el.rollChordsKeep.textContent = keeping.lettingGo ? '\u2212' : '+';
     sayWhetherIdle(this.el.rollChordsKeep, keeping.says, keeping.idle);
+    // The cursor moved on, the chords of another key, or the drawer deleting: what is shown ahead follows.
+    if (this.chordPointedAt !== null) {
+      this.showTheChordAhead();
+    }
   }
 
   /**
@@ -13061,12 +13088,43 @@ export class AppView {
    * it already sounding there is left out, as a paste leaves it.
    */
   private writeTheChordAtTheHead(at: number): void {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const written = this.theChordWrittenAtTheHead(at);
+    if (sketch === undefined || stored === null || written === null || written.pasted.length === 0) {
+      return;
+    }
+    const { events, pasted, fromMs, untilMs, velocity } = written;
+    const now = this.runtime.clock.now();
+    for (const { midi } of pasted) {
+      this.runtime.pitchPlayer.play(midi, velocity, now);
+      this.runtime.pitchPlayer.stop(midi, now + (untilMs - fromMs));
+    }
+    this.changeTheSketchShowing(events, [...sketch.before, asItWas(stored, sketch.chosen)], pasted);
+    // Moved on, the cursor takes what is shown ahead with it: see `showTheChordsOfTheKey`.
+    this.putTheHeadAt(untilMs);
+  }
+
+  /**
+   * What a chord of the drawer would make of the sketch, written where the
+   * cursor is: its notes from the line of the grid the cursor is in, where
+   * the marker is put on one, to the next, as loud as the sketch is on the
+   * whole - the sketch with them, the keys of it put in, and where they go.
+   * One answer, for writing it and for showing it ahead.
+   */
+  private theChordWrittenAtTheHead(at: number): {
+    readonly events: readonly MidiFileEvent[];
+    readonly pasted: readonly KeyNamed[];
+    readonly fromMs: number;
+    readonly untilMs: number;
+    readonly velocity: number;
+  } | null {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
     const chord = stored === null ? undefined : this.theChordsInTheDrawer(this.theKeyAtTheHead(stored))[at];
     if (showing === null || sketch === undefined || stored === null || chord === undefined) {
-      return;
+      return null;
     }
     const roll = showing.roll;
     const origin = rollBeganAtMs(roll);
@@ -13080,16 +13138,29 @@ export class AppView {
       chord.midis.map((midi) => ({ afterMs: 0, lengthMs: untilMs - fromMs, midi, velocity })),
       fromMs + origin,
     );
-    if (pasted.length === 0) {
-      return;
-    }
-    const now = this.runtime.clock.now();
-    for (const { midi } of pasted) {
-      this.runtime.pitchPlayer.play(midi, velocity, now);
-      this.runtime.pitchPlayer.stop(midi, now + (untilMs - fromMs));
-    }
-    this.changeTheSketchShowing(events, [...sketch.before, asItWas(stored, sketch.chosen)], pasted);
-    this.putTheHeadAt(untilMs);
+    return { events, pasted, fromMs, untilMs, velocity };
+  }
+
+  /** Points at a chord of the drawer, or at none, and shows its notes where it would write them. */
+  private pointAtTheChord(at: number | null): void {
+    this.chordPointedAt = at;
+    this.showTheChordAhead();
+  }
+
+  /**
+   * Shows the notes of the chord pointed at where it would write them - the
+   * keys it would put in, and none already sounding there - or none while
+   * the drawer is deleting what it keeps. Put away, it points at none.
+   */
+  private showTheChordAhead(): void {
+    const at = this.chordPointedAt;
+    const scene = this.drawnScene;
+    const written = at === null || scene === null || this.chordsBeingForgotten ? null : this.theChordWrittenAtTheHead(at);
+    this.notesShownAhead =
+      written === null || scene === null
+        ? []
+        : written.pasted.map((key) => ({ row: scene.highest - key.midi, fromMs: written.fromMs, untilMs: written.untilMs }));
+    this.paintTheRoll();
   }
 
   /**
@@ -15277,6 +15348,7 @@ export class AppView {
       this.rollInks,
       density,
       this.soundingRows,
+      this.notesShownAhead,
     );
     paintTheRuler(sized(canvases.ruler, scrolled.viewWidePx, look.rulerTallPx), scene, view, this.rollInks, density);
     paintThePedal(sized(canvases.pedal, scrolled.viewWidePx, look.pedalTallPx), scene, view, this.rollInks, density);

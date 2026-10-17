@@ -3991,8 +3991,8 @@ describe('AppView', () => {
       }
     });
 
-    it('sounds a key of the strip beside a sketch while the mouse holds it, a finger\'s tap for a moment, and outlines the keys of the chosen notes', async () => {
-      const { view, sketches, instrument, clock } = createRig();
+    it('sounds a key of the strip beside a sketch while it is held, and each key it is slid to, and outlines the keys of the chosen notes', async () => {
+      const { view, sketches, instrument } = createRig();
       await view.initialize();
       const sketch = sketches.begin(
         {
@@ -4046,18 +4046,49 @@ describe('AppView', () => {
       }
       expect(heard()).toHaveLength(1);
 
-      // A finger moves the drawing from it as ever, and its tap is heard for a moment.
+      // A finger holds it as the mouse does; slid, it sounds each key it comes
+      // to in turn, letting go of the one before - by height alone, so strayed
+      // onto the drawing it goes on, and past the top it stays on the top key.
       instrument.played.length = 0;
       instrument.stopped.length = 0;
-      press('pointerdown', keyOf(65), { pointerType: 'touch', pointerId: 72 });
-      expect(heard()).toEqual([]);
-      press('pointerup', keyOf(65), { pointerType: 'touch', pointerId: 72 });
-      const now = clock.now();
-      keyOf(65).dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      expect(heard()).toEqual([[65, 0.5, now]]);
-      expect(ended()).toEqual([[65, now + 300]]);
+      const highest = view.rollScene?.highest ?? 0;
+      const scrolledDown =
+        Number.parseFloat(body.querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0') || 0;
+      const heightOf = (midi: number): number => (highest - midi + 0.5) * 13 - scrolledDown;
+      const finger = (type: string, on: Element, clientY: number, clientX = 5): void => {
+        press(type, on, { pointerType: 'touch', pointerId: 72, clientX, clientY });
+      };
+      finger('pointerdown', keyOf(65), heightOf(65));
+      expect(heard()).toEqual([[65, 0.5, undefined]]);
+      finger('pointermove', body, heightOf(65) + 4);
+      expect(heard()).toHaveLength(1);
+      finger('pointermove', body, heightOf(64), 300);
+      finger('pointermove', body, heightOf(63), 300);
+      expect(heard().map(([midi]) => midi)).toEqual([65, 64, 63]);
+      expect(ended()).toEqual([
+        [65, undefined],
+        [64, undefined],
+      ]);
+      expect([keyOf(63).dataset['sounding'], keyOf(65).dataset['sounding']]).toEqual(['true', undefined]);
+      const lowest = highest - (view.rollScene?.rows ?? 0) + 1;
+      finger('pointermove', body, heightOf(lowest - 40));
+      expect(heard().at(-1)?.[0]).toBe(lowest);
+      finger('pointermove', body, -scrolledDown - 500);
+      expect(heard().at(-1)?.[0]).toBe(highest);
+      finger('pointerup', body, -scrolledDown - 500);
+      body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(ended().at(-1)).toEqual([highest, undefined]);
       expect(sketches.find(sketch.id)?.events).toEqual(events);
       expect(headAt(body)).toBe(head);
+      // A second finger makes it a pinch, and the key is let go of.
+      finger('pointerdown', keyOf(65), heightOf(65));
+      body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 73, pointerType: 'touch', clientX: 300, clientY: 100 }));
+      expect(ended().at(-1)).toEqual([65, undefined]);
+      finger('pointermove', body, heightOf(60));
+      expect(heard().at(-1)?.[0]).toBe(65);
+      for (const pointerId of [72, 73]) {
+        body.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId, pointerType: 'touch' }));
+      }
 
       // The key of a chosen note outlined, and only while it is chosen.
       document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'a', code: 'KeyA', ctrlKey: true }));

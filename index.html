@@ -775,35 +775,6 @@
               Each name with what it names, so a row that wraps on a phone
               never leaves a word on one line and its slider on the next.
             -->
-            <!--
-              The key the sketch is written in, which its notes are spelt in:
-              its tonic, and its scale - the two minors beside the plain one,
-              and the modes - whose notes' rows are lit on the drawing.
-            -->
-            <span class="roll-velocity__group">
-              <label class="roll-velocity__name" for="roll-key">Key</label>
-              <select id="roll-key" class="roll-velocity__key"></select>
-              <select id="roll-scale" class="roll-velocity__key" title="Scale" aria-label="Scale"></select>
-            </span>
-            <!-- The metre it is written in: the notes stay put, the bars move. -->
-            <span class="roll-velocity__group">
-              <label class="roll-velocity__name" for="roll-metre">Time</label>
-              <select id="roll-metre" class="roll-velocity__key"></select>
-            </span>
-            <!-- Its pace, in crotchets a minute: the notes keep their beats and go faster or slower. -->
-            <span class="roll-velocity__group">
-              <label class="roll-velocity__name" for="roll-tempo">♩ =</label>
-              <input
-                id="roll-tempo"
-                class="number-input"
-                type="number"
-                min="20"
-                max="400"
-                step="1"
-                inputmode="numeric"
-                title="Crotchets a minute"
-              />
-            </span>
             <span class="roll-velocity__group roll-velocity__group--wide">
               <label class="roll-velocity__name" for="roll-velocity-level">Velocity</label>
               <!--
@@ -908,6 +879,49 @@
               title="Close" aria-label="Close">&times;</button>
           </div>
           <div class="controls controls--stacked">
+            <!--
+              Where a sketch being edited begins: its key, its metre and its
+              pace. Set once and then left, so they stand here rather than
+              in the row under the drawing, which holds what is pressed
+              while editing; the first flag over the ruler asks the same.
+            -->
+            <div id="roll-sketch-start" class="control-group" hidden>
+              <span class="control-group__label">Where the sketch begins</span>
+              <div class="roll-mark__fields">
+                <!--
+                  The key the sketch is written in, which its notes are spelt in:
+                  its tonic, and its scale - the two minors beside the plain one,
+                  and the modes - whose notes' rows are lit on the drawing.
+                -->
+                <span class="roll-velocity__group">
+                  <label class="roll-velocity__name" for="roll-key">Key</label>
+                  <select id="roll-key" class="roll-velocity__key"></select>
+                  <select id="roll-scale" class="roll-velocity__key" title="Scale" aria-label="Scale"></select>
+                </span>
+                <!-- The metre it is written in: the notes stay put, the bars move. -->
+                <span class="roll-velocity__group">
+                  <label class="roll-velocity__name" for="roll-metre">Time</label>
+                  <select id="roll-metre" class="roll-velocity__key"></select>
+                </span>
+                <!-- Its pace, in crotchets a minute: the notes keep their beats and go faster or slower. -->
+                <span class="roll-velocity__group">
+                  <label class="roll-velocity__name" for="roll-tempo">♩ =</label>
+                  <input
+                    id="roll-tempo"
+                    class="number-input"
+                    type="number"
+                    min="20"
+                    max="400"
+                    step="1"
+                    inputmode="numeric"
+                    title="Crotchets a minute"
+                  />
+                </span>
+              </div>
+              <p class="hint">The first flag over the ruler changes these too, and
+                a flag further on changes them from its bar.</p>
+            </div>
+
             <div class="control-group">
               <label for="roll-grid">Grid</label>
               <select id="roll-grid">

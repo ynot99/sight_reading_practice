@@ -5051,6 +5051,20 @@ describe('AppView', () => {
       expect(element('roll-title').textContent).toBe('Waltz');
       expect(element('roll-edit').getAttribute('aria-pressed')).toBe('true');
       expect(element('roll-velocity').hidden).toBe(false);
+      // Where it begins - its key, metre and pace - is in the options, set
+      // once, and not in the row of what is pressed while editing; listened
+      // to, it is not there at all.
+      const start = element('roll-sketch-start');
+      expect(start.hidden).toBe(false);
+      expect(start.closest('#sheet-roll-options')).not.toBeNull();
+      for (const id of ['roll-key', 'roll-scale', 'roll-metre', 'roll-tempo']) {
+        expect(start.contains(element(id)), id).toBe(true);
+        expect(element('roll-velocity').contains(element(id)), id).toBe(false);
+      }
+      element<HTMLButtonElement>('roll-edit').click();
+      expect(start.hidden).toBe(true);
+      element<HTMLButtonElement>('roll-edit').click();
+      expect(start.hidden).toBe(false);
 
       // Shut unchanged, the page stays as it was written.
       element<HTMLButtonElement>('roll-close').click();

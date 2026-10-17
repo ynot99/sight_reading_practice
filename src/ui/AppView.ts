@@ -2416,6 +2416,7 @@ export class AppView {
     rollVelocityTicks: HTMLElement;
     rollVelocitySaid: HTMLOutputElement;
     rollHands: HTMLElement;
+    rollSketchStart: HTMLElement;
     rollKey: HTMLSelectElement;
     rollScale: HTMLSelectElement;
     rollMetre: HTMLSelectElement;
@@ -2809,6 +2810,7 @@ export class AppView {
       rollVelocityTicks: requireElement(doc, 'roll-velocity-ticks'),
       rollVelocitySaid: requireElement(doc, 'roll-velocity-said'),
       rollHands: requireElement(doc, 'roll-hands'),
+      rollSketchStart: requireElement(doc, 'roll-sketch-start'),
       rollKey: requireElement(doc, 'roll-key'),
       rollScale: requireElement(doc, 'roll-scale'),
       rollMetre: requireElement(doc, 'roll-metre'),
@@ -13099,6 +13101,8 @@ export class AppView {
     const sketch = this.theOtherRollShowing?.sketch;
     this.el.rollPassage.hidden = sketch !== undefined;
     this.el.rollVelocity.hidden = sketch?.editing !== true;
+    // Where it begins, in the options, while it is edited as well.
+    this.el.rollSketchStart.hidden = sketch?.editing !== true;
     const key = sketch === undefined ? null : this.runtime.sketches.find(sketch.id)?.key;
     if (key !== undefined && key !== null) {
       this.sayTheKeyOfTheSketch(key);

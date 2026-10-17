@@ -4277,6 +4277,29 @@ body[data-take-on-keys='true'] .focus-bar__row > #focus-speed {
 }
 
 /*
+ * And on a screen up to a tablet's or a laptop's, the whole of it: there the
+ * edge left round the drawing was room it had to do without, and the cross
+ * and Escape are ways out enough. A desk monitor has room to spare, and keeps
+ * its edge. Clear of a phone's notch and corners by the panel's own padding,
+ * which `max` keeps where it was wherever the screen keeps nothing back.
+ */
+@media (max-width: 1366px) {
+  .sheet--room {
+    padding: 0;
+  }
+
+  .sheet__panel--room {
+    --sheet-height: 100%;
+    width: 100%;
+    padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px))
+      max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
+/*
  * Today, in the corner of the page.
  *
  * Top right, which is the one corner nothing else uses: the engraver writes

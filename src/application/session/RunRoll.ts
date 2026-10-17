@@ -750,6 +750,17 @@ export function momentOfTicks(
   positionTicks: number,
   edge: MusicalEdge = 'starts',
 ): number | null {
+  return theMomentsOfTicks(roll)(positionTicks, edge);
+}
+
+/**
+ * `momentOfTicks` for many places of one roll: the clicks read once, and
+ * each place found among them by halving. Asked afresh for each note, a
+ * score of thousands of notes read its hundreds of clicks thousands of
+ * times over, and choosing notes on its drawing, which draws it again,
+ * took seconds.
+ */
+export function theMomentsOfTicks(roll: RunRoll): (positionTicks: number, edge?: MusicalEdge) => number | null {
   const began = rollBeganAtMs(roll);
   // Two moments per place: when the beat fell, and when the reader took it.
   // They differ only at a bar line that waited, and that is the whole point.
@@ -763,26 +774,44 @@ export function momentOfTicks(
     taken.set(beat.positionTicks, at);
   }
   const places = [...fell.keys()].sort((left, right) => left - right);
-  const exactly = edge === 'ends' ? fell.get(positionTicks) : taken.get(positionTicks);
-  if (exactly !== undefined) {
-    return exactly;
+  return (positionTicks, edge = 'starts') => {
+    const exactly = edge === 'ends' ? fell.get(positionTicks) : taken.get(positionTicks);
+    if (exactly !== undefined) {
+      return exactly;
+    }
+    // The pair to measure between: the one the position falls inside, or the
+    // nearest pair at whichever end it lies beyond.
+    const firstPast = theFirstPast(places, positionTicks);
+    let index = firstPast - 1;
+    if (index < 0 || firstPast === places.length) {
+      index = positionTicks <= (places[0] ?? 0) ? 0 : places.length - 2;
+    }
+    const from = places[index];
+    const to = places[index + 1];
+    // Which is also how a run with fewer than two clicks answers: there is no
+    // pair, so there is nothing to measure between and nothing to say.
+    if (from === undefined || to === undefined || to === from) {
+      return null;
+    }
+    const atFrom = taken.get(from) ?? 0;
+    const atTo = fell.get(to) ?? 0;
+    return atFrom + ((positionTicks - from) * (atTo - atFrom)) / (to - from);
+  };
+}
+
+/** Where the first of some places in order lies past a position, or how many there are where none does. */
+function theFirstPast(places: readonly number[], positionTicks: number): number {
+  let low = 0;
+  let high = places.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if ((places[middle] ?? 0) > positionTicks) {
+      high = middle;
+    } else {
+      low = middle + 1;
+    }
   }
-  // The pair to measure between: the one the position falls inside, or the
-  // nearest pair at whichever end it lies beyond.
-  let index = places.findIndex((place) => place > positionTicks) - 1;
-  if (index < 0) {
-    index = positionTicks <= (places[0] ?? 0) ? 0 : places.length - 2;
-  }
-  const from = places[index];
-  const to = places[index + 1];
-  // Which is also how a run with fewer than two clicks answers: there is no
-  // pair, so there is nothing to measure between and nothing to say.
-  if (from === undefined || to === undefined || to === from) {
-    return null;
-  }
-  const atFrom = taken.get(from) ?? 0;
-  const atTo = fell.get(to) ?? 0;
-  return atFrom + ((positionTicks - from) * (atTo - atFrom)) / (to - from);
+  return low;
 }
 
 /**

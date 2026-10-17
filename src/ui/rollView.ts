@@ -1,6 +1,6 @@
 import {
   beatsWorthMarking,
-  momentOfTicks,
+  theMomentsOfTicks,
   rollBeganAtMs,
   rollEndedAtMs,
   theGrid,
@@ -185,13 +185,14 @@ interface PlacedGhost {
 function placedGhosts(roll: RunRoll, ghosts: readonly RollGhost[]): PlacedGhost[] {
   const lastMs = rollEndedAtMs(roll) - rollBeganAtMs(roll);
   const placed: PlacedGhost[] = [];
+  const momentOf = theMomentsOfTicks(roll);
   for (const ghost of ghosts) {
     // Beginning where the beat was taken and ending where the next one fell:
     // a note is over when its time is up, not when the reader arrives. Which
     // is also what cuts it where the reader came in early - there the only
     // beat at the far end is the one they took, so the note ends there.
-    const from = momentOfTicks(roll, ghost.fromTicks, 'starts');
-    const until = momentOfTicks(roll, ghost.untilTicks, 'ends');
+    const from = momentOf(ghost.fromTicks, 'starts');
+    const until = momentOf(ghost.untilTicks, 'ends');
     if (from === null || until === null) {
       continue;
     }

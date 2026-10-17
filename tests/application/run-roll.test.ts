@@ -3,6 +3,7 @@ import {
   RollRecorder,
   beatsWorthMarking,
   momentOfTicks,
+  theMomentsOfTicks,
   theGrid,
   theRushes,
   theWaits,
@@ -916,6 +917,36 @@ describe('the beat a run was measured against', () => {
     });
 
     expect(momentOfTicks(played, Duration.QUARTER.ticks * 2)).toBe(2000);
+  });
+
+  it('places every position of a long run between the right pair of clicks, before the first and past the last as well', () => {
+    // Forty clicks a beat apart, beginning a beat in, the pace going back and
+    // forth - four tenths of a second, then six: swept a seventh of a beat at
+    // a time from before the first to past the last, every place is as far
+    // between the two clicks either side of it as it is between them in the
+    // music, and outside them, on at the pace of the nearest two.
+    const QUARTER = Duration.QUARTER.ticks;
+    const clicks = Array.from({ length: 40 }, (_, at) => ({
+      atMs: 1_000 + Math.floor(at / 2) * 1_000 + (at % 2) * 400,
+      positionTicks: (at + 1) * QUARTER,
+    }));
+    const played = roll({
+      beats: clicks.map((click, at) => beatOf(click.atMs, at === 0 ? 'downbeat' : 'beat', click.positionTicks)),
+    });
+    const origin = (momentOfTicks(played, QUARTER) ?? Number.NaN) - 1_000;
+    const momentOf = theMomentsOfTicks(played);
+    for (let position = 0; position <= 42 * QUARTER; position += QUARTER / 7) {
+      // The first click past it, or the last where none is; and never the first, which has none before it.
+      const past = clicks.findIndex((click) => click.positionTicks > position);
+      const to = Math.max(1, past === -1 ? clicks.length - 1 : past);
+      const [from, until] = [clicks[to - 1], clicks[to]];
+      const expected =
+        origin +
+        (from?.atMs ?? 0) +
+        ((position - (from?.positionTicks ?? 0)) * ((until?.atMs ?? 0) - (from?.atMs ?? 0))) / QUARTER;
+      expect(momentOf(position) ?? Number.NaN).toBeCloseTo(expected, 6);
+      expect(momentOfTicks(played, position, 'ends') ?? Number.NaN).toBeCloseTo(expected, 6);
+    }
   });
 
   it('says nothing where there are no clicks to measure between', () => {

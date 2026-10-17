@@ -42,6 +42,16 @@ class FolderDrive implements ICloudDrive {
     return found === undefined ? Promise.reject(new Error('gone')) : Promise.resolve(found.content);
   }
 
+  trash(id: string): Promise<void> {
+    this.asked();
+    for (const [name, file] of this.files) {
+      if (file.id === id) {
+        this.files.delete(name);
+      }
+    }
+    return Promise.resolve();
+  }
+
   write(name: string, content: string, replacing: string | null): Promise<CloudFile> {
     this.asked();
     const id = replacing ?? `file-${String((this.made += 1))}`;

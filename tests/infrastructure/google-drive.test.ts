@@ -188,6 +188,19 @@ describe('the trainer folder on Google Drive', () => {
     expect(replaced?.body).toBe('{"a":2}');
   });
 
+  it('puts a file in the drive\'s bin rather than deleting it outright', async () => {
+    const { drive, calls } = google({ folders: ['f'] });
+    await drive.connect();
+
+    await drive.trash('doc-id');
+
+    const trashed = calls.at(-1);
+    expect(trashed?.method).toBe('PATCH');
+    expect(trashed?.url).toContain('/drive/v3/files/doc-id?');
+    expect(trashed?.url).not.toContain('/upload/');
+    expect(JSON.parse(trashed?.body ?? '{}')).toEqual({ trashed: true });
+  });
+
   it('asks to sign in again when Google says the token is no good', async () => {
     const refusing = google({ folders: ['f'], status: 401 });
 

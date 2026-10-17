@@ -75,6 +75,15 @@ describe('the stylesheet', () => {
     expect(CSS).toMatch(/@keyframes ring-breathes/);
   });
 
+  it('keeps the two icons of a row of what only the drive has together, at their own size', () => {
+    const ways = rules().find((rule) => rule.selector === '.drive-only__ways')?.body ?? '';
+    expect(ways).toMatch(/display\s*:\s*flex/);
+    expect(ways).toMatch(/flex\s*:\s*none/);
+    // Square round the icon, over the padding `.button` gives every button and
+    // later in the sheet: a selector of its own alone would lose to it.
+    expect(rules().find((rule) => rule.selector === '.button.drive-only__way')?.body).toMatch(/padding\s*:\s*6px;/);
+  });
+
   it('lights the grade being read', () => {
     const lit = rules().find((rule) => rule.selector === ".grades__grade[aria-pressed='true']");
     expect(lit?.body).toMatch(/background\s*:\s*var\(--accent\)/);

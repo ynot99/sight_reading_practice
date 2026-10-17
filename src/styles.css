@@ -2404,6 +2404,18 @@ textarea {
   gap: 8px;
 }
 
+/* Bring it here, or take it off the drive: two icons, so the name keeps the row. */
+.drive-only__ways {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+/* Square round its icon: over `.button`'s padding, which comes later in the sheet. */
+.button.drive-only__way {
+  padding: 6px;
+}
+
 /*
  * What the device keeps, and the room left beside it, as one bar.
  *

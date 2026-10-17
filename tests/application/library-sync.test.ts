@@ -7,6 +7,7 @@ import { InMemoryScoreStore, type StoredScore } from '../../src/application/port
 class FolderDrive implements ICloudDrive {
   readonly signedIn = true;
   readonly files = new Map<string, { id: string; content: string }>();
+  writes = 0;
   private made = 0;
 
   prepare(): void {}
@@ -24,7 +25,17 @@ class FolderDrive implements ICloudDrive {
     return found === undefined ? Promise.reject(new Error('gone')) : Promise.resolve(found.content);
   }
 
+  trash(id: string): Promise<void> {
+    for (const [name, file] of this.files) {
+      if (file.id === id) {
+        this.files.delete(name);
+      }
+    }
+    return Promise.resolve();
+  }
+
   write(name: string, content: string, replacing: string | null): Promise<CloudFile> {
+    this.writes += 1;
     const id = replacing ?? `file-${String((this.made += 1))}`;
     this.files.set(name, { id, content });
     return Promise.resolve({ id, name });
@@ -76,6 +87,33 @@ describe('keeping the library the same on every device', () => {
     expect(outcome.sent).toBe(1);
     expect(drive.files.get('Clair de Lune.musicxml')?.content).toBe('<score>Clair de Lune</score>');
     expect(drive.index()[0]).toMatchObject({ title: 'Clair de Lune', stars: 6.5, markedAtMs: 2_000 });
+  });
+
+  it('takes a score off the drive: out of its list, and its document into the bin, until a device that has it sends it back', async () => {
+    const { drive, device } = await devices();
+    const pc = await device([score('City of Tears'), score('Clair de Lune')]);
+    await pc.sync.sync();
+    const ipad = await device([]);
+    const [cityOfTears] = (await ipad.sync.sync()).onlyOnTheDrive;
+    if (cityOfTears === undefined) {
+      throw new Error('listed');
+    }
+    const writes = drive.writes;
+
+    await ipad.sync.deleteFromTheDrive(cityOfTears);
+
+    expect(drive.index().map((each) => each.title)).toEqual(['Clair de Lune']);
+    expect([...drive.files.keys()].sort()).toEqual(['Clair de Lune.musicxml', 'library.json']);
+    expect((await ipad.sync.sync()).onlyOnTheDrive.map((each) => each.title)).toEqual(['Clair de Lune']);
+    // Asked again, it is gone already: the list is not written for nothing.
+    const after = drive.writes;
+    await ipad.sync.deleteFromTheDrive(cityOfTears);
+    expect(drive.writes).toBe(after);
+    expect(after).toBeGreaterThan(writes);
+    // The device that still has it sends it back.
+    await pc.sync.sync();
+    expect(drive.index().map((each) => each.title).sort()).toEqual(['City of Tears', 'Clair de Lune']);
+    expect(drive.files.has('City of Tears.musicxml')).toBe(true);
   });
 
   it('lists what only the drive has, and brings one here with its stars', async () => {

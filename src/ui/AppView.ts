@@ -1516,6 +1516,10 @@ function readPlayedNotes(value: string): PlayedNoteDisplay {
 
 /** The transport icons, as one path each so only the `d` has to change. */
 const PLAY_ICON = 'M8 5l11 7-11 7z';
+/** An arrow down onto a line: what the drive has, brought down to this device. */
+const BRING_HERE_ICON = 'M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z';
+/** A bin, as the drawing's own Delete is drawn. */
+const TRASH_ICON = 'M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z';
 const PAUSE_ICON = 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z';
 
 /** Note size, in the same steps the slider offers. */
@@ -8346,10 +8350,9 @@ export class AppView {
     );
   }
 
-  /** The scores only the drive has, each with a button to bring it here. */
   /**
-   * The sketches the drive has and this device does not, each with a button
-   * to bring it here - as the scores are offered, under a line of their own.
+   * The sketches the drive has and this device does not, each to bring here
+   * or take off the drive - as the scores are offered, under a line of their own.
    */
   private showTheSketchesOnlyTheDriveHas(sketches: readonly SketchOnTheDrive[]): void {
     const list = this.el.driveOnlySketches;
@@ -8358,93 +8361,119 @@ export class AppView {
       this.el.driveOnlySketchesSaid.hidden = list.hidden;
     };
     list.replaceChildren(
-      ...sketches.map((sketch) => {
-        const row = this.doc.createElement('li');
-        const title = this.doc.createElement('span');
-        title.textContent = `${sketch.title} · ${String(sketch.noteCount)} notes`;
-        const bring = this.doc.createElement('button');
-        bring.type = 'button';
-        bring.className = 'button button--ghost';
-        bring.textContent = 'Bring here';
-        bring.addEventListener('click', () => {
-          bring.disabled = true;
-          void this.runtime.sketchSync
-            .bringHere(sketch.id)
-            .then(() => {
-              row.remove();
-              sayWhetherAny();
+      ...sketches.map((sketch) =>
+        this.anOfferFromTheDrive({
+          said: `${sketch.title} · ${String(sketch.noteCount)} notes`,
+          name: sketch.title,
+          bring: () =>
+            this.runtime.sketchSync.bringHere(sketch.id).then(() => {
               this.renderSketches();
-            })
-            .catch((error: unknown) => {
-              bring.disabled = false;
-              this.el.driveStatus.textContent =
-                error instanceof Error ? error.message : 'That sketch could not be brought here.';
-            });
-        });
-        const remove = this.doc.createElement('button');
-        remove.type = 'button';
-        remove.className = 'button button--ghost';
-        remove.textContent = 'Delete from the drive';
-        remove.addEventListener('click', () => {
-          void this.askToTypeIt(
-            `Delete ${sketch.title} from the drive? A device that still has it will send it back at its next sync.`,
-          ).then((yes) => {
-            if (!yes) {
-              return;
-            }
-            remove.disabled = true;
-            bring.disabled = true;
-            void this.runtime.sketchSync
-              .deleteFromTheDrive(sketch.id)
-              .then(() => {
-                row.remove();
-                sayWhetherAny();
-              })
-              .catch((error: unknown) => {
-                remove.disabled = false;
-                bring.disabled = false;
-                this.el.driveStatus.textContent =
-                  error instanceof Error ? error.message : 'That sketch could not be taken off the drive.';
-              });
-          });
-        });
-        row.append(title, bring, remove);
-        return row;
-      }),
+            }),
+          notBrought: 'That sketch could not be brought here.',
+          remove: () => this.runtime.sketchSync.deleteFromTheDrive(sketch.id),
+          notRemoved: 'That sketch could not be taken off the drive.',
+          gone: sayWhetherAny,
+        }),
+      ),
     );
     sayWhetherAny();
   }
 
+  /** The scores only the drive has, each to bring here or take off the drive. */
   private showWhatOnlyTheDriveHas(scores: readonly DriveScore[]): void {
-    this.el.driveOnly.replaceChildren(
-      ...scores.map((score) => {
-        const row = this.doc.createElement('li');
-        const title = this.doc.createElement('span');
-        title.textContent = score.stars === undefined ? score.title : `${score.title} · ${String(score.stars)}★`;
-        const bring = this.doc.createElement('button');
-        bring.type = 'button';
-        bring.className = 'button button--ghost';
-        bring.textContent = 'Bring here';
-        bring.addEventListener('click', () => {
-          bring.disabled = true;
-          void this.runtime.librarySync
-            .bringHere(score)
-            .then(() => {
-              row.remove();
-              this.el.driveOnly.hidden = this.el.driveOnly.childElementCount === 0;
+    const list = this.el.driveOnly;
+    list.replaceChildren(
+      ...scores.map((score) =>
+        this.anOfferFromTheDrive({
+          said: score.stars === undefined ? score.title : `${score.title} · ${String(score.stars)}★`,
+          name: score.title,
+          bring: () =>
+            this.runtime.librarySync.bringHere(score).then(() => {
               this.renderScores();
-            })
-            .catch((error: unknown) => {
-              bring.disabled = false;
-              this.el.driveStatus.textContent =
-                error instanceof Error ? error.message : 'That score could not be brought here.';
-            });
-        });
-        row.append(title, bring);
-        return row;
-      }),
+            }),
+          notBrought: 'That score could not be brought here.',
+          remove: () => this.runtime.librarySync.deleteFromTheDrive(score),
+          notRemoved: 'That score could not be taken off the drive.',
+          gone: () => {
+            list.hidden = list.childElementCount === 0;
+          },
+        }),
+      ),
     );
-    this.el.driveOnly.hidden = scores.length === 0;
+    list.hidden = scores.length === 0;
+  }
+
+  /**
+   * A row of a list of what only the drive has: what it is, and two icons,
+   * since the pane is narrow and the words would crowd the name out - one
+   * to bring it here, one to take it off the drive once the word is typed.
+   * Either done, the row goes and the list is told; refused, the drive's
+   * reason is said where the sync's is, and both can be pressed again.
+   */
+  private anOfferFromTheDrive(offer: {
+    readonly said: string;
+    readonly name: string;
+    readonly bring: () => Promise<void>;
+    readonly notBrought: string;
+    readonly remove: () => Promise<void>;
+    readonly notRemoved: string;
+    readonly gone: () => void;
+  }): HTMLLIElement {
+    const row = this.doc.createElement('li');
+    const title = this.doc.createElement('span');
+    title.textContent = offer.said;
+    const bring = this.anIconButton(BRING_HERE_ICON, 'Bring here', `Bring ${offer.name} here`);
+    const remove = this.anIconButton(TRASH_ICON, 'Delete from the drive', `Delete ${offer.name} from the drive`);
+    const ways = this.doc.createElement('span');
+    ways.className = 'drive-only__ways';
+    ways.append(bring, remove);
+    const ask = (done: () => Promise<void>, refused: string): void => {
+      bring.disabled = true;
+      remove.disabled = true;
+      void done()
+        .then(() => {
+          row.remove();
+          offer.gone();
+        })
+        .catch((error: unknown) => {
+          bring.disabled = false;
+          remove.disabled = false;
+          this.el.driveStatus.textContent = error instanceof Error ? error.message : refused;
+        });
+    };
+    bring.addEventListener('click', () => {
+      ask(offer.bring, offer.notBrought);
+    });
+    remove.addEventListener('click', () => {
+      void this.askToTypeIt(
+        `Delete ${offer.name} from the drive? A device that still has it will send it back at its next sync.`,
+      ).then((yes) => {
+        if (yes) {
+          ask(offer.remove, offer.notRemoved);
+        }
+      });
+    });
+    row.append(title, ways);
+    return row;
+  }
+
+  /** A button drawn as an icon alone, saying what it does in its title and to a screen reader. */
+  private anIconButton(icon: string, title: string, label: string): HTMLButtonElement {
+    const button = this.doc.createElement('button');
+    button.type = 'button';
+    button.className = 'button button--ghost drive-only__way';
+    button.title = title;
+    button.setAttribute('aria-label', label);
+    const drawn = this.doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    drawn.setAttribute('viewBox', '0 0 24 24');
+    drawn.setAttribute('aria-hidden', 'true');
+    drawn.setAttribute('focusable', 'false');
+    drawn.setAttribute('class', 'take-transport__icon');
+    const path = this.doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', icon);
+    drawn.append(path);
+    button.append(drawn);
+    return button;
   }
 
   /**

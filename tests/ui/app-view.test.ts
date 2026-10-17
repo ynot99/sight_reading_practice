@@ -297,6 +297,15 @@ class FolderDrive implements ICloudDrive, ICodeSignIn {
     return found === undefined ? Promise.reject(new Error('gone')) : Promise.resolve(found.content);
   }
 
+  trash(id: string): Promise<void> {
+    for (const [name, file] of this.files) {
+      if (file.id === id) {
+        this.files.delete(name);
+      }
+    }
+    return Promise.resolve();
+  }
+
   write(name: string, content: string, replacing: string | null): Promise<CloudFile> {
     const id = replacing ?? `file-${String((this.made += 1))}`;
     this.files.set(name, { id, content });
@@ -19614,6 +19623,71 @@ describe('the library on Google Drive', () => {
     expect((await rig.scoreStore.read('score:City of Tears'))?.stars).toBe(4);
   });
 
+  it('offers a score only the drive has by two icons, and takes it off the drive when the word is typed', async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+    const offeredScore = (title: string, at: number) => ({
+      id: `score:${title}`,
+      title,
+      bars: 8,
+      savedAtMs: 1_000,
+      openedAtMs: 1_000 + at,
+      markedAtMs: 2_000,
+      passages: [],
+      file: `${title}.musicxml`,
+    });
+    await rig.drive.write('City of Tears.musicxml', '<score/>', null);
+    await rig.drive.write('Clair de Lune.musicxml', '<score/>', null);
+    await rig.drive.write(
+      'library.json',
+      JSON.stringify({ version: 1, scores: [offeredScore('City of Tears', 0), offeredScore('Clair de Lune', 1)] }),
+      null,
+    );
+    element<HTMLButtonElement>('drive-sync').click();
+    await waitFor(() => element('drive-status').textContent?.startsWith('Synced') === true);
+    const only = element<HTMLUListElement>('drive-only');
+    const rowOf = (title: string): HTMLLIElement | undefined =>
+      [...only.querySelectorAll('li')].find((row) => row.textContent?.includes(title) === true);
+    const buttonsOf = (title: string): HTMLButtonElement[] => [...(rowOf(title)?.querySelectorAll('button') ?? [])];
+
+    // Two icons and no words, each saying what it does in its title and to a screen reader.
+    expect(buttonsOf('City of Tears').map((button) => [button.title, button.getAttribute('aria-label'), button.textContent])).toEqual([
+      ['Bring here', 'Bring City of Tears here', ''],
+      ['Delete from the drive', 'Delete City of Tears from the drive', ''],
+    ]);
+    expect(buttonsOf('City of Tears').every((button) => button.querySelector('svg path') !== null)).toBe(true);
+
+    // Asked for in words; cancelled, it stays.
+    buttonsOf('City of Tears')[1]?.click();
+    expect(element('confirm-text').textContent).toBe(
+      'Delete City of Tears from the drive? A device that still has it will send it back at its next sync. Type DELETE to confirm.',
+    );
+    element<HTMLButtonElement>('confirm-no').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(rig.drive.files.has('City of Tears.musicxml')).toBe(true);
+    // Typed, it goes: off the drive's list, its document into the bin, and off the list here.
+    buttonsOf('City of Tears')[1]?.click();
+    await confirmByTyping();
+    await waitFor(() => rowOf('City of Tears') === undefined);
+    expect(rig.drive.files.has('City of Tears.musicxml')).toBe(false);
+    expect(rig.drive.files.get('library.json')?.content).not.toContain('City of Tears');
+    expect(only.hidden).toBe(false);
+    expect(await rig.scoreStore.read('score:City of Tears')).toBeNull();
+
+    // Refused by the drive, it says so, and both can be pressed again.
+    const write = rig.drive.write.bind(rig.drive);
+    rig.drive.write = () => Promise.reject(new Error('The drive refused it.'));
+    buttonsOf('Clair de Lune')[1]?.click();
+    await confirmByTyping();
+    await waitFor(() => element('drive-status').textContent === 'The drive refused it.');
+    expect(buttonsOf('Clair de Lune').map((button) => button.disabled)).toEqual([false, false]);
+    rig.drive.write = write;
+    // The last gone, the list goes.
+    buttonsOf('Clair de Lune')[1]?.click();
+    await confirmByTyping();
+    await waitFor(() => only.hidden === true);
+  });
+
   it('offers from the button the sketches only the drive has, brings one here when asked, and leaves the one open as it is', async () => {
     const rig = createRig();
     await rig.view.initialize();
@@ -19683,7 +19757,7 @@ describe('the library on Google Drive', () => {
       [...offered.querySelectorAll('li')].find((row) => row.textContent?.includes(title) === true);
     const removeOf = (title: string): HTMLButtonElement | null | undefined =>
       [...(rowOf(title)?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
-        (button) => button.textContent === 'Delete from the drive',
+        (button) => button.title === 'Delete from the drive',
       );
     const onTheDrive = async (): Promise<string[]> =>
       [...(await new SketchSync({ drive: rig.drive, sketches: new SketchLibrary(new InMemorySettingsStore(), () => 1) }).sync(null)).onlyOnTheDrive].map(

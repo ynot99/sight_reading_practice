@@ -141,6 +141,29 @@ export class LibrarySync {
   }
 
   /**
+   * Takes a score off the drive, where no device here has it: out of the
+   * drive's list, and its document into the drive's bin. The list goes
+   * first, so a document left behind by a failure is only a file in the
+   * folder, never an entry the list offers and the folder cannot give. A
+   * device that still has the score sends it back at its next sync, as it
+   * would any score the drive lacks.
+   */
+  async deleteFromTheDrive(score: DriveScore): Promise<void> {
+    const { drive } = this.deps;
+    await drive.connect();
+    this.files = await drive.list();
+    const index = this.files.find((file) => file.name === INDEX);
+    const there = index === undefined ? new Map<string, DriveScore>() : readIndex(await drive.read(index.id));
+    if (there.delete(score.id)) {
+      await drive.write(INDEX, writeIndex(there), index?.id ?? null);
+    }
+    const document = this.files.find((file) => file.name === score.file);
+    if (document !== undefined) {
+      await drive.trash(document.id);
+    }
+  }
+
+  /**
    * A document on the drive, by name, or nothing where it is not there. A
    * sync expects one read for it: the folder listed again to find it is one
    * request more, and none at all where it is not found.

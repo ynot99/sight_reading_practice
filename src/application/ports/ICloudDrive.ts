@@ -29,4 +29,10 @@ export interface ICloudDrive {
   read(id: string): Promise<string>;
   /** Writes a file: over the one with the id given, or as a new one by that name. */
   write(name: string, content: string, replacing: string | null): Promise<CloudFile>;
+  /**
+   * Takes a file out of the folder into the drive's own bin, from where the
+   * reader can still get it back for a while: a score taken off the drive
+   * by a press is a document they may have wanted after all.
+   */
+  trash(id: string): Promise<void>;
 }

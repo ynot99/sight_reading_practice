@@ -32,6 +32,15 @@ class FolderDrive implements ICloudDrive {
     return answer;
   }
 
+  trash(id: string): Promise<void> {
+    for (const [name, file] of this.files) {
+      if (file.id === id) {
+        this.files.delete(name);
+      }
+    }
+    return Promise.resolve();
+  }
+
   write(name: string, content: string, replacing: string | null): Promise<CloudFile> {
     if (this.failing) {
       return Promise.reject(new Error('The drive could not be reached.'));

@@ -272,6 +272,14 @@ export class GoogleDrive implements ICloudDrive, ICodeSignIn {
     return (await response.json()) as CloudFile;
   }
 
+  async trash(id: string): Promise<void> {
+    await this.call(`${API}/files/${encodeURIComponent(id)}?fields=id`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+      body: JSON.stringify({ trashed: true }),
+    });
+  }
+
   private signIn(): Promise<{ value: string; expiresAtMs: number }> {
     this.prepare();
     const identity = this.identity ?? this.options.identity();

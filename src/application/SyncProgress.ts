@@ -75,6 +75,7 @@ export class SyncProgress {
       list: () => answered(drive.list()),
       read: (id) => answered(drive.read(id)),
       write: (name, content, replacing) => answered(drive.write(name, content, replacing)),
+      trash: (id) => answered(drive.trash(id)),
     };
   }
 

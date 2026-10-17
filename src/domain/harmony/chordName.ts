@@ -97,6 +97,82 @@ export function nameTheChord(midis: readonly number[], fifths: number | null = n
   return best.root === bass ? name : `${name}/${nameOfThePitchClass(bass, fifths)}`;
 }
 
+/** A chord some notes make, and whether they make exactly it or only mostly. */
+export interface ChordHeard {
+  readonly name: string;
+  readonly exactly: boolean;
+}
+
+/**
+ * What a chord tone costs, as a share of how long all the notes sound
+ * together: a tone has to sound at least this much of the time to be heard
+ * as part of the chord rather than as a note passing it.
+ */
+const EACH_TONE_COSTS = 0.15;
+
+/** The share of the sounding a chord has to account for to be named at all. */
+const MOSTLY = 0.5;
+
+/**
+ * The chord some notes make: exactly, where they make one this knows (see
+ * `nameTheChord`), or otherwise the one most of their sounding is - a bar of
+ * a broken chord with a melody over it is that chord, though the melody's
+ * passing notes make the whole set none.
+ *
+ * Each pitch class weighs as long as its notes sound. A reading is a root
+ * and a kind whose every tone is there (the fifth may go where the kind lets
+ * it), worth what its tones weigh less what they cost; the best one wins if
+ * it accounts for at least half of the sounding, standing on the bass where
+ * two are worth the same, as an exact one does. Said over the lowest note
+ * where that is another tone of it.
+ */
+export function theChordTheNotesMake(
+  notes: readonly { readonly midi: number; readonly lengthMs: number }[],
+  fifths: number | null = null,
+): ChordHeard | null {
+  const exactly = nameTheChord(
+    notes.map((note) => note.midi),
+    fifths,
+  );
+  if (exactly !== null) {
+    return { name: exactly, exactly: true };
+  }
+  const weight = new Map<number, number>();
+  for (const note of notes) {
+    const pitchClass = ((note.midi % 12) + 12) % 12;
+    weight.set(pitchClass, (weight.get(pitchClass) ?? 0) + Math.max(note.lengthMs, 1));
+  }
+  const total = [...weight.values()].reduce((sum, each) => sum + each, 0);
+  const bass = ((Math.min(...notes.map((note) => note.midi)) % 12) + 12) % 12;
+  type Reading = { readonly root: number; readonly kindAt: number; readonly tones: readonly number[]; readonly worth: number };
+  const readings: Reading[] = [];
+  for (let root = 0; root < 12; root += 1) {
+    for (const [kindAt, kind] of CHORD_KINDS.entries()) {
+      const there = (step: number): boolean => weight.has((root + step) % 12);
+      if (!kind.intervals.every((step) => there(step) || (kind.fifthMayGo && step === 7))) {
+        continue;
+      }
+      const tones = kind.intervals.filter(there).map((step) => (root + step) % 12);
+      const covered = tones.reduce((sum, tone) => sum + (weight.get(tone) ?? 0), 0);
+      if (covered >= MOSTLY * total) {
+        readings.push({ root, kindAt, tones, worth: covered - EACH_TONE_COSTS * total * tones.length });
+      }
+    }
+  }
+  const found = readings.sort(
+    (left, right) =>
+      right.worth - left.worth ||
+      Number(right.root === bass) - Number(left.root === bass) ||
+      left.kindAt - right.kindAt,
+  )[0];
+  if (found === undefined) {
+    return null;
+  }
+  const name = `${nameOfThePitchClass(found.root, fifths)}${CHORD_KINDS[found.kindAt]?.suffix ?? ''}`;
+  const overTheBass = bass !== found.root && found.tones.includes(bass);
+  return { name: overTheBass ? `${name}/${nameOfThePitchClass(bass, fifths)}` : name, exactly: false };
+}
+
 function sameNumbers(left: readonly number[], right: readonly number[]): boolean {
   return left.length === right.length && left.every((value, at) => value === right[at]);
 }

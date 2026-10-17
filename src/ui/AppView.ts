@@ -8,7 +8,7 @@ import {
   type PlayedWith,
 } from '../application/modes/challengeModes.js';
 import { barCells } from '../domain/scoring/barCells.js';
-import { nameOfThePitchClass, nameTheChord } from '../domain/harmony/chordName.js';
+import { nameOfThePitchClass, nameTheChord, theChordTheNotesMake } from '../domain/harmony/chordName.js';
 import { DYNAMIC_VELOCITY, type DynamicLevel } from '../domain/model/Exercise.js';
 import { eachKeyOnce, sameKeys, theChordsOfTheScale } from '../domain/harmony/chordsOfTheKey.js';
 import {
@@ -12823,7 +12823,9 @@ export class AppView {
 
   /**
    * The name of the chord the chosen notes make, over the drawing, wherever
-   * in time each is: a chord broken into a figure is still that chord.
+   * in time each is: a chord broken into a figure is still that chord - and
+   * one with a melody passing over it is mostly that chord, said with "≈",
+   * each note weighing as long as it sounds (see `theChordTheNotesMake`).
    * Spelled as a sketch's key spells its black keys. Not there while they
    * make none with a name - and on a sketch none is chosen but while it is
    * edited.
@@ -12831,11 +12833,24 @@ export class AppView {
   private nameTheChosenChord(): void {
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
-    // Spelled in a sketch's key; anything else, as chord charts spell it.
+    const roll = this.theRoll();
     const chosen = this.theNotesChosen();
-    const chord =
-      chosen.length === 0 ? null : nameTheChord(chosen.map((key) => key.midi), stored === null ? null : this.theKeyAtTheHead(stored).fifths);
-    this.el.rollChord.textContent = chord ?? '';
+    // How long each sounds, off the drawing: a key still down when the run ended, to its end.
+    const lengthOf = new Map<string, number>();
+    if (roll !== null && chosen.length > 0) {
+      const ended = rollEndedAtMs(roll);
+      for (const press of roll.presses) {
+        lengthOf.set(`${String(press.midi)} ${String(press.downAtMs)}`, (press.upAtMs ?? ended) - press.downAtMs);
+      }
+    }
+    // Spelled in a sketch's key; anything else, as chord charts spell it.
+    const chord = theChordTheNotesMake(
+      chosen.map((key) => ({ midi: key.midi, lengthMs: lengthOf.get(`${String(key.midi)} ${String(key.downAtMs)}`) ?? 0 })),
+      stored === null ? null : this.theKeyAtTheHead(stored).fifths,
+    );
+    this.el.rollChord.textContent = chord === null ? '' : chord.exactly ? chord.name : `≈ ${chord.name}`;
+    this.el.rollChord.title =
+      chord?.exactly === false ? 'The chord most of the chosen notes make, by how long they sound' : 'The chord the chosen notes make';
     this.el.rollChord.hidden = chord === null;
   }
 

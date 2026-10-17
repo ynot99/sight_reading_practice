@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHORD_KINDS, nameOfThePitchClass, nameTheChord } from '../../src/domain/harmony/chordName.js';
+import { CHORD_KINDS, nameOfThePitchClass, nameTheChord, theChordTheNotesMake } from '../../src/domain/harmony/chordName.js';
 
 /** Middle C's octave, so a chord built on a root lies where a hand would play it. */
 const C4 = 60;
@@ -104,6 +104,61 @@ describe('naming the chord held', () => {
     // White keys keep their letters.
     for (let fifths = -7; fifths <= 7; fifths += 1) {
       expect(nameOfThePitchClass(4, fifths)).toBe('E');
+    }
+  });
+});
+
+describe('the chord some notes mostly make', () => {
+  const A2 = 45;
+  const note = (midi: number, lengthMs: number): { midi: number; lengthMs: number } => ({ midi, lengthMs });
+
+  it('names a chord they make exactly as such', () => {
+    expect(theChordTheNotesMake([note(C4, 500), note(C4 + 4, 500), note(C4 + 7, 500)])).toEqual({ name: 'C', exactly: true });
+    expect(theChordTheNotesMake([])).toBeNull();
+  });
+
+  it('names a broken chord under a melody passing over it by the chord, as mostly that', () => {
+    // A minor held in the left hand, and B, D and G passing over it.
+    const notes = [note(A2, 1_000), note(C4, 1_000), note(C4 + 4, 1_000), note(C4 + 11, 200), note(C4 + 14, 200), note(C4 + 7, 100)];
+    expect(nameTheChord(notes.map((each) => each.midi))).toBeNull();
+    expect(theChordTheNotesMake(notes)).toEqual({ name: 'Am', exactly: false });
+    // Where the G sounds as long as the rest, it is the seventh: on the bass,
+    // where A minor seventh and C sixth are the same notes.
+    const seventh = [note(A2, 1_000), note(C4, 1_000), note(C4 + 4, 1_000), note(C4 + 7, 1_000), note(C4 + 14, 100)];
+    expect(theChordTheNotesMake(seventh)).toEqual({ name: 'Am7', exactly: false });
+    // Over the lowest note where that is another tone of it; and in a key, spelled as it spells.
+    const overE = [note(C4 - 8, 1_000), note(C4, 1_000), note(C4 + 7, 1_000), note(C4 + 6, 100)];
+    expect(theChordTheNotesMake(overE)).toEqual({ name: 'C/E', exactly: false });
+    // And not over a note passing under it.
+    const passingUnder = [note(C4 - 18, 100), note(C4, 1_000), note(C4 + 4, 1_000), note(C4 + 7, 1_000)];
+    expect(theChordTheNotesMake(passingUnder)).toEqual({ name: 'C', exactly: false });
+    // The same notes as A minor seventh, on C: C sixth, the bass deciding.
+    const onC = [note(C4 - 12, 1_000), note(C4 + 4, 1_000), note(C4 + 7, 1_000), note(C4 + 9, 1_000), note(C4 + 14, 100)];
+    expect(theChordTheNotesMake(onC)).toEqual({ name: 'C6', exactly: false });
+    expect(theChordTheNotesMake([note(C4 + 1, 900), note(C4 + 5, 900), note(C4 + 8, 900), note(C4 + 7, 50)], -4)?.name).toBe('D♭');
+    // The fifth left out of a seventh, as a pianist leaves it.
+    expect(theChordTheNotesMake([note(C4, 900), note(C4 + 4, 900), note(C4 + 10, 900), note(C4 + 2, 50), note(C4 + 6, 50)])).toEqual({
+      name: 'C7',
+      exactly: false,
+    });
+  });
+
+  it('names nothing where the chord accounts for less than half of the sounding', () => {
+    // C, E and G a tenth of a second each, against an F sharp of a length swept across the line.
+    for (let sharp = 1; sharp <= 600; sharp += 1) {
+      const named = theChordTheNotesMake([note(C4, 100), note(C4 + 4, 100), note(C4 + 7, 100), note(C4 + 6, sharp)]);
+      expect(named).toEqual(sharp <= 300 ? { name: 'C', exactly: false } : null);
+    }
+  });
+
+  it('takes a note into the chord only where it sounds long enough to be heard as part of it', () => {
+    // A minor a second each, a B swept across the line, and an F sharp too
+    // short to count. A tone costs fifteen hundredths of the whole: the B is
+    // the ninth once it is worth more than that.
+    for (let ninth = 1; ninth <= 1_000; ninth += 1) {
+      const notes = [note(A2, 1_000), note(C4, 1_000), note(C4 + 4, 1_000), note(C4 + 11, ninth), note(C4 + 6, 10)];
+      const total = 3_010 + ninth;
+      expect(theChordTheNotesMake(notes)?.name).toBe(ninth > 0.15 * total ? 'Am(add9)' : 'Am');
     }
   });
 });

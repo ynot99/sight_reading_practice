@@ -6715,6 +6715,8 @@ describe('AppView', () => {
             [0, 400, 60],
             [500, 900, 64],
             [1_000, 1_400, 67],
+            [1_200, 1_250, 66],
+            [1_300, 1_350, 69],
             [1_500, 1_900, 58],
             [2_500, 2_900, 61],
             [2_500, 2_900, 65],
@@ -6756,6 +6758,18 @@ describe('AppView', () => {
       expect(said()).toBeNull();
       tap(1_100, 67);
       expect(said()).toBe('C');
+      expect(chord.title).toBe('The chord the chosen notes make');
+      // With an F sharp passing them for a twentieth of a second, mostly that chord, and said so.
+      tap(1_225, 66);
+      expect(said()).toBe('≈ C');
+      // And an A as short: still C, by how long each sounds - counted alike, C sixth.
+      tap(1_325, 69);
+      expect(said()).toBe('≈ C');
+      expect(chord.title).toBe('The chord most of the chosen notes make, by how long they sound');
+      key({ key: 'Escape' });
+      tap(100, 60, false);
+      tap(600, 64);
+      tap(1_100, 67);
       // With a B flat below, a seventh over its bass.
       tap(1_600, 58);
       expect(said()).toBe('C7/B♭');

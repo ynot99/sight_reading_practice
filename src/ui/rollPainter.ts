@@ -340,6 +340,7 @@ export function paintTheGrid(
   density: number,
   soundingRows: readonly number[] = [],
   ahead: readonly NoteShownAhead[] = [],
+  recording: readonly NoteShownAhead[] = [],
 ): void {
   const ready = readied(surface, density);
   if (ready === null) {
@@ -497,6 +498,20 @@ export function paintTheGrid(
     paint.stroke();
   }
 
+  // The notes being recorded, as they are played: filled in the accent, as
+  // notes no verdict judged, and rimmed as the chosen are, which they will
+  // be once written in. A key still down reaches the cursor.
+  for (const note of recording) {
+    if (!shows(note.row)) {
+      continue;
+    }
+    paint.fillStyle = inks.chosen;
+    paint.globalAlpha = RECORDING_STRENGTH;
+    box(paint, x(note.fromMs), y(note.row), wide(note.fromMs, note.untilMs), rowPx, CORNER_PX);
+    paint.fill();
+    paint.globalAlpha = 1;
+  }
+
   // The notes a chord would be written as, before it is: rimmed as a chosen
   // note is, in the accent and no verdict, but dashed and empty, as nothing
   // is there yet. Over everything, so a note already there shows through.
@@ -514,6 +529,9 @@ export function paintTheGrid(
   paint.setLineDash([]);
   paint.lineWidth = 1;
 }
+
+/** How strongly a note being recorded is filled: enough to read as a note, faint enough to say it is not written yet. */
+const RECORDING_STRENGTH = 0.55;
 
 /** How tall a tick on the ruler stands, and how wide: tall for a bar, short for a beat. */
 const TICKS: Readonly<Record<LineKind, { readonly tall: number; readonly wide: number }>> = {

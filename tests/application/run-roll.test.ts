@@ -9,6 +9,7 @@ import {
   theBeatNearest,
   theBarsAcross,
   takeWithThePlayingRecorded,
+  theNotesRecorded,
   theNextLineOfTheGrid,
   theLineOfTheGridUnder,
   theEndAKeyFitsTo,
@@ -611,6 +612,22 @@ describe('the beat a run was measured against', () => {
     expect(later.events.filter((event) => event.kind === 'sustain')).toHaveLength(2);
     // Nothing played, nothing changes.
     expect(takeWithThePlayingRecorded(there, [], 3_000, 600)).toEqual({ events: there, pasted: [] });
+    // Held into a C already there, it ends where that one begins, as a key struck again ends the note before.
+    const held: MidiFileEvent[] = [
+      { kind: 'noteOn', atMs: 0, midi: MIDI.C4, velocity: 0.6 },
+      { kind: 'noteOff', atMs: 900, midi: MIDI.C4 },
+    ];
+    expect(theNotesRecorded(there, held, 700, 1_200)).toEqual([{ afterMs: 0, lengthMs: 300, midi: MIDI.C4, velocity: 0.6 }]);
+    expect(takeWithThePlayingRecorded(there, held, 700, 1_200).pasted).toEqual([{ midi: MIDI.C4, downAtMs: 700 }]);
+    // Struck on the moment one ends, it begins there; struck the moment one begins, it is left out.
+    expect(theNotesRecorded(there, held, 1_400, 2_000).map((note) => note.lengthMs)).toEqual([900]);
+    expect(theNotesRecorded(there, held, 1_000, 2_000)).toEqual([]);
+    // Still down, as far as the moment it has got to, and no further than the next of its pitch.
+    const down: MidiFileEvent[] = [{ kind: 'noteOn', atMs: 100, midi: MIDI.C4, velocity: 0.6 }];
+    expect(theNotesRecorded(there, down, 0, 500).map((note) => [note.afterMs, note.lengthMs])).toEqual([[100, 400]]);
+    expect(theNotesRecorded(there, down, 0, 5_000).map((note) => note.lengthMs)).toEqual([900]);
+    // A key still down in what is there sounds on: one struck after it is left out.
+    expect(theNotesRecorded([{ kind: 'noteOn', atMs: 0, midi: MIDI.C4, velocity: 0.5 }], down, 0, 500)).toEqual([]);
   });
 
   it('slices whole bars between two moments, either way round, across the whole run', () => {

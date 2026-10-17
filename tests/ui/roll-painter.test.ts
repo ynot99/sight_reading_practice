@@ -182,6 +182,29 @@ describe('painting the grid', () => {
     expect(rim?.wide).toBeCloseTo(68, 6);
   });
 
+  it('fills the notes being recorded in the accent, faintly, where they go', () => {
+    const scene = theSceneOfTheRoll({
+      roll: roll({ presses: [press({ verdict: null })] }),
+      barLabel: () => null,
+    });
+    const { surface: canvas, recorder } = surface();
+
+    paintTheGrid(canvas, scene, at(), INKS, 1, [], [], [
+      { row: 2, fromMs: 500, untilMs: 1_000 },
+      { row: 1_000, fromMs: 500, untilMs: 1_000 },
+    ]);
+
+    expect(recorder.inked('chosen').map((mark) => [mark.how, mark.x, mark.y, mark.tall])).toEqual([['fill', 70, 2 * 14, 14]]);
+    const [filled] = recorder.inked('chosen');
+    expect(filled?.wide).toBeCloseTo(70, 6);
+    expect(filled?.alpha).toBeGreaterThan(0.3);
+    expect(filled?.alpha).toBeLessThan(1);
+    // And the canvas left at full strength for the next painting of it.
+    recorder.marks.length = 0;
+    paintTheGrid(canvas, scene, at(), INKS, 1);
+    expect(recorder.marks.map((mark) => mark.alpha)).not.toContain(filled?.alpha);
+  });
+
   it('rims the notes a chord would be written as where they would go, dashed in the accent, over everything', () => {
     const scene = theSceneOfTheRoll({
       roll: roll({ presses: [press({ verdict: null })] }),

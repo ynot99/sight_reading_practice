@@ -205,6 +205,7 @@ import {
   takeWithThePedalAt,
   theBarsAcross,
   takeWithThePlayingRecorded,
+  theNotesRecorded,
   theChangeOnTheClipboard,
   theClipboardTextOf,
   theClipboardTextOfTheChange,
@@ -2101,6 +2102,8 @@ export class AppView {
   private chordPointedAt: number | null = null;
   /** Those notes, where they would go: painted dashed over the drawing until the pointer leaves the chord. */
   private notesShownAhead: readonly NoteShownAhead[] = [];
+  /** The notes played into a recording under way, where they go, painted as they are played: see `showWhatIsBeingRecorded`. */
+  private notesBeingRecorded: readonly NoteShownAhead[] = [];
   /** What the rows sounding last were, so a frame that changes nothing draws nothing. */
   private soundingRowsSaid = '';
   /** The stretch of the run the map down the side last marked, to mark again when a key sounds. */
@@ -6456,6 +6459,11 @@ export class AppView {
   /** And the notes it shows ahead, where a chord pointed at would write them: see `showTheChordAhead`. */
   get rollNotesShownAhead(): readonly NoteShownAhead[] {
     return this.notesShownAhead;
+  }
+
+  /** And those of a recording under way: see `showWhatIsBeingRecorded`. */
+  get rollNotesBeingRecorded(): readonly NoteShownAhead[] {
+    return this.notesBeingRecorded;
   }
 
   /** True while the reader is being given their look at the page. */
@@ -15393,6 +15401,7 @@ export class AppView {
       density,
       this.soundingRows,
       this.notesShownAhead,
+      this.notesBeingRecorded,
     );
     paintTheRuler(sized(canvases.ruler, scrolled.viewWidePx, look.rulerTallPx), scene, view, this.rollInks, density);
     paintThePedal(sized(canvases.pedal, scrolled.viewWidePx, look.pedalTallPx), scene, view, this.rollInks, density);
@@ -15675,6 +15684,10 @@ export class AppView {
       } else if (event.type === 'pedal') {
         played.push({ kind: 'sustain', atMs: atMs - beginsAtMs, value: event.value });
       }
+      // Seen as it is played, not a tick later.
+      if (event.type === 'noteon' || event.type === 'noteoff') {
+        this.showWhatIsBeingRecorded();
+      }
     });
     this.recording = { sketchId: sketch.id, fromMs, beginsAtMs, played, clicks, nextClick: 0, stopListening, begins: null, tick: null };
     const recording = this.recording;
@@ -15722,6 +15735,30 @@ export class AppView {
     }
     this.rollAtMs = atMs;
     this.describeTheRoll();
+    this.showWhatIsBeingRecorded();
+  }
+
+  /**
+   * Paints the notes the recording under way comes to where they go, a key
+   * still down as far as now, so the playing is seen as it is played - and
+   * as it will be written in, by the same answer; nothing while none is
+   * under way. It is written in only once the recording stops.
+   */
+  private showWhatIsBeingRecorded(): void {
+    const recording = this.recording;
+    const scene = this.drawnScene;
+    const showing = this.theOtherRollShowing;
+    const stored = recording === null ? null : this.runtime.sketches.find(recording.sketchId);
+    const now = this.runtime.clock.now() - (recording?.beginsAtMs ?? 0);
+    this.notesBeingRecorded =
+      recording === null || scene === null || showing === null || stored === null
+        ? []
+        : theNotesRecorded(stored.events, recording.played, recording.fromMs + rollBeganAtMs(showing.roll), now).map((note) => ({
+            row: scene.highest - note.midi,
+            fromMs: recording.fromMs + note.afterMs,
+            untilMs: recording.fromMs + note.afterMs + note.lengthMs,
+          }));
+    this.paintTheRoll();
   }
 
   /**
@@ -15736,6 +15773,7 @@ export class AppView {
       return;
     }
     this.recording = null;
+    this.showWhatIsBeingRecorded();
     recording.stopListening();
     if (recording.begins !== null) {
       clearTimeout(recording.begins);

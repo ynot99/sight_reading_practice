@@ -1406,12 +1406,39 @@ export function takeWithTheNotesPasted(
 }
 
 /**
+ * The notes some playing recorded into a take from a moment on comes to, as
+ * far as a moment it has got to: each timed from the playing's own nought,
+ * which falls on that moment; a key still down, as far as the moment it
+ * has got to. Over what is there, as a piano is played over itself: a key
+ * struck again ends the note before it, so a note held into one of its
+ * pitch already there ends where that one begins, and a key struck while
+ * one of its pitch there is still sounding is left out. One answer for
+ * what is shown while it records and what is written in when it stops.
+ */
+export function theNotesRecorded(
+  events: readonly MidiFileEvent[],
+  played: readonly MidiFileEvent[],
+  atMs: number,
+  untilMs: number,
+): readonly NoteCopied[] {
+  const there = theKeysOfTheTake(events);
+  return theKeysOfTheTake(played).flatMap((key): NoteCopied[] => {
+    const startsAt = atMs + key.downAtMs;
+    const ofItsPitch = there.filter((each) => each.midi === key.midi);
+    if (ofItsPitch.some((each) => each.downAtMs <= startsAt && startsAt < (each.upAtMs ?? Number.POSITIVE_INFINITY))) {
+      return [];
+    }
+    const next = Math.min(...ofItsPitch.map((each) => each.downAtMs).filter((downAtMs) => downAtMs > startsAt));
+    const endsAt = Math.min(atMs + (key.upAtMs ?? untilMs), next);
+    return [{ afterMs: key.downAtMs, lengthMs: Math.max(0, endsAt - startsAt), midi: key.midi, velocity: key.velocity }];
+  });
+}
+
+/**
  * A take's events with some playing recorded into them from a moment on, and
- * the keys of it put in: the playing timed from its own nought, which falls
- * on that moment. Recorded over what is there, as a paste is - a key that
- * would sound over another of its pitch is left out - and its pedal with it.
- * A key or the pedal still down when the recording stopped is let go of
- * there, or it would ring for ever.
+ * the keys of it put in: the notes it comes to (`theNotesRecorded`), and its
+ * pedal with them. A key or the pedal still down when the recording stopped
+ * is let go of there, or it would ring for ever.
  */
 export function takeWithThePlayingRecorded(
   events: readonly MidiFileEvent[],
@@ -1419,12 +1446,7 @@ export function takeWithThePlayingRecorded(
   atMs: number,
   stoppedAtMs: number,
 ): { readonly events: readonly MidiFileEvent[]; readonly pasted: readonly KeyNamed[] } {
-  const notes: NoteCopied[] = theKeysOfTheTake(played).map((key) => ({
-    afterMs: key.downAtMs,
-    lengthMs: Math.max(0, (key.upAtMs ?? stoppedAtMs) - key.downAtMs),
-    midi: key.midi,
-    velocity: key.velocity,
-  }));
+  const notes = theNotesRecorded(events, played, atMs, stoppedAtMs);
   const pedal = played.flatMap((event) => (event.kind === 'sustain' ? [{ ...event, atMs: Math.round(atMs + event.atMs) }] : []));
   const lastPedal = pedal[pedal.length - 1];
   const held = lastPedal !== undefined && damperIsDown(lastPedal.value);

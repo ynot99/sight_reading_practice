@@ -7460,15 +7460,27 @@ describe('AppView', () => {
         expect(metronome.clicks.map((click) => (click.atMs ?? 0) - pressedAt).slice(4, 5)).toEqual([2_000]);
         midi.noteOff(67, pressedAt + 2_200);
         midi.pedal(true, pressedAt + 2_300);
+        // Seen the moment it is struck, before any tick.
+        const live = (): string[] =>
+          view.rollNotesBeingRecorded.map((note) => `${String((view.rollScene?.highest ?? 0) - note.row)}:${String(note.fromMs)}-${String(note.untilMs)}`);
+        // Struck while the C written there sounds: left out, as it will be when written in.
+        midi.noteOn(60, pressedAt + 2_100);
+        midi.noteOff(60, pressedAt + 2_200);
+        clock.set(pressedAt + 2_750);
         midi.noteOn(65, pressedAt + 2_750);
+        expect(live()).toEqual(['67:1900-2200', '65:2750-2750']);
+        clock.set(pressedAt + 2_000);
         for (let step = 0; step < 10; step += 1) {
           clock.advance(100);
           vi.advanceTimersByTime(80);
         }
         expect(metronome.clicks.map((click) => (click.atMs ?? 0) - pressedAt).slice(4, 7)).toEqual([2_000, 2_500, 3_000]);
         expect(headAt(element('roll-body'))).toBe('3.000');
+        // Played so far, where it goes: a key still down as far as the cursor.
+        expect(live()).toEqual(['67:1900-2200', '65:2750-3000']);
         // Pressed again: written in from the cursor, a key and the pedal still down let go of there.
         record.click();
+        expect(live()).toEqual([]);
       } finally {
         vi.useRealTimers();
       }
@@ -10908,6 +10920,89 @@ describe('AppView', () => {
         }
         await frame();
         expect([...painted].sort()).toEqual(each);
+      } finally {
+        context.mockRestore();
+        for (const [name, descriptor] of lent) {
+          if (descriptor === undefined) {
+            delete (HTMLElement.prototype as unknown as Record<string, unknown>)[name];
+          } else {
+            Object.defineProperty(HTMLElement.prototype, name, descriptor);
+          }
+        }
+      }
+    });
+
+    it('paints the notes being recorded on the drawing as they are played, and none once written in', async () => {
+      const sizes: Record<string, (node: HTMLElement) => number> = {
+        clientWidth: (node) => (node.classList.contains('roll__grid') ? 900 : 0),
+        clientHeight: (node) =>
+          node.classList.contains('roll__grid')
+            ? 600
+            : node.classList.contains('roll__ruler')
+              ? 19
+              : node.classList.contains('roll__pedal')
+                ? 15
+                : 0,
+      };
+      const lent = Object.keys(sizes).map(
+        (name) => [name, Object.getOwnPropertyDescriptor(HTMLElement.prototype, name)] as const,
+      );
+      for (const [name, size] of Object.entries(sizes)) {
+        Object.defineProperty(HTMLElement.prototype, name, {
+          configurable: true,
+          get(this: HTMLElement) {
+            return size(this);
+          },
+        });
+      }
+      // The grid's canvas writes down what is painted on it; the others paint nothing.
+      const grid = new Recorder();
+      const context = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
+        this: HTMLCanvasElement,
+      ) {
+        return (this.parentElement?.classList.contains('roll__grid') === true
+          ? grid
+          : new Proxy({}, { get: () => () => undefined, set: () => true })) as unknown as RenderingContext;
+      });
+      try {
+        const { view, sketches, runtime, clock, midi } = createRig();
+        await view.initialize();
+        runtime.controller.updateSettings({ countInBars: 0 });
+        sketches.begin(
+          {
+            events: [
+              { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.5 },
+              { kind: 'noteOff', atMs: 400, midi: 60 },
+            ],
+            beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+          },
+          'Seen',
+          1,
+        );
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-sketches').click();
+        rowButton('sketches-list', 'Edit this sketch').click();
+        // How faint the notes painted are: a soft note is painted faint, and so is one being recorded.
+        const faint = (): number[] =>
+          [...new Set(grid.marks.filter((mark) => mark.how === 'fill' && mark.alpha > 0 && mark.alpha < 1).map((mark) => mark.alpha))];
+        const painted = async (): Promise<number[]> => {
+          grid.marks.length = 0;
+          element<HTMLInputElement>('roll-zoom').dispatchEvent(new Event('input', { bubbles: true }));
+          await new Promise<void>((done) => {
+            requestAnimationFrame(() => done());
+          });
+          return faint();
+        };
+        element<HTMLButtonElement>('roll-record').click();
+        const before = await painted();
+        grid.marks.length = 0;
+        midi.noteOn(62, clock.now());
+        // The one played, painted the moment it is struck, fainter than any written.
+        const struck = faint().filter((alpha) => !before.includes(alpha));
+        expect(struck).toHaveLength(1);
+        element<HTMLButtonElement>('roll-record').click();
+        // Written in, it is a note like the rest, and nothing is painted as being recorded.
+        expect(await painted()).not.toContain(struck[0]);
       } finally {
         context.mockRestore();
         for (const [name, descriptor] of lent) {

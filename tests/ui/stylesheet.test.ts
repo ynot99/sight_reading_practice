@@ -2319,6 +2319,10 @@ describe('searching the settings', () => {
     expect(body('.roll__mark-tools')).toMatch(/top\s*:\s*100%/);
     expect(body('.roll__mark-tools')).toMatch(/transform\s*:\s*translateX\(calc\(var\(--roll-second\) \* var\(--roll-at, 0\) - var\(--roll-x\)\)\)/);
     expect(body('.roll__mark-tools')).toMatch(/pointer-events\s*:\s*auto/);
+    // Each of them takes the scroll and the zoom from the box they are set
+    // on, which nothing hands down by itself.
+    expect(body('.roll__mark, .roll__mark-tools')).toMatch(/--roll-x\s*:\s*inherit/);
+    expect(body('.roll__mark, .roll__mark-tools')).toMatch(/--roll-second\s*:\s*inherit/);
     // The key of a chosen note outlined in the chosen note's ink.
     expect(body(".roll__key[data-chosen='true']")).toMatch(/box-shadow\s*:\s*inset 0 0 0 2px var\(--roll-ink-chosen\)/);
     // A key of the scale marked down its edge by an image, which neither the

@@ -2210,6 +2210,19 @@ textarea {
   pointer-events: none;
 }
 
+/*
+ * The flags and their buttons take where the view stands and how wide a
+ * second is from the box they are in, which is set as the heads are. Those
+ * two are not handed down to anything by themselves - see their @property -
+ * so a flag asks for them by name; without it a flag stands where the view
+ * stood when it was drawn, and at the width a second has when nothing says.
+ */
+.roll__mark,
+.roll__mark-tools {
+  --roll-x: inherit;
+  --roll-second: inherit;
+}
+
 .roll__mark {
   position: absolute;
   top: 2px;

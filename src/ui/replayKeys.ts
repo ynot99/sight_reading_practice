@@ -3,9 +3,12 @@ export type { KeyShade };
 
 /**
  * How a key is lit: as its press was judged, in a replay - or as heard, in a
- * playback, where nobody played it and nothing was judged.
+ * playback, where nobody played it and nothing was judged; a key of a
+ * playback held only by the left hand in an ink of its own, as the drawing
+ * of a run colours that hand, so the machine's two hands are told apart on
+ * the keys and in the notes falling onto them.
  */
-export type KeyLight = KeyShade | 'heard';
+export type KeyLight = KeyShade | 'heard' | 'heard-left';
 
 /** The lowest key of a piano, A0. */
 export const LOWEST_KEY = 21;

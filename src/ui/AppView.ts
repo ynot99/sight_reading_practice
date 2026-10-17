@@ -184,7 +184,7 @@ const SETTINGS_WENT: Readonly<Record<SettingsSyncOutcome, string>> = {
   same: 'already the same',
 };
 import { drawTheProfile } from './profileChart.js';
-import { expectedFor, keysHeldAt, notesStruckAt, soundsFor } from '../domain/timeline/Timeline.js';
+import { expectedFor, notesStruckAt, soundsFor, theStavesHoldingTheKeysAt } from '../domain/timeline/Timeline.js';
 import {
   clicksBefore,
   clicksUpTo,
@@ -11873,12 +11873,18 @@ export class AppView {
       return;
     }
     const hand = controller.settings.handStaff;
-    const held = keysHeldAt(timeline, step.onsetTicks, hand);
+    const held = theStavesHoldingTheKeysAt(timeline, step.onsetTicks, hand);
     const pedalDown = pedalHeldUntil(timeline.exercise, step.onsetTicks) !== null;
-    // As heard: the machine is playing, and nobody's press was judged.
+    // As heard: the machine is playing, and nobody's press was judged - a key
+    // only the left hand holds in that hand's ink, as its notes fall.
     lightTheKeys(
       this.replayKeyboard,
-      new Map<number, KeyLight>(held.map((midi) => [midi, 'heard'])),
+      new Map<number, KeyLight>(
+        [...held].map(([midi, staves]) => [
+          midi,
+          staves.size === 1 && staves.has(LEFT_HAND_STAFF) ? 'heard-left' : 'heard',
+        ]),
+      ),
       pedalDown,
     );
 

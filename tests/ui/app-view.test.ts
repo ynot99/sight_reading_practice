@@ -152,6 +152,7 @@ import {
   longExercise,
   offBeatAfterALongNote,
   oneHandWalksUnderAHeldNote,
+  oneKeyInBothHands,
   unisonInTwoVoices,
   p,
   twoBarExercise,
@@ -934,11 +935,11 @@ describe('AppView', () => {
     expect(toggle.title).toBe('Falling notes and keyboard. Press for keyboard only.');
 
     // Metronome advance sounds the step, lit as heard: nobody played it, so
-    // it is in no verdict's colour.
+    // it is in no verdict's colour - the left hand's in that hand's own.
     metronome.advanceSubdivisions(2);
     const lit = [...keys.querySelectorAll<HTMLElement>('[data-shade]')];
     expect(lit.length).toBeGreaterThan(0);
-    expect(lit.every((key) => key.dataset['shade'] === 'heard')).toBe(true);
+    expect(lit.every((key) => key.dataset['shade'] === 'heard' || key.dataset['shade'] === 'heard-left')).toBe(true);
 
     // Pause unlights keys
     element<HTMLButtonElement>('focus-play').click();
@@ -1029,6 +1030,13 @@ describe('AppView', () => {
       [p('D4').midi, 'heard', 0.333, 0.667],
       [p('E4').midi, 'heard', 0, 0.333],
     ]);
+    // And the keys they land on lit alike: the bass in the left hand's ink.
+    const litKeys = (): string[][] =>
+      [...element('replay-keys').querySelectorAll<HTMLElement>('[data-shade]')].map((key) => [key.dataset['midi'] ?? '', key.dataset['shade'] ?? '']);
+    expect(litKeys()).toEqual([
+      [String(p('C3').midi), 'heard-left'],
+      [String(p('C4').midi), 'heard'],
+    ]);
     // Two beats on, the second bar's bass is coming down, not yet handed to
     // the instrument, and in the left hand's ink as well.
     metronome.advanceSubdivisions(2);
@@ -1042,6 +1050,21 @@ describe('AppView', () => {
     // Nothing falling, and the picture of what was let go of.
     expect(view.fallingScene).toEqual([]);
     expect(lane.width).toBe(0);
+  });
+
+  it('lights a key of a playback held by both hands as heard, and one held by the left alone in its ink', async () => {
+    const { view, runtime, metronome } = createRig();
+    await view.initialize();
+    await runtime.controller.openScore(oneKeyInBothHands({ tempoBpm: 60 }));
+    await pressListen(runtime.controller);
+    const shadeOf = (midi: number): string | undefined =>
+      element('replay-keys').querySelector<HTMLElement>(`[data-midi='${String(midi)}']`)?.dataset['shade'];
+
+    metronome.advanceSubdivisions(1);
+    expect([shadeOf(p('C4').midi), shadeOf(p('D4').midi)]).toEqual(['heard', 'heard-left']);
+    metronome.advanceSubdivisions(1);
+    expect(shadeOf(p('D4').midi)).toBe('heard');
+    element<HTMLButtonElement>('focus-stop').click();
   });
 
   it('puts the keyboard up in free play, lights what is held, and lets what was played rise off the keys', async () => {

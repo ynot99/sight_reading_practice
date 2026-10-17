@@ -3548,6 +3548,11 @@ body[data-free-play='true'] .replay-keys__row[data-scrolls='false'] {
   background: var(--keys-heard);
 }
 
+.replay-keys__white[data-lit='heard-left']::after,
+.replay-keys__black[data-lit='heard-left']::after {
+  background: var(--keys-heard-left);
+}
+
 /*
  * The page and nothing else, until the reader asks for the rest back.
  *

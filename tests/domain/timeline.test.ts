@@ -6,6 +6,7 @@ import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import {
   buildTimeline,
   keysHeldAt,
+  theStavesHoldingTheKeysAt,
   notesStruckAt,
   notesStruckOutside,
   soundsFor,
@@ -14,6 +15,7 @@ import type { TimelineNote, TimelineStep } from '../../src/domain/timeline/Timel
 import {
   MIDI,
   bar,
+  oneKeyInBothHands,
   p,
   partialVoiceExercise,
   singleBarExercise,
@@ -280,6 +282,26 @@ describe('the keys held down at a place in the music', () => {
     // The whole note ends at the bar line, and the half-note chord at the rest.
     expect(keysHeldAt(timeline, q * 4, null)).toEqual([MIDI.G2, MIDI.D3, MIDI.G4]);
     expect(keysHeldAt(timeline, q * 6, null)).toEqual([MIDI.G4]);
+  });
+
+  it('says the staves holding each key, both where both hands hold one', () => {
+    // The bass holding a D under the treble, which strikes that D on its second beat.
+    const timeline = buildTimeline(oneKeyInBothHands());
+    const staves = (ticks: number): [number, number[]][] =>
+      [...theStavesHoldingTheKeysAt(timeline, ticks, null)]
+        .map(([midi, held]): [number, number[]] => [midi, [...held].sort()])
+        .sort((left, right) => left[0] - right[0]);
+
+    expect(staves(0)).toEqual([
+      [MIDI.C4, [1]],
+      [MIDI.D4, [2]],
+    ]);
+    expect(staves(q)).toEqual([[MIDI.D4, [1, 2]]]);
+    expect(staves(q * 4)).toEqual([
+      [MIDI.G2, [2]],
+      [MIDI.D3, [2]],
+      [MIDI.G4, [1]],
+    ]);
   });
 
   it('holds a tied note across the bar line', () => {

@@ -87,6 +87,10 @@ describe('the stylesheet', () => {
   it('gives the left hand of what the machine plays an ink of its own over the keys, the one the drawing gives that hand', () => {
     const keys = rules().find((rule) => rule.selector === '.replay-keys')?.body ?? '';
     expect(keys).toMatch(/--keys-heard-left\s*:\s*var\(--star-8\)/);
+    // And the key it lands on, in the same ink.
+    expect(
+      rules().find((rule) => rule.selector === ".replay-keys__white[data-lit='heard-left']::after, .replay-keys__black[data-lit='heard-left']::after")?.body,
+    ).toMatch(/background\s*:\s*var\(--keys-heard-left\)/);
     expect(CSS).toMatch(/--roll-ink-left\s*:\s*color-mix\(in srgb, var\(--star-8\)/);
   });
 

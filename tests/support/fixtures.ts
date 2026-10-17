@@ -585,6 +585,22 @@ export function unisonInTwoVoices(overrides: ExerciseOverrides = {}): Exercise {
 }
 
 /**
+ * The two-bar fixture with the bass holding a D under the treble through its
+ * first bar, which the treble strikes on its second beat: one key, held by
+ * both hands at once.
+ */
+export function oneKeyInBothHands(overrides: ExerciseOverrides = {}): Exercise {
+  const base = twoBarExercise(overrides);
+  return {
+    ...base,
+    id: 'fixture-one-key-in-both-hands',
+    staves: base.staves.map((staff) =>
+      staff.staffNumber === 2 ? { ...staff, measures: [bar(noteEntry(p('D4'), Duration.WHOLE)), ...staff.measures.slice(1)] } : staff,
+    ),
+  };
+}
+
+/**
  * The treble holds a whole note while the bass walks four quarters under it.
  *
  * The shape that shows the two clocks of a waiting mode apart: the reader owes

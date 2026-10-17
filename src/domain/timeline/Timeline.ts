@@ -181,18 +181,31 @@ export function keysHeldAt(
   ticks: number,
   staffNumber: number | null,
 ): readonly number[] {
-  const held = new Set<number>();
+  return [...theStavesHoldingTheKeysAt(timeline, ticks, staffNumber).keys()].sort((left, right) => left - right);
+}
+
+/**
+ * The keys held down at a place, as `keysHeldAt` has them, each with the
+ * staves whose notes hold it - which say the hands: a key both hands hold
+ * is held by both.
+ */
+export function theStavesHoldingTheKeysAt(
+  timeline: ExerciseTimeline,
+  ticks: number,
+  staffNumber: number | null,
+): ReadonlyMap<number, ReadonlySet<number>> {
+  const held = new Map<number, Set<number>>();
   for (const step of timeline.steps) {
     if (step.onsetTicks > ticks) {
       break;
     }
     for (const note of notesStruckAt(step, staffNumber)) {
       if (step.onsetTicks + soundsFor(note) > ticks) {
-        held.add(note.midi);
+        held.set(note.midi, (held.get(note.midi) ?? new Set<number>()).add(note.staffNumber));
       }
     }
   }
-  return [...held].sort((left, right) => left - right);
+  return held;
 }
 
 /**

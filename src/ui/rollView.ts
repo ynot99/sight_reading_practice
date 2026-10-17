@@ -17,7 +17,8 @@ import {
 import { midiToLabel } from '../domain/model/Pitch.js';
 import { theChordsAlongTheBars, type BarOfBeats, type KeyFrom } from '../domain/harmony/chordsAlong.js';
 import { HIGHEST_KEY, LOWEST_KEY } from './replayKeys.js';
-import { HANDS_SPLIT_AT_MIDI } from '../domain/midi/MidiFile.js';
+import { theHandThatPlays } from '../domain/midi/MidiFile.js';
+import type { ChordKind } from '../domain/harmony/chordName.js';
 
 /**
  * What the drawing needs beyond the roll itself.
@@ -233,7 +234,7 @@ function shadeOf(press: RolledPress, freely: boolean): NoteShade {
   // by the hand that plays it, the one its pitch is in where none is said:
   // the staff it will be written on.
   if (freely && press.verdict === null) {
-    return press.hand ?? (press.midi >= HANDS_SPLIT_AT_MIDI ? 'right' : 'left');
+    return theHandThatPlays(press);
   }
   switch (press.verdict) {
     case 'correct':
@@ -311,6 +312,9 @@ export interface SceneChord extends SceneStretch {
   readonly exactly: boolean;
   /** Whether every note struck in it is among those chosen: see {@link theNotesOfTheChord}. */
   readonly chosen: boolean;
+  /** Its root, as a pitch class, and its kind: which pitches are its tones. */
+  readonly root: number;
+  readonly kind: ChordKind;
 }
 
 /** An instant of the run, and what it says to a pointer resting on it, if anything. */
@@ -1123,6 +1127,8 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
             name: chord.name,
             numeral: chord.numeral,
             exactly: chord.exactly,
+            root: chord.root,
+            kind: chord.kind,
             chosen: isEveryNoteChosen(theNotesOfTheChord(roll, chord.fromMs - origin, chord.untilMs - origin), drawing.chosen),
             says: chord.exactly
               ? `${chord.name} (${chord.numeral}): the chord the notes here make`

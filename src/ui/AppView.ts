@@ -12,6 +12,7 @@ import { nameOfThePitchClass, nameTheChord, theChordTheNotesMake } from '../doma
 import { DYNAMIC_VELOCITY, type DynamicLevel } from '../domain/model/Exercise.js';
 import { eachKeyOnce, sameKeys, theChordsOfTheScale } from '../domain/harmony/chordsOfTheKey.js';
 import type { KeyFrom } from '../domain/harmony/chordsAlong.js';
+import { theChordMovedTo } from '../domain/harmony/chordMoved.js';
 import {
   SCALES,
   SCALE_NAMES,
@@ -68,6 +69,7 @@ import {
   theKeyOfTheMusicAt,
   theClickInAnotherMetre,
   theClickOfTheTake,
+  theHandThatPlays,
   thePaceOfTheClick,
   thePlayingAtAnotherPace,
   writeMidiFile,
@@ -265,6 +267,7 @@ import {
   whatTheGridSaysAt,
   whatTheRulerSaysAt,
   type RollCanvases,
+  type SceneChord,
   type RollPitches,
   type RollScene,
   type ScenePedal,
@@ -660,6 +663,25 @@ function theBeatAt(roll: RunRoll, atMs: number): number {
     return next - here;
   }
   return here !== undefined && before !== null ? here - before : 500;
+}
+
+/**
+ * What a chord of the drawer would do to the sketch: the keys heard as it is
+ * held, and struck by a key's press of its button; the sketch with it; the
+ * notes chosen after; the notes it puts or moves, to show ahead; how loud,
+ * how long it sounds, and where the cursor goes, or nowhere.
+ */
+interface ChordWritten {
+  /** Whether it changes the sketch at all: a chord written where it already is changes nothing, but is still heard. */
+  readonly changes: boolean;
+  readonly heard: readonly number[];
+  readonly struck: readonly number[];
+  readonly events: readonly MidiFileEvent[];
+  readonly chosen: readonly KeyNamed[];
+  readonly shown: readonly { readonly midi: number; readonly fromMs: number; readonly untilMs: number }[];
+  readonly velocity: number;
+  readonly lengthMs: number;
+  readonly headAfterMs: number | null;
 }
 
 /** How the way a chord is broken is said on its button. */
@@ -2166,6 +2188,15 @@ export class AppView {
 
   /** What last went down on the drawer's chords, so a menu asked by a finger deletes nothing. */
   private pointerOnTheChords = '';
+
+  /**
+   * Where the chord last tapped in the lane begins: a chord of the drawer is
+   * written over it while its notes are the ones chosen, and nothing else
+   * (see `theChordChosenInTheLane`). Only a tap there says so - the notes of
+   * a chord just written are chosen too, and the next one tapped follows
+   * them rather than replacing them.
+   */
+  private chordTappedAt: number | null = null;
 
   /**
    * The chord of the drawer a pointer is held down on, sounding until it is
@@ -9595,7 +9626,7 @@ export class AppView {
         // there: see `letGoOfTheChord`.
         const written = this.writeTheChordAtTheHead(Number(chord.dataset['chord']));
         const now = this.runtime.clock.now();
-        for (const { midi } of written === null ? [] : written.pasted) {
+        for (const midi of written === null ? [] : written.struck) {
           this.runtime.pitchPlayer.play(midi, written?.velocity ?? 0, now);
           this.runtime.pitchPlayer.stop(midi, now + (written?.lengthMs ?? 0));
         }
@@ -12970,7 +13001,8 @@ export class AppView {
       !anyKept,
     );
     this.el.rollChordsList.dataset['forgetting'] = String(forgetting);
-    const shows = `${String(fifths)}:${theScaleOfTheKey(keyHere)} ${JSON.stringify(this.runtime.sketches.keptChords())} ${String(forgetting)}`;
+    const over = this.theChordChosenInTheLane();
+    const shows = `${String(fifths)}:${theScaleOfTheKey(keyHere)} ${JSON.stringify(this.runtime.sketches.keptChords())} ${String(forgetting)} ${over?.name ?? ''}`;
     if (this.el.rollChordsList.dataset['shows'] !== shows) {
       this.el.rollChordsList.dataset['shows'] = shows;
       this.el.rollChordsList.replaceChildren(
@@ -12980,7 +13012,9 @@ export class AppView {
           button.className = chord.kept ? 'button roll-chords__chord roll-chords__chord--kept' : 'button roll-chords__chord';
           button.dataset['chord'] = String(at);
           button.title = !forgetting
-            ? `Write ${chord.name} (${chord.under}) where the cursor is, to the next line of the grid`
+            ? over !== null
+              ? `Make the chosen ${over.name} ${chord.name} (${chord.under}), moving its notes as little as they can`
+              : `Write ${chord.name} (${chord.under}) where the cursor is, to the next line of the grid`
             : chord.kept
               ? `Delete ${chord.name} (${chord.under}) from the chords kept`
               : `${chord.name} is the key's own, and is not deleted`;
@@ -13296,20 +13330,19 @@ export class AppView {
    * follows it, and a progression is written by tapping it through. A key of
    * it already sounding there is left out, as a paste leaves it.
    */
-  private writeTheChordAtTheHead(
-    at: number,
-  ): { readonly pasted: readonly KeyNamed[]; readonly velocity: number; readonly lengthMs: number } | null {
+  private writeTheChordAtTheHead(at: number): ChordWritten | null {
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
     const written = this.theChordWrittenAtTheHead(at);
-    if (sketch === undefined || stored === null || written === null || written.pasted.length === 0) {
+    if (sketch === undefined || stored === null || written === null || !written.changes) {
       return null;
     }
-    const { events, pasted, fromMs, untilMs, velocity } = written;
-    this.changeTheSketchShowing(events, [...sketch.before, asItWas(stored, sketch.chosen)], pasted);
+    this.changeTheSketchShowing(written.events, [...sketch.before, asItWas(stored, sketch.chosen)], written.chosen);
     // Moved on, the cursor takes what is shown ahead with it: see `showTheChordsOfTheKey`.
-    this.putTheHeadAt(untilMs);
-    return { pasted, velocity, lengthMs: untilMs - fromMs };
+    if (written.headAfterMs !== null) {
+      this.putTheHeadAt(written.headAfterMs);
+    }
+    return written;
   }
 
   /**
@@ -13355,7 +13388,7 @@ export class AppView {
       this.runtime.pitchPlayer.stop(midi);
     }
     const written = at === null ? null : this.theChordWrittenAtTheHead(at);
-    const keys = written === null ? [] : written.chord;
+    const keys = written === null ? [] : written.heard;
     const now = this.runtime.clock.now();
     for (const midi of keys) {
       this.runtime.pitchPlayer.play(midi, written?.velocity ?? 0, now);
@@ -13391,27 +13424,24 @@ export class AppView {
   }
 
   /**
-   * What a chord of the drawer would make of the sketch, written where the
-   * cursor is: its notes from the line of the grid the cursor is in, where
-   * the marker is put on one, to the next, as loud as the sketch is on the
-   * whole - the sketch with them, the keys of it put in, and where they go.
-   * One answer, for writing it and for showing it ahead.
+   * What a chord of the drawer would make of the sketch: written over the
+   * chord chosen in the lane, where one is (see `theChordWrittenOver`), and
+   * where the cursor is otherwise - its notes from the line of the grid the
+   * cursor is in, where the marker is put on one, to the next, as loud as
+   * the sketch is on the whole, the cursor going on to where they end. One
+   * answer, for writing it, hearing it and showing it ahead.
    */
-  private theChordWrittenAtTheHead(at: number): {
-    /** The chord's keys, every one: what is heard of it. */
-    readonly chord: readonly number[];
-    readonly events: readonly MidiFileEvent[];
-    readonly pasted: readonly KeyNamed[];
-    readonly fromMs: number;
-    readonly untilMs: number;
-    readonly velocity: number;
-  } | null {
+  private theChordWrittenAtTheHead(at: number): ChordWritten | null {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
     const chord = stored === null ? undefined : this.theChordsInTheDrawer(this.theKeyAtTheHead(stored))[at];
     if (showing === null || sketch === undefined || stored === null || chord === undefined) {
       return null;
+    }
+    const over = this.theChordChosenInTheLane();
+    if (over !== null) {
+      return this.theChordWrittenOver(over, chord.midis);
     }
     const roll = showing.roll;
     const origin = rollBeganAtMs(roll);
@@ -13425,7 +13455,100 @@ export class AppView {
       chord.midis.map((midi) => ({ afterMs: 0, lengthMs: untilMs - fromMs, midi, velocity })),
       fromMs + origin,
     );
-    return { chord: chord.midis, events, pasted, fromMs, untilMs, velocity };
+    return {
+      changes: pasted.length > 0,
+      heard: chord.midis,
+      struck: pasted.map((key) => key.midi),
+      events,
+      chosen: pasted,
+      shown: pasted.map((key) => ({ midi: key.midi, fromMs, untilMs })),
+      velocity,
+      lengthMs: untilMs - fromMs,
+      headAfterMs: untilMs,
+    };
+  }
+
+  /**
+   * The chord tapped in the lane, while the notes chosen are its notes and
+   * nothing else - what a chord of the drawer is written over rather than at
+   * the cursor; `null` where the choice is anything else. Read off the
+   * choice each time it is asked, so it is never out of step with it.
+   */
+  private theChordChosenInTheLane(): SceneChord | null {
+    const scene = this.drawnScene;
+    const roll = this.theRoll();
+    const sketch = this.theOtherRollShowing?.sketch;
+    const at = this.chordTappedAt;
+    const chord = scene === null || at === null ? null : theChordAt(scene, at);
+    if (chord === null || !chord.chosen || roll === null || sketch === undefined) {
+      return null;
+    }
+    return theNotesOfTheChord(roll, chord.fromMs, chord.untilMs).length === sketch.chosen.length ? chord : null;
+  }
+
+  /**
+   * A chord of the drawer written over a chord of the lane: its notes moved
+   * to the drawer's, as a hand moves from one chord to the next (see
+   * `theChordMovedTo`), in the time and the rhythm they have. Only the
+   * notes that make the chord move - those that are its tones - and of
+   * those, where both hands play in it, only the left hand's, which carry
+   * it: a melody over it is the right hand's, and stays. The whole chord
+   * stays chosen and the cursor where it begins, so another can be tried
+   * over it at once.
+   */
+  private theChordWrittenOver(over: SceneChord, drawn: readonly number[]): ChordWritten | null {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const roll = this.theRoll();
+    const to = theChordTheNotesMake(drawn.map((midi) => ({ midi, lengthMs: 1 })));
+    if (stored === null || roll === null || to === null) {
+      return null;
+    }
+    const origin = rollBeganAtMs(roll);
+    const notes = theNotesOfTheChord(roll, over.fromMs, over.untilMs);
+    const bothHands = new Set(notes.map((note) => theHandThatPlays(note))).size > 1;
+    const tones = new Set(over.kind.intervals.map((step) => (over.root + step) % 12));
+    const moving = notes.filter(
+      (note) => (!bothHands || theHandThatPlays(note) === 'left') && tones.has(((note.midi % 12) + 12) % 12),
+    );
+    const moved = theChordMovedTo(
+      moving.map((note) => note.midi),
+      to,
+      notes.filter((note) => !moving.includes(note)).map((note) => note.midi),
+    );
+    const changing = moving.filter((note) => (moved.get(note.midi) ?? note.midi) !== note.midi);
+    const events =
+      changing.length === 0
+        ? stored.events
+        : takeWithTheKeysChanged(
+            stored.events,
+            changing.map((note) => ({
+              key: { midi: note.midi, downAtMs: note.downAtMs },
+              midi: moved.get(note.midi) ?? note.midi,
+              downAtMs: note.downAtMs,
+              upAtMs: note.upAtMs,
+            })),
+          );
+    if (events === null) {
+      return null;
+    }
+    const endMs = rollEndedAtMs(roll);
+    const heard = [...new Set(moving.map((note) => moved.get(note.midi) ?? note.midi))].sort((low, high) => low - high);
+    return {
+      changes: changing.length > 0,
+      heard,
+      struck: heard,
+      events,
+      chosen: notes.map((note) => ({ midi: moved.get(note.midi) ?? note.midi, downAtMs: note.downAtMs })),
+      shown: changing.map((note) => ({
+        midi: moved.get(note.midi) ?? note.midi,
+        fromMs: note.downAtMs - origin,
+        untilMs: (note.upAtMs ?? endMs) - origin,
+      })),
+      velocity: theUsualLoudness(stored.events),
+      lengthMs: over.untilMs - over.fromMs,
+      headAfterMs: null,
+    };
   }
 
   /** Points at a chord of the drawer, or at none, and shows its notes where it would write them. */
@@ -13446,7 +13569,7 @@ export class AppView {
     this.notesShownAhead =
       written === null || scene === null
         ? []
-        : written.pasted.map((key) => ({ row: scene.highest - key.midi, fromMs: written.fromMs, untilMs: written.untilMs }));
+        : written.shown.map((key) => ({ row: scene.highest - key.midi, fromMs: key.fromMs, untilMs: key.untilMs }));
     this.paintTheRoll();
   }
 
@@ -14612,6 +14735,8 @@ export class AppView {
     const notes = theNotesOfTheChord(roll, chord.fromMs, chord.untilMs).map((press) => ({ midi: press.midi, downAtMs: press.downAtMs }));
     const adds = event.ctrlKey || event.metaKey || event.shiftKey;
     this.choose(adds ? [...sketch.chosen.filter((key) => !notes.some((note) => sameKey(note, key))), ...notes] : notes);
+    this.chordTappedAt = chord.fromMs;
+    this.showTheChordsOfTheKey();
     this.putTheHeadAt(chord.fromMs);
     return true;
   }

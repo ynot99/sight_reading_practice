@@ -35,6 +35,11 @@ export type Hand = 'left' | 'right';
  */
 export const HANDS_SPLIT_AT_MIDI = 60;
 
+/** The hand that plays a note: the one it is said to be in, or the one its pitch is in. */
+export function theHandThatPlays(note: { readonly midi: number; readonly hand?: Hand }): Hand {
+  return note.hand ?? (note.midi >= HANDS_SPLIT_AT_MIDI ? 'right' : 'left');
+}
+
 /** What each hand's track is called in a file, which is how a reader knows it. */
 export const TRACK_OF_A_HAND: Readonly<Record<Hand, string>> = {
   right: 'Right hand',

@@ -542,6 +542,8 @@ describe('painting the chords the notes make', () => {
       numeral,
       exactly,
       chosen: chosen === true,
+      root: 0,
+      kind: { suffix: '', intervals: [0, 4, 7], fifthMayGo: false, minor: false, afterTheNumeral: '' },
       says: name,
     })),
   });

@@ -8312,6 +8312,115 @@ describe('AppView', () => {
       expect(lane()).toEqual([]);
     });
 
+    it('writes a chord of the drawer over the chord tapped in the lane, moving its notes as little as they can', async () => {
+      const { view, sketches, instrument } = createRig();
+      await view.initialize();
+      const held = (midis: readonly number[], atMs: number, upAtMs: number) =>
+        midis.flatMap((midi) => [
+          { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+          { kind: 'noteOff' as const, atMs: upAtMs, midi },
+        ]);
+      // C in the left hand under a melody in the right for a bar; then G
+      // in the right hand alone.
+      const sketch = sketches.begin(
+        {
+          events: [...held([48, 52, 55], 0, 2_000), ...held([76], 0, 1_000), ...held([79], 1_000, 2_000), ...held([67, 71, 74], 2_000, 4_000), ...held([78], 3_000, 3_250)],
+          beats: Array.from({ length: 8 }, (_, beat) => ({ atMs: beat * 500, beat: beat % 4, beatsInBar: 4 })),
+        },
+        'Over',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      element<HTMLButtonElement>('roll-chords-open').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const theLane = (): HTMLCanvasElement => {
+        const found = element('roll-body').querySelector<HTMLCanvasElement>('.roll__chords > .roll__paint');
+        if (found === null) {
+          throw new Error('No lane of chords.');
+        }
+        return found;
+      };
+      const drawer = (name: string): HTMLButtonElement => {
+        const found = [...element('roll-chords-list').querySelectorAll<HTMLButtonElement>('[data-chord]')].find(
+          (button) => button.querySelector('.roll-chords__name')?.textContent === name,
+        );
+        if (found === undefined) {
+          throw new Error(`No ${name} in the drawer.`);
+        }
+        return found;
+      };
+      const notes = (): number[][] => {
+        const events = sketches.find(sketch.id)?.events ?? [];
+        return events
+          .flatMap((event, index) => {
+            if (event.kind !== 'noteOn') {
+              return [];
+            }
+            const off = events.slice(index + 1).find((later) => later.kind === 'noteOff' && later.midi === event.midi);
+            return [[event.atMs, event.midi, off?.atMs ?? -1]];
+          })
+          .sort(([a = 0, x = 0], [b = 0, y = 0]) => a - b || x - y);
+      };
+      const lane = (): string[] => (view.rollScene?.chords ?? []).map((chord) => `${String(chord.fromMs)} ${chord.name}`);
+      const original = notes();
+      expect(lane()).toEqual(['0 C', '2000 G']);
+      const marker = (): string | undefined =>
+        element('roll-body').querySelector<HTMLElement>('.roll__place-mark')?.style.getPropertyValue('--roll-at');
+
+      // Tapped, the drawer's buttons say they write over it; the chord it
+      // already is changes nothing, and nothing is there to be put back.
+      tapTheDrawing({ pointerType: 'touch', button: 0, clientX: 0.5 * zoom, clientY: 5 }, theLane());
+      expect(drawer('F').title).toBe('Make the chosen C F (IV), moving its notes as little as they can');
+      drawer('C').click();
+      expect(notes()).toEqual(original);
+      expect(element<HTMLButtonElement>('roll-undo').dataset['idle']).toBe('true');
+      drawer('F').click();
+      // The left hand's C E G moved to F, C and A, in their own time; the melody stays.
+      expect(notes()).toEqual([
+        [0, 41, 2_000],
+        [0, 48, 2_000],
+        [0, 57, 2_000],
+        [0, 76, 1_000],
+        [1_000, 79, 2_000],
+        ...original.slice(5),
+      ]);
+      expect(instrument.played.slice(-3).map((note) => note.midi)).toEqual([41, 48, 57]);
+      // And named in the lane as what it now is.
+      expect(lane()).toEqual(['0 F', '2000 G']);
+      expect(marker()).toBe('0.000');
+      // Still the chord chosen, so another is tried over it at once.
+      expect((view.rollScene?.chords ?? []).map((chord) => chord.chosen)).toEqual([true, false]);
+      expect(drawer('G').title).toMatch(/^Make the chosen /);
+      // One change, put back as one.
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'z', code: 'KeyZ', ctrlKey: true }));
+      expect(notes()).toEqual(original);
+
+      // In one hand alone, every key of the chord moves.
+      tapTheDrawing({ pointerType: 'touch', button: 0, clientX: 2.5 * zoom, clientY: 5 }, theLane());
+      drawer('Am').click();
+      // Every key of the chord: a note passing over it that is none of its tones stays.
+      expect(notes().slice(5)).toEqual([
+        [2_000, 69, 4_000],
+        [2_000, 72, 4_000],
+        [2_000, 76, 4_000],
+        [3_000, 78, 3_250],
+      ]);
+      // Two chords chosen, it is written where the cursor is.
+      tapTheDrawing({ pointerType: 'mouse', button: 0, ctrlKey: true, clientX: 0.5 * zoom, clientY: 5 }, theLane());
+      expect(drawer('F').title).toMatch(/^Write F \(IV\) where the cursor is/);
+
+      // Chosen any other way, a chord of the drawer is written where the cursor is.
+      tapTheDrawing({ pointerType: 'touch', button: 0, clientX: 0.5 * zoom, clientY: 5 }, theLane());
+      element<HTMLButtonElement>('roll-select').click();
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'a', code: 'KeyA', ctrlKey: true }));
+      expect(drawer('F').title).toMatch(/^Write F \(IV\) where the cursor is/);
+      const before = notes().length;
+      drawer('F').click();
+      expect(notes().length).toBe(before + 3);
+    });
+
     it('sounds a chord of the drawer while it is held, slid over the others, and writes the one let go of', async () => {
       // jsdom lays nothing out, so where a pointer is says which chord it is
       // over: y is the chord's place in the drawer, and anywhere else is off it.

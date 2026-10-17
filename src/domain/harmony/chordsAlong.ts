@@ -1,4 +1,10 @@
-import { theChordMostOfTheNotesMake, theNumeralOfTheChord, type ChordHeard, type ChordMostlyHeard } from './chordName.js';
+import {
+  theChordMostOfTheNotesMake,
+  theNumeralOfTheChord,
+  type ChordHeard,
+  type ChordKind,
+  type ChordMostlyHeard,
+} from './chordName.js';
 import { thePitchClassesOfTheScale, type ScaleName } from './scales.js';
 
 /** A note sounding from one moment until another. */
@@ -28,6 +34,9 @@ export interface ChordAlong {
   readonly name: string;
   readonly numeral: string;
   readonly exactly: boolean;
+  /** Its root, as a pitch class, and its kind: which pitches are its tones. */
+  readonly root: number;
+  readonly kind: ChordKind;
 }
 
 /**
@@ -77,7 +86,7 @@ export function theChordsAlongTheBars(
     if (before !== undefined && before.untilMs === fromMs && before.name === chord.name && before.numeral === numeral) {
       along[along.length - 1] = { ...before, untilMs, exactly: before.exactly && chord.exactly };
     } else {
-      along.push({ fromMs, untilMs, name: chord.name, numeral, exactly: chord.exactly });
+      along.push({ fromMs, untilMs, name: chord.name, numeral, exactly: chord.exactly, root: chord.root, kind: chord.kind });
     }
   };
   const readTheBar = (moments: readonly number[]): void => {

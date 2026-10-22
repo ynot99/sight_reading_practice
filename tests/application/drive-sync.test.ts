@@ -3,6 +3,7 @@ import { DriveSync, SYNC_AFTER_QUIET_MS } from '../../src/application/DriveSync.
 import type { StoredScoreSummary } from '../../src/application/ports/IScoreStore.js';
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
 import { SettingsRepository } from '../../src/application/SettingsRepository.js';
+import type { SketchLeftOpen } from '../../src/application/SketchSync.js';
 
 const KNOWN = { presetIds: [], modeIds: [], rhythmProfileIds: [] };
 
@@ -16,7 +17,7 @@ function device(scores: StoredScoreSummary[] = [], store = new InMemorySettingsS
   repository.load();
   let now = 10_000;
   const shelf = [...scores];
-  const sketches = { unsentSinceMs: null as number | null, open: [] as (string | null)[] };
+  const sketches = { unsentSinceMs: null as number | null, open: [] as SketchLeftOpen[] };
   const sync = new DriveSync({
     library: {
       sync: () => Promise.resolve({ sent: 0, brought: 0, onlyOnTheDrive: [] }),

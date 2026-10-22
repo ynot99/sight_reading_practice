@@ -541,6 +541,9 @@ function sameKey(one: KeyNamed, other: KeyNamed): boolean {
   return one.midi === other.midi && one.downAtMs === other.downAtMs;
 }
 
+/** How often, at most, coming back to the page syncs it: see `syncOnComingBack`. */
+const SYNCED_ON_COMING_BACK_AT_MOST_EVERY_MS = 60_000;
+
 /** How near either end of a note the mouse or a finger takes hold of that end, in pixels. */
 const GRIP_PX = 10;
 
@@ -1951,6 +1954,13 @@ export class AppView {
   private timeTick: ReturnType<typeof setInterval> | null = null;
   /** The Sync button pressing itself, set for half a minute after the last change. */
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
+  /** When a sync nobody pressed for last began as the page was opened or come back to: see `syncOnComingBack`. */
+  private syncedOnComingBackAtMs: number | null = null;
+  /**
+   * The sketch open in the editor that a sync under way may take from the
+   * drive underneath it, having nothing in it to undo: see `syncWithTheDrive`.
+   */
+  private sketchTakenUnderTheEditor: string | null = null;
   /** Whether a sync is under way, pressed for or not. */
   private syncing = false;
   /**
@@ -3294,6 +3304,14 @@ export class AppView {
     this.bindTheKnobs();
     this.countTheTime();
     await this.openWhatWasAskedFor();
+    this.syncOnComingBack();
+    const onVisibility = (): void => {
+      this.syncOnComingBack();
+    };
+    this.doc.addEventListener('visibilitychange', onVisibility);
+    this.subscriptions.push(() => {
+      this.doc.removeEventListener('visibilitychange', onVisibility);
+    });
     // Again, and after the material this time. Opening material settles
     // things the reader left set on a visit that is over - the passage of a
     // piece not on the stand is not a passage of this one - and the boxes
@@ -8373,11 +8391,28 @@ export class AppView {
     this.showHowFarTheSyncHasGot({ answered: 0, expected: null });
     this.offerToSync();
     try {
-      // The sketch open on the page is left as it is, to be settled at the next sync.
-      const open = this.el.sheetRoll.hidden ? null : (this.theOtherRollShowing?.sketch?.id ?? null);
+      // The sketch open on the page is left as it is, to be settled at the
+      // next sync - where it has a change to undo, which is of the notes
+      // here. With none, there is nothing of it to lose: what the drive has
+      // newer is taken, and shown, as the page opened on it from another
+      // device's last sketch has to be.
+      const open = (): string | null => {
+        const sketch = this.el.sheetRoll.hidden ? undefined : this.theOtherRollShowing?.sketch;
+        if (sketch === undefined) {
+          return null;
+        }
+        if (sketch.before.length === 0 && sketch.after.length === 0) {
+          this.sketchTakenUnderTheEditor = sketch.id;
+          return null;
+        }
+        return sketch.id;
+      };
       const { library, settings, sketches } = await this.runtime.driveSync.sync((shown) => {
         this.showHowFarTheSyncHasGot(shown);
       }, open);
+      if (sketches.brought > 0) {
+        this.showTheSketchTakenUnderTheEditor();
+      }
       this.el.driveStatus.textContent = `Synced. Sent ${String(library.sent)}, brought here ${String(library.brought)}. ${theSketchesSynced(sketches)} Settings ${SETTINGS_WENT[settings]}.`;
       this.showWhatOnlyTheDriveHas(library.onlyOnTheDrive);
       this.showTheSketchesOnlyTheDriveHas(sketches.onlyOnTheDrive);
@@ -8391,6 +8426,7 @@ export class AppView {
       this.syncFailed = { change, why };
     } finally {
       this.syncing = false;
+      this.sketchTakenUnderTheEditor = null;
       this.showHowFarTheSyncHasGot(null);
       this.el.driveSync.disabled = false;
       this.el.scoreSync.disabled = false;
@@ -8419,6 +8455,52 @@ export class AppView {
     }
     button.dataset['syncMeasured'] = String(share !== null);
     this.el.driveStatus.textContent = share === null ? 'Syncing…' : `Syncing… ${String(Math.round(share * 100))}%`;
+  }
+
+  /**
+   * Draws the sketch open in the editor again as the sync has left it, where
+   * the drive's was taken underneath it: the notes chosen let go of, since
+   * they were chosen among notes that are not there now.
+   */
+  private showTheSketchTakenUnderTheEditor(): void {
+    const id = this.sketchTakenUnderTheEditor;
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    const stored = id === null ? null : this.runtime.sketches.find(id);
+    if (showing === null || sketch?.id !== id || stored === null) {
+      return;
+    }
+    this.holdTheRoll();
+    const roll = rollOfTheTake(stored, ROOM_IN_A_SKETCH);
+    this.theOtherRollShowing = { ...showing, roll, barLabel: barsCountedOnItsBeats(roll), sketch: { ...sketch, chosen: [] } };
+    this.drawTheRollInto();
+    this.sayWhatCanBeChanged();
+  }
+
+  /**
+   * Syncs without a press as the page is opened and each time it is come
+   * back to - from the other device, as often as not, with what was done
+   * there waiting on the drive, which is not asked otherwise until something
+   * changes here. Only where the drive can be asked without a press - Google
+   * opens a window for one, and a window needs a press - and where syncing
+   * was asked for; not during a run, nor while one is under way. Coming and
+   * going between windows, at most once a minute.
+   */
+  private syncOnComingBack(): void {
+    const now = Date.now();
+    if (
+      this.doc.visibilityState === 'hidden' ||
+      !this.runtime.controller.settings.offerToSync ||
+      !this.runtime.cloudDrive.signedIn ||
+      this.syncing ||
+      this.isPlaying ||
+      this.runtime.controller.isListening ||
+      (this.syncedOnComingBackAtMs !== null && now - this.syncedOnComingBackAtMs < SYNCED_ON_COMING_BACK_AT_MOST_EVERY_MS)
+    ) {
+      return;
+    }
+    this.syncedOnComingBackAtMs = now;
+    void this.syncWithTheDrive();
   }
 
   /** Stands the Sync button by the clock or takes it away, and sets it to press itself. */
@@ -16061,7 +16143,9 @@ export class AppView {
   ): void {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
-    if (showing === null || sketch === undefined) {
+    // Not while the drive's is being taken underneath it: a change worked
+    // out from the notes drawn would put back the notes the drive's replaced.
+    if (showing === null || sketch === undefined || this.sketchTakenUnderTheEditor === sketch.id) {
       return;
     }
     const changed = this.runtime.sketches.changeTheNotes(sketch.id, events, beats);

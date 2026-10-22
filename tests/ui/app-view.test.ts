@@ -7,7 +7,7 @@ import { timeTheStart } from '../../src/shared/timeTheStart.js';
 import { LibrarySync } from '../../src/application/LibrarySync.js';
 import { SettingsSync } from '../../src/application/SettingsSync.js';
 import { DriveSync } from '../../src/application/DriveSync.js';
-import { SketchSync } from '../../src/application/SketchSync.js';
+import { CONFLICTING_COPY, SKETCHES_FILE, SketchSync } from '../../src/application/SketchSync.js';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { DARK_SYSTEM_THEMES, PracticeController, TEMPO_STEP_PERCENT, THEMES } from '../../src/application/PracticeController.js';
@@ -20795,7 +20795,7 @@ describe('the library on Google Drive', () => {
     await waitFor(() => only.hidden === true);
   });
 
-  it('offers from the button the sketches only the drive has, brings one here when asked, and leaves the one open as it is', async () => {
+  it('offers from the button the sketches only the drive has, brings one here when asked, and leaves the one open as it is where it has a change to undo', async () => {
     const rig = createRig();
     await rig.view.initialize();
     // Another device, on the same drive.
@@ -20827,22 +20827,98 @@ describe('the library on Google Drive', () => {
     expect(said.hidden).toBe(true);
     expect(element('sketches-list').textContent).toContain('From the iPad');
 
-    // Renamed on the other device while it is open here: left as it is.
+    const sync = async (): Promise<void> => {
+      element('drive-status').textContent = '';
+      element<HTMLButtonElement>('drive-sync').click();
+      await waitFor(() => element('drive-status').textContent?.startsWith('Synced') === true);
+    };
+    // Renamed and added to on the other device while it is open here, with
+    // nothing changed in it here: taken, and drawn as it is now.
     other.rename(theirs.id, 'Renamed on the iPad');
+    other.changeTheNotes(theirs.id, [
+      ...played,
+      { kind: 'noteOn' as const, atMs: 500, midi: 64, velocity: 0.5 },
+      { kind: 'noteOff' as const, atMs: 900, midi: 64 },
+    ]);
     await otherSync.sync(null);
     rowButton('sketches-list', 'Edit this sketch').click();
-    element('drive-status').textContent = '';
-    element<HTMLButtonElement>('drive-sync').click();
-    await waitFor(() => element('drive-status').textContent?.startsWith('Synced') === true);
-    expect(rig.sketches.find(theirs.id)?.title).toBe('From the iPad');
-    // Shut, it is open no longer, and is taken.
-    element<HTMLButtonElement>('roll-close').click();
-    element('drive-status').textContent = '';
-    element<HTMLButtonElement>('drive-sync').click();
-    await waitFor(() => element('drive-status').textContent?.startsWith('Synced') === true);
+    expect(rig.view.rollScene?.notes).toHaveLength(1);
+    await sync();
     expect(element('drive-status').textContent).toContain('Sketches sent 0, brought here 1.');
     expect(rig.sketches.find(theirs.id)?.title).toBe('Renamed on the iPad');
-    expect(element('sketches-list').textContent).toContain('Renamed on the iPad');
+    expect(rig.view.rollScene?.notes).toHaveLength(2);
+    // With a change made in it here, and undone, which a redo is of: left as it is.
+    element<HTMLButtonElement>('roll-mark').click();
+    element<HTMLSelectElement>('roll-mark-dynamic').value = 'f';
+    element<HTMLButtonElement>('roll-mark-yes').click();
+    element<HTMLButtonElement>('roll-undo').click();
+    other.rename(theirs.id, 'Renamed again');
+    await otherSync.sync(null);
+    await sync();
+    expect(rig.sketches.find(theirs.id)?.title).toBe('Renamed on the iPad');
+    // Shut, it is open no longer, and is taken - what was changed here kept beside it.
+    element<HTMLButtonElement>('roll-close').click();
+    await sync();
+    expect(rig.sketches.find(theirs.id)?.title).toBe('Renamed again');
+    expect(element('sketches-list').textContent).toContain(`Renamed on the iPad (${CONFLICTING_COPY})`);
+  });
+
+  it("refuses a change to the sketch open while the drive's is being taken underneath it, and draws the drive's after", async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+    const played = [
+      { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+      { kind: 'noteOff' as const, atMs: 400, midi: 60 },
+    ];
+    const beats = [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 }));
+    const mine = rig.sketches.begin({ events: played, beats }, 'Both', 1);
+    element<HTMLButtonElement>('drive-sync').click();
+    await waitFor(() => element('drive-status').textContent?.startsWith('Synced') === true);
+    // Added to on the other device.
+    const other = new SketchLibrary(new InMemorySettingsStore(), () => 1);
+    const otherSync = new SketchSync({ drive: rig.drive, sketches: other });
+    await otherSync.bringHere(mine.id);
+    other.changeTheNotes(mine.id, [
+      ...played,
+      { kind: 'noteOn' as const, atMs: 500, midi: 64, velocity: 0.5 },
+      { kind: 'noteOff' as const, atMs: 900, midi: 64 },
+    ]);
+    await otherSync.sync(null);
+    element<HTMLButtonElement>('focus-scores').click();
+    element<HTMLButtonElement>('scores-show-sketches').click();
+    rowButton('sketches-list', 'Edit this sketch').click();
+    // Another sketch begun here, for the sync to send - and held as it
+    // writes the sketches, the drive's already taken here by then.
+    rig.sketches.begin({ events: played, beats }, 'Only here', 1);
+    let written: () => void = () => undefined;
+    const write = rig.drive.write.bind(rig.drive);
+    rig.drive.write = (name, content, replacing) =>
+      name !== SKETCHES_FILE
+        ? write(name, content, replacing)
+        : new Promise((resolve) => {
+            written = () => {
+              rig.drive.write = write;
+              resolve(write(name, content, replacing));
+            };
+          });
+    element('drive-status').textContent = '';
+    element<HTMLButtonElement>('drive-sync').click();
+    await waitFor(() => (rig.sketches.find(mine.id)?.noteCount ?? 0) === 2);
+    expect(rig.view.rollScene?.notes).toHaveLength(1);
+    // A change from the notes drawn, refused.
+    element<HTMLButtonElement>('roll-mark').click();
+    element<HTMLSelectElement>('roll-mark-dynamic').value = 'f';
+    element<HTMLButtonElement>('roll-mark-yes').click();
+    expect(rig.sketches.find(mine.id)?.noteCount).toBe(2);
+    expect(rig.sketches.find(mine.id)?.events.some((event) => event.kind === 'dynamic')).toBe(false);
+    written();
+    await waitFor(() => element('drive-status').textContent?.startsWith('Synced') === true);
+    expect(rig.view.rollScene?.notes).toHaveLength(2);
+    // And once it is over, changed as ever.
+    element<HTMLButtonElement>('roll-mark').click();
+    element<HTMLSelectElement>('roll-mark-dynamic').value = 'f';
+    element<HTMLButtonElement>('roll-mark-yes').click();
+    expect(rig.sketches.find(mine.id)?.events.some((event) => event.kind === 'dynamic')).toBe(true);
   });
 
   it('takes a sketch offered off the drive when the word is typed, and says so where it cannot', async () => {
@@ -21145,6 +21221,86 @@ describe('the Sync button pressing itself', () => {
       expect(rig.drive.files.has('Clair de Lune.musicxml')).toBe(true);
     });
     expect(button.hidden).toBe(true);
+  });
+
+  it('syncs as the page opens and as it is come back to, where it can without a press, at most once a minute', async () => {
+    const rig = createRig();
+    // What another device left on the drive.
+    const other = new SketchLibrary(new InMemorySettingsStore(), () => 1);
+    other.begin(
+      { events: [{ kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.5 }, { kind: 'noteOff', atMs: 400, midi: 60 }], beats: [] },
+      'From the iPad',
+      5,
+    );
+    await new SketchSync({ drive: rig.drive, sketches: other }).sync(null);
+    let listed = 0;
+    const list = rig.drive.list.bind(rig.drive);
+    rig.drive.list = () => {
+      listed += 1;
+      return list();
+    };
+    const seen = (state: DocumentVisibilityState): void => {
+      Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+    rig.drive.signedIn = true;
+    rig.runtime.controller.updateSettings({ offerToSync: true });
+    try {
+      // Opened: synced with nothing changed here, and what the other device sent is offered.
+      await rig.view.initialize();
+      await vi.waitFor(() => {
+        expect(element('drive-only-sketches').textContent).toContain('From the iPad');
+      });
+      const once = listed;
+      expect(once).toBeGreaterThan(0);
+      // Left and come back to within the minute: nothing; after it, again.
+      seen('hidden');
+      await vi.advanceTimersByTimeAsync(30_000);
+      seen('visible');
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(listed).toBe(once);
+      // Leaving after it is no coming back.
+      await vi.advanceTimersByTimeAsync(30_000);
+      seen('hidden');
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(listed).toBe(once);
+      seen('visible');
+      await vi.waitFor(() => {
+        expect(listed).toBeGreaterThan(once);
+      });
+      // Not where Google would need a press to be asked.
+      const twice = listed;
+      rig.drive.signedIn = false;
+      seen('hidden');
+      await vi.advanceTimersByTimeAsync(61_000);
+      seen('visible');
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(listed).toBe(twice);
+      // Nor where syncing was not asked for.
+      rig.drive.signedIn = true;
+      rig.runtime.controller.updateSettings({ offerToSync: false });
+      seen('hidden');
+      await vi.advanceTimersByTimeAsync(61_000);
+      seen('visible');
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(listed).toBe(twice);
+    } finally {
+      Reflect.deleteProperty(document, 'visibilityState');
+    }
+  });
+
+  it('does not sync as the page opens without a press where Google would need one', async () => {
+    const rig = createRig();
+    let listed = 0;
+    const list = rig.drive.list.bind(rig.drive);
+    rig.drive.list = () => {
+      listed += 1;
+      return list();
+    };
+    rig.runtime.controller.updateSettings({ offerToSync: true });
+    await rig.view.initialize();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(listed).toBe(0);
   });
 
   it('waits for half a minute of quiet, so a run of changes goes together', async () => {

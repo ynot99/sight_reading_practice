@@ -82,6 +82,12 @@ export interface SketchSyncDependencies {
  * of here since the last sync is done to the drive's list, and nothing is
  * ever a conflict (see `theChordsMerged`).
  */
+/**
+ * The sketch open on the page, not to be taken from the drive underneath it,
+ * or none: said at once, or asked when the sketches are settled.
+ */
+export type SketchLeftOpen = string | null | (() => string | null);
+
 export class SketchSync {
   private readonly deps: SketchSyncDependencies;
 
@@ -102,7 +108,7 @@ export class SketchSync {
    * with other notes than the drive's, which the next sync keeps as a copy
    * (see `settle`).
    */
-  async sync(open: string | null, progress?: SyncProgress): Promise<SketchSyncOutcome> {
+  async sync(open: SketchLeftOpen, progress?: SyncProgress): Promise<SketchSyncOutcome> {
     const drive = progress === undefined ? this.deps.drive : progress.counting(this.deps.drive);
     let brought = 0;
     let conflicts = 0;
@@ -154,9 +160,12 @@ export class SketchSync {
    */
   private settle(
     there: ReadonlyMap<string, SketchThere>,
-    open: string | null,
+    leftOpen: SketchLeftOpen,
   ): { readonly next: Map<string, SketchThere>; readonly sentAt: [string, number][]; readonly brought: number; readonly conflicts: number } {
     const library = this.deps.sketches;
+    // Asked as the sketches are settled, which is when it counts: a sync
+    // takes a while, and one is opened or changed in the meantime.
+    const open = typeof leftOpen === 'function' ? leftOpen() : leftOpen;
     const next = new Map<string, SketchThere>(there);
     const sentAt: [string, number][] = [];
     let brought = 0;

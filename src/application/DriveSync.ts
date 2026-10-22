@@ -2,7 +2,7 @@ import type { LibrarySync, SyncOutcome } from './LibrarySync.js';
 import type { StoredScoreSummary } from './ports/IScoreStore.js';
 import type { SettingsRepository } from './SettingsRepository.js';
 import { SETTINGS_REQUESTS_AT_MOST, type SettingsSync, type SettingsSyncOutcome } from './SettingsSync.js';
-import { SKETCH_REQUESTS_AT_MOST, type SketchSync, type SketchSyncOutcome } from './SketchSync.js';
+import { SKETCH_REQUESTS_AT_MOST, type SketchLeftOpen, type SketchSync, type SketchSyncOutcome } from './SketchSync.js';
 import { SyncProgress, type SyncProgressShown } from './SyncProgress.js';
 
 /**
@@ -57,7 +57,7 @@ export class DriveSync {
    * (`openSketch`): see `SketchSync`. How far it has got is told as it goes,
    * in requests to the drive: see `SyncProgress`.
    */
-  async sync(tell?: (shown: SyncProgressShown) => void, openSketch: string | null = null): Promise<DriveSyncOutcome> {
+  async sync(tell?: (shown: SyncProgressShown) => void, openSketch: SketchLeftOpen = null): Promise<DriveSyncOutcome> {
     // The library is synced first, and the settings and the sketches after
     // it are held back for until it knows how much it will ask.
     const progress =

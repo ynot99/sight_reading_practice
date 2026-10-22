@@ -8143,6 +8143,28 @@ describe('AppView', () => {
         [72, 0.5],
         [76, 0.5],
       ]);
+      // The button keeps the focus it was pressed with, and the arrows are
+      // still the notes': Shift takes the chord just written up an octave.
+      const am = [...drawer.querySelectorAll<HTMLButtonElement>('[data-chord]')].find(
+        (button) => button.querySelector('.roll-chords__name')?.textContent === 'Am',
+      );
+      am?.focus();
+      const arrow = (init: KeyboardEventInit): boolean => {
+        const pressed = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+        (document.activeElement ?? document.body).dispatchEvent(pressed);
+        return pressed.defaultPrevented;
+      };
+      expect(document.activeElement).toBe(am);
+      expect(arrow({ key: 'ArrowUp', shiftKey: true })).toBe(true);
+      expect(notes().slice(2).map(([, midi = 0]) => midi)).toEqual([81, 84, 88]);
+      // A checkbox has no use for them either; a list does.
+      element<HTMLInputElement>('roll-snap').focus();
+      expect(arrow({ key: 'ArrowDown', shiftKey: true })).toBe(true);
+      expect(notes().slice(2).map(([, midi = 0]) => midi)).toEqual([69, 72, 76]);
+      element<HTMLSelectElement>('roll-key').focus();
+      expect(arrow({ key: 'ArrowDown' })).toBe(false);
+      key({ key: 'z', code: 'KeyZ', ctrlKey: true });
+      key({ key: 'z', code: 'KeyZ', ctrlKey: true });
       tapTheChord('F');
       expect(notes().slice(5)).toEqual([[3_500, 65, 4_000, 0.5], [3_500, 69, 4_000, 0.5], [3_500, 72, 4_000, 0.5]]);
       // Each one change, put back as one.

@@ -1699,6 +1699,21 @@ function isFormControl(element: Element | null): boolean {
 }
 
 /**
+ * Whether a control holding the focus has a use of its own for the arrow
+ * keys: a list, a slider, a choice of one, anything typed into. A button has
+ * none, so the arrows are the editor's still while one holds the focus -
+ * as a chord of the drawer does once it is pressed, and Shift and the
+ * arrows were then lost to the notes it had just written.
+ */
+function usesTheArrows(element: Element | null): boolean {
+  if (element === null) {
+    return false;
+  }
+  const type = element.tagName === 'INPUT' ? (element.getAttribute('type') ?? 'text') : null;
+  return isFormControl(element) && element.tagName !== 'BUTTON' && !['button', 'checkbox', 'submit', 'reset'].includes(type ?? '');
+}
+
+/**
  * Whether a control is one pressed rather than typed into: a button, a box
  * ticked, a slider dragged, a list chosen from. Pressed by the pointer, the
  * browser leaves the focus on it all the same. A field typed into is never
@@ -15372,7 +15387,7 @@ export class AppView {
       !event.altKey &&
       ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) &&
       // A list or a slider with the focus has its own use for them.
-      !isFormControl(event.target instanceof Element ? event.target : null) &&
+      !usesTheArrows(event.target instanceof Element ? event.target : null) &&
       chosen.length > 0
     ) {
       event.preventDefault();

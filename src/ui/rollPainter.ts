@@ -279,9 +279,11 @@ const VELOCITY_INSET_PX = 3;
 const VELOCITY_TALL_PX = 2;
 /** The pin at the end of the bar of a note at its own level: as wide, and as much again above and below the bar. */
 const VELOCITY_PIN_PX = 3;
-/** The dashes of the bar of a note as loud as it was struck: so long, so far apart. */
+/** The dashes of the bar of a note as loud as the dynamic over it says: so long, so far apart. */
 const VELOCITY_DASH_PX = 3;
 const VELOCITY_GAP_PX = 2;
+/** And how strongly they are inked: paler than a bar of the note's own, so the two part at a glance. */
+const VELOCITY_BORROWED_STRENGTH = 0.45;
 
 function inkOfLine(inks: RollInks, kind: LineKind): string {
   switch (kind) {
@@ -466,10 +468,10 @@ export function paintTheGrid(
   // note struck as hard as a key goes the whole of it. Seen at a glance
   // across a phrase, where a number on every note would be read one by one.
   // And where its loudness comes from, by the bar's shape, in the one ink:
-  // whole where the dynamic over it says; pinned at its end where the note
-  // is at a level of its own; in dashes where it is as loud as it was struck,
-  // of a sketch whose notes are written at levels. Of a run, which is all
-  // played, a whole bar.
+  // whole where it is as loud as it was struck, as every note of a run is;
+  // pinned at its end where the note is at a level of its own; in dashes
+  // where it borrows the dynamic over it, and paler, which is what the
+  // dashed edge of a level's button says of the chosen notes.
   paint.fillStyle = inks.velocity;
   for (const note of stretchesIn(scene.notes, fromMs - ms(NARROWEST_PX), untilMs)) {
     const room = wide(note.fromMs, note.untilMs) - 2 * VELOCITY_INSET_PX;
@@ -479,10 +481,12 @@ export function paintTheGrid(
     const left = x(note.fromMs) + VELOCITY_INSET_PX;
     const top = y(note.row) + VELOCITY_INSET_PX;
     const long = room * note.loudness;
-    if (note.written === undefined && scene.written) {
+    if (note.written?.own === false) {
+      paint.globalAlpha = VELOCITY_BORROWED_STRENGTH;
       for (let at = 0; at < long; at += VELOCITY_DASH_PX + VELOCITY_GAP_PX) {
         paint.fillRect(left + at, top, Math.min(VELOCITY_DASH_PX, long - at), VELOCITY_TALL_PX);
       }
+      paint.globalAlpha = 1;
       continue;
     }
     paint.fillRect(left, top, long, VELOCITY_TALL_PX);

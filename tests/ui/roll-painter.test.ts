@@ -320,7 +320,7 @@ describe('painting the grid', () => {
     expect(short.recorder.inked('velocity')).toEqual([]);
   });
 
-  it('shapes the bar by where its loudness comes from: whole from the flags, pinned at its own level, in dashes as played', () => {
+  it('shapes the bar by where its loudness comes from: in pale dashes from the flags, pinned at its own level, whole as played', () => {
     const scene = theSceneOfTheRoll({
       roll: roll({
         presses: [
@@ -338,15 +338,23 @@ describe('painting the grid', () => {
 
     const top = (midi: number): number => (scene.notes.find((note) => scene.highest - note.row === midi)?.row ?? -1) * 14 + 3;
     const bars = recorder.inked('velocity').map((mark) => [mark.x, mark.y, Number(mark.wide.toFixed(6)), mark.tall]);
-    // Half the note's 64 pixels inside its insets: whole; whole and a pin at its end; and dashes of three, two apart.
-    expect(bars.filter(([, y]) => y === top(MIDI.C4))).toEqual([[3, top(MIDI.C4), 32, 2]]);
+    const paleness = (midi: number): readonly number[] => [
+      ...new Set(recorder.inked('velocity').filter((mark) => mark.y === top(midi)).map((mark) => mark.alpha)),
+    ];
+    // Half the note's 64 pixels inside its insets: dashes of three, two apart; whole and a pin at its end; and whole.
+    expect(bars.filter(([, y]) => y === top(MIDI.C4))).toEqual(
+      [0, 5, 10, 15, 20, 25, 30].map((at) => [3 + at, top(MIDI.C4), Math.min(3, 32 - at), 2]),
+    );
     expect(bars.filter(([, y]) => y === top(MIDI.C4 + 2) || y === top(MIDI.C4 + 2) - 1)).toEqual([
       [3, top(MIDI.C4 + 2), 32, 2],
       [32, top(MIDI.C4 + 2) - 1, 3, 4],
     ]);
-    expect(bars.filter(([, y]) => y === top(MIDI.C4 + 4))).toEqual(
-      [0, 5, 10, 15, 20, 25, 30].map((at) => [3 + at, top(MIDI.C4 + 4), Math.min(3, 32 - at), 2]),
-    );
+    expect(bars.filter(([, y]) => y === top(MIDI.C4 + 4))).toEqual([[3, top(MIDI.C4 + 4), 32, 2]]);
+    // The borrowed paler than either of the others, and nothing after them left pale.
+    expect(paleness(MIDI.C4)).toHaveLength(1);
+    expect(paleness(MIDI.C4)[0]).toBeLessThan(0.6);
+    expect(paleness(MIDI.C4 + 2)).toEqual([1]);
+    expect(paleness(MIDI.C4 + 4)).toEqual([1]);
     expect(scene.notes.map((note) => note.says)).toEqual([
       'C4 · not judged · mf, from the flag over it',
       'D4 · not judged · f, its own',

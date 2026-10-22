@@ -377,11 +377,6 @@ export interface RollScene {
   readonly rushes: readonly SceneMoment[];
   readonly slips: readonly SceneSlip[];
   readonly notes: readonly SceneNote[];
-  /**
-   * Whether any note is written at a level, as a sketch's may be: then a note
-   * as loud as it was struck is told apart from them on its bar.
-   */
-  readonly written: boolean;
   /** The notes the music asked for: see {@link RollDrawing.ghosts}. */
   readonly ghosts: readonly SceneRowed[];
   readonly bars: readonly SceneBar[];
@@ -1026,7 +1021,8 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
   const endMs = rollEndedAtMs(roll);
   const ghosts = drawing.ghosts ?? [];
   const band = bandOf(roll.presses, ghosts, drawing.wholeKeyboard);
-  // Whether any note is written at a level: see `RollScene.written`.
+  // Whether any note is written at a level, as a sketch's may be: then a
+  // note as loud as it was struck says so, told apart from them.
   const written = roll.presses.some((press) => press.written !== undefined);
 
   const blackRows: number[] = [];
@@ -1114,7 +1110,6 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
     notes: inTimeOrder(
       roll.presses.map((press) => noteOf(press, origin, band.high, endMs, drawing.chosen, drawing.freely === true, written)),
     ),
-    written,
     ghosts: inTimeOrder(
       outlines.map(({ ghost, from, until }) => ({
         fromMs: from,

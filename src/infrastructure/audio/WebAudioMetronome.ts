@@ -9,6 +9,8 @@ import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolu
 import { TypedEventEmitter, type Unsubscribe } from '../../shared/EventEmitter.js';
 import {
   AudioClockReading,
+  CLOCKS_APART_MS,
+  CLOCKS_WATCHED_MS,
   TOO_LATE_MS,
   audioTimeFor,
   outputLatencySeconds,
@@ -91,15 +93,6 @@ const DEFAULT_CONFIG: MetronomeConfig = {
  * its due moment. Each tick also carries the exact time it represents, which
  * lets Flow mode grade timing without inheriting any scheduler jitter.
  */
-/** How long the clocks are watched before what stands between them is asked of. */
-const CLOCKS_WATCHED_MS = 500;
-
-/**
- * How far the reading may stand from the clocks before it is taken again:
- * wider than a buffer of the audio clock, which is what its readings wander
- * by, and well inside what anybody sees or hears.
- */
-const CLOCKS_APART_MS = 15;
 
 /** How far past where it settled the audio clock's nought may rise before the timings say it stood. */
 const CLOCK_STOOD_MS = 30;

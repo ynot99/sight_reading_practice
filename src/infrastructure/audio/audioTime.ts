@@ -128,9 +128,28 @@ function pageMsAtAudioNought(context: BaseAudioContext): number {
   return performance.now() - context.currentTime * 1000;
 }
 
+/** How long the clocks are watched before what stands between them is asked of. */
+export const CLOCKS_WATCHED_MS = 500;
+
+/**
+ * How far the reading may stand from the clocks before it is taken again:
+ * wider than a buffer of the audio clock, which is what its readings wander
+ * by, and well inside what anybody sees or hears.
+ */
+export const CLOCKS_APART_MS = 15;
+
+/**
+ * How long nothing may be placed before the reading kept for placing is let
+ * go, and the next sound is placed by a fresh one: longer than any gap
+ * between two sounds of one playback handed over ahead, so a playback keeps
+ * one reading from its first sound to its last.
+ */
+export const A_PLAYBACK_PAUSES_MS = 2_000;
+
 /**
  * The one crossing between the page's clock and the audio clock that every
- * sound beside the metronome's makes, for as long as the metronome beats.
+ * sound makes: the metronome's while it beats, and otherwise one kept for
+ * as long as sounds go on being placed.
  *
  * Read fresh, the two clocks disagree from one moment to the next: the audio
  * clock moves in whole buffers, and a device just woken runs slow for a
@@ -141,26 +160,58 @@ function pageMsAtAudioNought(context: BaseAudioContext): number {
  * a later start. Crossed back by the reading the tick was stamped with, a
  * note lands on the audio clock where its click is.
  *
- * Fresh whenever the metronome is not beating: then nothing sounds beside
- * it, and a reading kept from its last start would drift from the page's
- * clock over a session.
+ * Where the metronome is not beating - a take or a sketch played back, with
+ * its clicks placed one by one - each sound was placed by a reading of its
+ * own, and so each was early by however long the audio clock had stood since
+ * its last buffer: measured in Chrome on his desktop, a buffer of 10.7 ms,
+ * and readings wandering 0-13 ms, 6 ms at the median. Clicks a sixteenth
+ * apart at 92 a minute, 163 ms, came out unevenly and ahead. So one reading
+ * is kept while sounds keep being placed, as the metronome keeps its own,
+ * and taken again as the metronome's is: where the earliest over a stretch -
+ * the nearest of many - stands further from it than a buffer wanders. A
+ * reading kept over a quiet spell would drift from the page's clock over a
+ * session, so after one the next sound is placed by a fresh one.
  */
 export class AudioClockReading {
   private held: number | null = null;
+  private kept: number | null = null;
+  private lastPlacedAt = 0;
+  private watchedSince = 0;
+  private earliest: number | null = null;
 
   /** The metronome's reading, kept while it beats. */
   hold(pageMsAtAudioNought: number): void {
     this.held = pageMsAtAudioNought;
   }
 
-  /** Back to reading fresh, the metronome having stopped. */
+  /** Back to the reading kept for placing, the metronome having stopped. */
   release(): void {
     this.held = null;
   }
 
   /** Where the page's clock stands at the audio clock's nought, as sounds are to be placed now. */
   of(context: BaseAudioContext): number {
-    return this.held ?? pageMsAtAudioNought(context);
+    if (this.held !== null) {
+      return this.held;
+    }
+    const now = performance.now();
+    const nought = pageMsAtAudioNought(context);
+    if (this.kept === null || now - this.lastPlacedAt > A_PLAYBACK_PAUSES_MS) {
+      this.kept = nought;
+      this.watchedSince = now;
+      this.earliest = null;
+    } else {
+      this.earliest = Math.min(this.earliest ?? nought, nought);
+      if (now - this.watchedSince >= CLOCKS_WATCHED_MS) {
+        if (Math.abs(this.earliest - this.kept) > CLOCKS_APART_MS) {
+          this.kept = this.earliest;
+        }
+        this.watchedSince = now;
+        this.earliest = null;
+      }
+    }
+    this.lastPlacedAt = now;
+    return this.kept;
   }
 }
 

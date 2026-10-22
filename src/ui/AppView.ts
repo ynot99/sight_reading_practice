@@ -9628,6 +9628,13 @@ export class AppView {
         this.sliceByAClick(mouse);
         return;
       }
+      // Two on the ruler of a sketch being edited ask about the beat there,
+      // as the flag's button asks about the one the marker is on - which
+      // the first of them put there.
+      if (onTheRuler && this.isASecondTap(mouse, null) && this.theOtherRollShowing?.sketch?.editing === true) {
+        this.askForAChangeAtTheHead();
+        return;
+      }
       if (onTheChords && this.chooseTheChordTapped(event)) {
         return;
       }

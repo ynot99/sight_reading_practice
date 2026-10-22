@@ -7472,6 +7472,53 @@ describe('AppView', () => {
       }
     });
 
+    it("asks about the beat under two taps on the ruler of a sketch being edited, as the flag's button does", async () => {
+      const { view, sketches, clock } = createRig();
+      await view.initialize();
+      sketches.begin(
+        {
+          events: Array.from({ length: 12 }, (_, at) => [
+            { kind: 'noteOn' as const, atMs: at * 500, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: at * 500 + 400, midi: 60 },
+          ]).flat(),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Ruled',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const body = element('roll-body');
+      const sheet = element('sheet-roll-mark');
+      const across = (ms: number): number =>
+        (ms / 1000) * zoom - (Number.parseFloat(body.querySelector<HTMLElement>('.roll__head')?.style.getPropertyValue('--roll-x') ?? '0') || 0);
+      const onTheRuler = (ms: number, afterMs: number): void => {
+        clock.advance(afterMs);
+        body.querySelector('.roll__ruler')?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: across(ms), clientY: 5 }));
+      };
+
+      // One puts the marker on the beat, and asks nothing.
+      onTheRuler(4_620, 1_000);
+      expect(headAt(body)).toBe('4.500');
+      expect(sheet.hidden).toBe(true);
+      // The second, soon after, asks about that beat.
+      onTheRuler(4_620, 100);
+      expect(sheet.hidden).toBe(false);
+      expect(element('roll-mark-title').textContent).toBe('From bar 3, beat 2, until the next change. The score shows a key changed here from the next bar.');
+      element<HTMLButtonElement>('roll-mark-no').click();
+      // Two a second apart are two taps.
+      onTheRuler(2_100, 1_000);
+      onTheRuler(2_100, 1_000);
+      expect([headAt(body), sheet.hidden]).toEqual(['2.000', true]);
+      // Listening, nothing to ask.
+      element<HTMLButtonElement>('roll-edit').click();
+      onTheRuler(2_100, 1_000);
+      onTheRuler(2_100, 100);
+      expect(sheet.hidden).toBe(true);
+    });
+
     it('puts an empty bar in before the bar of the beat asked about, as one change, and none before the first', async () => {
       const { view, sketches, clock } = createRig();
       await view.initialize();

@@ -49,6 +49,8 @@ export interface RollInks {
   readonly sounding: string;
   /** The wash over a row of a note of the scale the music is written in: no verdict either. */
   readonly scale: string;
+  /** The line under the row an octave begins on. */
+  readonly octave: string;
   /** A note nothing judged, by the hand that plays it: colours no verdict wears. */
   readonly right: string;
   readonly left: string;
@@ -86,6 +88,7 @@ export const INKS: Readonly<Record<Exclude<keyof RollInks, 'font'>, string>> = {
   chosen: 'chosen',
   sounding: 'sounding',
   scale: 'scale',
+  octave: 'octave',
   right: 'right',
   left: 'left',
   tickDivision: 'tick-division',
@@ -275,6 +278,9 @@ const CHOSEN_RIM_PX = 2;
  * stands - below the rim of a note chosen, which it would otherwise hide
  * under - and how tall it is. Left off a note too small to hold it.
  */
+/** How thick the line under the row an octave begins on is. */
+const OCTAVE_LINE_PX = 1;
+
 const VELOCITY_INSET_PX = 3;
 const VELOCITY_TALL_PX = 2;
 /** The pin at the end of the bar of a note at its own level: as wide, and as much again above and below the bar. */
@@ -390,6 +396,21 @@ export function paintTheGrid(
     for (const row of span.rows) {
       if (shows(row)) {
         paint.fillRect(left, y(row), right - left, rowPx);
+      }
+    }
+  }
+  // Where each octave begins, a line along the foot of its row: under the
+  // tonic the rows are lit from, or under C.
+  paint.fillStyle = inks.octave;
+  for (const span of scene.octaves) {
+    const left = Math.max(0, x(span.fromMs));
+    const right = Math.min(widePx, x(span.untilMs));
+    if (right <= left) {
+      continue;
+    }
+    for (const row of span.rows) {
+      if (shows(row)) {
+        paint.fillRect(left, y(row) + rowPx - OCTAVE_LINE_PX, right - left, OCTAVE_LINE_PX);
       }
     }
   }

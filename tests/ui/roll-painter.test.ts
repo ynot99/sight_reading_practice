@@ -35,6 +35,7 @@ const INKS: RollInks = {
   chosen: 'chosen',
   sounding: 'sounding',
   scale: 'scale',
+  octave: 'octave',
   right: 'right',
   left: 'left',
   tickDivision: 'tick-division',
@@ -412,6 +413,27 @@ describe('painting the grid', () => {
     const { surface: plain, recorder: none } = surface(700, 140);
     paintTheGrid(plain, sceneOf(input), at(), INKS, 1);
     expect(none.inked('scale')).toEqual([]);
+  });
+
+  it('lines the foot of the row each octave begins on, as far as the next scale, under the notes, none out of sight', () => {
+    const input = roll({ presses: [press({ midi: 40 }), press({ midi: 90 })] });
+    const scene = {
+      ...sceneOf(input),
+      octaves: [
+        { fromMs: Number.NEGATIVE_INFINITY, untilMs: 2_000, rows: [2, 50] },
+        { fromMs: 2_000, untilMs: Number.POSITIVE_INFINITY, rows: [3] },
+        { fromMs: 9_000, untilMs: 10_000, rows: [4] },
+      ],
+    };
+    const { surface: canvas, recorder } = surface(700, 140);
+
+    paintTheGrid(canvas, scene, at(), INKS, 1);
+
+    expect(recorder.inked('octave')).toEqual([
+      expect.objectContaining({ x: 0, y: 3 * 14 - 1, wide: 280, tall: 1 }),
+      expect.objectContaining({ x: 280, y: 4 * 14 - 1, wide: 420, tall: 1 }),
+    ]);
+    expect(recorder.order.indexOf('octave')).toBeLessThan(recorder.order.indexOf('correct'));
   });
 
   it('lays a band across the whole width of each row sounding, under the notes, and none out of sight', () => {

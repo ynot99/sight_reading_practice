@@ -516,6 +516,13 @@ describe('drawing a run as a piano roll', () => {
       { fromMs: 1_000, untilMs: Number.POSITIVE_INFINITY, rows: [0, 2, 4, 6, 7, 9, 11] },
     ]);
     expect(sceneOf(input).scaleSpans).toEqual([]);
+    // Each octave begins on the tonic's row: C's, then G's from two seconds.
+    expect(scene.octaves).toEqual([
+      { fromMs: Number.NEGATIVE_INFINITY, untilMs: 1_000, rows: [6] },
+      { fromMs: 1_000, untilMs: Number.POSITIVE_INFINITY, rows: [11] },
+    ]);
+    // In no scale, on C's, all the way.
+    expect(sceneOf(input).octaves).toEqual([{ fromMs: Number.NEGATIVE_INFINITY, untilMs: Number.POSITIVE_INFINITY, rows: [6] }]);
   });
 
   it('flags each mark, placed at its moment, its buttons hidden until one is chosen', () => {

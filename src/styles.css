@@ -1994,6 +1994,12 @@ textarea {
    */
   --roll-ink-line: color-mix(in srgb, var(--border) 70%, transparent);
   --roll-ink-division: color-mix(in srgb, var(--border) 32%, transparent);
+  /*
+   * Where each octave begins, under its tonic's row: across the rows, where
+   * the beats are down them, and fainter than a beat, so a bar is still
+   * read before an octave.
+   */
+  --roll-ink-octave: color-mix(in srgb, var(--border) 55%, transparent);
   --roll-ink-downbeat: var(--border);
   /*
    * A bar line the reader gave after it fell due. Two lines at one bar line is

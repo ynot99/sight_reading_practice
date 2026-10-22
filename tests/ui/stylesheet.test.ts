@@ -1859,6 +1859,9 @@ describe('how fine the grid reads', () => {
 
     expect(percent(ink('division'))).toBeGreaterThan(0);
     expect(percent(ink('division'))).toBeLessThan(percent(ink('line')));
+    // Where an octave begins, across the rows: fainter than a beat, so a bar is read first.
+    expect(percent(ink('octave'))).toBeGreaterThan(percent(ink('division')));
+    expect(percent(ink('octave'))).toBeLessThan(percent(ink('line')));
   });
 });
 

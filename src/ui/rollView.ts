@@ -369,6 +369,12 @@ export interface RollScene {
   readonly blackRows: readonly number[];
   /** The rows of the notes of each scale the music is written in, as far as the next: see {@link RollDrawing.scales}. */
   readonly scaleSpans: readonly { readonly fromMs: number; readonly untilMs: number; readonly rows: readonly number[] }[];
+  /**
+   * The rows each octave begins on, as far as the next scale: its tonic's,
+   * where the music is written in one, and C's where it is not. A line runs
+   * under each, so the octaves are read down the drawing at a glance.
+   */
+  readonly octaves: readonly { readonly fromMs: number; readonly untilMs: number; readonly rows: readonly number[] }[];
   /** The marks over the ruler: see {@link RollDrawing.marks}. */
   readonly marks: readonly SceneMark[];
   readonly waits: readonly SceneStretch[];
@@ -1032,6 +1038,23 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
     }
   }
   const scales = drawing.scales ?? [];
+  const rowsOf = (pitchClass: number): number[] => {
+    const rows: number[] = [];
+    for (let midi = band.high; midi >= band.low; midi -= 1) {
+      if (((midi % 12) + 12) % 12 === pitchClass) {
+        rows.push(band.high - midi);
+      }
+    }
+    return rows;
+  };
+  const octaves =
+    scales.length === 0
+      ? [{ fromMs: Number.NEGATIVE_INFINITY, untilMs: Number.POSITIVE_INFINITY, rows: rowsOf(0) }]
+      : scales.map((scale, at) => ({
+          fromMs: at === 0 ? Number.NEGATIVE_INFINITY : scale.fromMs - origin,
+          untilMs: (scales[at + 1]?.fromMs ?? Number.POSITIVE_INFINITY) - origin,
+          rows: rowsOf(scale.pitchClasses[0] ?? 0),
+        }));
   const scaleSpans = scales.map((scale, at) => {
     const inTheScale = new Set(scale.pitchClasses);
     const rows: number[] = [];
@@ -1094,6 +1117,7 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
     lengthMs: endMs - origin,
     blackRows,
     scaleSpans,
+    octaves,
     marks: momentsInTimeOrder(
       (drawing.marks ?? []).map((mark) => ({
         atMs: mark.atMs - origin,

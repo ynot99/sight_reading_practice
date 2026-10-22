@@ -7472,6 +7472,149 @@ describe('AppView', () => {
       }
     });
 
+    it('reaches a dynamic gradually from the one marked before, says so on its flag, copies it so, and prints a hairpin', async () => {
+      const { view, sketches, clock, runtime } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: Array.from({ length: 16 }, (_, at) => [
+            { kind: 'noteOn' as const, atMs: at * 500, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: at * 500 + 400, midi: 60 },
+          ]).flat(),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Swelling',
+        1,
+      );
+      const written: string[] = [];
+      Object.defineProperty(window.navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: (text: string): Promise<void> => {
+            written.push(text);
+            return Promise.resolve();
+          },
+          readText: (): Promise<string> => Promise.resolve(written.at(-1) ?? ''),
+        },
+      });
+      try {
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-sketches').click();
+        rowButton('sketches-list', 'Edit this sketch').click();
+        const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+        const body = element('roll-body');
+        const dynamic = element<HTMLSelectElement>('roll-mark-dynamic');
+        const reached = element<HTMLSelectElement>('roll-mark-reached');
+        const marks = (): string[] => (view.rollScene?.marks ?? []).map((each) => `${each.after}: ${each.says}`);
+        const marked = (): string[] =>
+          (sketches.find(sketch.id)?.events ?? []).flatMap((event) =>
+            event.kind === 'dynamic' ? [`${String(event.atMs)} ${event.level}${event.gradually === true ? ' gradually' : ''}`] : [],
+          );
+        const across = (ms: number): number =>
+          (ms / 1000) * zoom - (Number.parseFloat(body.querySelector<HTMLElement>('.roll__head')?.style.getPropertyValue('--roll-x') ?? '0') || 0);
+        const ask = (ms: number): void => {
+          clock.advance(1_000);
+          tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: across(ms), clientY: 20 });
+          element<HTMLButtonElement>('roll-mark').click();
+        };
+        const choose = (level: string): void => {
+          dynamic.value = level;
+          dynamic.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+        const yes = (): void => {
+          element<HTMLButtonElement>('roll-mark-yes').click();
+        };
+        const idle = (): [boolean, string] => [reached.dataset['idle'] === 'true', reached.title];
+        const key = (init: KeyboardEventInit): void => {
+          document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
+        };
+
+        // Nothing marked before the first beat to come from: at once, and dimmed saying why.
+        ask(100);
+        expect([reached.value, [...reached.options].map((option) => option.label)]).toEqual(['', ['at once', 'gradually']]);
+        expect(idle()).toEqual([true, 'Nothing is marked before this beat to come from gradually: the dynamic is reached at once']);
+        choose('p');
+        reached.value = 'gradually';
+        yes();
+        expect(marked()).toEqual(['0 p']);
+        // On the third bar, in piano already: nothing to reach; forte chosen, gradually from it.
+        ask(4_200);
+        expect(idle()).toEqual([true, 'The music is in p already: there is nothing to reach gradually']);
+        // Asked for all the same, nothing: no change, and undoing undoes the piano before it.
+        reached.value = 'gradually';
+        yes();
+        key({ key: 'z', code: 'KeyZ', ctrlKey: true });
+        expect(marked()).toEqual([]);
+        ask(100);
+        choose('p');
+        yes();
+        ask(4_200);
+        choose('f');
+        expect(idle()).toEqual([false, 'Whether f is reached at once here, or gradually from p']);
+        reached.value = 'gradually';
+        yes();
+        expect(marked()).toEqual(['0 p', '4000 f gradually']);
+        expect(marks()).toEqual(['1: C major 4/4 ♩=120 p', '3: < f']);
+        // Asked again, the sheet says so; further on, at once, which it is only in.
+        ask(4_200);
+        expect([dynamic.value, reached.value]).toEqual(['f', 'gradually']);
+        element<HTMLButtonElement>('roll-mark-no').click();
+        ask(6_200);
+        expect([dynamic.value, reached.value]).toEqual(['f', '']);
+        element<HTMLButtonElement>('roll-mark-no').click();
+        // Only how it is reached changed is a change, put back as one.
+        ask(4_200);
+        reached.value = '';
+        yes();
+        expect(marks()).toEqual(['1: C major 4/4 ♩=120 p', '3: f']);
+        key({ key: 'z', code: 'KeyZ', ctrlKey: true });
+        expect(marks()).toEqual(['1: C major 4/4 ♩=120 p', '3: < f']);
+
+        // Copied so, and pasted after a forte: softer gradually from it.
+        const flag = [...body.querySelectorAll<HTMLElement>('.roll__mark')].find((each) => each.textContent === '3 < f');
+        const init = { bubbles: true, cancelable: true, pointerId: 83, pointerType: 'mouse', button: 0 };
+        flag?.dispatchEvent(new PointerEvent('pointerdown', init));
+        body.dispatchEvent(new PointerEvent('pointerup', init));
+        key({ key: 'c', code: 'KeyC', ctrlKey: true });
+        expect((JSON.parse(written.at(-1) ?? '{}') as { change?: object }).change).toEqual({ dynamic: 'f', gradually: true });
+        ask(5_200);
+        choose('ff');
+        yes();
+        clock.advance(1_000);
+        tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: across(7_200), clientY: 20 });
+        const pasted = new Event('paste', { bubbles: true, cancelable: true });
+        Object.defineProperty(pasted, 'clipboardData', {
+          value: { getData: (type: string): string => (type === 'text/plain' ? (written.at(-1) ?? '') : '') },
+        });
+        document.body.dispatchEvent(pasted);
+        expect(marked()).toEqual(['0 p', '4000 f gradually', '5000 ff', '7000 f gradually']);
+        expect(marks()).toEqual(['1: C major 4/4 ♩=120 p', '3: < f', ': ff', ': > f']);
+
+        // Written down, each a hairpin from the dynamic before it.
+        element<HTMLButtonElement>('roll-close').click();
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-sketches').click();
+        rowButton('sketches-list', 'Write this sketch down as a score').click();
+        await vi.waitFor(() => {
+          expect(runtime.controller.openedExercise?.title).toBe('Swelling');
+        });
+        expect(
+          runtime.controller.openedExercise?.hairpins.map(({ measureIndex, offsetTicks, kind, untilMeasureIndex, untilOffsetTicks }) => [
+            measureIndex,
+            offsetTicks / Duration.QUARTER.ticks,
+            kind,
+            untilMeasureIndex,
+            untilOffsetTicks / Duration.QUARTER.ticks,
+          ]),
+        ).toEqual([
+          [0, 0, 'crescendo', 2, 0],
+          [2, 2, 'diminuendo', 3, 2],
+        ]);
+      } finally {
+        Reflect.deleteProperty(window.navigator, 'clipboard');
+      }
+    });
+
     it('copies and cuts a flag by the keys or its buttons, and pastes what it changes on the beat the cursor is on', async () => {
       const { view, sketches } = createRig();
       await view.initialize();

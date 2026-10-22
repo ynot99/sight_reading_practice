@@ -37,7 +37,17 @@ export type MidiFileEvent =
    * one. Nothing a hand plays either, and kept among the events for the same
    * reason a key is - it moves with the music it is in.
    */
-  | { readonly kind: 'dynamic'; readonly atMs: number; readonly level: DynamicLevel };
+  | {
+      readonly kind: 'dynamic';
+      readonly atMs: number;
+      readonly level: DynamicLevel;
+      /**
+       * Reached gradually from the dynamic marked before it, rather than at
+       * once here: a hairpin from that one to this. Only ever said of one
+       * with a dynamic before it.
+       */
+      readonly gradually?: true;
+    };
 
 /** The two hands, as the two staves of a piano score are theirs. */
 export type Hand = 'left' | 'right';
@@ -474,6 +484,7 @@ export function takeWithTheDynamicFrom(
   events: readonly MidiFileEvent[],
   atMs: number,
   level: DynamicLevel | null,
+  gradually = false,
 ): readonly MidiFileEvent[] {
   const here = (event: MidiFileEvent): boolean => event.kind === 'dynamic' && Math.abs(event.atMs - atMs) <= SAME_MOMENT_MS;
   const kept = events.filter((event) => !here(event));
@@ -481,12 +492,20 @@ export function takeWithTheDynamicFrom(
   const now = level ?? before;
   const next = kept.find((event) => event.kind === 'dynamic' && event.atMs > atMs);
   const joined = kept.filter((event) => event !== next || event.kind !== 'dynamic' || event.level !== now);
-  return inTheOrderPlayed(level !== null && level !== before ? [...joined, { kind: 'dynamic', atMs, level }] : joined);
+  if (level === null || level === before) {
+    return inTheOrderPlayed(joined);
+  }
+  // Gradually only from a dynamic before it: with none, there is nothing to come from.
+  return inTheOrderPlayed([...joined, { kind: 'dynamic', atMs, level, ...(gradually && before !== null ? { gradually: true } : {}) }]);
 }
 
-/** Where music is marked with a dynamic, and which, in time order. */
-export function theDynamicsOf(events: readonly MidiFileEvent[]): readonly { readonly atMs: number; readonly level: DynamicLevel }[] {
-  return events.flatMap((event) => (event.kind === 'dynamic' ? [{ atMs: event.atMs, level: event.level }] : []));
+/** Where music is marked with a dynamic, and which, and whether reached gradually, in time order. */
+export function theDynamicsOf(
+  events: readonly MidiFileEvent[],
+): readonly { readonly atMs: number; readonly level: DynamicLevel; readonly gradually?: true }[] {
+  return events.flatMap((event) =>
+    event.kind === 'dynamic' ? [{ atMs: event.atMs, level: event.level, ...(event.gradually === true ? { gradually: true as const } : {}) }] : [],
+  );
 }
 
 /**
@@ -495,16 +514,24 @@ export function theDynamicsOf(events: readonly MidiFileEvent[]): readonly { read
  * this program's reader takes back as the dynamic it was. One for a hand
  * alone says which.
  */
-export function theTextOfADynamic(level: DynamicLevel, hand: Hand | null = null): string {
-  return hand === null ? `dynamic ${level}` : `dynamic ${level}, ${hand} hand`;
+export function theTextOfADynamic(level: DynamicLevel, hand: Hand | null = null, gradually = false): string {
+  return `dynamic ${level}${hand === null ? '' : `, ${hand} hand`}${gradually ? ', gradually' : ''}`;
 }
 
-/** The dynamic a text event says, and the hand it is for if one alone, as `theTextOfADynamic` writes it; `null` where it says anything else. */
-export function theDynamicATextSays(text: string): { readonly level: DynamicLevel; readonly hand: Hand | null } | null {
-  const said = /^dynamic (\w+)(?:, (right|left) hand)?$/.exec(text.trim());
+/**
+ * The dynamic a text event says, the hand it is for if one alone, and
+ * whether it is reached gradually, as `theTextOfADynamic` writes it; `null`
+ * where it says anything else.
+ */
+export function theDynamicATextSays(
+  text: string,
+): { readonly level: DynamicLevel; readonly hand: Hand | null; readonly gradually: boolean } | null {
+  const said = /^dynamic (\w+)(?:, (right|left) hand)?(, gradually)?$/.exec(text.trim());
   const level = DYNAMIC_LEVELS.find((each) => each === said?.[1]);
   const hand = said?.[2];
-  return level === undefined ? null : { level, hand: hand === 'right' || hand === 'left' ? hand : null };
+  return level === undefined
+    ? null
+    : { level, hand: hand === 'right' || hand === 'left' ? hand : null, gradually: said?.[3] !== undefined };
 }
 
 /**
@@ -576,6 +603,26 @@ export function theVelocityOfTheLevel(level: DynamicLevel, shade: number): numbe
   return from + (DYNAMIC_VELOCITY[toward] - from) * Math.min(1, Math.abs(shade) / 100);
 }
 
+/**
+ * How hard a note written at a level is struck: its own level, or the
+ * dynamic it is in - and on the way to the next where that one is reached
+ * gradually, as far along as the note is from the one before it to that one.
+ */
+function theVelocityWritten(events: readonly MidiFileEvent[], atMs: number, loudness: NoteLoudness): number {
+  if (loudness.level !== null) {
+    return theVelocityOfTheLevel(loudness.level, loudness.shade);
+  }
+  const dynamics = theDynamicsOf(events);
+  const next = dynamics.findIndex((dynamic) => dynamic.atMs > atMs + SAME_MOMENT_MS);
+  const from = next === -1 ? dynamics[dynamics.length - 1] : dynamics[next - 1];
+  const to = dynamics[next];
+  const ground = theVelocityOfTheLevel(from?.level ?? LOUDNESS_UNMARKED, loudness.shade);
+  if (from === undefined || to?.gradually !== true) {
+    return ground;
+  }
+  return ground + (theVelocityOfTheLevel(to.level, loudness.shade) - ground) * ((atMs - from.atMs) / (to.atMs - from.atMs));
+}
+
 /** The level a note written at one is at: its own, or the dynamic it is in, or the unmarked one. */
 export function theLevelOfTheNote(events: readonly MidiFileEvent[], atMs: number, loudness: NoteLoudness): DynamicLevel {
   return loudness.level ?? theDynamicAt(events, atMs) ?? LOUDNESS_UNMARKED;
@@ -593,7 +640,7 @@ export function takeWithTheLoudnessWritten(events: readonly MidiFileEvent[]): re
     if (event.kind !== 'noteOn' || event.loudness === undefined) {
       return event;
     }
-    const velocity = theVelocityOfTheLevel(theLevelOfTheNote(events, event.atMs, event.loudness), event.loudness.shade);
+    const velocity = theVelocityWritten(events, event.atMs, event.loudness);
     if (velocity === event.velocity) {
       return event;
     }
@@ -1049,7 +1096,13 @@ function theTrack(
         break;
       case 'dynamic':
       case 'dynamicOfAHand': {
-        const text = [...new TextEncoder().encode(theTextOfADynamic(event.level, event.kind === 'dynamic' ? null : event.hand))];
+        const text = [
+          ...new TextEncoder().encode(
+            event.kind === 'dynamic'
+              ? theTextOfADynamic(event.level, null, event.gradually === true)
+              : theTextOfADynamic(event.level, event.hand),
+          ),
+        ];
         track.push(0xff, 0x01, ...variableLength(text.length), ...text);
         break;
       }

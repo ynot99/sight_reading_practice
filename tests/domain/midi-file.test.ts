@@ -899,6 +899,79 @@ describe('how loud a note written at a level is struck', () => {
   });
 });
 
+describe('a dynamic reached gradually from the one before', () => {
+  const follower = (atMs: number, shade = 0): MidiFileEvent[] => [
+    { kind: 'noteOn', atMs, midi: 60, velocity: 0.1, loudness: { level: null, shade } },
+    { kind: 'noteOff', atMs: atMs + 100, midi: 60 },
+  ];
+  const struck = (events: readonly MidiFileEvent[]): number[] =>
+    takeWithTheLoudnessWritten(events).flatMap((event) => (event.kind === 'noteOn' ? [event.velocity] : []));
+
+  it('is marked so only where there is a dynamic before it to come from', () => {
+    const notes = [...follower(0), ...follower(2_000)];
+    const from = takeWithTheDynamicFrom(notes, 0, 'p');
+    expect(theDynamicsOf(takeWithTheDynamicFrom(from, 2_000, 'f', true))).toEqual([
+      { atMs: 0, level: 'p' },
+      { atMs: 2_000, level: 'f', gradually: true },
+    ]);
+    expect(theDynamicsOf(takeWithTheDynamicFrom(notes, 2_000, 'f', true))).toEqual([{ atMs: 2_000, level: 'f' }]);
+    // Asked again at once, at once.
+    expect(theDynamicsOf(takeWithTheDynamicFrom(takeWithTheDynamicFrom(from, 2_000, 'f', true), 2_000, 'f'))).toEqual([
+      { atMs: 0, level: 'p' },
+      { atMs: 2_000, level: 'f' },
+    ]);
+  });
+
+  it('strikes the notes that follow the dynamics on the way, as far along as each is, and none else', () => {
+    const notes: MidiFileEvent[] = [
+      ...follower(0),
+      ...follower(1_000),
+      ...follower(1_500, 50),
+      ...follower(2_000),
+      ...follower(3_000),
+      { kind: 'noteOn', atMs: 1_000, midi: 64, velocity: 0.1, loudness: { level: 'pp', shade: 0 } },
+      { kind: 'noteOff', atMs: 1_100, midi: 64 },
+      { kind: 'noteOn', atMs: 1_000, midi: 67, velocity: 0.1 },
+      { kind: 'noteOff', atMs: 1_100, midi: 67 },
+    ];
+    const marked = takeWithTheDynamicFrom(takeWithTheDynamicFrom(notes, 0, 'p'), 2_000, 'f', true);
+    const between = (from: number, to: number, share: number): number => from + (to - from) * share;
+
+    expect(struck(marked)).toEqual([
+      DYNAMIC_VELOCITY.p,
+      between(DYNAMIC_VELOCITY.p, DYNAMIC_VELOCITY.f, 0.5),
+      DYNAMIC_VELOCITY.pp,
+      0.1,
+      between(theVelocityOfTheLevel('p', 50), theVelocityOfTheLevel('f', 50), 0.75),
+      DYNAMIC_VELOCITY.f,
+      DYNAMIC_VELOCITY.f,
+    ]);
+    // At once, a step on its beat.
+    expect(struck(takeWithTheDynamicFrom(marked, 2_000, 'f'))).toEqual([
+      DYNAMIC_VELOCITY.p,
+      DYNAMIC_VELOCITY.p,
+      DYNAMIC_VELOCITY.pp,
+      0.1,
+      theVelocityOfTheLevel('p', 50),
+      DYNAMIC_VELOCITY.f,
+      DYNAMIC_VELOCITY.f,
+    ]);
+    // One said so with nothing before it, as a file may, comes from nowhere: at once.
+    expect(struck([...follower(500), { kind: 'dynamic', atMs: 1_000, level: 'f', gradually: true }, ...follower(1_000)])).toEqual([
+      DYNAMIC_VELOCITY.mf,
+      DYNAMIC_VELOCITY.f,
+    ]);
+  });
+
+  it('is written to a file as a text saying so, and read back so', () => {
+    const marked = takeWithTheDynamicFrom(takeWithTheDynamicFrom([...follower(0), ...follower(2_000)], 0, 'p'), 2_000, 'f', true);
+    expect(readMidiFile(writeMidiFile(marked, { beats: click(0, 500, 4) })).dynamics).toEqual([
+      { atTicks: 0, level: 'p' },
+      { atTicks: 4 * BEAT, level: 'f', gradually: true },
+    ]);
+  });
+});
+
 describe('the dynamics printed for one hand alone', () => {
   const OWN = (level: NoteLoudness['level']): NoteLoudness => ({ level, shade: 0 });
   const FOLLOWS: NoteLoudness = { level: null, shade: 0 };

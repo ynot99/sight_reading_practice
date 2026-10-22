@@ -1397,6 +1397,8 @@ export interface ChangeCopied {
   readonly metre?: { readonly beatsInBar: number; readonly beatType: number };
   readonly crotchetsPerMinute?: number;
   readonly dynamic?: DynamicLevel;
+  /** The dynamic reached gradually from the one before wherever it is pasted. */
+  readonly gradually?: true;
 }
 
 /** What a change copied is called on the clipboard, so a paste can tell it from notes and any other text. */
@@ -1432,6 +1434,7 @@ export function theChangeOnTheClipboard(text: string): ChangeCopied | null {
     readonly metre?: unknown;
     readonly crotchetsPerMinute?: unknown;
     readonly dynamic?: unknown;
+    readonly gradually?: unknown;
   } | null;
   if (typeof change !== 'object' || change === null) {
     return null;
@@ -1455,7 +1458,8 @@ export function theChangeOnTheClipboard(text: string): ChangeCopied | null {
     (key !== undefined && !keyIsOne) ||
     (metre !== undefined && !metreIsOne) ||
     (pace !== undefined && !paceIsOne) ||
-    (change.dynamic !== undefined && dynamic === undefined)
+    (change.dynamic !== undefined && dynamic === undefined) ||
+    (change.gradually !== undefined && (change.gradually !== true || dynamic === undefined))
   ) {
     return null;
   }
@@ -1464,6 +1468,7 @@ export function theChangeOnTheClipboard(text: string): ChangeCopied | null {
     ...(metreIsOne ? { metre: { beatsInBar: Number(metre.beatsInBar), beatType: Number(metre.beatType) } } : {}),
     ...(paceIsOne ? { crotchetsPerMinute: Number(pace) } : {}),
     ...(dynamic === undefined ? {} : { dynamic }),
+    ...(change.gradually === true ? { gradually: true } : {}),
   };
   return Object.keys(copied).length === 0 ? null : copied;
 }

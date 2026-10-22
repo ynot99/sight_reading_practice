@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { writeMidiFile, type MidiFileEvent } from '../../src/domain/midi/MidiFile.js';
 import { readMidiFile } from '../../src/domain/midi/readMidiFile.js';
 import { midiToExercise } from '../../src/domain/notation/midiToExercise.js';
-import { measureCount, validateExercise } from '../../src/domain/model/Exercise.js';
+import { DYNAMIC_VELOCITY, measureCount, validateExercise, velocityAt } from '../../src/domain/model/Exercise.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { DomainError } from '../../src/shared/errors.js';
 import { Duration } from '../../src/domain/model/Duration.js';
@@ -349,6 +349,48 @@ describe('turning a MIDI file into a page', () => {
       [0, 3, 'mf', 1, 'above'],
     ]);
     expect(() => validateExercise(exercise)).not.toThrow();
+  });
+
+  it('draws a dynamic reached gradually as a hairpin from the one over both before it, and is heard so', () => {
+    const { exercise } = pageOf([
+      ...note(60, 0, 8 * QUARTER_MS),
+      // A hand's own mark, ppp from the third beat, is not where one over both comes from.
+      { kind: 'noteOn', atMs: 2 * QUARTER_MS, midi: 72, velocity: 0.5, loudness: { level: 'ppp', shade: 0 } },
+      { kind: 'noteOff', atMs: 3 * QUARTER_MS, midi: 72 },
+      { kind: 'dynamic', atMs: 0, level: 'p' },
+      { kind: 'dynamic', atMs: QUARTER_MS, level: 'ff', gradually: true },
+      { kind: 'dynamic', atMs: 4 * QUARTER_MS, level: 'f', gradually: true },
+      { kind: 'dynamic', atMs: 6 * QUARTER_MS, level: 'mp', gradually: true },
+      { kind: 'dynamic', atMs: 7 * QUARTER_MS, level: 'pp' },
+    ]);
+
+    expect(
+      exercise.hairpins.map((hairpin) => [
+        hairpin.measureIndex,
+        hairpin.offsetTicks / Duration.QUARTER.ticks,
+        hairpin.kind,
+        hairpin.untilMeasureIndex,
+        hairpin.untilOffsetTicks / Duration.QUARTER.ticks,
+        hairpin.staffNumber,
+      ]),
+    ).toEqual([
+      [0, 0, 'crescendo', 0, 1, null],
+      [0, 1, 'diminuendo', 1, 0, null],
+      [1, 0, 'diminuendo', 1, 2, null],
+    ]);
+    // Heard rising from piano at its start towards forte at its end.
+    const quiet = velocityAt(exercise, 1, 2 * Duration.QUARTER.ticks, 1);
+    const halfway = velocityAt(exercise, 1, Duration.QUARTER.ticks, 1);
+    expect(halfway).toBeCloseTo((DYNAMIC_VELOCITY.f + DYNAMIC_VELOCITY.mp) / 2, 9);
+    expect(quiet).toBe(DYNAMIC_VELOCITY.mp);
+    expect(() => validateExercise(exercise)).not.toThrow();
+    expect(exercise.dynamicMarks.filter((mark) => mark.staffNumber !== null).map((mark) => mark.level)).toEqual(['ppp']);
+    // None where there is none before.
+    const handed = pageOf([
+      ...note(60, 0, 4 * QUARTER_MS),
+      { kind: 'dynamic', atMs: QUARTER_MS, level: 'f', gradually: true },
+    ]);
+    expect(handed.exercise.hairpins).toEqual([]);
   });
 
   it('fills the silence a performance leaves with rests', () => {

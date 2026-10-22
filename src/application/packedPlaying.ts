@@ -45,7 +45,8 @@ export function pack(event: MidiFileEvent): Packed {
     case 'key':
       return [3, Math.round(event.atMs), event.fifths, SCALE_NAMES.indexOf(event.scale)];
     case 'dynamic':
-      return [4, Math.round(event.atMs), DYNAMIC_LEVELS.indexOf(event.level), 0];
+      // Reached gradually, one; at once, nought.
+      return [4, Math.round(event.atMs), DYNAMIC_LEVELS.indexOf(event.level), event.gradually === true ? 1 : 0];
   }
 }
 
@@ -88,7 +89,7 @@ export function unpack(value: unknown): MidiFileEvent | null {
     }
     case 4: {
       const level = DYNAMIC_LEVELS[a];
-      return level === undefined ? null : { kind: 'dynamic', atMs, level };
+      return level === undefined ? null : { kind: 'dynamic', atMs, level, ...(b === 1 ? { gradually: true } : {}) };
     }
     default:
       return null;

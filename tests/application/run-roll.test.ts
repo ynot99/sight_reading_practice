@@ -1635,6 +1635,7 @@ describe('changing a recording', () => {
       { metre: { beatsInBar: 1, beatType: 32 } },
       { crotchetsPerMinute: 1 },
       { dynamic: 'pp' as const },
+      { dynamic: 'f' as const, gradually: true as const },
     ]) {
       expect(theChangeOnTheClipboard(theClipboardTextOfTheChange(part))).toEqual(part);
     }
@@ -1666,6 +1667,10 @@ describe('changing a recording', () => {
       { dynamic: 'loud' },
       { dynamic: 5 },
       { dynamic: null },
+      // Gradually, only to a dynamic, and only said so.
+      { gradually: true },
+      { dynamic: 'f', gradually: 1 },
+      { dynamic: 'f', gradually: false },
     ]) {
       expect(theChangeOnTheClipboard(withPart(part)), JSON.stringify(part)).toBeNull();
     }

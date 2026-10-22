@@ -701,10 +701,36 @@ const A_FINGER_LISTENS_MS = 250;
 /** How far a finger on a chord of the drawer goes before it is moving at all, and not only resting unsteadily. */
 const A_FINGER_MOVES_PX = 8;
 
-/** The dynamic marked on a moment, as a change copied says one: none where the moment is marked in the one before it. */
-function theDynamicMarkedAt(events: readonly MidiFileEvent[], atMs: number): { readonly dynamic?: DynamicLevel } {
+/**
+ * The dynamic marked on a moment, and whether reached gradually, as a change
+ * copied says one: none where the moment is marked in the one before it.
+ */
+function theDynamicMarkedAt(events: readonly MidiFileEvent[], atMs: number): { readonly dynamic?: DynamicLevel; readonly gradually?: true } {
   const here = theDynamicAt(events, atMs);
-  return here === null || here === theDynamicAt(events, atMs - 1) ? {} : { dynamic: here };
+  if (here === null || here === theDynamicAt(events, atMs - 1)) {
+    return {};
+  }
+  return { dynamic: here, ...(theDynamicReachedGraduallyAt(events, atMs) ? { gradually: true } : {}) };
+}
+
+/**
+ * A dynamic as its flag says it: its level, after a hairpin opening or
+ * closing towards it where it is reached gradually from the one before.
+ */
+function theNameOfTheDynamic(
+  dynamic: { readonly atMs: number; readonly level: DynamicLevel; readonly gradually?: true },
+  dynamics: readonly { readonly atMs: number; readonly level: DynamicLevel }[],
+): string {
+  const from = dynamics.filter((each) => each.atMs < dynamic.atMs).pop();
+  if (dynamic.gradually !== true || from === undefined) {
+    return dynamic.level;
+  }
+  return `${DYNAMIC_LEVELS.indexOf(dynamic.level) > DYNAMIC_LEVELS.indexOf(from.level) ? '<' : '>'} ${dynamic.level}`;
+}
+
+/** Whether the dynamic marked on a moment is reached gradually from the one before. */
+function theDynamicReachedGraduallyAt(events: readonly MidiFileEvent[], atMs: number): boolean {
+  return theDynamicsOf(events).some((dynamic) => Math.abs(dynamic.atMs - atMs) < 1 && dynamic.gradually === true);
 }
 
 /** How the way a chord is broken is said on its button. */
@@ -2229,7 +2255,12 @@ export class AppView {
   /** And the key that beat is in, and the one the beat before it is in - none before the first. */
   private keyAskedAbout: { readonly here: KeyOfTheMusic; readonly before: KeyOfTheMusic | null } | null = null;
   /** And the dynamic that beat is marked in, and the one the beat before it is: none where none is marked yet. */
-  private dynamicAskedAbout: { readonly here: DynamicLevel | null; readonly before: DynamicLevel | null } | null = null;
+  private dynamicAskedAbout: {
+    readonly here: DynamicLevel | null;
+    readonly before: DynamicLevel | null;
+    /** Whether the one marked on the beat is reached gradually. */
+    readonly graduallyHere: boolean;
+  } | null = null;
 
   /** Whether a tap on a chord kept in the drawer deletes it, rather than writing it. */
   private chordsBeingForgotten = false;
@@ -2598,6 +2629,7 @@ export class AppView {
     rollMarkScale: HTMLSelectElement;
     rollMarkTempo: HTMLInputElement;
     rollMarkDynamic: HTMLSelectElement;
+    rollMarkReached: HTMLSelectElement;
     rollMarkRemove: HTMLButtonElement;
     rollMarkYes: HTMLButtonElement;
     rollMarkNo: HTMLButtonElement;
@@ -2994,6 +3026,7 @@ export class AppView {
       rollMarkScale: requireElement(doc, 'roll-mark-scale'),
       rollMarkTempo: requireElement(doc, 'roll-mark-tempo'),
       rollMarkDynamic: requireElement(doc, 'roll-mark-dynamic'),
+      rollMarkReached: requireElement(doc, 'roll-mark-reached'),
       rollMarkRemove: requireElement(doc, 'roll-mark-remove'),
       rollMarkYes: requireElement(doc, 'roll-mark-yes'),
       rollMarkNo: requireElement(doc, 'roll-mark-no'),
@@ -9671,6 +9704,18 @@ export class AppView {
       [{ value: '', label: 'None' }, ...DYNAMICS_OFFERED.map((level) => ({ value: level, label: level }))],
       '',
     );
+    fillSelect(
+      this.el.rollMarkReached,
+      [
+        { value: '', label: 'at once' },
+        { value: 'gradually', label: 'gradually' },
+      ],
+      '',
+    );
+    // Whether there is anything to come from gradually depends on the dynamic chosen.
+    this.listen(this.el.rollMarkDynamic, 'change', () => {
+      this.sayWhetherTheDynamicIsReachedGradually();
+    });
     // Another scale names the tonics again, as that scale on each is spelt.
     this.listen(this.el.rollMarkScale, 'change', () => {
       const scale = SCALE_NAMES.find((each) => each === this.el.rollMarkScale.value) ?? 'major';
@@ -9683,11 +9728,23 @@ export class AppView {
       this.askForAChangeAtTheHead();
     });
     this.listen(this.el.rollMarkYes, 'click', () => {
-      this.changeFromTheBeatAsked(this.el.rollMarkMetre.value, Number(this.el.rollMarkTempo.value), this.theKeyAskedFor(), this.theDynamicAskedFor());
+      this.changeFromTheBeatAsked(
+        this.el.rollMarkMetre.value,
+        Number(this.el.rollMarkTempo.value),
+        this.theKeyAskedFor(),
+        this.theDynamicAskedFor(),
+        this.el.rollMarkReached.value === 'gradually',
+      );
     });
     this.listen(this.el.rollMarkTempo, 'keydown', (event) => {
       if (event.key === 'Enter') {
-        this.changeFromTheBeatAsked(this.el.rollMarkMetre.value, Number(this.el.rollMarkTempo.value), this.theKeyAskedFor(), this.theDynamicAskedFor());
+        this.changeFromTheBeatAsked(
+          this.el.rollMarkMetre.value,
+          Number(this.el.rollMarkTempo.value),
+          this.theKeyAskedFor(),
+          this.theDynamicAskedFor(),
+          this.el.rollMarkReached.value === 'gradually',
+        );
       }
     });
     // Escape and a tap outside press it too.
@@ -13240,7 +13297,7 @@ export class AppView {
           ...(key === undefined ? [] : [theNameOfTheKey(key)]),
           ...(change?.metre === undefined ? [] : [`${String(change.metre.beatsInBar)}/${String(change.metre.beatType)}`]),
           ...(change?.crotchetsPerMinute === undefined ? [] : [`\u2669=${String(change.crotchetsPerMinute)}`]),
-          ...(dynamic === undefined ? [] : [dynamic.level]),
+          ...(dynamic === undefined ? [] : [theNameOfTheDynamic(dynamic, dynamics)]),
         ].join(' '),
       });
     }
@@ -13877,8 +13934,11 @@ export class AppView {
     this.sayTheKeyIn(this.el.rollMarkKey, this.el.rollMarkScale, keyHere);
     const dynamicHere = theDynamicAt(stored.events, bar.atMs);
     const dynamicBefore = theDynamicAt(stored.events, bar.atMs - 1);
-    this.dynamicAskedAbout = { here: dynamicHere, before: dynamicBefore };
+    const graduallyHere = theDynamicReachedGraduallyAt(stored.events, bar.atMs);
+    this.dynamicAskedAbout = { here: dynamicHere, before: dynamicBefore, graduallyHere };
     this.el.rollMarkDynamic.value = dynamicHere ?? '';
+    this.el.rollMarkReached.value = graduallyHere ? 'gradually' : '';
+    this.sayWhetherTheDynamicIsReachedGradually();
     const metre = `${String(bar.metre.beatsInBar)}/${String(bar.metre.beatType)}`;
     // A metre the list does not offer, as a score may be in, is offered as it is.
     if (![...this.el.rollMarkMetre.options].some((option) => option.value === metre)) {
@@ -13909,6 +13969,23 @@ export class AppView {
     return true;
   }
 
+  /**
+   * Dims the sheet's choice of how the dynamic is reached where it has
+   * nothing to come from gradually: no dynamic before the beat, or none
+   * chosen, or the same one, which is no change.
+   */
+  private sayWhetherTheDynamicIsReachedGradually(): void {
+    const before = this.dynamicAskedAbout?.before ?? null;
+    const chosen = this.theDynamicAskedFor();
+    const why =
+      before === null
+        ? 'Nothing is marked before this beat to come from gradually: the dynamic is reached at once'
+        : chosen === null || chosen === before
+          ? `The music is in ${before} already: there is nothing to reach gradually`
+          : `Whether ${chosen} is reached at once here, or gradually from ${before}`;
+    sayWhetherIdle(this.el.rollMarkReached, why, before === null || chosen === null || chosen === before);
+  }
+
   /** The dynamic the sheet's list says, or none. */
   private theDynamicAskedFor(): DynamicLevel | null {
     return DYNAMIC_LEVELS.find((level) => level === this.el.rollMarkDynamic.value) ?? null;
@@ -13932,6 +14009,7 @@ export class AppView {
         before.crotchetsPerMinute,
         keyBefore,
         dynamicBefore,
+        false,
       );
     } else {
       this.changeFromTheBeatAsked(
@@ -13939,6 +14017,7 @@ export class AppView {
         bar.crotchetsPerMinute,
         keyHere,
         dynamicBefore,
+        false,
       );
     }
   }
@@ -14145,6 +14224,7 @@ export class AppView {
       change.crotchetsPerMinute ?? beat.crotchetsPerMinute,
       change.key ?? keyHere,
       change.dynamic ?? this.dynamicAskedAbout?.here ?? null,
+      change.dynamic === undefined ? this.dynamicAskedAbout?.graduallyHere === true : change.gradually === true,
     );
     this.chooseTheMark(beat.atMs);
   }
@@ -14161,17 +14241,21 @@ export class AppView {
    * about, as far as the next change of each: one change, put back as one. A
    * metre is counted from the first beat of the beat's bar. A pace past what
    * a metronome offers is held to it. No dynamic takes away the one marked
-   * on the beat.
+   * on the beat; one is reached gradually from the dynamic before it only
+   * where there is one, and another.
    */
   private changeFromTheBeatAsked(
     metre: string,
     crotchetsPerMinute: number,
     key: KeyOfTheMusic,
     dynamic: DynamicLevel | null,
+    gradually: boolean,
   ): void {
     const bar = this.beatAskedAbout;
     const keyHere = this.keyAskedAbout?.here ?? null;
     const dynamicHere = this.dynamicAskedAbout?.here ?? null;
+    const dynamicBefore = this.dynamicAskedAbout?.before ?? null;
+    const graduallyHere = this.dynamicAskedAbout?.graduallyHere === true;
     this.dynamicAskedAbout = null;
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
@@ -14189,7 +14273,8 @@ export class AppView {
     const metreChanges = beatsInBar !== bar.metre.beatsInBar || beatType !== bar.metre.beatType;
     const paceChanges = pace !== bar.crotchetsPerMinute;
     const keyChanges = key.fifths !== keyHere.fifths || key.scale !== keyHere.scale;
-    const dynamicChanges = dynamic !== dynamicHere;
+    const reachedGradually = gradually && dynamic !== null && dynamicBefore !== null && dynamic !== dynamicBefore;
+    const dynamicChanges = dynamic !== dynamicHere || reachedGradually !== graduallyHere;
     if (!metreChanges && !paceChanges && !keyChanges && !dynamicChanges) {
       return;
     }
@@ -14203,7 +14288,7 @@ export class AppView {
       events = takeWithTheKeyFrom(events, this.theKeyTheSketchBeginsIn(stored), bar.atMs, key);
     }
     if (dynamicChanges) {
-      events = takeWithTheDynamicFrom(events, bar.atMs, dynamic);
+      events = takeWithTheDynamicFrom(events, bar.atMs, dynamic, reachedGradually);
     }
     // The bar keeps its first beat whatever its metre, and its later beats where they fall, so the pace changes from the same place.
     const counted = metreChanges

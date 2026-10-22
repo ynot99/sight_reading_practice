@@ -399,6 +399,12 @@ describe('the sketches being written', () => {
       [4, 2_000, 3, 0],
       [4, 3_000, 8, 0],
     ]);
+    // Reached gradually, one where nought is at once.
+    const gradually: MidiFileEvent[] = [...PLAYED, { kind: 'dynamic', atMs: 2_000, level: 'pp' }, { kind: 'dynamic', atMs: 3_000, level: 'ff', gradually: true }];
+    const swelling = library.begin({ events: gradually, beats: THREE }, 'Swelling', 1);
+    expect((sketchAsKept(swelling)['events'] as unknown[]).slice(-1)).toEqual([[4, 3_000, 8, 1]]);
+    next.load();
+    expect(next.find(swelling.id)?.events).toEqual(gradually);
     store.write({ version: 1, sketches: [{ ...sketchAsKept(sketch), events: [...kept.slice(0, -2), [4, 2_000, 11, 0], [4, 2_000, -1, 0]] }] });
     next.load();
     expect(next.find(sketch.id)?.events).toEqual(PLAYED);

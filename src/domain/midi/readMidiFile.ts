@@ -40,9 +40,14 @@ export interface MidiFileDocument {
   /**
    * Where the file marks a dynamic, in its own ticks, each another than the
    * one before it for the same music: see `theTextOfADynamic`. One for a hand
-   * alone says which.
+   * alone says which, and one reached gradually from the one before says so.
    */
-  readonly dynamics: readonly { readonly atTicks: number; readonly level: DynamicLevel; readonly hand?: Hand }[];
+  readonly dynamics: readonly {
+    readonly atTicks: number;
+    readonly level: DynamicLevel;
+    readonly hand?: Hand;
+    readonly gradually?: true;
+  }[];
   readonly title: string | null;
   /** Each track's own name where it gives one, by the track's number. */
   readonly trackNames: readonly (string | null)[];
@@ -176,7 +181,7 @@ interface TrackResult {
   readonly metres: { readonly atTicks: number; readonly beats: number; readonly beatType: number }[];
   readonly keys: { readonly atTicks: number; readonly fifths: number; readonly minor: boolean }[];
   readonly tempos: { readonly atTicks: number; readonly microsecondsPerQuarter: number }[];
-  readonly dynamics: { readonly atTicks: number; readonly level: DynamicLevel; readonly hand?: Hand }[];
+  readonly dynamics: { readonly atTicks: number; readonly level: DynamicLevel; readonly hand?: Hand; readonly gradually?: true }[];
   name: string | null;
   /** Its track name, apart from any other text: a file's title may be either. */
   trackName: string | null;
@@ -287,7 +292,12 @@ function readTrack(bytes: Bytes, length: number, track: number): TrackResult {
         result.keys.push({ atTicks: at, fifths, minor });
       } else if (dynamic !== null) {
         // A dynamic, as this program writes one: no title.
-        result.dynamics.push({ atTicks: at, level: dynamic.level, ...(dynamic.hand === null ? {} : { hand: dynamic.hand }) });
+        result.dynamics.push({
+          atTicks: at,
+          level: dynamic.level,
+          ...(dynamic.hand === null ? {} : { hand: dynamic.hand }),
+          ...(dynamic.gradually ? { gradually: true } : {}),
+        });
       } else if ((type === 0x03 || type === 0x01) && size > 0) {
         result.name ??= decodeText(data);
         if (type === 0x03) {
@@ -399,7 +409,7 @@ export function readMidiFile(data: Uint8Array): MidiFileDocument {
   const metres: { atTicks: number; beats: number; beatType: number }[] = [];
   const keys: { atTicks: number; fifths: number; minor: boolean }[] = [];
   const tempos: { atTicks: number; microsecondsPerQuarter: number }[] = [];
-  const dynamics: { atTicks: number; level: DynamicLevel; hand?: Hand }[] = [];
+  const dynamics: { atTicks: number; level: DynamicLevel; hand?: Hand; gradually?: true }[] = [];
   let title: string | null = null;
   const trackNames: (string | null)[] = [];
   let track = 0;

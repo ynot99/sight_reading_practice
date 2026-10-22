@@ -1,6 +1,7 @@
 import { DIVISIONS_PER_QUARTER, Duration, type NoteTypeName } from '../model/Duration.js';
 import { DomainError } from '../../shared/errors.js';
-import type { Exercise, KeyChange, MusicalEntry, PedalMark, StaffPart, TempoChange, TimeChange } from '../model/Exercise.js';
+import type { DynamicHairpin, Exercise, KeyChange, MusicalEntry, PedalMark, StaffPart, TempoChange, TimeChange } from '../model/Exercise.js';
+import { DYNAMIC_LEVELS } from '../model/Exercise.js';
 import { measureOf, noteEntry, restEntry, validateExercise } from '../model/Exercise.js';
 import { KeySignature } from '../model/KeySignature.js';
 import { Pitch } from '../model/Pitch.js';
@@ -590,6 +591,29 @@ export function midiToExercise(
     .filter((change) => change.ticks < (laid.bars[bars - 1]?.endTicks ?? 0))
     .map((change) => ({ ...placed(change.ticks), tempoBpm: change.tempoBpm }));
 
+  // What the file marks, on the page's grid, and none past the last bar.
+  const dynamics = document.dynamics
+    .map((dynamic) => ({ ...dynamic, ticks: pull(dynamic.atTicks * scale) }))
+    .filter((dynamic) => dynamic.ticks < (laid.bars[bars - 1]?.endTicks ?? 0));
+  // One reached gradually is a hairpin from the dynamic over both before it,
+  // getting louder or quieter as that one is to this.
+  const hairpins: DynamicHairpin[] = dynamics.flatMap((dynamic, at) => {
+    const from = dynamics.slice(0, at).filter((each) => each.hand === undefined).pop();
+    if (dynamic.gradually !== true || dynamic.hand !== undefined || from === undefined || from.ticks >= dynamic.ticks) {
+      return [];
+    }
+    const until = placed(dynamic.ticks);
+    return [
+      {
+        ...placed(from.ticks),
+        kind: DYNAMIC_LEVELS.indexOf(dynamic.level) > DYNAMIC_LEVELS.indexOf(from.level) ? 'crescendo' : 'diminuendo',
+        untilMeasureIndex: until.measureIndex,
+        untilOffsetTicks: until.offsetTicks,
+        staffNumber: null,
+      },
+    ];
+  });
+
   const exercise: Exercise = {
     id: `midi-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
     title,
@@ -598,20 +622,16 @@ export function midiToExercise(
     timeChanges,
     tempoChanges,
     pedalMarks,
-    // What the file marks, on the page's grid, and none past the last bar.
     // One for a hand alone goes on its staff, and on the side away from the
     // other, so it is not read as for both: those go between the staves.
-    dynamicMarks: document.dynamics
-      .map((dynamic) => ({ ticks: pull(dynamic.atTicks * scale), level: dynamic.level, hand: dynamic.hand }))
-      .filter((dynamic) => dynamic.ticks < (laid.bars[bars - 1]?.endTicks ?? 0))
-      .map((dynamic) => ({
+    dynamicMarks: dynamics.map((dynamic) => ({
         ...placed(dynamic.ticks),
         level: dynamic.level,
         staffNumber: dynamic.hand === undefined ? null : dynamic.hand === 'right' ? RIGHT_HAND : LEFT_HAND,
         ...(dynamic.hand === 'right' ? { placement: 'above' as const } : {}),
       })),
     tempoWords: [],
-    hairpins: [],
+    hairpins,
     octaveShifts: [],
     timeSignature,
     tempoBpm: document.tempoBpm,

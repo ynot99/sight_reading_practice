@@ -542,6 +542,9 @@ function sameKey(one: KeyNamed, other: KeyNamed): boolean {
   return one.midi === other.midi && one.downAtMs === other.downAtMs;
 }
 
+/** The grid of bar lines alone, which a slice's ends go to. */
+const BAR_LINES_ONLY: GridChoice = { beats: false, parts: 1 };
+
 /** How often, at most, coming back to the page syncs it: see `syncOnComingBack`. */
 const SYNCED_ON_COMING_BACK_AT_MOST_EVERY_MS = 60_000;
 
@@ -2092,6 +2095,8 @@ export class AppView {
    * none until one is laid on it. Kept while the page is, and no longer.
    */
   private rollSlice: { readonly of: string; readonly fromMs: number; readonly toMs: number } | null = null;
+  /** An end of the slice held by a pointer on the ruler, and where its other end stays: see `takeHoldOfAnEndOfTheSlice`. */
+  private sliceEndHeld: { readonly pointerId: number; readonly otherMs: number } | null = null;
   /** Where the marker stood as the drawing was shown, so shutting it carries the marker only where it was put: see `closeTheRoll`. */
   private headWhereShown: number | null = null;
   /**
@@ -9981,6 +9986,10 @@ export class AppView {
       }
       this.sliceLaidByThePress = false;
       this.followThePointerPastTheDrawing(event);
+      if (event.button === 0 && this.isOnTheRuler(event) && this.takeHoldOfAnEndOfTheSlice(event)) {
+        event.preventDefault();
+        return;
+      }
       if (event.button === 0 && this.isOnTheRuler(event)) {
         this.watchForASliceHold(event);
       }
@@ -10024,7 +10033,7 @@ export class AppView {
       if (this.fingersOnTheDrawing.has(event.pointerId)) {
         this.fingersOnTheDrawing.set(event.pointerId, { x: event.clientX, y: event.clientY });
       }
-      if (this.dragTheSlice(event)) {
+      if (this.dragTheSlice(event) || this.dragAnEndOfTheSlice(event)) {
         return;
       }
       if (this.keyHeldOnTheStrip?.pointerId === event.pointerId) {
@@ -10056,7 +10065,7 @@ export class AppView {
     for (const ending of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
       this.listen(this.el.rollBody, ending, (event) => {
         this.fingersOnTheDrawing.delete(event.pointerId);
-        if (this.letGoOfTheSliceHold(event)) {
+        if (this.letGoOfTheSliceHold(event) || this.letGoOfAnEndOfTheSlice(event)) {
           return;
         }
         if (this.keyHeldOnTheStrip?.pointerId === event.pointerId) {
@@ -15577,7 +15586,9 @@ export class AppView {
   private showTheGrip(event: PointerEvent): void {
     const editing = this.theOtherRollShowing?.sketch?.editing === true;
     let grip: Grip | null = null;
-    if (editing && this.isOnThePedal(event)) {
+    if (this.isOnTheRuler(event)) {
+      grip = this.theGripOnTheSlice(event.clientX);
+    } else if (editing && this.isOnThePedal(event)) {
       const at = this.theMomentUnder(event.clientX);
       const press = at === null ? null : this.thePedalPressAt(at);
       grip = press === null || at === null ? null : theGripOfAStretch(press.fromMs, press.untilMs, at, Number(this.el.rollZoom.value) / 1000);
@@ -16955,6 +16966,77 @@ export class AppView {
       band.style.setProperty('--roll-at', (slice.fromMs / 1000).toFixed(3));
       band.style.setProperty('--roll-span', ((slice.toMs - slice.fromMs) / 1000).toFixed(3));
     }
+  }
+
+  /**
+   * Which end of the slice a point on the ruler is on: within a grip of it,
+   * inside or just outside it - a third of a slice too narrow for that - or
+   * neither.
+   */
+  private theGripOnTheSlice(clientX: number): 'start' | 'end' | null {
+    const slice = this.theSliceShown();
+    const at = this.theMomentUnder(clientX);
+    if (slice === null || at === null) {
+      return null;
+    }
+    const pxPerMs = Number(this.el.rollZoom.value) / 1000;
+    const reachMs = GRIP_PX / pxPerMs;
+    if (at < slice.fromMs - reachMs || at > slice.toMs + reachMs) {
+      return null;
+    }
+    const grip = theGripOfAStretch(slice.fromMs, slice.toMs, at, pxPerMs);
+    return grip === 'whole' ? null : grip;
+  }
+
+  /**
+   * Takes hold of an end of the slice where a pointer goes down on the
+   * ruler by it, to take it to another bar line, the other end staying
+   * where it is. Says whether it did.
+   */
+  private takeHoldOfAnEndOfTheSlice(event: PointerEvent): boolean {
+    const grip = this.theGripOnTheSlice(event.clientX);
+    const slice = this.theSliceShown();
+    if (grip === null || slice === null) {
+      return false;
+    }
+    this.sliceEndHeld = { pointerId: event.pointerId, otherMs: grip === 'start' ? slice.toMs : slice.fromMs };
+    return true;
+  }
+
+  /**
+   * Takes the end of the slice held to the bar line nearest the pointer, or
+   * the drawing's end, as a note's end goes to the beat nearest: past the
+   * other end, it is the other end, and on it, the slice keeps a bar. Says
+   * whether the move was its.
+   */
+  private dragAnEndOfTheSlice(event: PointerEvent): boolean {
+    const held = this.sliceEndHeld;
+    if (held === null || held.pointerId !== event.pointerId) {
+      return false;
+    }
+    const roll = this.theRoll();
+    const at = this.theMomentUnder(event.clientX);
+    if (roll !== null && at !== null) {
+      const began = rollBeganAtMs(roll);
+      const lines = [...theMusicsBeats(roll, BAR_LINES_ONLY).map((line) => line.atMs - began), rollEndedAtMs(roll) - began];
+      const nearest = lines.reduce((best, line) => (Math.abs(line - at) < Math.abs(best - at) ? line : best));
+      const slice = { fromMs: Math.min(held.otherMs, nearest), toMs: Math.max(held.otherMs, nearest) };
+      const shown = this.theSliceShown();
+      if (slice.toMs > slice.fromMs && (shown === null || shown.fromMs !== slice.fromMs || shown.toMs !== slice.toMs)) {
+        this.sliceTheDrawing(slice);
+      }
+    }
+    return true;
+  }
+
+  /** Lets go of the end of the slice held; says whether it was one, whose click is then let pass. */
+  private letGoOfAnEndOfTheSlice(event: PointerEvent): boolean {
+    if (this.sliceEndHeld?.pointerId !== event.pointerId) {
+      return false;
+    }
+    this.sliceEndHeld = null;
+    this.sliceLaidByThePress = true;
+    return true;
   }
 
   /** Starts the clock on a press on the ruler, which held still long enough lays a slice. */

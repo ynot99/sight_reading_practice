@@ -11576,6 +11576,65 @@ describe('AppView', () => {
       expect(passage()).toEqual([4, 8]);
     });
 
+    it('takes the slice by either end on the ruler to another bar line, the other end staying', async () => {
+      const { view, runtime, clock } = createRig();
+      await view.initialize();
+      // Bars of four seconds.
+      await runtime.controller.openScore(longExercise({ bars: 8, tempoBpm: 60 }));
+      runtime.controller.choosePassage(3, 4);
+      element<HTMLButtonElement>('focus-roll').click();
+      const body = element('roll-body');
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const ruler = (): Element => body.querySelector('.roll__ruler') ?? body;
+      const point = (type: string, seconds: number): void => {
+        ruler().dispatchEvent(
+          new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 41, pointerType: 'mouse', button: 0, clientX: seconds * zoom, clientY: 5 }),
+        );
+      };
+      const drag = (from: number, to: number): void => {
+        clock.advance(1_000);
+        point('pointerdown', from);
+        point('pointermove', to);
+        point('pointerup', to);
+        ruler().dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: to * zoom, clientY: 5 }));
+      };
+      const passage = (): (number | null)[] => [runtime.controller.settings.rangeFromBar, runtime.controller.settings.rangeToBar];
+      const nudge = 3 / zoom;
+
+      // The mouse over either end says so; over its middle, or away from it, not.
+      for (const [seconds, grip] of [
+        [8 + nudge, 'start'],
+        [8 - nudge, 'start'],
+        [16 - nudge, 'end'],
+        [12, undefined],
+        [20, undefined],
+      ] as const) {
+        point('pointermove', seconds);
+        expect(body.dataset['grip'], String(seconds)).toBe(grip);
+      }
+      // Its end taken a bar on, and its start back one; the marker left where it was.
+      const head = headAt(body);
+      drag(16 - nudge, 21);
+      expect(passage()).toEqual([3, 5]);
+      drag(8 + nudge, 5);
+      expect(passage()).toEqual([2, 5]);
+      expect(headAt(body)).toBe(head);
+      // Its start taken past its end, the end is where it was taken: the bars between.
+      drag(4 + nudge, 29);
+      expect(passage()).toEqual([6, 7]);
+      // To the line nearest, or the drawing's end past the last.
+      drag(28 - nudge, 25.5);
+      expect(passage()).toEqual([6, 6]);
+      drag(24 - nudge, 40);
+      expect(passage()).toEqual([6, 8]);
+      // Let go of, the mouse moving on moves nothing.
+      point('pointermove', 10);
+      expect(passage()).toEqual([6, 8]);
+      // Taken onto the other end, it keeps what it had rather than become nothing.
+      drag(20 + nudge, 40);
+      expect(passage()).toEqual([6, 8]);
+    });
+
     it('takes an end of the passage from the marker on the drawing of a run, whose clock began long before', async () => {
       const { view, runtime, midi, clock, metronome } = createRig();
       await view.initialize();

@@ -591,6 +591,24 @@ describe('painting the chords the notes make', () => {
     expect(recorder.marks.filter((mark) => mark.how === 'stroke').map((mark) => mark.ink)).toEqual(['chosen', 'chord-edge']);
   });
 
+  it('writes a name smaller in a block too short for it at its size, as far as it can still be read', () => {
+    const { surface: canvas, recorder } = surface(700, 30);
+    // A fifth of a second is twenty-eight pixels: sixteen of them for the
+    // words, which A minor seventh fills at eleven pixels high, and not at
+    // twelve; a second, at its own thirteen.
+    paint([[0, 0.2, 'Am7', 'vi7', true], [1, 2, 'Am7', 'vi7', true]]);
+    expect(recorder.inked('chord-name').map((mark) => [mark.words, mark.size])).toEqual([
+      ['Am7', 11],
+      ['Am7', 13],
+    ]);
+    // The degree only where there is room after the name.
+    expect(recorder.inked('bar').map((mark) => mark.words)).toEqual(['vi7']);
+
+    function paint(chords: readonly [number, number, string, string, boolean][]): void {
+      paintTheChords(canvas, withChords(chords), at(), INKS, 1);
+    }
+  });
+
   it('leaves the words out of a block too short to hold them, and the degree out of one that holds only the name', () => {
     const { surface: canvas, recorder } = surface(700, 30);
     // A tenth of a second is fourteen pixels; a fifth, twenty-eight.

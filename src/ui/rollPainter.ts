@@ -613,13 +613,16 @@ const CHORD_CORNER_PX = 4;
 const CHORD_WORDS_IN_PX = 5;
 const CHORD_NAME_PX = 13;
 const CHORD_NUMERAL_PX = 11;
+/** The smallest a chord's name is written, smaller each pixel down from its own size, before it is left out. */
+const CHORD_NAME_LEAST_PX = 8;
 
 /**
  * Paints the part of the lane of chords a canvas covers: a block for each
  * chord as long as it lasts, its name and its degree written in it - kept in
- * sight at the left of the screen while the block goes on past it, and left
- * out where the block is too short to hold them, which a pointer resting on
- * it still says. Edged in dashes where it is only most of the notes, and
+ * sight at the left of the screen while the block goes on past it. Where the
+ * block is too short for them, the degree is left out, and the name written
+ * smaller, as far as it can still be read; shorter still, it is left out as
+ * well, and a pointer resting on the block still says it. Edged in dashes where it is only most of the notes, and
  * in the ink of a chosen note where its notes are chosen.
  */
 export function paintTheChords(
@@ -649,9 +652,15 @@ export function paintTheChords(
     paint.stroke();
     paint.setLineDash([]);
     paint.lineWidth = 1;
-    paint.font = `700 ${String(CHORD_NAME_PX)}px ${inks.font}`;
-    const nameWide = paint.measureText(chord.name).width;
-    const words = Math.min(Math.max(left, 0) + CHORD_WORDS_IN_PX, right - CHORD_WORDS_IN_PX - nameWide);
+    let nameWide = 0;
+    let words = Number.NEGATIVE_INFINITY;
+    let size = CHORD_NAME_PX + 1;
+    while (words < left + CHORD_WORDS_IN_PX && size > CHORD_NAME_LEAST_PX) {
+      size -= 1;
+      paint.font = `700 ${String(size)}px ${inks.font}`;
+      nameWide = paint.measureText(chord.name).width;
+      words = Math.min(Math.max(left, 0) + CHORD_WORDS_IN_PX, right - CHORD_WORDS_IN_PX - nameWide);
+    }
     if (words < left + CHORD_WORDS_IN_PX) {
       continue;
     }

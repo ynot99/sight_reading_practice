@@ -12,6 +12,8 @@ export interface Mark {
   readonly dashes?: readonly number[];
   readonly alpha: number;
   readonly words?: string;
+  /** How large its words were written, in pixels, where the font said. */
+  readonly size?: number;
   /** Where an ink that fades runs from and to, and its stops on the way. */
   readonly fade?: { readonly fromY: number; readonly toY: number; readonly stops: readonly [number, string][] };
 }
@@ -117,11 +119,31 @@ export class Recorder {
     }
   }
   fillText(words: string, x: number, y: number): void {
-    this.marks.push({ how: 'text', ink: this.fillStyle, x, y, wide: 0, tall: 0, words, alpha: this.globalAlpha });
+    const size = this.fontSize();
+    this.marks.push({
+      how: 'text',
+      ink: this.fillStyle,
+      x,
+      y,
+      wide: 0,
+      tall: 0,
+      words,
+      alpha: this.globalAlpha,
+      ...(size === null ? {} : { size }),
+    });
   }
-  /** Six pixels a letter, so a test can say where words after others begin. */
+  /**
+   * Six pixels a letter at thirteen pixels high, and as much less as the font
+   * is smaller, so a test can say where words after others begin and whether
+   * smaller ones fit.
+   */
   measureText(words: string): { readonly width: number } {
-    return { width: words.length * 6 };
+    const size = this.fontSize();
+    return { width: words.length * 6 * (size === null ? 1 : size / 13) };
+  }
+  private fontSize(): number | null {
+    const said = /(\d+(?:\.\d+)?)px/.exec(this.font);
+    return said === null ? null : Number(said[1]);
   }
 
   /** The inks in the order they were first painted with. */

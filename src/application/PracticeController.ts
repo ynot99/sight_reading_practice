@@ -1508,6 +1508,14 @@ export class PracticeController {
   }
 
   /**
+   * The bar a run would really begin at, by its place in the playing from
+   * nought: see `whereARunBegins`. None with nothing open.
+   */
+  get barARunBeginsAt(): number | null {
+    return this.timeline?.steps[this.whereARunBegins()]?.measureIndex ?? null;
+  }
+
+  /**
    * Which step a run would really begin at.
    *
    * The reader's own place, never outside the passage they chose: a place

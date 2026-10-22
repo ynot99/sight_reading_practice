@@ -175,7 +175,7 @@ import type { StoredScoreSummary } from '../application/ports/IScoreStore.js';
 import { replayFits } from '../application/runReplay.js';
 import type { NoteCounts } from '../domain/scoring/PerformanceReport.js';
 import type { ClosingCue, DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
-import { barLines, barNumberOf, measureCount, pedalHeldUntil, type Exercise } from '../domain/model/Exercise.js';
+import { barLines, barNumberOf, measureCount, measureIndexAt, pedalHeldUntil, type Exercise } from '../domain/model/Exercise.js';
 import type { ImportWarning } from '../domain/notation/MusicXmlParser.js';
 import { theHitErrors } from '../domain/scoring/theHitErrors.js';
 import { theProfile } from '../domain/scoring/theProfile.js';
@@ -240,6 +240,7 @@ import {
   theEndAKeyFitsTo,
   aKeyIsOverAnotherOfItsPitch,
   theMusicsPlaceAt,
+  momentOfTicks,
   type GridChoice,
 } from '../application/session/RunRoll.js';
 import {
@@ -2091,6 +2092,8 @@ export class AppView {
    * none until one is laid on it. Kept while the page is, and no longer.
    */
   private rollSlice: { readonly of: string; readonly fromMs: number; readonly toMs: number } | null = null;
+  /** Where the marker stood as the drawing was shown, so shutting it carries the marker only where it was put: see `closeTheRoll`. */
+  private headWhereShown: number | null = null;
   /**
    * A press on the ruler that may lay a slice: held still long enough it
    * does, and then the finger drags the slice's far end until it is let go.
@@ -12284,6 +12287,7 @@ export class AppView {
     this.rollScroller.to(0, 0);
     this.drawTheRollInto();
     this.showTheSheet(this.el.sheetRoll);
+    this.putTheHeadWhereThePageBegins();
     // Measured after it is on the screen and not before. A hidden sheet has no
     // width, so the box saying which part of the run is in view was worked out
     // against nothing, found nothing to say, and stayed away until the first
@@ -12826,16 +12830,12 @@ export class AppView {
    * to it rather than for agreeing to it.
    */
   private takeAnEndFromTheMarker(end: 'from' | 'to'): void {
-    const roll = this.theRoll();
     const controller = this.runtime.controller;
-    if (roll === null) {
+    const measureIndex = this.theBarOnThePageAt(this.headIsAtMs());
+    if (measureIndex === null) {
       return;
     }
-    const ticks = theMusicsPlaceAt(roll, this.headIsAtMs());
-    const bar = ticks === null ? null : controller.theBarAtTicks(ticks);
-    if (bar === null) {
-      return;
-    }
+    const bar = measureIndex + 1;
     const { firstBar, lastBar } = controller.pieceBarRange;
     const settings = controller.settings;
     const from = end === 'from' ? bar : (settings.rangeFromBar ?? firstBar);
@@ -12860,7 +12860,8 @@ export class AppView {
    * перемкнутись на слайс з нот, та гравець міг ще раз спробувати цю частину".
    */
   private goAndPractiseThePassage(): void {
-    this.closeTheRoll();
+    // To the passage's beginning, and not where the marker was left.
+    this.closeTheRoll(false);
     this.runtime.controller.cursorToStart();
   }
 
@@ -12873,19 +12874,90 @@ export class AppView {
    * Written at each way out instead, the ways out drift apart, which is how
    * one of them ended up not being a way out at all.
    */
-  private closeTheRoll(): void {
+  private closeTheRoll(carryTheMarker = true): void {
+    // Where the marker was put, the page's music begins: the bar it is in,
+    // since a run begins on a bar line - asked before the playback stops,
+    // which takes it back to the beginning, and before the sheet goes, while
+    // the drawing is still the one it is in. Only where it was put: shown
+    // and shut, a drawing changes nothing, and one of a run begun later in
+    // the piece would otherwise move the page's beginning to the run's.
+    const placed = this.rollPlacedAtMs;
+    const bar = carryTheMarker && placed !== this.headWhereShown ? this.theBarOnThePageAt(placed) : null;
     this.stopTheRoll();
+    const beginThere = (): void => {
+      if (bar !== null) {
+        this.beginAt(bar);
+      }
+    };
     this.el.sheetRollOptions.hidden = true;
     this.el.sheetRoll.hidden = true;
     // The page written from a sketch changed in it is written again, so the
-    // page and the sketch never disagree.
+    // page and the sketch never disagree - and begins at the marker once it is.
     const onThePage = this.theSketchOfThePage();
-    if (onThePage !== null) {
-      const now = this.runtime.sketches.find(onThePage.sketch.id);
-      if (now !== null && now !== onThePage.sketch) {
-        void this.writeDownTheSketch(now.id, this.el.sheetRoll);
-      }
+    const now = onThePage === null ? null : this.runtime.sketches.find(onThePage.sketch.id);
+    if (onThePage !== null && now !== null && now !== onThePage.sketch) {
+      void this.writeDownTheSketch(now.id, this.el.sheetRoll).then(beginThere);
+      return;
     }
+    beginThere();
+  }
+
+  /**
+   * The bar of the music on the page that a moment of the drawing shown is
+   * in, by its place in the playing from nought; none where the drawing is
+   * not of the page's music. The run just played and the score's own
+   * drawing are of the score, and say so by the beats they carry; a sketch
+   * is of the page written down from it, whose bars are its bars counted on
+   * its beats, as the writing counts them.
+   */
+  private theBarOnThePageAt(atMs: number): number | null {
+    const roll = this.theRoll();
+    const showing = this.theOtherRollShowing;
+    if (roll === null) {
+      return null;
+    }
+    const stored = this.theSketchShownOnThePage();
+    if (stored !== null) {
+      const beat = theBeatOfTheClickAt(stored.events, stored.beats, atMs + rollBeganAtMs(roll));
+      return beat === null ? null : beat.bar - 1;
+    }
+    const exercise = this.runtime.controller.currentTimeline?.exercise;
+    // A beat carries the run's own clock, and a moment of the drawing is from its beginning.
+    const ticks = showing !== null && !showing.ofTheOpenScore ? null : theMusicsPlaceAt(roll, atMs + rollBeganAtMs(roll));
+    return exercise === undefined || ticks === null ? null : measureIndexAt(exercise, ticks);
+  }
+
+  /** Where a bar of the music on the page begins in the drawing shown, from its beginning: see `theBarOnThePageAt`. */
+  private theMomentOfTheBarOnThePage(measureIndex: number): number | null {
+    const roll = this.theRoll();
+    const showing = this.theOtherRollShowing;
+    if (roll === null) {
+      return null;
+    }
+    const stored = this.theSketchShownOnThePage();
+    if (stored !== null) {
+      const downbeat = (theClickOfTheTake(stored.events, stored.beats) ?? []).filter((beat) => beat.beat === 0)[measureIndex];
+      return downbeat === undefined ? null : downbeat.atMs - rollBeganAtMs(roll);
+    }
+    const exercise = this.runtime.controller.currentTimeline?.exercise;
+    const startTicks = exercise === undefined ? undefined : barLines(exercise)[measureIndex]?.startTicks;
+    return (showing !== null && !showing.ofTheOpenScore) || startTicks === undefined ? null : momentOfTicks(roll, startTicks);
+  }
+
+  /** The sketch shown, as it is kept, where the page is the one written down from it; none otherwise. */
+  private theSketchShownOnThePage(): StoredSketch | null {
+    const sketch = this.theOtherRollShowing?.sketch;
+    return sketch === undefined || this.theSketchOfThePage()?.sketch.id !== sketch.id ? null : this.runtime.sketches.find(sketch.id);
+  }
+
+  /** Puts the marker of the drawing just shown where a run of the page's music would begin, where the drawing is of it. */
+  private putTheHeadWhereThePageBegins(): void {
+    const bar = this.runtime.controller.barARunBeginsAt;
+    const at = bar === null ? null : this.theMomentOfTheBarOnThePage(bar);
+    if (at !== null && at > 0) {
+      this.putTheHeadAt(at);
+    }
+    this.headWhereShown = this.rollPlacedAtMs;
   }
 
   /**
@@ -13032,6 +13104,7 @@ export class AppView {
     this.rollScroller.to(0, 0);
     this.drawTheRollInto();
     this.showTheSheet(this.el.sheetRoll);
+    this.putTheHeadWhereThePageBegins();
     this.showTheView();
     this.sayWhatWouldBePractised();
     this.sayWhatThePictureIsOf();
@@ -14767,6 +14840,7 @@ export class AppView {
     this.rollScroller.to(0, 0);
     this.drawTheRollInto();
     this.showTheSheet(this.el.sheetRoll);
+    this.putTheHeadWhereThePageBegins();
     this.showTheView();
     this.sayWhatWouldBePractised();
     this.sayWhatThePictureIsOf();

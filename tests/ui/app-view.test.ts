@@ -7472,6 +7472,80 @@ describe('AppView', () => {
       }
     });
 
+    it('carries the marker put in a sketch to where the page written down from it begins, and back', async () => {
+      const { view, sketches, clock, runtime } = createRig();
+      await view.initialize();
+      sketches.begin(
+        {
+          // Begun two seconds into the run, click and all: the drawing begins at its first bar.
+          events: Array.from({ length: 16 }, (_, at) => [
+            { kind: 'noteOn' as const, atMs: 2_000 + at * 500, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: 2_000 + at * 500 + 400, midi: 60 },
+          ]).flat(),
+          beats: [2_000, 2_500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Carried',
+        1,
+      );
+      const elsewhere = sketches.begin(
+        {
+          events: [
+            { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: 400, midi: 60 },
+          ],
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Elsewhere',
+        2,
+      );
+      const ofTheSketch = (name: string, does: string): HTMLButtonElement | null | undefined =>
+        [...element('sketches-list').querySelectorAll('li')]
+          .find((row) => row.textContent?.includes(name) === true)
+          ?.querySelector<HTMLButtonElement>(`button[title="${does}"]`);
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      ofTheSketch('Carried', 'Write this sketch down as a score')?.click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise?.title).toBe('Carried');
+      });
+      const body = element('roll-body');
+      const ruler = (ms: number): void => {
+        clock.advance(1_000);
+        const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+        const scrolled = Number.parseFloat(body.querySelector<HTMLElement>('.roll__head')?.style.getPropertyValue('--roll-x') ?? '0') || 0;
+        body.querySelector('.roll__ruler')?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: (ms / 1000) * zoom - scrolled, clientY: 5 }));
+      };
+
+      element<HTMLButtonElement>('focus-sketch').click();
+      ruler(5_200);
+      expect(headAt(body)).toBe('5.000');
+      element<HTMLButtonElement>('roll-close').click();
+      expect(runtime.controller.barARunBeginsAt).toBe(2);
+      element<HTMLButtonElement>('focus-sketch').click();
+      expect(headAt(body)).toBe('4.000');
+      // Changed, the page is written again, and begins there once it is.
+      ruler(2_200);
+      element<HTMLButtonElement>('roll-mark').click();
+      element<HTMLSelectElement>('roll-mark-dynamic').value = 'f';
+      element<HTMLButtonElement>('roll-mark-yes').click();
+      const before = runtime.controller.openedExercise;
+      element<HTMLButtonElement>('roll-close').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise).not.toBe(before);
+      });
+      await vi.waitFor(() => {
+        expect(runtime.controller.barARunBeginsAt).toBe(1);
+      });
+      // Another sketch, not the page's, carries nothing to it.
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      ofTheSketch(elsewhere.title, 'Edit this sketch')?.click();
+      expect(element('roll-title').textContent).toBe('Elsewhere');
+      ruler(6_200);
+      element<HTMLButtonElement>('roll-close').click();
+      expect(runtime.controller.barARunBeginsAt).toBe(1);
+    });
+
     it("asks about the beat under two taps on the ruler of a sketch being edited, as the flag's button does", async () => {
       const { view, sketches, clock } = createRig();
       await view.initialize();
@@ -11348,6 +11422,105 @@ describe('AppView', () => {
       element<HTMLButtonElement>('focus-roll').click();
 
       expect(view.rollScene?.ghosts.length).toBe(view.rollScene?.notes.length);
+    });
+
+    it('carries the marker put in the drawing of the score to where the page begins, by its bar, and back', async () => {
+      const { view, runtime, clock } = createRig();
+      await view.initialize();
+      // Bars of four seconds.
+      await runtime.controller.openScore(longExercise({ bars: 8, tempoBpm: 60 }));
+      const body = element('roll-body');
+      const ruler = (seconds: number): void => {
+        clock.advance(1_000);
+        const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+        body.querySelector('.roll__ruler')?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: seconds * zoom, clientY: 5 }));
+      };
+
+      // Shown and shut, nothing moves.
+      element<HTMLButtonElement>('focus-roll').click();
+      expect(headAt(body)).toBe('0.000');
+      element<HTMLButtonElement>('roll-close').click();
+      expect(runtime.controller.barARunBeginsAt).toBe(0);
+      // Put in the third bar, between its beats: the page begins at its bar line.
+      element<HTMLButtonElement>('focus-roll').click();
+      ruler(9.2);
+      expect(headAt(body)).toBe('9.000');
+      element<HTMLButtonElement>('roll-close').click();
+      expect(runtime.controller.barARunBeginsAt).toBe(2);
+      // Shown again, the marker is where the page begins.
+      element<HTMLButtonElement>('focus-roll').click();
+      expect(headAt(body)).toBe('8.000');
+      // Played on and paused further along, it is where the marker was put that counts, not where the sound got to.
+      ruler(13.2);
+      vi.useFakeTimers();
+      try {
+        element<HTMLButtonElement>('roll-play').click();
+        clock.advance(6_000);
+        vi.advanceTimersByTime(6_000);
+        element<HTMLButtonElement>('roll-play').click();
+      } finally {
+        vi.useRealTimers();
+      }
+      expect(Number(headAt(body))).toBeGreaterThan(16);
+      element<HTMLButtonElement>('roll-close').click();
+      expect(runtime.controller.barARunBeginsAt).toBe(3);
+      // Going to practise the passage goes to its beginning, not the marker's.
+      element<HTMLButtonElement>('focus-roll').click();
+      ruler(17.2);
+      element<HTMLButtonElement>('roll-from').click();
+      ruler(25.2);
+      element<HTMLButtonElement>('roll-practise').click();
+      expect(runtime.controller.barARunBeginsAt).toBe(4);
+      // Shown and shut inside a passage that holds the page's beginning in,
+      // the reader's own place stays theirs.
+      runtime.controller.beginAtTheStart();
+      element<HTMLButtonElement>('focus-roll').click();
+      expect(headAt(body)).toBe('16.000');
+      element<HTMLButtonElement>('roll-close').click();
+      runtime.controller.updateSettings({ rangeFromBar: null, rangeToBar: null });
+      expect(runtime.controller.barARunBeginsAt).toBe(0);
+    });
+
+    it('takes an end of the passage from the marker on the drawing of a run, whose clock began long before', async () => {
+      const { view, runtime, midi, clock, metronome } = createRig();
+      await view.initialize();
+      await runtime.controller.openScore(longExercise({ bars: 8, tempoBpm: 60 }));
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
+      clock.advance(50_000);
+      element<HTMLButtonElement>('focus-play').click();
+      for (let beat = 0; beat < 24; beat += 1) {
+        metronome.advanceSubdivisions(1);
+        const pitch = runtime.controller.session?.currentStep?.expectedMidi[0] ?? 60;
+        midi.noteOn(pitch, clock.now());
+        midi.noteOff(pitch, clock.now() + 100);
+      }
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      clock.advance(1_000);
+      element('roll-body').querySelector('.roll__ruler')?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 9.2 * zoom, clientY: 5 }));
+
+      element<HTMLButtonElement>('roll-from').click();
+
+      expect(runtime.controller.settings.rangeFromBar).toBe(3);
+      // A run begun later than where the page now begins, shown and shut, moves nothing.
+      element<HTMLButtonElement>('roll-close').click();
+      runtime.controller.updateSettings({ rangeFromBar: null, rangeToBar: null });
+      runtime.controller.beginAtTheStart();
+      clock.advance(1_000);
+      runtime.controller.beginAtBar(4);
+      element<HTMLButtonElement>('focus-play').click();
+      for (let beat = 0; beat < 8; beat += 1) {
+        metronome.advanceSubdivisions(1);
+        const pitch = runtime.controller.session?.currentStep?.expectedMidi[0] ?? 60;
+        midi.noteOn(pitch, clock.now());
+        midi.noteOff(pitch, clock.now() + 100);
+      }
+      element<HTMLButtonElement>('focus-stop').click();
+      runtime.controller.beginAtTheStart();
+      element<HTMLButtonElement>('run-roll-open').click();
+      element<HTMLButtonElement>('roll-close').click();
+      expect(runtime.controller.barARunBeginsAt).toBe(0);
     });
 
     it('allows choosing a passage and practising it from the score roll', async () => {

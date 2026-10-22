@@ -7472,6 +7472,63 @@ describe('AppView', () => {
       }
     });
 
+    it('puts an empty bar in before the bar of the beat asked about, as one change, and none before the first', async () => {
+      const { view, sketches, clock } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            ...Array.from({ length: 12 }, (_, at) => [
+              { kind: 'noteOn' as const, atMs: at * 500, midi: 60 + at, velocity: 0.5 },
+              { kind: 'noteOff' as const, atMs: at * 500 + 400, midi: 60 + at },
+            ]).flat(),
+            { kind: 'dynamic' as const, atMs: 4_000, level: 'f' as const },
+          ],
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Room',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const body = element('roll-body');
+      const insert = element<HTMLButtonElement>('roll-mark-insert');
+      const struck = (): number[] =>
+        (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'noteOn' || event.kind === 'dynamic' ? [event.atMs] : []));
+      const across = (ms: number): number =>
+        (ms / 1000) * zoom - (Number.parseFloat(body.querySelector<HTMLElement>('.roll__head')?.style.getPropertyValue('--roll-x') ?? '0') || 0);
+      const ask = (ms: number): void => {
+        clock.advance(1_000);
+        tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: across(ms), clientY: 20 });
+        element<HTMLButtonElement>('roll-mark').click();
+      };
+      const was = struck();
+
+      // Before the first bar: dimmed, saying why, and nothing done.
+      ask(1_200);
+      expect([insert.dataset['idle'], insert.title]).toEqual([
+        'true',
+        'A sketch begins at the bar its first note is in: there is no bar before it to put an empty one after',
+      ]);
+      insert.click();
+      expect(struck()).toEqual(was);
+      expect(element('sheet-roll-mark').hidden).toBe(true);
+      // Asked on the third bar's second beat: before the third bar.
+      ask(4_600);
+      expect([insert.dataset['idle'], insert.title]).toEqual([
+        undefined,
+        'Insert an empty bar before bar 3, moving everything from it on by a bar',
+      ]);
+      insert.click();
+      expect(element('sheet-roll-mark').hidden).toBe(true);
+      expect(struck()).toEqual([...was.slice(0, 8), ...was.slice(8).map((atMs) => atMs + 2_000)].sort((one, other) => one - other));
+      // One change, put back as one.
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'z', code: 'KeyZ', ctrlKey: true }));
+      expect(struck()).toEqual(was);
+    });
+
     it('reaches a dynamic gradually from the one marked before, says so on its flag, copies it so, and prints a hairpin', async () => {
       const { view, sketches, clock, runtime } = createRig();
       await view.initialize();

@@ -2352,6 +2352,9 @@ describe('searching the settings', () => {
     expect(body('.roll-mark__fields')).toMatch(/display\s*:\s*flex/);
     expect(body('.roll-mark__fields')).toMatch(/flex-wrap\s*:\s*wrap/);
     expect(body(".roll-mark__fields select[data-idle='true']")).toMatch(/opacity\s*:\s*0?\.\d+/);
+    // Its buttons, four with a bar to put in, wrap on a phone rather than running off it.
+    expect(body('.sheet__actions')).toMatch(/flex-wrap\s*:\s*wrap/);
+    expect(body(".sheet__actions .button[data-idle='true']")).toMatch(/opacity\s*:\s*0?\.\d+/);
     // And the row wraps on a phone rather than running off it, each name with
     // what it names, the slider's group taking the room.
     expect(body('.roll-velocity')).toMatch(/flex-wrap\s*:\s*wrap/);

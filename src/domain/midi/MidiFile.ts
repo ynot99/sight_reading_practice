@@ -759,6 +759,46 @@ export function thePlayingAtAnotherPace(
 
 const MILLISECONDS_PER_MINUTE = 60_000;
 
+/**
+ * A take with an empty bar put in before the bar a moment is in: the same
+ * metre and pace as that bar, and everything from its first beat on moved
+ * later by as long as it lasts - the notes, the pedal, the keys and the
+ * dynamics, and the beats. What begins on that bar line moves with the music
+ * after it, and what ends there stays with the music before; a note or the
+ * pedal held across it is held across the bar put in too. Where the click
+ * says nothing it is given back as it was.
+ */
+export function thePlayingWithABarInserted(
+  events: readonly MidiFileEvent[],
+  beats: readonly HeardBeat[],
+  atMs: number,
+): { readonly events: readonly MidiFileEvent[]; readonly beats: readonly HeardBeat[] } {
+  const grid = theClickReaching(events, beats, atMs, true);
+  if (grid === null) {
+    return { events, beats };
+  }
+  const from = theBarAt(grid, atMs);
+  const first = elementAt(grid, from);
+  // The bar and the beat after it, carried on at its pace where the click stops short of them.
+  const laid = [...grid];
+  while (laid.length <= from + first.beatsInBar) {
+    const last = elementAt(laid, laid.length - 1);
+    laid.push({ ...last, atMs: last.atMs + gapAfter(laid, laid.length - 1), beat: (last.beat + 1) % last.beatsInBar });
+  }
+  const lengthMs = elementAt(laid, from + first.beatsInBar).atMs - first.atMs;
+  const begins = (event: MidiFileEvent): boolean =>
+    event.kind === 'noteOn' || event.kind === 'key' || event.kind === 'dynamic' || (event.kind === 'sustain' && damperIsDown(event.value));
+  const moves = (event: MidiFileEvent): boolean =>
+    event.atMs > first.atMs + SAME_MOMENT_MS || (event.atMs >= first.atMs - SAME_MOMENT_MS && begins(event));
+  return {
+    events: inTheOrderPlayed(events.map((event) => (moves(event) ? { ...event, atMs: event.atMs + lengthMs } : event))),
+    beats: [
+      ...laid.slice(0, from + first.beatsInBar),
+      ...laid.slice(from).map((beat) => ({ ...beat, atMs: beat.atMs + lengthMs })),
+    ],
+  };
+}
+
 /** A beat of a click: how many crotchets after its first it falls, and when. */
 interface CrotchetMark {
   readonly crotchets: number;

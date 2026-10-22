@@ -70,6 +70,7 @@ import {
   theClickInAnotherMetre,
   theClickOfTheTake,
   takeWithTheDynamicFrom,
+  thePlayingWithABarInserted,
   theDynamicAt,
   theDynamicsOf,
   theVelocityOfTheLevel,
@@ -2631,6 +2632,7 @@ export class AppView {
     rollMarkDynamic: HTMLSelectElement;
     rollMarkReached: HTMLSelectElement;
     rollMarkRemove: HTMLButtonElement;
+    rollMarkInsert: HTMLButtonElement;
     rollMarkYes: HTMLButtonElement;
     rollMarkNo: HTMLButtonElement;
     rollChords: HTMLElement;
@@ -3028,6 +3030,7 @@ export class AppView {
       rollMarkDynamic: requireElement(doc, 'roll-mark-dynamic'),
       rollMarkReached: requireElement(doc, 'roll-mark-reached'),
       rollMarkRemove: requireElement(doc, 'roll-mark-remove'),
+      rollMarkInsert: requireElement(doc, 'roll-mark-insert'),
       rollMarkYes: requireElement(doc, 'roll-mark-yes'),
       rollMarkNo: requireElement(doc, 'roll-mark-no'),
       rollChords: requireElement(doc, 'roll-chords'),
@@ -9755,6 +9758,9 @@ export class AppView {
     this.listen(this.el.rollMarkRemove, 'click', () => {
       this.takeTheChangeAway();
     });
+    this.listen(this.el.rollMarkInsert, 'click', () => {
+      this.insertABarBeforeTheBeatAsked();
+    });
     this.listen(this.el.rollChordsOpen, 'click', () => {
       this.chordsOfTheKeyOpen = !this.chordsOfTheKeyOpen;
       this.chordsBeingForgotten = false;
@@ -13966,7 +13972,40 @@ export class AppView {
       : `From ${thePlaceOfTheBeat(bar)}, until the next change`;
     // A dynamic is marked on any beat, the first too, which has nothing else to give back.
     this.el.rollMarkRemove.hidden = !changesHere && dynamicHere === dynamicBefore;
+    // A sketch begins at the bar its first note is in, so a bar put before that one is not kept.
+    sayWhetherIdle(
+      this.el.rollMarkInsert,
+      bar.bar === 1
+        ? 'A sketch begins at the bar its first note is in: there is no bar before it to put an empty one after'
+        : `Insert an empty bar before bar ${String(bar.bar)}, moving everything from it on by a bar`,
+      bar.bar === 1,
+    );
     return true;
+  }
+
+  /**
+   * Puts an empty bar in before the bar of the beat asked about, in its
+   * metre and at its pace, and moves everything from it on by as long:
+   * one change, put back as one. None before the first.
+   */
+  private insertABarBeforeTheBeatAsked(): void {
+    const bar = this.beatAskedAbout;
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    this.el.sheetRollMark.hidden = true;
+    this.beatAskedAbout = null;
+    this.keyAskedAbout = null;
+    this.dynamicAskedAbout = null;
+    if (bar === null || bar.bar === 1 || sketch === undefined || stored === null) {
+      return;
+    }
+    const inserted = thePlayingWithABarInserted(stored.events, stored.beats, bar.atMs);
+    this.changeTheSketchShowing(
+      inserted.events,
+      [...sketch.before, asItWas(stored, sketch.chosen)],
+      this.theChosenMovedWith(stored.events, inserted.events, sketch.chosen),
+      inserted.beats,
+    );
   }
 
   /**

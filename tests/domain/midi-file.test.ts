@@ -17,6 +17,7 @@ import {
   theClickOfTheTake,
   thePaceOfTheClick,
   thePlayingAtAnotherPace,
+  thePlayingWithABarInserted,
   TRACK_OF_A_HAND,
   writeMidiFile,
   type HeardBeat,
@@ -896,6 +897,72 @@ describe('how loud a note written at a level is struck', () => {
     // Nothing to change, the same events.
     const written = takeWithTheLoudnessWritten(notes);
     expect(takeWithTheLoudnessWritten(written)).toBe(written);
+  });
+});
+
+describe('an empty bar put in before another', () => {
+  it('moves everything from the bar line on by a bar, what begins on it with what follows and what ends on it with what went before', () => {
+    const events: MidiFileEvent[] = [
+      ...struck(0),
+      // Ending on the bar line, and held across it.
+      { kind: 'noteOn', atMs: 3_500, midi: 62, velocity: 0.5 },
+      { kind: 'noteOff', atMs: 4_000, midi: 62 },
+      { kind: 'noteOn', atMs: 3_800, midi: 64, velocity: 0.5 },
+      { kind: 'noteOff', atMs: 4_200, midi: 64 },
+      // The pedal let up on the bar line and put down again on it.
+      { kind: 'sustain', atMs: 4_000, value: 0 },
+      { kind: 'sustain', atMs: 4_000, value: 1 },
+      // A hair before the bar line is on it; a key and a dynamic go with the music.
+      { kind: 'noteOn', atMs: 3_999.6, midi: 67, velocity: 0.5 },
+      { kind: 'noteOff', atMs: 4_400, midi: 67 },
+      { kind: 'key', atMs: 4_000, fifths: 1, scale: 'major' },
+      { kind: 'dynamic', atMs: 5_000, level: 'f' },
+    ];
+    // Asked anywhere in the third bar: before it.
+    const { events: moved, beats } = thePlayingWithABarInserted(events, click(0, 500, 2), 5_200);
+    const where = (kind: MidiFileEvent['kind']): string[] =>
+      moved.flatMap((event) =>
+        event.kind !== kind
+          ? []
+          : [`${String(event.atMs)}${event.kind === 'noteOn' || event.kind === 'noteOff' ? ` ${String(event.midi)}` : event.kind === 'sustain' ? ` ${String(event.value)}` : ''}`],
+      );
+
+    expect(where('noteOn')).toEqual(['0 60', '3500 62', '3800 64', '5999.6 67']);
+    expect(where('noteOff')).toEqual(['1 60', '4000 62', '6200 64', '6400 67']);
+    expect(where('sustain')).toEqual(['4000 0', '6000 1']);
+    expect([...where('key'), ...where('dynamic')]).toEqual(['6000', '7000']);
+    // Four bars of four now, the third the one put in.
+    expect(beats.slice(0, 17).map((beat) => `${String(beat.atMs)}:${String(beat.beat)}`)).toEqual(
+      Array.from({ length: 17 }, (_, at) => `${String(at * 500)}:${String(at % 4)}`),
+    );
+  });
+
+  it('is in the metre and at the pace of the bar it goes before, and the bars after keep theirs', () => {
+    const notes = struck(0, 5_000);
+    const waltz = theClickInAnotherMetre(notes, click(0, 500, 2), 3, 4, 2_000);
+    const paced = thePlayingAtAnotherPace(notes, waltz, 90, 2_000);
+    const { events, beats } = thePlayingWithABarInserted(paced.events, paced.beats, 2_100);
+    const said = (changes: readonly { readonly atMs: number; readonly metre?: { readonly beatsInBar: number }; readonly crotchetsPerMinute?: number }[]): string[] =>
+      changes.map((change) => `${String(Math.round(change.atMs))} ${String(change.metre?.beatsInBar ?? '')} ${String(change.crotchetsPerMinute ?? '')}`);
+
+    expect(said(theChangesOfTheClick(paced.events, paced.beats))).toEqual(['0 4 120', '2000 3 90']);
+    expect(said(theChangesOfTheClick(events, beats))).toEqual(['0 4 120', '2000 3 90']);
+    // Three crotchets at 90 a minute: two seconds.
+    expect(events.filter((event) => event.kind === 'noteOn').map((event) => Math.round(event.atMs))).toEqual([
+      0,
+      Math.round((paced.events.find((event) => event.kind === 'noteOn' && event.atMs > 0)?.atMs ?? 0) + 2_000),
+    ]);
+  });
+
+  it('goes past the last note as well, and gives back a take the click says nothing of as it was', () => {
+    const notes = struck(0);
+    const { events, beats } = thePlayingWithABarInserted(notes, click(0, 500, 2), 8_000);
+    expect(events).toEqual(notes);
+    expect(
+      beats.filter((beat) => beat.atMs >= 7_500 && beat.atMs <= 10_500).map((beat) => `${String(beat.atMs)}:${String(beat.beat)}`),
+    ).toEqual(['7500:3', '8000:0', '8500:1', '9000:2', '9500:3', '10000:0', '10500:1']);
+    const silent = [{ atMs: 0, beat: 0, beatsInBar: 4 }];
+    expect(thePlayingWithABarInserted(notes, silent, 2_000)).toEqual({ events: notes, beats: silent });
   });
 });
 

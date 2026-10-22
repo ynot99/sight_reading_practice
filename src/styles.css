@@ -4848,6 +4848,8 @@ body[data-playing='true'] .score__modes {
 
 .sheet__actions {
   display: flex;
+  /* Four buttons do not fit a phone's width in one row. */
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
 }
@@ -4902,6 +4904,11 @@ body[data-playing='true'] .score__modes {
 
 /* Changing a recording in its viewer, with nothing chosen or nothing to put back. */
 .sheet__head .button[data-idle='true'] {
+  opacity: 0.45;
+}
+
+/* A sheet's action with nothing to act on, saying why on its title. */
+.sheet__actions .button[data-idle='true'] {
   opacity: 0.45;
 }
 

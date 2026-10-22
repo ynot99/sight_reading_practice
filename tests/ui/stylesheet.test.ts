@@ -1445,17 +1445,18 @@ describe('the stylesheet', () => {
     expect(ruleOf('.roll-chords__chord')).toMatch(/touch-action\s*:\s*none/);
   });
 
-  it('gives the drawing of a run the whole screen of a tablet, and leaves a desk monitor an edge round it', () => {
-    // There the edge round it was room it had to do without.
+  it('gives the drawing of a run the whole screen, on every screen', () => {
     const room = rules().filter((rule) => rule.selector === '.sheet__panel--room');
-    expect(room.map((rule) => inWhichMedia(rule.at))).toEqual(['', '@media (max-width: 1366px)']);
-    expect(room[1]?.body).toMatch(/--sheet-height\s*:\s*100%/);
-    expect(room[1]?.body).toMatch(/(?<!-)width\s*:\s*100%/);
-    expect(room[1]?.body).toMatch(/border-radius\s*:\s*0/);
-    expect(room[1]?.body).toMatch(/padding\s*:\s*max\(16px,\s*env\(safe-area-inset-top/);
-    const edge = rules().find((rule) => rule.selector === '.sheet--room');
-    expect(inWhichMedia(edge?.at ?? -1)).toBe('@media (max-width: 1366px)');
-    expect(edge?.body).toMatch(/padding\s*:\s*0/);
+    expect(room.map((rule) => inWhichMedia(rule.at))).toEqual(['']);
+    expect(room[0]?.body).toMatch(/--sheet-height\s*:\s*100%/);
+    expect(room[0]?.body).toMatch(/(?<!-)width\s*:\s*100%/);
+    expect(room[0]?.body).toMatch(/border-radius\s*:\s*0/);
+    expect(room[0]?.body).toMatch(/padding\s*:\s*max\(16px,\s*env\(safe-area-inset-top/);
+    const edge = rules().filter((rule) => rule.selector === '.sheet--room');
+    expect(edge.map((rule) => inWhichMedia(rule.at))).toEqual(['']);
+    expect(edge[0]?.body).toMatch(/padding\s*:\s*0/);
+    // Written after every sheet's own, so it wins over the gutter.
+    expect(edge[0]?.at ?? 0).toBeGreaterThan(rules().find((rule) => rule.selector === '.sheet')?.at ?? Infinity);
     expect(HTML).toMatch(/<div id="sheet-roll" class="sheet sheet--room"/);
   });
 

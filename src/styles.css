@@ -4297,35 +4297,27 @@ body[data-take-on-keys='true'] .focus-bar__row > #focus-speed {
  * діалог зробити більше, майже на весь екран, бо це важливо саме цьому діалогу
  * займати багато місця".
  *
- * Almost, and not all: the dimmed edge is the way out that a thumb finds without
- * aiming, so there has to be an edge left to find.
+ * It was almost all of it, with a dimmed edge left as the way out a thumb
+ * finds without aiming. The room mattered more: now all of it, on every
+ * screen, and the cross and Escape are the ways out.
  */
 .sheet__panel--room {
-  --sheet-height: 96%;
-  width: min(2000px, 100%);
+  --sheet-height: 100%;
+  width: 100%;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px))
+    max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 /*
- * And on a screen up to a tablet's or a laptop's, the whole of it: there the
- * edge left round the drawing was room it had to do without, and the cross
- * and Escape are ways out enough. A desk monitor has room to spare, and keeps
- * its edge. Clear of a phone's notch and corners by the panel's own padding,
- * which `max` keeps where it was wherever the screen keeps nothing back.
+ * No gutter round it either. Clear of a phone's notch and corners by the
+ * panel's own padding above, which `max` keeps where it was wherever the
+ * screen keeps nothing back.
  */
-@media (max-width: 1366px) {
-  .sheet--room {
-    padding: 0;
-  }
-
-  .sheet__panel--room {
-    --sheet-height: 100%;
-    width: 100%;
-    padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px))
-      max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-  }
+.sheet--room {
+  padding: 0;
 }
 
 /*

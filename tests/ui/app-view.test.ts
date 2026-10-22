@@ -7472,6 +7472,61 @@ describe('AppView', () => {
       }
     });
 
+    it('lays a slice in a sketch as the passage of the page written down from it, and in any other as its own', async () => {
+      const { view, sketches, clock, runtime } = createRig();
+      await view.initialize();
+      const of = (title: string): MidiFileEvent[] =>
+        title === ''
+          ? []
+          : Array.from({ length: 16 }, (_, at) => [
+              { kind: 'noteOn' as const, atMs: at * 500, midi: 60, velocity: 0.5 },
+              { kind: 'noteOff' as const, atMs: at * 500 + 400, midi: 60 },
+            ]).flat();
+      const beats = [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 }));
+      sketches.begin({ events: of('Sliced'), beats }, 'Sliced', 1);
+      const other = sketches.begin({ events: of('Other'), beats }, 'Other', 2);
+      const ofTheSketch = (name: string, does: string): HTMLButtonElement | null | undefined =>
+        [...element('sketches-list').querySelectorAll('li')]
+          .find((row) => row.textContent?.includes(name) === true)
+          ?.querySelector<HTMLButtonElement>(`button[title="${does}"]`);
+      const body = element('roll-body');
+      const ruler = (ms: number, init: MouseEventInit = {}): void => {
+        clock.advance(1_000);
+        const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+        const scrolled = Number.parseFloat(body.querySelector<HTMLElement>('.roll__head')?.style.getPropertyValue('--roll-x') ?? '0') || 0;
+        body.querySelector('.roll__ruler')?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: (ms / 1000) * zoom - scrolled, clientY: 5, ...init }));
+      };
+      const passage = (): (number | null)[] => [runtime.controller.settings.rangeFromBar, runtime.controller.settings.rangeToBar];
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      ofTheSketch('Sliced', 'Write this sketch down as a score')?.click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise?.title).toBe('Sliced');
+      });
+
+      element<HTMLButtonElement>('focus-sketch').click();
+      ruler(2_200, { ctrlKey: true });
+      ruler(4_200, { altKey: true });
+      expect(passage()).toEqual([2, 3]);
+      // Changed, the page is written again on shutting, and the passage stays.
+      element<HTMLButtonElement>('roll-mark').click();
+      element<HTMLSelectElement>('roll-mark-dynamic').value = 'f';
+      element<HTMLButtonElement>('roll-mark-yes').click();
+      const before = runtime.controller.openedExercise;
+      element<HTMLButtonElement>('roll-close').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise).not.toBe(before);
+      });
+      expect(passage()).toEqual([2, 3]);
+      // Another sketch has a slice of its own, and the passage is left.
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      ofTheSketch(other.title, 'Edit this sketch')?.click();
+      ruler(6_200, { ctrlKey: true });
+      expect(body.querySelector<HTMLElement>('.roll__slice')?.hidden).toBe(false);
+      expect(passage()).toEqual([2, 3]);
+    });
+
     it('carries the marker put in a sketch to where the page written down from it begins, and back', async () => {
       const { view, sketches, clock, runtime } = createRig();
       await view.initialize();
@@ -11481,6 +11536,46 @@ describe('AppView', () => {
       expect(runtime.controller.barARunBeginsAt).toBe(0);
     });
 
+    it('lays the passage of the page as the slice of its drawing, and the slice laid there as the passage', async () => {
+      const { view, runtime, clock } = createRig();
+      await view.initialize();
+      // Bars of four seconds.
+      await runtime.controller.openScore(longExercise({ bars: 8, tempoBpm: 60 }));
+      const body = element('roll-body');
+      const band = (): string | null => {
+        const slice = body.querySelector<HTMLElement>('.roll__slice');
+        return slice === null || slice.hidden ? null : `${slice.style.getPropertyValue('--roll-at')}+${slice.style.getPropertyValue('--roll-span')}`;
+      };
+      const ruler = (seconds: number, init: MouseEventInit = {}): void => {
+        clock.advance(1_000);
+        const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+        body.querySelector('.roll__ruler')?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: seconds * zoom, clientY: 5, ...init }));
+      };
+      const passage = (): (number | null)[] => [runtime.controller.settings.rangeFromBar, runtime.controller.settings.rangeToBar];
+
+      // Chosen on the page, laid in the drawing as it opens.
+      runtime.controller.choosePassage(3, 4);
+      element<HTMLButtonElement>('focus-roll').click();
+      expect(band()).toBe('8.000+8.000');
+      // Laid in the drawing, by its bars, chosen on the page.
+      ruler(21.2, { ctrlKey: true });
+      expect(passage()).toEqual([6, 6]);
+      // The page's own say of it drawn again at once.
+      expect(element<HTMLInputElement>('focus-from').value).toBe('6');
+      ruler(25.2, { altKey: true });
+      expect(passage()).toEqual([6, 7]);
+      expect(band()).toBe('20.000+8.000');
+      // Its ends taken from the marker as well.
+      ruler(13.2);
+      element<HTMLButtonElement>('roll-from').click();
+      expect([passage(), band()]).toEqual([[4, 7], '12.000+16.000']);
+      // To the last bar, the drawing's end.
+      ruler(30.2, { altKey: true });
+      expect([passage(), band()]).toEqual([[4, 8], '12.000+21.000']);
+      element<HTMLButtonElement>('roll-close').click();
+      expect(passage()).toEqual([4, 8]);
+    });
+
     it('takes an end of the passage from the marker on the drawing of a run, whose clock began long before', async () => {
       const { view, runtime, midi, clock, metronome } = createRig();
       await view.initialize();
@@ -11503,6 +11598,12 @@ describe('AppView', () => {
       element<HTMLButtonElement>('roll-from').click();
 
       expect(runtime.controller.settings.rangeFromBar).toBe(3);
+      // A slice laid on it is the passage too.
+      clock.advance(1_000);
+      element('roll-body')
+        .querySelector('.roll__ruler')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 17.2 * zoom, clientY: 5, altKey: true }));
+      expect(runtime.controller.settings.rangeToBar).toBe(5);
       // A run begun later than where the page now begins, shown and shut, moves nothing.
       element<HTMLButtonElement>('roll-close').click();
       runtime.controller.updateSettings({ rangeFromBar: null, rangeToBar: null });

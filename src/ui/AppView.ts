@@ -12849,6 +12849,8 @@ export class AppView {
     // перемальовуються... коли натискаю Practise this".
     this.syncControlsFromSettings();
     this.sayWhatWouldBePractised();
+    // And the slice in the drawing, which is the passage.
+    this.followTheSlice();
   }
 
   /**
@@ -16855,10 +16857,43 @@ export class AppView {
     return showing.sketch?.id ?? showing.recording ?? `${showing.what} ${showing.why}`;
   }
 
-  /** The slice laid on the drawing shown, or none. */
+  /**
+   * The slice laid on the drawing shown, or none. On a drawing of the music
+   * on the page it is the passage chosen there: one answer to which bars are
+   * being worked on, laid on the page or in the drawing alike. On any other,
+   * the drawing's own.
+   */
   private theSliceShown(): { readonly fromMs: number; readonly toMs: number } | null {
+    if (this.theDrawingIsOfThePage()) {
+      return this.thePassageInTheDrawing();
+    }
     const slice = this.rollSlice;
     return slice !== null && slice.of === this.theDrawingsName() ? slice : null;
+  }
+
+  /** Whether the drawing shown is of the music on the page: see `theBarOnThePageAt`. */
+  private theDrawingIsOfThePage(): boolean {
+    const showing = this.theOtherRollShowing;
+    return showing === null || showing.ofTheOpenScore || this.theSketchShownOnThePage() !== null;
+  }
+
+  /**
+   * The passage chosen on the page, where it stands in the drawing shown:
+   * from the line its first bar begins on to the one after its last, or to
+   * the drawing's end where that bar is its last. None where there is no
+   * passage, or the drawing has none of it.
+   */
+  private thePassageInTheDrawing(): { readonly fromMs: number; readonly toMs: number } | null {
+    const controller = this.runtime.controller;
+    const roll = this.theRoll();
+    const { rangeFromBar, rangeToBar } = controller.settings;
+    if (roll === null || (rangeFromBar === null && rangeToBar === null)) {
+      return null;
+    }
+    const { firstBar, lastBar } = controller.pieceBarRange;
+    const fromMs = this.theMomentOfTheBarOnThePage((rangeFromBar ?? firstBar) - 1);
+    const toMs = this.theMomentOfTheBarOnThePage(rangeToBar ?? lastBar) ?? rollEndedAtMs(roll) - rollBeganAtMs(roll);
+    return fromMs === null || toMs <= fromMs ? null : { fromMs, toMs };
   }
 
   /** The slice a playback from a moment goes round: the one it is inside, or none - from anywhere else it plays on as it always has. */
@@ -16873,7 +16908,30 @@ export class AppView {
    * counted again from where it is.
    */
   private sliceTheDrawing(slice: { readonly fromMs: number; readonly toMs: number } | null): void {
-    this.rollSlice = slice === null ? null : { of: this.theDrawingsName(), fromMs: slice.fromMs, toMs: slice.toMs };
+    if (this.theDrawingIsOfThePage()) {
+      // The passage, in the bars it takes in: the page and its markers say so at once.
+      const controller = this.runtime.controller;
+      const from = slice === null ? null : this.theBarOnThePageAt(slice.fromMs + SLICE_EDGE_MS);
+      const to = slice === null ? null : this.theBarOnThePageAt(slice.toMs - SLICE_EDGE_MS);
+      if (slice === null) {
+        controller.updateSettings({ rangeFromBar: null, rangeToBar: null });
+      } else if (from !== null && to !== null) {
+        controller.choosePassage(from + 1, to + 1);
+      }
+      this.syncControlsFromSettings();
+      this.sayWhatWouldBePractised();
+    } else {
+      this.rollSlice = slice === null ? null : { of: this.theDrawingsName(), fromMs: slice.fromMs, toMs: slice.toMs };
+    }
+    this.followTheSlice();
+  }
+
+  /**
+   * Shows the slice where it now is, and has a playback going on go round
+   * it from now on where it is inside it, its clicks counted again from
+   * where it is.
+   */
+  private followTheSlice(): void {
     this.showTheSlice();
     const player = this.runtime.takePlayer;
     const roll = this.theRoll();

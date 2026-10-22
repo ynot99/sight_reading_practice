@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { CloudFile, ICloudDrive } from '../../src/application/ports/ICloudDrive.js';
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
 import { SketchLibrary } from '../../src/application/SketchLibrary.js';
-import { CONFLICTING_COPY, SKETCHES_FILE, SketchSync } from '../../src/application/SketchSync.js';
+import {
+  CONFLICTING_COPY,
+  SKETCHES_FILE,
+  SketchSync,
+  type SketchOnTheDrive,
+  type SketchSyncOutcome,
+} from '../../src/application/SketchSync.js';
 import type { HeardBeat, MidiFileEvent } from '../../src/domain/midi/MidiFile.js';
 
 /** A folder on the drive, shared by the devices of a test; a write can be made to fail. */
@@ -85,6 +91,23 @@ function device(drive: FolderDrive) {
   };
 }
 
+type Device = ReturnType<typeof device>;
+
+/** What a sync says the drive has and the device does not: the sketches there are to bring here. */
+function offered(each: Device, outcome: SketchSyncOutcome): readonly SketchOnTheDrive[] {
+  return outcome.onTheDrive.filter(({ id }) => each.sketches.find(id) === null);
+}
+
+/** A sync's outcome as counts, and what it offers, by what the reader is shown of each. */
+function said(each: Device, outcome: SketchSyncOutcome) {
+  return {
+    sent: outcome.sent,
+    brought: outcome.brought,
+    conflicts: outcome.conflicts,
+    offered: offered(each, outcome).map(({ id, title, begunAtMs, noteCount }) => ({ id, title, begunAtMs, noteCount })),
+  };
+}
+
 describe('the sketches kept the same on every device that has them', () => {
   it('offers one begun on another device rather than bringing it, and keeps it in step once brought', async () => {
     const drive = new FolderDrive();
@@ -93,14 +116,20 @@ describe('the sketches kept the same on every device that has them', () => {
     const older = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Older', 1);
     const idea = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Idea', 2);
 
-    expect(await ipad.sync()).toEqual({ sent: 2, brought: 0, conflicts: 0, onlyOnTheDrive: [] });
+    const sent = await ipad.sync();
+    expect(said(ipad, sent)).toEqual({ sent: 2, brought: 0, conflicts: 0, offered: [] });
+    // Listed all the same, as the drive has them, newest first.
+    expect(sent.onTheDrive.map(({ title, sketch }) => [title, sketch.events])).toEqual([
+      ['Idea', idea.events],
+      ['Older', older.events],
+    ]);
     const written = drive.files.get(SKETCHES_FILE)?.id;
     // Offered, newest first, and not brought.
-    expect(await pc.sync()).toEqual({
+    expect(said(pc, await pc.sync())).toEqual({
       sent: 0,
       brought: 0,
       conflicts: 0,
-      onlyOnTheDrive: [
+      offered: [
         { id: idea.id, title: 'Idea', begunAtMs: 2, noteCount: 2 },
         { id: older.id, title: 'Older', begunAtMs: 1, noteCount: 2 },
       ],
@@ -113,7 +142,7 @@ describe('the sketches kept the same on every device that has them', () => {
     expect(pc.sketches.unsentSinceMs).toBeNull();
     // In step on both: nothing to send, and the drive not written again.
     const writes = drive.writes;
-    expect((await pc.sync()).onlyOnTheDrive.map(({ title }) => title)).toEqual(['Older']);
+    expect(offered(pc, await pc.sync()).map(({ title }) => title)).toEqual(['Older']);
     expect((await ipad.sync()).sent).toBe(0);
     expect(drive.writes).toBe(writes);
     // Written again, it is the same file, not another beside it.
@@ -160,7 +189,7 @@ describe('the sketches kept the same on every device that has them', () => {
     expect([copy?.title, copy?.noteCount]).toEqual([`Idea (${CONFLICTING_COPY})`, 3]);
     expect(ipad.sketches.unsentSinceMs).toBeNull();
     // And the copy offered to the PC.
-    expect((await pc.sync()).onlyOnTheDrive.map(({ title }) => title)).toEqual([`Idea (${CONFLICTING_COPY})`]);
+    expect(offered(pc, await pc.sync()).map(({ title }) => title)).toEqual([`Idea (${CONFLICTING_COPY})`]);
   });
 
   it('takes one deleted here off this device only, and offers it back', async () => {
@@ -173,10 +202,10 @@ describe('the sketches kept the same on every device that has them', () => {
 
     ipad.sketches.remove(idea.id);
     const synced = await ipad.sync();
-    expect([synced.sent, synced.onlyOnTheDrive.map(({ title }) => title)]).toEqual([0, ['Idea']]);
+    expect([synced.sent, offered(ipad, synced).map(({ title }) => title)]).toEqual([0, ['Idea']]);
     expect(drive.holds()).toEqual([[idea.id, 'Idea', 1]]);
     expect(pc.titles()).toEqual(['Idea']);
-    expect((await pc.sync()).onlyOnTheDrive).toEqual([]);
+    expect(offered(pc, await pc.sync())).toEqual([]);
 
     await ipad.bring(idea.id);
     expect(ipad.titles()).toEqual(['Idea']);
@@ -240,8 +269,8 @@ describe('the sketches kept the same on every device that has them', () => {
     await ipad.sync();
     for (const each of [ipad, pc]) {
       const titles = each.titles();
-      const offered = (await each.sync()).onlyOnTheDrive.map(({ title }) => title);
-      expect([...titles, ...offered].sort().join(' | ')).toMatch(/^Idea, (iPad|PC) \| Idea, (iPad|PC) \(conflicting copy\)$/);
+      const there = offered(each, await each.sync()).map(({ title }) => title);
+      expect([...titles, ...there].sort().join(' | ')).toMatch(/^Idea, (iPad|PC) \| Idea, (iPad|PC) \(conflicting copy\)$/);
     }
     expect(drive.holds().map(([, title]) => title).sort()).toEqual(
       [ipad.sketches.find(idea.id)?.title ?? '', `${ipad.sketches.find(idea.id)?.title === 'Idea, iPad' ? 'Idea, PC' : 'Idea, iPad'} (${CONFLICTING_COPY})`].sort(),
@@ -272,7 +301,7 @@ describe('the sketches kept the same on every device that has them', () => {
       }
     };
 
-    expect(await pc.sync()).toEqual({ sent: 1, brought: 1, conflicts: 1, onlyOnTheDrive: [] });
+    expect(said(pc, await pc.sync())).toEqual({ sent: 1, brought: 1, conflicts: 1, offered: [] });
     expect(pc.titles()).toEqual(['Idea, PC (conflicting copy)', 'Idea, iPad']);
     expect(drive.holds().map(([, title]) => title)).toEqual(['Idea, iPad', 'Idea, PC (conflicting copy)']);
   });
@@ -313,14 +342,14 @@ describe('the sketches kept the same on every device that has them', () => {
     // The PC in step at revision 1, with other notes than the drive's.
     pc.sketches.takeFromTheDrive({ ...idea, title: 'Idea, PC' }, 1);
 
-    expect(await pc.sync()).toEqual({ sent: 1, brought: 1, conflicts: 1, onlyOnTheDrive: [] });
+    expect(said(pc, await pc.sync())).toEqual({ sent: 1, brought: 1, conflicts: 1, offered: [] });
     expect(pc.titles()).toEqual(['Idea', `Idea, PC (${CONFLICTING_COPY})`]);
     // In step and the same: nothing.
-    expect(await ipad.sync()).toEqual({
+    expect(said(ipad, await ipad.sync())).toEqual({
       sent: 0,
       brought: 0,
       conflicts: 0,
-      onlyOnTheDrive: [{ id: `${idea.id}-copy`, title: `Idea, PC (${CONFLICTING_COPY})`, begunAtMs: 1, noteCount: 2 }],
+      offered: [{ id: `${idea.id}-copy`, title: `Idea, PC (${CONFLICTING_COPY})`, begunAtMs: 1, noteCount: 2 }],
     });
     // Open, it is left for the sync after.
     const other = device(drive);
@@ -344,7 +373,7 @@ describe('the sketches kept the same on every device that has them', () => {
     expect(drive.holds()).toEqual([[kept.id, 'Kept', 1]]);
     // Written over the one file, not beside it.
     expect(drive.files.get(SKETCHES_FILE)?.id).toBe(file);
-    expect((await pc.sync()).onlyOnTheDrive.map(({ title }) => title)).toEqual(['Kept']);
+    expect(offered(pc, await pc.sync()).map(({ title }) => title)).toEqual(['Kept']);
     // Not there, nothing is written.
     const writes = drive.writes;
     await pc.deleteFromTheDrive(old.id);
@@ -533,7 +562,7 @@ describe('the sketches kept the same on every device that has them', () => {
         ],
       }),
     });
-    expect((await pc.sync()).onlyOnTheDrive.map(({ id }) => id)).toEqual(['good']);
+    expect(offered(pc, await pc.sync()).map(({ id }) => id)).toEqual(['good']);
     // Written back without what it could not read.
     pc.sketches.begin({ events: PLAYED, beats: BEATS }, 'Mine', 3);
     await pc.sync();

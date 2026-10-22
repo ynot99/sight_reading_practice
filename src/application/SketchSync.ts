@@ -28,12 +28,17 @@ interface SketchThere {
   readonly revision: number;
 }
 
-/** A sketch the drive has and this device does not, for the reader to bring here or leave. */
+/**
+ * A sketch the drive has, whether or not this device has it too: for the
+ * reader to look at as the drive has it, and to bring here or leave.
+ */
 export interface SketchOnTheDrive {
   readonly id: string;
   readonly title: string;
   readonly begunAtMs: number;
   readonly noteCount: number;
+  /** The drive's copy, to be looked at without bringing it here. */
+  readonly sketch: StoredSketch;
 }
 
 export interface SketchSyncOutcome {
@@ -43,8 +48,8 @@ export interface SketchSyncOutcome {
   readonly brought: number;
   /** Sketches changed here and elsewhere at once, kept here as a copy beside the drive's. */
   readonly conflicts: number;
-  /** Sketches the drive has and this device does not, newest first. */
-  readonly onlyOnTheDrive: readonly SketchOnTheDrive[];
+  /** Every sketch the drive has, newest first: those here among them, as the drive has them. */
+  readonly onTheDrive: readonly SketchOnTheDrive[];
 }
 
 export interface SketchSyncDependencies {
@@ -143,7 +148,7 @@ export class SketchSync {
         sent: round.sentAt.length,
         brought,
         conflicts,
-        onlyOnTheDrive: onlyOnTheDrive(round.next, this.deps.sketches),
+        onTheDrive: theSketchesOnTheDrive(round.next),
       };
     }
   }
@@ -265,11 +270,10 @@ function theSame(one: StoredSketch, other: StoredSketch): boolean {
   return JSON.stringify(sketchAsKept(one)) === JSON.stringify(sketchAsKept(other));
 }
 
-/** What the drive has that the library here does not, newest first. */
-function onlyOnTheDrive(there: ReadonlyMap<string, SketchThere>, library: SketchLibrary): readonly SketchOnTheDrive[] {
+/** What the drive has, newest first. */
+function theSketchesOnTheDrive(there: ReadonlyMap<string, SketchThere>): readonly SketchOnTheDrive[] {
   return [...there.values()]
-    .filter(({ sketch }) => library.find(sketch.id) === null)
-    .map(({ sketch }) => ({ id: sketch.id, title: sketch.title, begunAtMs: sketch.begunAtMs, noteCount: sketch.noteCount }))
+    .map(({ sketch }) => ({ id: sketch.id, title: sketch.title, begunAtMs: sketch.begunAtMs, noteCount: sketch.noteCount, sketch }))
     .sort((one, other) => other.begunAtMs - one.begunAtMs);
 }
 

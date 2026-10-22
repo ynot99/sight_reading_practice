@@ -26,7 +26,7 @@ function device(scores: StoredScoreSummary[] = [], store = new InMemorySettingsS
     sketches: {
       sync: (open) => {
         sketches.open.push(open);
-        return Promise.resolve({ sent: 2, brought: 1, conflicts: 1, onlyOnTheDrive: [] });
+        return Promise.resolve({ sent: 2, brought: 1, conflicts: 1, onTheDrive: [] });
       },
     },
     sketchesUnsentSinceMs: () => sketches.unsentSinceMs,
@@ -153,7 +153,7 @@ describe('the sketches, synced with the rest', () => {
     const outcome = await pc.sync.sync(undefined, 'sketch-open');
     await pc.sync.sync();
 
-    expect(outcome.sketches).toEqual({ sent: 2, brought: 1, conflicts: 1, onlyOnTheDrive: [] });
+    expect(outcome.sketches).toEqual({ sent: 2, brought: 1, conflicts: 1, onTheDrive: [] });
     expect(pc.sketches.open).toEqual(['sketch-open', null]);
   });
 

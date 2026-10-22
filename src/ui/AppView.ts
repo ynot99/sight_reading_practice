@@ -1622,6 +1622,12 @@ function readPlayedNotes(value: string): PlayedNoteDisplay {
 const PLAY_ICON = 'M8 5l11 7-11 7z';
 /** An arrow down onto a line: what the drive has, brought down to this device. */
 const BRING_HERE_ICON = 'M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z';
+/** An eye: looked at, and not taken. */
+const LOOK_ICON =
+  'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z';
+/** A device with a cross on it: taken off this device, the drive keeping its own. */
+const TAKE_OFF_THIS_DEVICE_ICON =
+  'M13 8.2l-1-1-4 4-4-4-1 1 4 4-4 4 1 1 4-4 4 4 1-1-4-4 4-4zM19 1H9c-1.1 0-2 .9-2 2v3h2V4h10v16H9v-2H7v3c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-2-2-2z';
 /** A bin, as the drawing's own Delete is drawn. */
 const TRASH_ICON = 'M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z';
 const PAUSE_ICON = 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z';
@@ -2428,6 +2434,8 @@ export class AppView {
     readonly barLabel?: (positionTicks: number) => string | null;
     /** The recording it is, where it is one, which a sketch can be begun from. */
     readonly recording?: string;
+    /** Whether it is a sketch as the drive has it, looked at before it is brought here. */
+    readonly onTheDrive?: boolean;
     /**
      * The recording it is, where it is one: which, the key chosen on it to be
      * changed, and what it was before each change, the last change last.
@@ -2451,6 +2459,8 @@ export class AppView {
     };
   } | null = null;
 
+  /** The sketches the drive had at the last sync: see `showTheSketchesOnTheDrive`. */
+  private sketchesOnTheDrive: readonly SketchOnTheDrive[] = [];
   /** The reading the sheet over the list is showing, so its buttons know theirs. */
   private theReadingShowing: PracticeReading | null = null;
   private theOtherHandsWalk: { readonly stepIndex: number; readonly atMs: number }[] = [];
@@ -2548,8 +2558,8 @@ export class AppView {
     driveCode: HTMLButtonElement;
     driveStatus: HTMLElement;
     driveOnly: HTMLUListElement;
-    driveOnlySketches: HTMLUListElement;
-    driveOnlySketchesSaid: HTMLElement;
+    driveSketches: HTMLUListElement;
+    driveSketchesSaid: HTMLElement;
     offerToSync: HTMLInputElement;
     settingsSearch: HTMLInputElement;
     settingsSearchCount: HTMLOutputElement;
@@ -2946,8 +2956,8 @@ export class AppView {
       driveCode: requireElement(doc, 'drive-code'),
       driveStatus: requireElement(doc, 'drive-status'),
       driveOnly: requireElement(doc, 'drive-only'),
-      driveOnlySketches: requireElement(doc, 'drive-only-sketches'),
-      driveOnlySketchesSaid: requireElement(doc, 'drive-only-sketches-said'),
+      driveSketches: requireElement(doc, 'drive-sketches'),
+      driveSketchesSaid: requireElement(doc, 'drive-sketches-said'),
       offerToSync: requireElement(doc, 'offer-to-sync'),
       settingsSearch: requireElement(doc, 'settings-search'),
       settingsSearchCount: requireElement(doc, 'settings-search-count'),
@@ -8429,7 +8439,7 @@ export class AppView {
       }
       this.el.driveStatus.textContent = `Synced. Sent ${String(library.sent)}, brought here ${String(library.brought)}. ${theSketchesSynced(sketches)} Settings ${SETTINGS_WENT[settings]}.`;
       this.showWhatOnlyTheDriveHas(library.onlyOnTheDrive);
-      this.showTheSketchesOnlyTheDriveHas(sketches.onlyOnTheDrive);
+      this.sketchesOnTheDrive = sketches.onTheDrive;
       this.renderScores();
       this.renderSketches();
       // Chords kept on another device are in the drawer, if it is open.
@@ -8617,32 +8627,141 @@ export class AppView {
   }
 
   /**
-   * The sketches the drive has and this device does not, each to bring here
-   * or take off the drive - as the scores are offered, under a line of their own.
+   * Every sketch the drive had at the last sync, under a line of its own:
+   * each to look at as the drive has it, to bring here or take off this
+   * device, and to take off the drive. Drawn from the drive's list and from
+   * what this device has now, so bringing one here or taking it off changes
+   * its row and not the list.
    */
-  private showTheSketchesOnlyTheDriveHas(sketches: readonly SketchOnTheDrive[]): void {
-    const list = this.el.driveOnlySketches;
-    const sayWhetherAny = (): void => {
-      list.hidden = list.childElementCount === 0;
-      this.el.driveOnlySketchesSaid.hidden = list.hidden;
+  private showTheSketchesOnTheDrive(): void {
+    const list = this.el.driveSketches;
+    list.replaceChildren(...this.sketchesOnTheDrive.map((entry) => this.aSketchOnTheDrive(entry)));
+    list.hidden = list.childElementCount === 0;
+    this.el.driveSketchesSaid.hidden = list.hidden;
+  }
+
+  /**
+   * A row of the drive's sketches. What a button cannot do is said on it and
+   * dimmed rather than taken away, and said where the drive's reasons are
+   * when it is pressed, a finger having no pointer to ask with. Asked again
+   * when pressed, since the sketch may have changed since the row was drawn.
+   */
+  private aSketchOnTheDrive(entry: SketchOnTheDrive): HTMLLIElement {
+    const row = this.doc.createElement('li');
+    const title = this.doc.createElement('span');
+    title.textContent = `${entry.title} · ${String(entry.noteCount)} notes`;
+    const here = this.runtime.sketches.find(entry.id) !== null;
+    const keep = here
+      ? this.anIconButton(TAKE_OFF_THIS_DEVICE_ICON, 'Take off this device', `Take ${entry.title} off this device`)
+      : this.anIconButton(BRING_HERE_ICON, 'Bring here', `Bring ${entry.title} here`);
+    const look = this.anIconButton(LOOK_ICON, 'Look at it as the drive has it', `Look at ${entry.title} as the drive has it`);
+    const remove = this.anIconButton(TRASH_ICON, 'Delete from the drive', `Delete ${entry.title} from the drive`);
+    const refuse = (button: HTMLButtonElement, why: string | null): void => {
+      if (why !== null) {
+        button.dataset['idle'] = 'true';
+        button.title = `${button.title}. ${why}`;
+      }
     };
-    list.replaceChildren(
-      ...sketches.map((sketch) =>
-        this.anOfferFromTheDrive({
-          said: `${sketch.title} · ${String(sketch.noteCount)} notes`,
-          name: sketch.title,
-          bring: () =>
-            this.runtime.sketchSync.bringHere(sketch.id).then(() => {
-              this.renderSketches();
-            }),
-          notBrought: 'That sketch could not be brought here.',
-          remove: () => this.runtime.sketchSync.deleteFromTheDrive(sketch.id),
-          notRemoved: 'That sketch could not be taken off the drive.',
-          gone: sayWhetherAny,
-        }),
-      ),
-    );
-    sayWhetherAny();
+    refuse(keep, here ? this.whyNotTakenOffThisDevice(entry.id) : null);
+    refuse(remove, this.whyNotDeletedFromTheDrive(entry.id));
+    const ways = this.doc.createElement('span');
+    ways.className = 'drive-only__ways';
+    ways.append(keep, look, remove);
+    const ask = (done: () => Promise<void>, refused: string, after: () => void): void => {
+      keep.disabled = true;
+      remove.disabled = true;
+      void done()
+        .then(after)
+        .catch((error: unknown) => {
+          keep.disabled = false;
+          remove.disabled = false;
+          this.el.driveStatus.textContent = error instanceof Error ? error.message : refused;
+        });
+    };
+    const refused = (why: string | null): boolean => {
+      if (why === null) {
+        return false;
+      }
+      this.el.driveStatus.textContent = why;
+      this.showTheSketchesOnTheDrive();
+      return true;
+    };
+    keep.addEventListener('click', () => {
+      if (!here) {
+        ask(() => this.runtime.sketchSync.bringHere(entry.id), 'That sketch could not be brought here.', () => {
+          this.renderSketches();
+        });
+        return;
+      }
+      if (refused(this.whyNotTakenOffThisDevice(entry.id))) {
+        return;
+      }
+      // The drive has it as it is here, so nothing is lost and nothing asked.
+      this.runtime.sketches.remove(entry.id);
+      this.renderSketches();
+      this.showThePencilBesideThePills();
+    });
+    look.addEventListener('click', () => {
+      this.lookAtTheSketchOnTheDrive(entry.sketch);
+    });
+    remove.addEventListener('click', () => {
+      if (refused(this.whyNotDeletedFromTheDrive(entry.id))) {
+        return;
+      }
+      void this.askToTypeIt(
+        `Delete ${entry.title} from the drive? A device that still has it will send it back at its next sync.`,
+      ).then((yes) => {
+        if (yes) {
+          ask(() => this.runtime.sketchSync.deleteFromTheDrive(entry.id), 'That sketch could not be taken off the drive.', () => {
+            this.sketchesOnTheDrive = this.sketchesOnTheDrive.filter((each) => each.id !== entry.id);
+            this.showTheSketchesOnTheDrive();
+          });
+        }
+      });
+    });
+    row.append(title, ways);
+    return row;
+  }
+
+  /** Why a sketch here may not be taken off this device, or none: changed since the drive had it, the change is only here. */
+  private whyNotTakenOffThisDevice(id: string): string | null {
+    return this.runtime.sketches.forTheDrive().some(({ sketch, unsent }) => sketch.id === id && unsent)
+      ? 'Changed here since the last sync: sync first, or the change is lost.'
+      : null;
+  }
+
+  /** Why a sketch may not be taken off the drive, or none: this device would send it straight back. */
+  private whyNotDeletedFromTheDrive(id: string): string | null {
+    return this.runtime.sketches.find(id) === null
+      ? null
+      : 'This device has it too, and would send it back at the next sync: take it off this device first.';
+  }
+
+  /**
+   * Opens the drawing on a sketch as the drive has it, to look at and listen
+   * to before bringing it here. Nothing in it is changed, as nothing in a
+   * recording is: what is edited is a sketch kept here.
+   */
+  private lookAtTheSketchOnTheDrive(sketch: StoredSketch): void {
+    this.stopTheRoll();
+    // The settings step aside for the picture asked for from them.
+    this.el.sheetSettings.hidden = true;
+    const roll = rollOfTheTake(sketch, ROOM_IN_A_SKETCH);
+    this.theOtherRollShowing = {
+      roll,
+      what: sketch.title,
+      why: 'On the drive: bring it here to edit it.',
+      ofTheOpenScore: false,
+      barLabel: barsCountedOnItsBeats(roll),
+      onTheDrive: true,
+    };
+    this.rollAtMs = 0;
+    this.rollScroller.to(0, 0);
+    this.drawTheRollInto();
+    this.showTheSheet(this.el.sheetRoll);
+    this.showTheView();
+    this.sayWhatWouldBePractised();
+    this.sayWhatThePictureIsOf();
   }
 
   /** The scores only the drive has, each to bring here or take off the drive. */
@@ -10894,6 +11013,8 @@ export class AppView {
       row.append(name, edit, write, save, remove);
       this.el.sketchesList.append(row);
     }
+    // The drive's list says which of its sketches are here.
+    this.showTheSketchesOnTheDrive();
   }
 
   private exportTake(id: string): void {
@@ -13202,6 +13323,9 @@ export class AppView {
       // And a score is what was written, for the same reason.
       delete this.el.rollEdit.dataset['idle'];
       this.el.rollEdit.title = 'Begin a sketch of this score to edit; the score stays as it is written';
+    } else if (this.theOtherRollShowing?.onTheDrive === true) {
+      this.el.rollEdit.dataset['idle'] = 'true';
+      this.el.rollEdit.title = 'Edit the notes. Only a sketch kept here is edited: bring this one here first.';
     } else if (sketch === undefined) {
       this.el.rollEdit.dataset['idle'] = 'true';
       this.el.rollEdit.title = 'Edit the notes. Only a sketch is edited: begin one from a recording or a score.';

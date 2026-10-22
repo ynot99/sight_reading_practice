@@ -21269,7 +21269,7 @@ describe('the library on Google Drive', () => {
     await waitFor(() => only.hidden === true);
   });
 
-  it('offers from the button the sketches only the drive has, brings one here when asked, and leaves the one open as it is where it has a change to undo', async () => {
+  it('offers from the button the sketches the drive has, brings one here when asked, and leaves the one open as it is where it has a change to undo', async () => {
     const rig = createRig();
     await rig.view.initialize();
     // Another device, on the same drive.
@@ -21282,8 +21282,8 @@ describe('the library on Google Drive', () => {
     const beats = [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 }));
     const theirs = other.begin({ events: played, beats }, 'From the iPad', 5);
     await otherSync.sync(null);
-    const offered = element<HTMLUListElement>('drive-only-sketches');
-    const said = element('drive-only-sketches-said');
+    const offered = element<HTMLUListElement>('drive-sketches');
+    const said = element('drive-sketches-said');
     expect([offered.hidden, said.hidden]).toEqual([true, true]);
 
     element<HTMLButtonElement>('drive-sync').click();
@@ -21297,9 +21297,10 @@ describe('the library on Google Drive', () => {
     element<HTMLButtonElement>('focus-scores').click();
     element<HTMLButtonElement>('scores-show-sketches').click();
     offered.querySelector<HTMLButtonElement>('button')?.click();
-    await waitFor(() => offered.hidden === true);
-    expect(said.hidden).toBe(true);
-    expect(element('sketches-list').textContent).toContain('From the iPad');
+    await waitFor(() => element('sketches-list').textContent?.includes('From the iPad') === true);
+    // Still on the drive's list, now to be taken off this device.
+    expect([offered.hidden, said.hidden]).toEqual([false, false]);
+    expect(offered.querySelector('button')?.title).toBe('Take off this device');
 
     const sync = async (): Promise<void> => {
       element('drive-status').textContent = '';
@@ -21395,6 +21396,87 @@ describe('the library on Google Drive', () => {
     expect(rig.sketches.find(mine.id)?.events.some((event) => event.kind === 'dynamic')).toBe(true);
   });
 
+  it('lists every sketch the drive has, to look at as it is there, and takes one off this device only where the drive has it as it is here', async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+    const played = [
+      { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+      { kind: 'noteOff' as const, atMs: 400, midi: 60 },
+    ];
+    const beats = [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 }));
+    const mine = rig.sketches.begin({ events: played, beats }, 'Mine', 4);
+    const other = new SketchLibrary(new InMemorySettingsStore(), () => 1);
+    other.begin(
+      {
+        events: [...played, { kind: 'noteOn' as const, atMs: 500, midi: 64, velocity: 0.5 }, { kind: 'noteOff' as const, atMs: 900, midi: 64 }],
+        beats,
+      },
+      'Theirs',
+      5,
+    );
+    await new SketchSync({ drive: rig.drive, sketches: other }).sync(null);
+    const sync = async (): Promise<void> => {
+      element('drive-status').textContent = '';
+      element<HTMLButtonElement>('drive-sync').click();
+      await waitFor(() => element('drive-status').textContent?.startsWith('Synced') === true);
+    };
+    await sync();
+    const listed = element<HTMLUListElement>('drive-sketches');
+    const rowOf = (title: string): HTMLLIElement | undefined =>
+      [...listed.querySelectorAll('li')].find((row) => row.textContent?.includes(title) === true);
+    const buttonsOf = (title: string): HTMLButtonElement[] => [...(rowOf(title)?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
+    const idle = (title: string): boolean[] => buttonsOf(title).map((button) => button.dataset['idle'] === 'true');
+
+    // Both, newest first: the one here to be taken off it, and not off the
+    // drive, which this device would send it back to.
+    expect([...listed.querySelectorAll('li')].map((row) => row.querySelector('span')?.textContent)).toEqual([
+      'Theirs · 2 notes',
+      'Mine · 1 notes',
+    ]);
+    expect(buttonsOf('Theirs').map((button) => button.title)).toEqual([
+      'Bring here',
+      'Look at it as the drive has it',
+      'Delete from the drive',
+    ]);
+    expect(idle('Theirs')).toEqual([false, false, false]);
+    expect(buttonsOf('Mine')[0]?.title).toBe('Take off this device');
+    expect(idle('Mine')).toEqual([false, false, true]);
+    buttonsOf('Mine')[2]?.click();
+    expect(element('drive-status').textContent).toBe(
+      'This device has it too, and would send it back at the next sync: take it off this device first.',
+    );
+    expect(element('sheet-confirm').hidden).toBe(true);
+
+    // Looked at as the drive has it, the settings stepping aside: not to be edited.
+    element('sheet-settings').hidden = false;
+    buttonsOf('Theirs')[1]?.click();
+    expect([element('sheet-settings').hidden, element('sheet-roll').hidden]).toEqual([true, false]);
+    expect(element('roll-title').textContent).toBe('Theirs');
+    expect(rig.view.rollScene?.notes).toHaveLength(2);
+    expect(element('roll-edit').dataset['idle']).toBe('true');
+    expect(element('roll-edit').title).toBe('Edit the notes. Only a sketch kept here is edited: bring this one here first.');
+    expect(rig.sketches.find(other.list()[0]?.id ?? '')).toBeNull();
+    element<HTMLButtonElement>('roll-close').click();
+
+    // Changed here since the drive had it: refused, asked when pressed.
+    rig.sketches.rename(mine.id, 'Mine, renamed');
+    buttonsOf('Mine')[0]?.click();
+    expect(element('drive-status').textContent).toBe('Changed here since the last sync: sync first, or the change is lost.');
+    expect(rig.sketches.find(mine.id)).not.toBeNull();
+    expect(idle('Mine')[0]).toBe(true);
+    // Synced, it goes from here, and stays on the drive's list, to bring back.
+    await sync();
+    expect(idle('Mine, renamed')).toEqual([false, false, true]);
+    buttonsOf('Mine, renamed')[0]?.click();
+    expect(rig.sketches.find(mine.id)).toBeNull();
+    expect(buttonsOf('Mine, renamed').map((button) => button.title)).toEqual([
+      'Bring here',
+      'Look at it as the drive has it',
+      'Delete from the drive',
+    ]);
+    expect(idle('Mine, renamed')).toEqual([false, false, false]);
+  });
+
   it('takes a sketch offered off the drive when the word is typed, and says so where it cannot', async () => {
     const rig = createRig();
     await rig.view.initialize();
@@ -21409,7 +21491,7 @@ describe('the library on Google Drive', () => {
     await new SketchSync({ drive: rig.drive, sketches: other }).sync(null);
     element<HTMLButtonElement>('drive-sync').click();
     await waitFor(() => element('drive-status').textContent?.startsWith('Synced') === true);
-    const offered = element<HTMLUListElement>('drive-only-sketches');
+    const offered = element<HTMLUListElement>('drive-sketches');
     const rowOf = (title: string): HTMLLIElement | undefined =>
       [...offered.querySelectorAll('li')].find((row) => row.textContent?.includes(title) === true);
     const removeOf = (title: string): HTMLButtonElement | null | undefined =>
@@ -21417,7 +21499,7 @@ describe('the library on Google Drive', () => {
         (button) => button.title === 'Delete from the drive',
       );
     const onTheDrive = async (): Promise<string[]> =>
-      [...(await new SketchSync({ drive: rig.drive, sketches: new SketchLibrary(new InMemorySettingsStore(), () => 1) }).sync(null)).onlyOnTheDrive].map(
+      [...(await new SketchSync({ drive: rig.drive, sketches: new SketchLibrary(new InMemorySettingsStore(), () => 1) }).sync(null)).onTheDrive].map(
         ({ title }) => title,
       );
 
@@ -21451,7 +21533,7 @@ describe('the library on Google Drive', () => {
     removeOf('Wanted')?.click();
     await confirmByTyping();
     await waitFor(() => offered.hidden === true);
-    expect(element('drive-only-sketches-said').hidden).toBe(true);
+    expect(element('drive-sketches-said').hidden).toBe(true);
     expect(await onTheDrive()).toEqual([]);
     expect(rig.sketches.list()).toEqual([]);
   });
@@ -21476,11 +21558,11 @@ describe('the library on Google Drive', () => {
     await waitFor(() => element('drive-status').textContent?.startsWith('Synced') === true);
 
     await rig.drive.write('sketches.json', JSON.stringify({ version: 1, sketches: [] }), null);
-    const bring = element('drive-only-sketches').querySelector<HTMLButtonElement>('button');
+    const bring = element('drive-sketches').querySelector<HTMLButtonElement>('button');
     bring?.click();
     await waitFor(() => element('drive-status').textContent === 'That sketch is no longer on the drive.');
     expect(bring?.disabled).toBe(false);
-    expect(element('drive-only-sketches').hidden).toBe(false);
+    expect(element('drive-sketches').hidden).toBe(false);
     expect(rig.sketches.list()).toEqual([]);
   });
 
@@ -21723,7 +21805,7 @@ describe('the Sync button pressing itself', () => {
       // Opened: synced with nothing changed here, and what the other device sent is offered.
       await rig.view.initialize();
       await vi.waitFor(() => {
-        expect(element('drive-only-sketches').textContent).toContain('From the iPad');
+        expect(element('drive-sketches').textContent).toContain('From the iPad');
       });
       const once = listed;
       expect(once).toBeGreaterThan(0);

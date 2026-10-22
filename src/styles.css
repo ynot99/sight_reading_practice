@@ -2477,7 +2477,7 @@ textarea {
   gap: 8px;
 }
 
-/* Bring it here, or take it off the drive: two icons, so the name keeps the row. */
+/* What can be done with it - brought here or taken off, looked at, deleted - as icons, so the name keeps the row. */
 .drive-only__ways {
   display: flex;
   flex: none;

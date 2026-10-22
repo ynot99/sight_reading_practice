@@ -2241,6 +2241,9 @@ export class AppView {
    */
   private pressedOn: EventTarget | null = null;
 
+  /** Where the marker was before a tap on nothing moved it, to go back to if it was the first of two. */
+  private placedBeforeTheTap: number | null = null;
+
   /**
    * The chord of the drawer a pointer is held down on, sounding until it is
    * let go of: by its place there, or none where the pointer has slid off
@@ -14470,17 +14473,21 @@ export class AppView {
    * A click on a sketch being edited where the press found no note: a note
    * is written there, unless a key held said the click was to choose - a
    * choice adds nothing to the music. A note itself is answered when it is
-   * let go of: see `letGoOfTheHeldKey`. The head stays where it is: placing
-   * it is listening's, and the ruler's.
+   * let go of: see `letGoOfTheHeldKey`. A click alone puts the marker
+   * there; two, writing a note, leave it where it was before the first.
    */
   private chooseTheKeyTapped(event: MouseEvent): void {
     if (this.theKeyUnder(event) !== null) {
       return;
     }
     const keyHeld = event.ctrlKey || event.metaKey || event.shiftKey;
-    // The second of two taps where there is nothing writes a note there.
+    // The second of two taps where there is nothing writes a note there, and
+    // takes the marker back to where the first found it.
     if (this.isASecondTap(event, null) && !keyHeld) {
       this.addAKeyWhereTapped(event);
+      if (this.placedBeforeTheTap !== null) {
+        this.putTheHeadAt(this.placedBeforeTheTap);
+      }
       return;
     }
     // One puts the marker there, to listen from, and lets go of the notes
@@ -14488,6 +14495,7 @@ export class AppView {
     if (!keyHeld && (this.theOtherRollShowing?.sketch?.chosen.length ?? 0) > 0) {
       this.choose([]);
     }
+    this.placedBeforeTheTap = this.rollPlacedAtMs;
     this.putTheHeadWhereItWasTapped(event);
   }
 

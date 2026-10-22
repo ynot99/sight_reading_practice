@@ -6088,6 +6088,17 @@ describe('AppView', () => {
       click(at(1_480, 67));
       expect(count()).toBe(3);
       element<HTMLButtonElement>('roll-undo').click();
+      // And leave the marker where it was before them: a click alone moves it.
+      clock.advance(1_000);
+      click(at(980, 69));
+      expect(headAt(body)).toBe('1.000');
+      clock.advance(1_000);
+      click(at(2_480, 69));
+      expect(headAt(body)).toBe('2.500');
+      click(at(2_480, 69));
+      expect(count()).toBe(3);
+      expect(headAt(body)).toBe('1.000');
+      element<HTMLButtonElement>('roll-undo').click();
       clock.advance(1_000);
       click(at(1_480, 67));
       click({ clientX: at(1_480, 67).clientX + 13, clientY: at(1_480, 67).clientY });

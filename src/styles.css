@@ -1338,15 +1338,33 @@ textarea {
   fill: color-mix(in srgb, var(--accent) 60%, var(--surface));
 }
 
-.roll-circle__chord text {
-  fill: var(--text-muted);
-  text-anchor: middle;
-  dominant-baseline: central;
+/* The names, over the way round, letting a finger through to the slice under each. */
+.roll-circle__names {
   pointer-events: none;
 }
 
-.roll-circle__chord[data-in-the-key='true'] .roll-circle__name,
-.roll-circle__chord[data-here='true'] .roll-circle__name {
+.roll-circle__label text {
+  fill: var(--text-muted);
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+/*
+ * The way the music came round, over the slices in the accent, each step as
+ * strong as it is new: not the names' ink, which it runs under.
+ */
+.roll-circle__way {
+  pointer-events: none;
+}
+
+.roll-circle__step {
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.roll-circle__label[data-in-the-key='true'] .roll-circle__name,
+.roll-circle__label[data-here='true'] .roll-circle__name {
   fill: var(--text);
   font-weight: 700;
 }

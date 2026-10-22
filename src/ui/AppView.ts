@@ -300,7 +300,7 @@ import {
   type RollHeads,
 } from './rollView.js';
 import { drawTheCircle, showOnTheCircle, thePlaceOnTheCircle } from './circleView.js';
-import { theKeysAtThePlace, theKeysOwnPlaces, whereOnTheCircle } from '../domain/harmony/circleOfFifths.js';
+import { theKeysAtThePlace, theKeysOwnPlaces, theWayRoundTheCircle, whereOnTheCircle } from '../domain/harmony/circleOfFifths.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
 import { readBackup } from '../application/Backup.js';
 import { calibrationExercise } from '../domain/generation/calibrationExercise.js';
@@ -544,6 +544,9 @@ function clampTheLoudness(level: number): number {
 function sameKey(one: KeyNamed, other: KeyNamed): boolean {
   return one.midi === other.midi && one.downAtMs === other.downAtMs;
 }
+
+/** How many chords the way round the circle is drawn through, the one the music is on last: enough for a phrase's turn, few enough to read. */
+const THE_WAY_ROUND_SHOWN = 4;
 
 /** How long a chord tapped in the lane sounds at most: long enough to be heard as a chord, short of a bar of one. */
 const A_CHORD_TAPPED_SOUNDS_MS = 1_200;
@@ -14131,7 +14134,8 @@ export class AppView {
    * The circle of fifths, open with the chords beside a sketch being edited:
    * the key the cursor is in lit, with its numerals, and the chord the music
    * makes where the cursor is - the one the lane under the notes names
-   * there - lit more, so a playback is watched going round it. Asked on every
+   * there - lit more, with the way the music came to it drawn fading
+   * behind, so a playback is watched going round it. Asked on every
    * step of a playback, and written only when what it shows has changed.
    */
   private showTheCircle(): void {
@@ -14146,12 +14150,18 @@ export class AppView {
     const scene = this.drawnScene;
     const chord = scene === null ? null : theChordAt(scene, this.headIsAtMs());
     const here = chord === null ? null : whereOnTheCircle(chord.root, chord.kind);
-    const shows = JSON.stringify([key.fifths, theScaleOfTheKey(key), here]);
+    const way = scene === null ? [] : theWayRoundTheCircle(scene.chords, this.headIsAtMs(), THE_WAY_ROUND_SHOWN);
+    const shows = JSON.stringify([key.fifths, theScaleOfTheKey(key), here, way]);
     if (shows === this.circleShows) {
       return;
     }
     this.circleShows = shows;
-    showOnTheCircle(this.circleDrawing, { fifths: key.fifths, ofTheKey: theKeysOwnPlaces(key.fifths, theScaleOfTheKey(key)), here });
+    showOnTheCircle(this.circleDrawing, {
+      fifths: key.fifths,
+      ofTheKey: theKeysOwnPlaces(key.fifths, theScaleOfTheKey(key)),
+      here,
+      way,
+    });
   }
 
   /** Points at a chord of the drawer, or at none, and shows its notes where it would write them. */

@@ -101,3 +101,25 @@ export function theKeysOwnPlaces(
     return at === null ? [] : [{ ...at, numeral }];
   });
 }
+
+/**
+ * The way the music has come round the circle to a moment: the places of
+ * the chords begun by then, oldest first, ending with the one sounding
+ * there or the last before it - each place once where the music stays on
+ * it, a chord with no place left out, and only the last `most`.
+ */
+export function theWayRoundTheCircle(
+  chords: readonly { readonly fromMs: number; readonly root: number; readonly kind: ChordKind }[],
+  atMs: number,
+  most: number,
+): readonly PlaceOnTheCircle[] {
+  const way: PlaceOnTheCircle[] = [];
+  for (const chord of [...chords].filter(({ fromMs }) => fromMs <= atMs).sort((one, other) => one.fromMs - other.fromMs)) {
+    const at = whereOnTheCircle(chord.root, chord.kind);
+    const last = way[way.length - 1];
+    if (at !== null && (last === undefined || last.ring !== at.ring || last.place !== at.place)) {
+      way.push(at);
+    }
+  }
+  return way.slice(-most);
+}

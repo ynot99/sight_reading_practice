@@ -29,10 +29,21 @@ const NUMERAL_SIZE: Readonly<Record<CircleRing, number>> = { major: 7, minor: 6,
 /** The drawing reaches a little past the outer ring, so its edge is not cut. */
 const REACH = 102;
 
+/** How strongly the newest step of the way round is drawn, and how much less each older one. */
+const NEWEST_STEP = 0.9;
+const EACH_STEP_OLDER = 0.25;
+
 /** A point at a distance from the middle, a turn round from the top, clockwise. */
 function at(radius: number, turn: number): string {
   const angle = turn * 2 * Math.PI;
   return `${(radius * Math.sin(angle)).toFixed(2)} ${(-radius * Math.cos(angle)).toFixed(2)}`;
+}
+
+/** The middle of the slice a place is, where the way round passes through it. */
+function theMiddleOf(place: PlaceOnTheCircle): readonly [number, number] {
+  const [inner, outer] = RING_EDGES[place.ring];
+  const [x, y] = at((inner + outer) / 2, place.place / PLACES_ON_THE_CIRCLE).split(' ').map(Number);
+  return [x ?? 0, y ?? 0];
 }
 
 /** The slice of a ring a place is: its outer edge clockwise, its inner edge back. */
@@ -51,6 +62,10 @@ function theNameOnTheSlice(name: string): string {
 /**
  * Draws the circle: each slice a button, carrying its ring and place for the
  * page to read back; named when it is shown (see `showOnTheCircle`).
+ *
+ * In three layers: the slices, the way round over them, and the names over
+ * that, so a step of the way never hides a name it crosses. A name is the
+ * slice's in all but where it is drawn, and lets a finger through to it.
  */
 export function drawTheCircle(doc: Document): SVGSVGElement {
   const drawing = doc.createElementNS(SVG, 'svg');
@@ -58,6 +73,9 @@ export function drawTheCircle(doc: Document): SVGSVGElement {
   drawing.setAttribute('class', 'roll-circle__drawing');
   drawing.setAttribute('role', 'group');
   drawing.setAttribute('aria-label', 'The circle of fifths');
+  const names = doc.createElementNS(SVG, 'g');
+  names.setAttribute('class', 'roll-circle__names');
+  names.setAttribute('aria-hidden', 'true');
   for (const ring of CIRCLE_RINGS) {
     const [inner, outer] = RING_EDGES[ring];
     for (let place = 0; place < PLACES_ON_THE_CIRCLE; place += 1) {
@@ -83,11 +101,50 @@ export function drawTheCircle(doc: Document): SVGSVGElement {
       numeral.setAttribute('x', (x ?? 0).toFixed(2));
       numeral.setAttribute('y', ((y ?? 0) + NAME_SIZE[ring] * 0.5).toFixed(2));
       numeral.setAttribute('font-size', String(NUMERAL_SIZE[ring]));
-      slice.append(title, shape, written, numeral);
+      slice.append(title, shape);
       drawing.append(slice);
+      const label = doc.createElementNS(SVG, 'g');
+      label.setAttribute('class', 'roll-circle__label');
+      label.append(written, numeral);
+      names.append(label);
     }
   }
+  // Over the slices, and nothing to press: a finger goes through it to the chord under it.
+  const way = doc.createElementNS(SVG, 'g');
+  way.setAttribute('class', 'roll-circle__way');
+  way.setAttribute('aria-hidden', 'true');
+  drawing.append(way, names);
   return drawing;
+}
+
+/**
+ * Draws the way the music came round the circle: a line from each chord to
+ * the next through the middles of their slices, the older the fainter, so
+ * the progression is read as a path that fades behind it.
+ */
+function showTheWayRound(drawing: SVGSVGElement, way: readonly PlaceOnTheCircle[]): void {
+  const shown = drawing.querySelector('.roll-circle__way');
+  if (shown === null) {
+    return;
+  }
+  const doc = drawing.ownerDocument;
+  const steps = way.slice(1).map((to, at) => {
+    const from = way[at] ?? to;
+    const [fromX, fromY] = theMiddleOf(from);
+    const [toX, toY] = theMiddleOf(to);
+    const step = doc.createElementNS(SVG, 'line');
+    step.setAttribute('class', 'roll-circle__step');
+    step.setAttribute('x1', fromX.toFixed(2));
+    step.setAttribute('y1', fromY.toFixed(2));
+    step.setAttribute('x2', toX.toFixed(2));
+    step.setAttribute('y2', toY.toFixed(2));
+    step.setAttribute('data-from', `${from.ring} ${String(from.place)}`);
+    step.setAttribute('data-to', `${to.ring} ${String(to.place)}`);
+    const older = way.length - 2 - at;
+    step.setAttribute('stroke-opacity', (NEWEST_STEP - older * EACH_STEP_OLDER).toFixed(2));
+    return step;
+  });
+  shown.replaceChildren(...steps);
 }
 
 /** The place of a slice of the circle a pointer or a key is on, read off it; none off the slices. */
@@ -110,9 +167,15 @@ export function showOnTheCircle(
     readonly fifths: number;
     readonly ofTheKey: readonly (PlaceOnTheCircle & { readonly numeral: string })[];
     readonly here: PlaceOnTheCircle | null;
+    /** The way the music came to where it is, oldest first: see `theWayRoundTheCircle`. */
+    readonly way: readonly PlaceOnTheCircle[];
   },
 ): void {
-  for (const slice of drawing.querySelectorAll<SVGGElement>('[data-ring]')) {
+  showTheWayRound(drawing, shown.way);
+  // A slice's name is the one drawn in the same turn as it.
+  const labels = [...drawing.querySelectorAll('.roll-circle__label')];
+  for (const [turn, slice] of [...drawing.querySelectorAll<SVGGElement>('[data-ring]')].entries()) {
+    const label = labels[turn];
     const ring = CIRCLE_RINGS.find((each) => each === slice.getAttribute('data-ring')) ?? 'major';
     const place = Number(slice.getAttribute('data-place'));
     const name = theNameAtThePlace({ ring, place }, shown.fifths);
@@ -122,24 +185,28 @@ export function showOnTheCircle(
     if (title !== null) {
       title.textContent = says;
     }
-    const written = slice.querySelector('.roll-circle__name');
+    const written = label?.querySelector('.roll-circle__name') ?? null;
     if (written !== null) {
       written.textContent = theNameOnTheSlice(name);
     }
     const own = shown.ofTheKey.find((each) => each.ring === ring && each.place === place);
-    if (own === undefined) {
-      slice.removeAttribute('data-in-the-key');
-    } else {
-      slice.setAttribute('data-in-the-key', 'true');
+    for (const each of [slice, label]) {
+      if (own === undefined) {
+        each?.removeAttribute('data-in-the-key');
+      } else {
+        each?.setAttribute('data-in-the-key', 'true');
+      }
     }
-    const numeral = slice.querySelector('.roll-circle__numeral');
+    const numeral = label?.querySelector('.roll-circle__numeral') ?? null;
     if (numeral !== null) {
       numeral.textContent = own?.numeral ?? '';
     }
-    if (shown.here?.ring === ring && shown.here.place === place) {
-      slice.setAttribute('data-here', 'true');
-    } else {
-      slice.removeAttribute('data-here');
+    for (const each of [slice, label]) {
+      if (shown.here?.ring === ring && shown.here.place === place) {
+        each?.setAttribute('data-here', 'true');
+      } else {
+        each?.removeAttribute('data-here');
+      }
     }
   }
 }

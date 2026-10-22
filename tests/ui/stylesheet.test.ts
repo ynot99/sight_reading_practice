@@ -1441,7 +1441,10 @@ describe('the stylesheet', () => {
     // Lit with the accent, never a verdict's colour; the music's chord more than the key's.
     expect(ruleOf(".roll-circle__chord[data-in-the-key='true'] path")).toMatch(/var\(--accent\) 18%/);
     expect(ruleOf(".roll-circle__chord[data-here='true'] path")).toMatch(/var\(--accent\) 60%/);
-    expect(ruleOf('.roll-circle__chord text')).toMatch(/pointer-events\s*:\s*none/);
+    // The way round and the names over it let a finger through to the slices.
+    expect(ruleOf('.roll-circle__names')).toMatch(/pointer-events\s*:\s*none/);
+    expect(ruleOf('.roll-circle__way')).toMatch(/pointer-events\s*:\s*none/);
+    expect(ruleOf('.roll-circle__step')).toMatch(/stroke\s*:\s*var\(--accent\)/);
   });
 
   it('opens the drawer of chords at the right of the drawing, beside it rather than over it', () => {

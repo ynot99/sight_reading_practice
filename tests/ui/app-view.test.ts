@@ -9107,10 +9107,17 @@ describe('AppView', () => {
       };
       const circle = element('roll-circle');
       const slice = (ring: string, place: number): Element | null => circle.querySelector(`[data-ring="${ring}"][data-place="${String(place)}"]`);
-      const said = (each: Element): string =>
-        `${each.querySelector('.roll-circle__name')?.textContent ?? ''} ${each.querySelector('.roll-circle__numeral')?.textContent ?? ''}`.trim();
-      const lit = (): string[] => [...circle.querySelectorAll('[data-in-the-key]')].map(said).sort();
-      const here = (): string[] => [...circle.querySelectorAll('[data-here]')].map(said);
+      // What a slice says, which is drawn in the layer of names: the name drawn in the same turn as it.
+      const said = (each: Element): string => {
+        const turn = [...circle.querySelectorAll('[data-ring]')].indexOf(each);
+        const label = circle.querySelectorAll('.roll-circle__label')[turn];
+        return `${label?.querySelector('.roll-circle__name')?.textContent ?? ''} ${label?.querySelector('.roll-circle__numeral')?.textContent ?? ''}`.trim();
+      };
+      const lit = (): string[] => [...circle.querySelectorAll('[data-ring][data-in-the-key]')].map(said).sort();
+      const here = (): string[] => [...circle.querySelectorAll('[data-ring][data-here]')].map(said);
+      // Each name lit as its slice is.
+      const litNames = (): number => circle.querySelectorAll('.roll-circle__label[data-in-the-key]').length;
+      const hereNames = (): number => circle.querySelectorAll('.roll-circle__label[data-here]').length;
       const struck = (): string[] =>
         (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'noteOn' ? [String(event.midi)] : []));
 
@@ -9120,6 +9127,7 @@ describe('AppView', () => {
       expect(circle.hidden).toBe(false);
       expect(circle.querySelectorAll('[data-ring]')).toHaveLength(36);
       expect(lit()).toEqual(['B° vii°', 'C I', 'Dm ii', 'Em iii', 'F IV', 'G V', 'Am vi'].sort());
+      expect([litNames(), hereNames()]).toEqual([7, 1]);
       // The chord the music makes where the cursor is, and the next as it is put there.
       expect(here()).toEqual(['C I']);
       cursorAt(2_600);
@@ -9128,6 +9136,7 @@ describe('AppView', () => {
       // Tapped, a chord is written where the cursor is and heard: D minor, the key's own.
       cursorAt(5_000);
       expect(here()).toEqual([]);
+      expect(hereNames()).toBe(0);
       instrument.played.length = 0;
       slice('minor', 11)?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       expect(struck().slice(-3).sort()).toEqual(['62', '65', '69']);
@@ -9151,6 +9160,60 @@ describe('AppView', () => {
       // Put away with the chords.
       element<HTMLButtonElement>('roll-chords-open').click();
       expect(circle.hidden).toBe(true);
+    });
+
+    it('draws the way the music came round the circle to the cursor, the older steps fainter, four chords at most', async () => {
+      const { view, sketches, clock } = createRig();
+      await view.initialize();
+      const held = (midis: readonly number[], atMs: number, upAtMs: number) =>
+        midis.flatMap((midi) => [
+          { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+          { kind: 'noteOff' as const, atMs: upAtMs, midi },
+        ]);
+      // C, A minor, F, G and C again, a bar each.
+      sketches.begin(
+        {
+          events: [
+            ...held([60, 64, 67], 0, 2_000),
+            ...held([57, 60, 64], 2_000, 4_000),
+            ...held([53, 57, 60], 4_000, 6_000),
+            ...held([55, 59, 62], 6_000, 8_000),
+            ...held([60, 64, 67], 8_000, 10_000),
+          ],
+          beats: Array.from({ length: 20 }, (_, beat) => ({ atMs: beat * 500, beat: beat % 4, beatsInBar: 4 })),
+        },
+        'Way',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      element<HTMLButtonElement>('roll-chords-open').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const cursorAt = (ms: number): void => {
+        clock.advance(1_000);
+        tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: (ms / 1000) * zoom, clientY: 20 });
+      };
+      const steps = (): string[] =>
+        [...element('roll-circle').querySelectorAll('.roll-circle__step')].map(
+          (step) => `${step.getAttribute('data-from') ?? ''} > ${step.getAttribute('data-to') ?? ''} ${step.getAttribute('stroke-opacity') ?? ''}`,
+        );
+
+      expect(steps()).toEqual([]);
+      // Over the slices, and under their names, which it never hides.
+      const layers = [...(element('roll-circle').querySelector('svg')?.children ?? [])].map((layer) => layer.getAttribute('class'));
+      expect(layers.slice(-2)).toEqual(['roll-circle__way', 'roll-circle__names']);
+      expect(layers.slice(0, -2).every((layer) => layer === 'roll-circle__chord')).toBe(true);
+      cursorAt(2_600);
+      expect(steps()).toEqual(['major 0 > minor 0 0.90']);
+      cursorAt(6_600);
+      expect(steps()).toEqual(['major 0 > minor 0 0.40', 'minor 0 > major 11 0.65', 'major 11 > major 1 0.90']);
+      // Four chords at most: the first C left behind as the last comes.
+      cursorAt(8_600);
+      expect(steps()).toEqual(['minor 0 > major 11 0.40', 'major 11 > major 1 0.65', 'major 1 > major 0 0.90']);
+      // Back, and the way goes back with the cursor.
+      cursorAt(1_000);
+      expect(steps()).toEqual([]);
     });
 
     it('writes a chord of the drawer over the chord tapped in the lane, moving its notes as little as they can', async () => {

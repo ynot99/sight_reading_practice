@@ -8,6 +8,7 @@ import {
   theKeysOwnPlaces,
   theRingOfTheKind,
   theRootAt,
+  theWayRoundTheCircle,
   whereOnTheCircle,
 } from '../../src/domain/harmony/circleOfFifths.js';
 
@@ -68,6 +69,30 @@ describe('the circle of fifths', () => {
     // E flat minor in A flat major; D sharp minor in E major.
     expect(theNameAtThePlace({ ring: 'minor', place: 6 }, -4)).toBe('E♭m');
     expect(theNameAtThePlace({ ring: 'minor', place: 6 }, 4)).toBe('D♯m');
+  });
+
+  it('follows the way the music came round to a moment, each place once where it stays, the last few only', () => {
+    const kind = (suffix: string) => CHORD_KINDS.find((each) => each.suffix === suffix) ?? CHORD_KINDS[0]!;
+    // C, C again, A minor, an augmented chord, F, G7, and later D minor - given out of order.
+    const chords = [
+      { fromMs: 4_000, root: 9, kind: kind('m') },
+      { fromMs: 0, root: 0, kind: kind('') },
+      { fromMs: 2_000, root: 0, kind: kind('') },
+      { fromMs: 5_000, root: 0, kind: kind('+') },
+      { fromMs: 6_000, root: 5, kind: kind('') },
+      { fromMs: 8_000, root: 7, kind: kind('7') },
+      { fromMs: 10_000, root: 2, kind: kind('m') },
+    ];
+    const way = (atMs: number, most = 10): string[] =>
+      theWayRoundTheCircle(chords, atMs, most).map(({ ring, place }) => `${ring} ${String(place)}`);
+
+    expect(way(-1)).toEqual([]);
+    // Begun at the moment counts.
+    expect(way(0)).toEqual(['major 0']);
+    expect(way(4_000)).toEqual(['major 0', 'minor 0']);
+    expect(way(9_000)).toEqual(['major 0', 'minor 0', 'major 11', 'major 1']);
+    // The last few only, the newest last.
+    expect(way(12_000, 3)).toEqual(['major 11', 'major 1', 'minor 11']);
   });
 
   it("lays a key's own triads together, by the scale on its signature", () => {

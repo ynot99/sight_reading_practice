@@ -1441,6 +1441,10 @@ describe('the stylesheet', () => {
     // Lit with the accent, never a verdict's colour; the music's chord more than the key's.
     expect(ruleOf(".roll-circle__chord[data-in-the-key='true'] path")).toMatch(/var\(--accent\) 18%/);
     expect(ruleOf(".roll-circle__chord[data-here='true'] path")).toMatch(/var\(--accent\) 60%/);
+    // Edged under a resting pointer, only where something hovers.
+    const hovered = rules().find((rule) => rule.selector === '.roll-circle__chord:hover path');
+    expect(inWhichMedia(hovered?.at ?? 0)).toBe('@media (hover: hover)');
+    expect(hovered?.body).toMatch(/stroke\s*:\s*var\(--accent\)/);
     // Focus is the slice's own edge, for a key only: the browser's ring is round its box.
     expect(ruleOf('.roll-circle__chord:focus')).toMatch(/outline\s*:\s*none/);
     expect(ruleOf('.roll-circle__chord:focus-visible path')).toMatch(/stroke\s*:\s*var\(--accent\)/);

@@ -300,7 +300,13 @@ import {
   type RollHeads,
 } from './rollView.js';
 import { drawTheCircle, showOnTheCircle, thePlaceOnTheCircle } from './circleView.js';
-import { theKeysAtThePlace, theKeysOwnPlaces, theWayRoundTheCircle, whereOnTheCircle } from '../domain/harmony/circleOfFifths.js';
+import {
+  theKeysAtThePlace,
+  theKeysOwnPlaces,
+  theWayRoundTheCircle,
+  whereOnTheCircle,
+  type PlaceOnTheCircle,
+} from '../domain/harmony/circleOfFifths.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
 import { readBackup } from '../application/Backup.js';
 import { calibrationExercise } from '../domain/generation/calibrationExercise.js';
@@ -2258,8 +2264,12 @@ export class AppView {
   private keyHeldOnTheStrip: { readonly pointerId: number; readonly midi: number; readonly velocity: number } | null = null;
   /** The rows of the keys sounding now: see `lightTheSoundingRows`. */
   private soundingRows: readonly number[] = [];
-  /** The chord of the drawer the pointer is on, by its place there, whose notes are shown where it would write them; or none. */
-  private chordPointedAt: number | null = null;
+  /**
+   * The chord the pointer is on - of the drawer, by its place there, or of
+   * the circle, by its slice - whose notes are shown where it would write
+   * them; or none.
+   */
+  private chordPointedAt: { readonly inTheDrawer: number } | { readonly onTheCircle: PlaceOnTheCircle } | null = null;
   /** Those notes, where they would go: painted dashed over the drawing until the pointer leaves the chord. */
   private notesShownAhead: readonly NoteShownAhead[] = [];
   /** The notes played into a recording under way, where they go, painted as they are played: see `showWhatIsBeingRecorded`. */
@@ -10044,6 +10054,14 @@ export class AppView {
     this.listen(this.el.rollCircle, 'click', (event) => {
       writeFromTheCircle(event.target);
     });
+    // Over a slice, its notes are shown where it would write them, as a chord of the drawer's are.
+    this.listen(this.el.rollCircle, 'pointerover', (event) => {
+      this.pointAtTheCircle(thePlaceOnTheCircle(event.target));
+    });
+    // Off it, onto another slice or anything else - out of the window, even.
+    this.listen(this.el.rollCircle, 'pointerout', (event) => {
+      this.pointAtTheCircle(thePlaceOnTheCircle((event as PointerEvent).relatedTarget));
+    });
     this.listen(this.el.rollCircle, 'keydown', (event) => {
       const key = (event as KeyboardEvent).key;
       if (key === 'Enter' || key === ' ') {
@@ -13867,9 +13885,11 @@ export class AppView {
       return null;
     }
     this.changeTheSketchShowing(written.events, [...sketch.before, asItWas(stored, sketch.chosen)], written.chosen);
-    // Moved on, the cursor takes what is shown ahead with it: see `showTheChordsOfTheKey`.
+    // Moved on, the cursor takes what is shown ahead with it: the chord still
+    // pointed at is shown where it would go next, not where it has just gone.
     if (written.headAfterMs !== null) {
       this.putTheHeadAt(written.headAfterMs);
+      this.showTheChordAhead();
     }
     return written;
   }
@@ -14166,19 +14186,33 @@ export class AppView {
 
   /** Points at a chord of the drawer, or at none, and shows its notes where it would write them. */
   private pointAtTheChord(at: number | null): void {
-    this.chordPointedAt = at;
+    this.chordPointedAt = at === null ? null : { inTheDrawer: at };
+    this.showTheChordAhead();
+  }
+
+  /** Points at a chord of the circle, or at none, and shows its notes where it would write them. */
+  private pointAtTheCircle(place: PlaceOnTheCircle | null): void {
+    this.chordPointedAt = place === null ? null : { onTheCircle: place };
     this.showTheChordAhead();
   }
 
   /**
    * Shows the notes of the chord pointed at where it would write them - the
-   * keys it would put in, and none already sounding there - or none while
-   * the drawer is deleting what it keeps. Put away, it points at none.
+   * keys it would put in, and none already sounding there - or, for one of
+   * the drawer, none while the drawer is deleting what it keeps, since a
+   * press there then writes nothing. Put away, it points at none.
    */
   private showTheChordAhead(): void {
-    const at = this.chordPointedAt;
+    const pointed = this.chordPointedAt;
     const scene = this.drawnScene;
-    const written = at === null || scene === null || this.chordsBeingForgotten ? null : this.theChordWrittenAtTheHead(at);
+    const written =
+      pointed === null || scene === null
+        ? null
+        : 'onTheCircle' in pointed
+          ? this.theKeysWrittenAtTheHead(theKeysAtThePlace(pointed.onTheCircle))
+          : this.chordsBeingForgotten
+            ? null
+            : this.theChordWrittenAtTheHead(pointed.inTheDrawer);
     this.notesShownAhead =
       written === null || scene === null
         ? []

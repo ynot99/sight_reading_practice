@@ -8111,6 +8111,7 @@ describe('AppView', () => {
       const before = notesAt(1_500);
       first.click();
       expect(notesAt(1_500).filter((note) => !before.includes(note))).toEqual(shown.filter((note) => !before.includes(note)));
+      expect(ahead().length).toBeGreaterThan(0);
       expect(ahead().every((note) => note.startsWith('2000-2500:'))).toBe(true);
       // A key already sounding where it would go is not shown, as it is not written:
       // middle C sounds from two seconds.
@@ -9160,6 +9161,77 @@ describe('AppView', () => {
       // Put away with the chords.
       element<HTMLButtonElement>('roll-chords-open').click();
       expect(circle.hidden).toBe(true);
+    });
+
+    it('shows the notes a slice of the circle would write while the pointer rests on it, and writes those', async () => {
+      const { view, sketches, clock } = createRig();
+      await view.initialize();
+      // C for a bar, in C major.
+      const sketch = sketches.begin(
+        {
+          events: [60, 64, 67].flatMap((midi) => [
+            { kind: 'noteOn' as const, atMs: 0, midi, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: 2_000, midi },
+          ]),
+          beats: Array.from({ length: 8 }, (_, beat) => ({ atMs: beat * 500, beat: beat % 4, beatsInBar: 4 })),
+        },
+        'Pointed',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      element<HTMLButtonElement>('roll-chords-open').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      clock.advance(1_000);
+      // The cursor in the second bar, past the C.
+      tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: 2.6 * zoom, clientY: 20 });
+      const circle = element('roll-circle');
+      const slice = (ring: string, place: number): Element => {
+        const found = circle.querySelector(`[data-ring="${ring}"][data-place="${String(place)}"] path`);
+        if (found === null) {
+          throw new Error('expected a slice');
+        }
+        return found;
+      };
+      const over = (on: Element): void => {
+        on.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse' }));
+      };
+      const out = (from: Element, to: Element | null): void => {
+        from.dispatchEvent(new PointerEvent('pointerout', { bubbles: true, pointerType: 'mouse', relatedTarget: to }));
+      };
+      const highest = view.rollScene?.highest ?? 0;
+      const ahead = (): string[] =>
+        view.rollNotesShownAhead.map((note) => `${String(note.fromMs)}-${String(note.untilMs)}:${String(highest - note.row)}`).sort();
+      const struck = (): string[] =>
+        (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'noteOn' && event.atMs > 0 ? [String(event.midi)] : [])).sort();
+
+      expect(ahead()).toEqual([]);
+      // D minor: its keys, from the cursor's line to the next.
+      over(slice('minor', 11));
+      expect(ahead()).toEqual(['2500-3000:62', '2500-3000:65', '2500-3000:69']);
+      // Onto G: its keys instead; off the circle, none.
+      out(slice('minor', 11), slice('major', 1));
+      over(slice('major', 1));
+      expect(ahead()).toEqual(['2500-3000:67', '2500-3000:71', '2500-3000:74']);
+      out(slice('major', 1), element('roll-body'));
+      expect(ahead()).toEqual([]);
+      // Out of the window altogether, none either.
+      over(slice('major', 1));
+      out(slice('major', 1), null);
+      expect(ahead()).toEqual([]);
+      // Pressed, exactly what was shown is written, and the next place shown.
+      over(slice('major', 1));
+      slice('major', 1).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(struck()).toEqual(['67', '71', '74']);
+      expect(ahead()).toEqual(['3000-3500:67', '3000-3500:71', '3000-3500:74']);
+      // The drawer deleting the chords it keeps leaves the circle as it is: a press there still writes.
+      sketches.keepTheChord([60, 63, 67]);
+      element<HTMLButtonElement>('roll-chords-forget').click();
+      expect(element('roll-chords-forget').getAttribute('aria-pressed')).toBe('true');
+      out(slice('major', 1), element('roll-body'));
+      over(slice('minor', 11));
+      expect(ahead()).toEqual(['3000-3500:62', '3000-3500:65', '3000-3500:69']);
     });
 
     it('draws the way the music came round the circle to the cursor, the older steps fainter, four chords at most', async () => {

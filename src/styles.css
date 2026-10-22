@@ -1339,6 +1339,18 @@ textarea {
 }
 
 /*
+ * A slice under a resting pointer edged in the accent, as a key's focus is
+ * but thinner: only where something hovers, or a touch would leave the last
+ * slice it tapped edged.
+ */
+@media (hover: hover) {
+  .roll-circle__chord:hover path {
+    stroke: var(--accent);
+    stroke-width: 1.5;
+  }
+}
+
+/*
  * A slice's focus is its own edge, not the browser's ring: the ring is drawn
  * round the box the slice stands in, which on a circle is nowhere near it.
  * And only for a key, which is the only way to tell where focus is - a slice

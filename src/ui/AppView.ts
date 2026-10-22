@@ -542,6 +542,9 @@ function sameKey(one: KeyNamed, other: KeyNamed): boolean {
   return one.midi === other.midi && one.downAtMs === other.downAtMs;
 }
 
+/** How long a chord tapped in the lane sounds at most: long enough to be heard as a chord, short of a bar of one. */
+const A_CHORD_TAPPED_SOUNDS_MS = 1_200;
+
 /** The grid of bar lines alone, which a slice's ends go to. */
 const BAR_LINES_ONLY: GridChoice = { beats: false, parts: 1 };
 
@@ -2095,6 +2098,8 @@ export class AppView {
    * none until one is laid on it. Kept while the page is, and no longer.
    */
   private rollSlice: { readonly of: string; readonly fromMs: number; readonly toMs: number } | null = null;
+  /** The keys of the chord last tapped in the lane, sounding for a moment: see `soundTheChordTapped`. */
+  private chordTappedSounds: readonly number[] = [];
   /** An end of the slice held by a pointer on the ruler, and where its other end stays: see `takeHoldOfAnEndOfTheSlice`. */
   private sliceEndHeld: { readonly pointerId: number; readonly otherMs: number } | null = null;
   /** Where the marker stood as the drawing was shown, so shutting it carries the marker only where it was put: see `closeTheRoll`. */
@@ -15255,13 +15260,34 @@ export class AppView {
     if (chord === null || roll === null || sketch?.editing !== true) {
       return false;
     }
-    const notes = theNotesOfTheChord(roll, chord.fromMs, chord.untilMs).map((press) => ({ midi: press.midi, downAtMs: press.downAtMs }));
+    const presses = theNotesOfTheChord(roll, chord.fromMs, chord.untilMs);
+    const notes = presses.map((press) => ({ midi: press.midi, downAtMs: press.downAtMs }));
     const adds = event.ctrlKey || event.metaKey || event.shiftKey;
     this.choose(adds ? [...sketch.chosen.filter((key) => !notes.some((note) => sameKey(note, key))), ...notes] : notes);
     this.chordTappedAt = chord.fromMs;
     this.showTheChordsOfTheKey();
     this.putTheHeadAt(chord.fromMs);
+    this.soundTheChordTapped(presses, chord.untilMs - chord.fromMs);
     return true;
+  }
+
+  /**
+   * Sounds the notes of a chord tapped in the lane, so it is heard as well
+   * as chosen: each pitch once, as hard as it is struck hardest there, all
+   * at once, for as long as the chord lasts or a moment, whichever is less.
+   * The one tapped before is silenced first.
+   */
+  private soundTheChordTapped(presses: readonly { readonly midi: number; readonly velocity: number }[], lastsMs: number): void {
+    for (const midi of this.chordTappedSounds) {
+      this.runtime.pitchPlayer.stop(midi);
+    }
+    const now = this.runtime.clock.now();
+    const keys = oneKeyForEachPitch(presses);
+    for (const { midi, velocity } of keys) {
+      this.runtime.pitchPlayer.play(midi, velocity, now);
+      this.runtime.pitchPlayer.stop(midi, now + Math.min(lastsMs, A_CHORD_TAPPED_SOUNDS_MS));
+    }
+    this.chordTappedSounds = keys.map(({ midi }) => midi);
   }
 
   /** Whether an event is on the lane of chords under the notes. */
@@ -16312,8 +16338,10 @@ export class AppView {
     const stage = this.el.rollBody.closest<HTMLElement>('.roll-stage');
     if (stage !== null) {
       stage.dataset['editing'] = String(this.theOtherRollShowing?.sketch?.editing === true);
-      // And with the chords open, the lane naming those the notes make.
+      // And with the chords open, the lane naming those the notes make -
+      // said on the sheet as well, for the rows under the drawing.
       stage.dataset['chords'] = String(this.theChordsOfTheKeyAreOpen());
+      this.el.sheetRoll.dataset['chords'] = String(this.theChordsOfTheKeyAreOpen());
     }
     this.el.rollBody.replaceChildren(drawTheRoll(scene));
     this.rollHeads = theHeadsOf(this.el.rollBody);

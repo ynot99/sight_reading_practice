@@ -9018,6 +9018,51 @@ describe('AppView', () => {
       expect(lane()).toEqual([]);
     });
 
+    it('sounds a chord tapped in the lane as it chooses it, each pitch once, for a moment, the one before silenced', async () => {
+      const { view, sketches, instrument, clock } = createRig();
+      await view.initialize();
+      const held = (midis: readonly number[], atMs: number, upAtMs: number, velocity = 0.5) =>
+        midis.flatMap((midi) => [
+          { kind: 'noteOn' as const, atMs, midi, velocity },
+          { kind: 'noteOff' as const, atMs: upAtMs, midi },
+        ]);
+      sketches.begin(
+        {
+          // C for two bars of a second, its E struck twice, harder the second time; A minor for the third.
+          events: [...held([60, 67], 0, 2_000), ...held([64], 0, 900, 0.4), ...held([64], 1_000, 2_000, 0.8), ...held([57, 60, 64], 2_000, 3_000)],
+          beats: Array.from({ length: 12 }, (_, beat) => ({ atMs: beat * 250, beat: beat % 4, beatsInBar: 4 })),
+        },
+        'Heard',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      element<HTMLButtonElement>('roll-chords-open').click();
+      expect(element('sheet-roll').dataset['chords']).toBe('true');
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const lane = (): Element => element('roll-body').querySelector('.roll__chords > .roll__paint') ?? element('roll-body');
+      const played = (): string[] => instrument.played.map((note) => `${String(note.midi)}@${String(note.velocity)}`).sort();
+
+      instrument.played.length = 0;
+      clock.advance(1_000);
+      const struckAt = clock.now();
+      tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: 0.5 * zoom, clientY: 5 }, lane());
+      expect(played()).toEqual(['60@0.5', '64@0.8', '67@0.5']);
+      expect(instrument.stopped.slice(-3).map((note) => note.atMs)).toEqual([1, 2, 3].map(() => struckAt + 1_200));
+      // The next, as long as it lasts where that is less; the one before silenced first.
+      instrument.played.length = 0;
+      instrument.stopped.length = 0;
+      clock.advance(1_000);
+      tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: 2.4 * zoom, clientY: 5 }, lane());
+      expect(instrument.stopped.slice(0, 3).map((note) => `${String(note.midi)}${note.atMs === undefined ? ' now' : ''}`).sort()).toEqual(['60 now', '64 now', '67 now']);
+      expect(played()).toEqual(['57@0.5', '60@0.5', '64@0.5']);
+      expect(instrument.stopped.slice(3).map((note) => note.atMs)).toEqual([1, 2, 3].map(() => clock.now() + 1_000));
+      // Put away, the sheet says so too.
+      element<HTMLButtonElement>('roll-chords-open').click();
+      expect(element('sheet-roll').dataset['chords']).toBe('false');
+    });
+
     it('writes a chord of the drawer over the chord tapped in the lane, moving its notes as little as they can', async () => {
       const { view, sketches, instrument } = createRig();
       await view.initialize();

@@ -2357,6 +2357,11 @@ describe('searching the settings', () => {
     expect(body(".roll-mark__fields select[data-idle='true']")).toMatch(/opacity\s*:\s*0?\.\d+/);
     // Its buttons, four with a bar to put in, wrap on a phone rather than running off it.
     expect(body('.sheet__actions')).toMatch(/flex-wrap\s*:\s*wrap/);
+    // On a small screen, the chords open in the editor take the room of the row under the drawing.
+    const small = rules().find(
+      (rule) => rule.selector === "#sheet-roll[data-chords='true'] .roll-velocity" && /max-height:\s*500px/.test(CSS.slice(Math.max(0, rule.at - 200), rule.at)),
+    );
+    expect(small?.body).toMatch(/display\s*:\s*none/);
     expect(body(".sheet__actions .button[data-idle='true']")).toMatch(/opacity\s*:\s*0?\.\d+/);
     // And the row wraps on a phone rather than running off it, each name with
     // what it names, the slider's group taking the room.

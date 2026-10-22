@@ -1696,6 +1696,17 @@ textarea {
   padding: 8px 0 0;
 }
 
+/*
+ * On a small screen, the chords open take the room of the row of loudness
+ * and hands under the drawing: a phone has the height for the one or the
+ * other. It comes back as the chords are put away.
+ */
+@media (max-width: 500px), (max-height: 500px) {
+  #sheet-roll[data-chords='true'] .roll-velocity {
+    display: none;
+  }
+}
+
 /* A name and what it names, kept on one line together. */
 .roll-velocity__group {
   display: flex;

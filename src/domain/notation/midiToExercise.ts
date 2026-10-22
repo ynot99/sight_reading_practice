@@ -598,7 +598,11 @@ export function midiToExercise(
     timeChanges,
     tempoChanges,
     pedalMarks,
-    dynamicMarks: [],
+    // What the file marks, on the page's grid, and none past the last bar.
+    dynamicMarks: document.dynamics
+      .map((dynamic) => ({ ticks: pull(dynamic.atTicks * scale), level: dynamic.level }))
+      .filter((dynamic) => dynamic.ticks < (laid.bars[bars - 1]?.endTicks ?? 0))
+      .map((dynamic) => ({ ...placed(dynamic.ticks), level: dynamic.level, staffNumber: null })),
     tempoWords: [],
     hairpins: [],
     octaveShifts: [],

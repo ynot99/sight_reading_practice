@@ -7325,6 +7325,151 @@ describe('AppView', () => {
       expect(marks()).toEqual(['1: C major 4/4 \u2669=120', '3: G major 3/4']);
     });
 
+    it('marks a dynamic from a beat in the sheet of a flag, prints it in the sketch written down, and copies it with the flag', async () => {
+      const { view, sketches, clock, runtime } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: Array.from({ length: 16 }, (_, at) => [
+            { kind: 'noteOn' as const, atMs: at * 500, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: at * 500 + 400, midi: 60 },
+          ]).flat(),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Dynamics',
+        1,
+      );
+      const written: string[] = [];
+      Object.defineProperty(window.navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: (text: string): Promise<void> => {
+            written.push(text);
+            return Promise.resolve();
+          },
+          readText: (): Promise<string> => Promise.resolve(written.at(-1) ?? ''),
+        },
+      });
+      try {
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-sketches').click();
+        rowButton('sketches-list', 'Edit this sketch').click();
+        const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+        const body = element('roll-body');
+        const dynamic = element<HTMLSelectElement>('roll-mark-dynamic');
+        const remove = element<HTMLButtonElement>('roll-mark-remove');
+        const marks = (): string[] => (view.rollScene?.marks ?? []).map((each) => `${each.after}: ${each.says}`);
+        const marked = (): string[] =>
+          (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'dynamic' ? [`${String(event.atMs)} ${event.level}`] : []));
+        const across = (ms: number): number =>
+          (ms / 1000) * zoom - (Number.parseFloat(body.querySelector<HTMLElement>('.roll__head')?.style.getPropertyValue('--roll-x') ?? '0') || 0);
+        const cursorAt = (ms: number): void => {
+          clock.advance(1_000);
+          tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: across(ms), clientY: 20 });
+        };
+        const ask = (ms: number): void => {
+          cursorAt(ms);
+          element<HTMLButtonElement>('roll-mark').click();
+        };
+        const yes = (): void => {
+          element<HTMLButtonElement>('roll-mark-yes').click();
+        };
+        const key = (init: KeyboardEventInit): void => {
+          document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
+        };
+
+        // Marked nowhere yet: the list says none, on any beat.
+        ask(4_200);
+        expect([dynamic.value, [...dynamic.options].map((option) => option.value)]).toEqual([
+          '',
+          ['', 'pp', 'p', 'mp', 'mf', 'f', 'ff'],
+        ]);
+        // Forte from the third bar's first beat, marked on its flag.
+        dynamic.value = 'f';
+        yes();
+        expect(marked()).toEqual(['4000 f']);
+        expect(marks()).toEqual(['1: C major 4/4 ♩=120', '3: f']);
+        // Further on it is in forte, marked there by nothing to take away.
+        ask(6_200);
+        expect([dynamic.value, remove.hidden]).toEqual(['f', true]);
+        element<HTMLButtonElement>('roll-mark-no').click();
+        // On the first beat, piano, beside the sketch's own key, metre and pace.
+        ask(100);
+        expect([dynamic.value, remove.hidden]).toEqual(['', true]);
+        dynamic.value = 'p';
+        yes();
+        expect(marks()).toEqual(['1: C major 4/4 ♩=120 p', '3: f']);
+        // Taken away on the first beat by its button, which has nothing else to give back there.
+        ask(100);
+        expect(remove.hidden).toBe(false);
+        remove.click();
+        expect(marked()).toEqual(['4000 f']);
+        // And by none in the list, on the third bar.
+        ask(4_200);
+        expect(remove.hidden).toBe(false);
+        dynamic.value = '';
+        yes();
+        expect(marked()).toEqual([]);
+        // Each one change, put back as one.
+        key({ key: 'z', code: 'KeyZ', ctrlKey: true });
+        expect(marked()).toEqual(['4000 f']);
+        // Its button there gives the beat back what the beat before it is in: none.
+        ask(4_200);
+        remove.click();
+        expect(marked()).toEqual([]);
+        key({ key: 'z', code: 'KeyZ', ctrlKey: true });
+        expect(marked()).toEqual(['4000 f']);
+
+        // Copied with its flag and pasted on another beat: forte there too.
+        const flag = [...body.querySelectorAll<HTMLElement>('.roll__mark')].find((each) => each.textContent === '3 f');
+        const init = { bubbles: true, cancelable: true, pointerId: 82, pointerType: 'mouse', button: 0 };
+        flag?.dispatchEvent(new PointerEvent('pointerdown', init));
+        body.dispatchEvent(new PointerEvent('pointerup', init));
+        key({ key: 'c', code: 'KeyC', ctrlKey: true });
+        expect(JSON.parse(written.at(-1) ?? '{}')).toMatchObject({ change: { dynamic: 'f' } });
+        // Piano in between, so forte pasted after it is a change again.
+        ask(5_200);
+        dynamic.value = 'p';
+        yes();
+        cursorAt(7_200);
+        const pasted = new Event('paste', { bubbles: true, cancelable: true });
+        Object.defineProperty(pasted, 'clipboardData', {
+          value: { getData: (type: string): string => (type === 'text/plain' ? (written.at(-1) ?? '') : '') },
+        });
+        document.body.dispatchEvent(pasted);
+        expect(marked()).toEqual(['4000 f', '5000 p', '7000 f']);
+        // A flag of another change, on a beat only in the dynamic before it,
+        // is copied without one.
+        ask(6_200);
+        element<HTMLSelectElement>('roll-mark-key').value = '7';
+        yes();
+        const keyFlag = [...body.querySelectorAll<HTMLElement>('.roll__mark')].find((each) => each.textContent === '4 G major');
+        keyFlag?.dispatchEvent(new PointerEvent('pointerdown', init));
+        body.dispatchEvent(new PointerEvent('pointerup', init));
+        key({ key: 'c', code: 'KeyC', ctrlKey: true });
+        expect((JSON.parse(written.at(-1) ?? '{}') as { change?: object }).change).toEqual({ key: { fifths: 1, scale: 'major' } });
+        key({ key: 'z', code: 'KeyZ', ctrlKey: true });
+
+        // Written down, the page prints them on their beats.
+        element<HTMLButtonElement>('roll-close').click();
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-sketches').click();
+        rowButton('sketches-list', 'Write this sketch down as a score').click();
+        await vi.waitFor(() => {
+          expect(runtime.controller.openedExercise?.title).toBe('Dynamics');
+        });
+        expect(
+          runtime.controller.openedExercise?.dynamicMarks.map(({ measureIndex, offsetTicks, level }) => [measureIndex, offsetTicks / Duration.QUARTER.ticks, level]),
+        ).toEqual([
+          [2, 0, 'f'],
+          [2, 2, 'p'],
+          [3, 2, 'f'],
+        ]);
+      } finally {
+        Reflect.deleteProperty(window.navigator, 'clipboard');
+      }
+    });
+
     it('copies and cuts a flag by the keys or its buttons, and pastes what it changes on the beat the cursor is on', async () => {
       const { view, sketches } = createRig();
       await view.initialize();

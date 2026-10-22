@@ -383,6 +383,25 @@ describe('the sketches being written', () => {
     expect(next.find(sketch.id)?.events).toEqual(PLAYED);
   });
 
+  it('keeps a dynamic marked among the notes of a sketch across visits, and leaves out one no level is', () => {
+    const store = new InMemorySettingsStore();
+    const library = new SketchLibrary(store, () => 0);
+    const events: MidiFileEvent[] = [...PLAYED, { kind: 'dynamic', atMs: 2_000, level: 'pp' }, { kind: 'dynamic', atMs: 3_000, level: 'ff' }];
+    const sketch = library.begin({ events, beats: THREE }, 'Loud', 1);
+    const next = new SketchLibrary(store, () => 0);
+    next.load();
+    expect(next.find(sketch.id)?.events).toEqual(events);
+    // Four numbers, like a note: where, and the level by its place in the list.
+    const kept = sketchAsKept(sketch)['events'] as unknown[];
+    expect(kept.slice(-2)).toEqual([
+      [4, 2_000, 3, 0],
+      [4, 3_000, 8, 0],
+    ]);
+    store.write({ version: 1, sketches: [{ ...sketchAsKept(sketch), events: [...kept.slice(0, -2), [4, 2_000, 11, 0], [4, 2_000, -1, 0]] }] });
+    next.load();
+    expect(next.find(sketch.id)?.events).toEqual(PLAYED);
+  });
+
   it('keeps the beats a sketch is counted in across visits, its notes as they were', () => {
     const store = new InMemorySettingsStore();
     const library = new SketchLibrary(store, () => 0);

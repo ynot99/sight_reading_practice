@@ -9,7 +9,7 @@ import {
 } from '../application/modes/challengeModes.js';
 import { barCells } from '../domain/scoring/barCells.js';
 import { nameOfThePitchClass, nameTheChord, theChordTheNotesMake } from '../domain/harmony/chordName.js';
-import { DYNAMIC_VELOCITY, type DynamicLevel } from '../domain/model/Exercise.js';
+import { DYNAMIC_LEVELS, DYNAMIC_VELOCITY, type DynamicLevel } from '../domain/model/Exercise.js';
 import { eachKeyOnce, sameKeys, theChordsOfTheScale } from '../domain/harmony/chordsOfTheKey.js';
 import type { KeyFrom } from '../domain/harmony/chordsAlong.js';
 import { theChordMovedTo } from '../domain/harmony/chordMoved.js';
@@ -69,6 +69,9 @@ import {
   theKeyOfTheMusicAt,
   theClickInAnotherMetre,
   theClickOfTheTake,
+  takeWithTheDynamicFrom,
+  theDynamicAt,
+  theDynamicsOf,
   theHandThatPlays,
   thePaceOfTheClick,
   thePlayingAtAnotherPace,
@@ -694,6 +697,12 @@ const A_FINGER_LISTENS_MS = 250;
 
 /** How far a finger on a chord of the drawer goes before it is moving at all, and not only resting unsteadily. */
 const A_FINGER_MOVES_PX = 8;
+
+/** The dynamic marked on a moment, as a change copied says one: none where the moment is marked in the one before it. */
+function theDynamicMarkedAt(events: readonly MidiFileEvent[], atMs: number): { readonly dynamic?: DynamicLevel } {
+  const here = theDynamicAt(events, atMs);
+  return here === null || here === theDynamicAt(events, atMs - 1) ? {} : { dynamic: here };
+}
 
 /** How the way a chord is broken is said on its button. */
 const ARPEGGIO_WAYS: Readonly<Record<ArpeggioWay, string>> = {
@@ -2216,6 +2225,8 @@ export class AppView {
 
   /** And the key that beat is in, and the one the beat before it is in - none before the first. */
   private keyAskedAbout: { readonly here: KeyOfTheMusic; readonly before: KeyOfTheMusic | null } | null = null;
+  /** And the dynamic that beat is marked in, and the one the beat before it is: none where none is marked yet. */
+  private dynamicAskedAbout: { readonly here: DynamicLevel | null; readonly before: DynamicLevel | null } | null = null;
 
   /** Whether a tap on a chord kept in the drawer deletes it, rather than writing it. */
   private chordsBeingForgotten = false;
@@ -2583,6 +2594,7 @@ export class AppView {
     rollMarkKey: HTMLSelectElement;
     rollMarkScale: HTMLSelectElement;
     rollMarkTempo: HTMLInputElement;
+    rollMarkDynamic: HTMLSelectElement;
     rollMarkRemove: HTMLButtonElement;
     rollMarkYes: HTMLButtonElement;
     rollMarkNo: HTMLButtonElement;
@@ -2978,6 +2990,7 @@ export class AppView {
       rollMarkKey: requireElement(doc, 'roll-mark-key'),
       rollMarkScale: requireElement(doc, 'roll-mark-scale'),
       rollMarkTempo: requireElement(doc, 'roll-mark-tempo'),
+      rollMarkDynamic: requireElement(doc, 'roll-mark-dynamic'),
       rollMarkRemove: requireElement(doc, 'roll-mark-remove'),
       rollMarkYes: requireElement(doc, 'roll-mark-yes'),
       rollMarkNo: requireElement(doc, 'roll-mark-no'),
@@ -9637,6 +9650,12 @@ export class AppView {
       SCALE_NAMES.map((scale) => ({ value: scale, label: SCALES[scale].called })),
       'major',
     );
+    // The levels a note's buttons strike, and none: a sketch marked nowhere yet.
+    fillSelect(
+      this.el.rollMarkDynamic,
+      [{ value: '', label: 'None' }, ...DYNAMICS_OFFERED.map((level) => ({ value: level, label: level }))],
+      '',
+    );
     // Another scale names the tonics again, as that scale on each is spelt.
     this.listen(this.el.rollMarkScale, 'change', () => {
       const scale = SCALE_NAMES.find((each) => each === this.el.rollMarkScale.value) ?? 'major';
@@ -9649,11 +9668,11 @@ export class AppView {
       this.askForAChangeAtTheHead();
     });
     this.listen(this.el.rollMarkYes, 'click', () => {
-      this.changeFromTheBeatAsked(this.el.rollMarkMetre.value, Number(this.el.rollMarkTempo.value), this.theKeyAskedFor());
+      this.changeFromTheBeatAsked(this.el.rollMarkMetre.value, Number(this.el.rollMarkTempo.value), this.theKeyAskedFor(), this.theDynamicAskedFor());
     });
     this.listen(this.el.rollMarkTempo, 'keydown', (event) => {
       if (event.key === 'Enter') {
-        this.changeFromTheBeatAsked(this.el.rollMarkMetre.value, Number(this.el.rollMarkTempo.value), this.theKeyAskedFor());
+        this.changeFromTheBeatAsked(this.el.rollMarkMetre.value, Number(this.el.rollMarkTempo.value), this.theKeyAskedFor(), this.theDynamicAskedFor());
       }
     });
     // Escape and a tap outside press it too.
@@ -13187,7 +13206,10 @@ export class AppView {
       ...(begins === undefined ? [] : [{ atMs: begins, ...this.theKeyTheSketchBeginsIn(stored) }]),
       ...theKeyChangesOf(stored.events),
     ];
-    const moments = [...new Set([...clicked.map((change) => change.atMs), ...keys.map((key) => key.atMs)])].sort((one, other) => one - other);
+    const dynamics = theDynamicsOf(stored.events);
+    const moments = [
+      ...new Set([...clicked.map((change) => change.atMs), ...keys.map((key) => key.atMs), ...dynamics.map((dynamic) => dynamic.atMs)]),
+    ].sort((one, other) => one - other);
     const near = (one: number, other: number): boolean => Math.abs(one - other) < 1;
     const marks: { atMs: number; says: string }[] = [];
     for (const atMs of moments) {
@@ -13196,12 +13218,14 @@ export class AppView {
       }
       const key = keys.find((each) => near(each.atMs, atMs));
       const change = clicked.find((each) => near(each.atMs, atMs));
+      const dynamic = dynamics.find((each) => near(each.atMs, atMs));
       marks.push({
         atMs,
         says: [
           ...(key === undefined ? [] : [theNameOfTheKey(key)]),
           ...(change?.metre === undefined ? [] : [`${String(change.metre.beatsInBar)}/${String(change.metre.beatType)}`]),
           ...(change?.crotchetsPerMinute === undefined ? [] : [`\u2669=${String(change.crotchetsPerMinute)}`]),
+          ...(dynamic === undefined ? [] : [dynamic.level]),
         ].join(' '),
       });
     }
@@ -13835,6 +13859,10 @@ export class AppView {
     const keyBefore = bar.before === null ? null : theKeyOfTheMusicAt(stored.events, begunIn, bar.atMs - 1);
     this.keyAskedAbout = { here: keyHere, before: keyBefore };
     this.sayTheKeyIn(this.el.rollMarkKey, this.el.rollMarkScale, keyHere);
+    const dynamicHere = theDynamicAt(stored.events, bar.atMs);
+    const dynamicBefore = theDynamicAt(stored.events, bar.atMs - 1);
+    this.dynamicAskedAbout = { here: dynamicHere, before: dynamicBefore };
+    this.el.rollMarkDynamic.value = dynamicHere ?? '';
     const metre = `${String(bar.metre.beatsInBar)}/${String(bar.metre.beatType)}`;
     // A metre the list does not offer, as a score may be in, is offered as it is.
     if (![...this.el.rollMarkMetre.options].some((option) => option.value === metre)) {
@@ -13860,19 +13888,41 @@ export class AppView {
     this.el.rollMarkTitle.textContent = inside
       ? `From ${thePlaceOfTheBeat(bar)}, until the next change. The score shows a key changed here from the next bar.`
       : `From ${thePlaceOfTheBeat(bar)}, until the next change`;
-    this.el.rollMarkRemove.hidden = !changesHere;
+    // A dynamic is marked on any beat, the first too, which has nothing else to give back.
+    this.el.rollMarkRemove.hidden = !changesHere && dynamicHere === dynamicBefore;
     return true;
+  }
+
+  /** The dynamic the sheet's list says, or none. */
+  private theDynamicAskedFor(): DynamicLevel | null {
+    return DYNAMIC_LEVELS.find((level) => level === this.el.rollMarkDynamic.value) ?? null;
   }
 
   /** The beat asked about given back what the beat before it is in: its changes taken away. */
   private takeTheChangeAway(): void {
-    const before = this.beatAskedAbout?.before;
+    const bar = this.beatAskedAbout;
+    const before = bar?.before;
     const keyBefore = this.keyAskedAbout?.before;
+    const keyHere = this.keyAskedAbout?.here;
+    if (bar === null || keyHere === undefined) {
+      return;
+    }
+    // The dynamic of the beat before, or none - the first beat has nothing
+    // else to give back, and keeps its own key, metre and pace.
+    const dynamicBefore = this.dynamicAskedAbout?.before ?? null;
     if (before !== null && before !== undefined && keyBefore !== null && keyBefore !== undefined) {
       this.changeFromTheBeatAsked(
         `${String(before.metre.beatsInBar)}/${String(before.metre.beatType)}`,
         before.crotchetsPerMinute,
         keyBefore,
+        dynamicBefore,
+      );
+    } else {
+      this.changeFromTheBeatAsked(
+        `${String(bar.metre.beatsInBar)}/${String(bar.metre.beatType)}`,
+        bar.crotchetsPerMinute,
+        keyHere,
+        dynamicBefore,
       );
     }
   }
@@ -14041,6 +14091,7 @@ export class AppView {
         ? { metre: beat.metre }
         : {}),
       ...(before === null || before.crotchetsPerMinute !== beat.crotchetsPerMinute ? { crotchetsPerMinute: beat.crotchetsPerMinute } : {}),
+      ...theDynamicMarkedAt(stored.events, beat.atMs),
     };
     this.changeCopiedHere = change;
     this.notesCopiedHere = null;
@@ -14077,6 +14128,7 @@ export class AppView {
       `${String(metre.beatsInBar)}/${String(metre.beatType)}`,
       change.crotchetsPerMinute ?? beat.crotchetsPerMinute,
       change.key ?? keyHere,
+      change.dynamic ?? this.dynamicAskedAbout?.here ?? null,
     );
     this.chooseTheMark(beat.atMs);
   }
@@ -14089,14 +14141,22 @@ export class AppView {
   }
 
   /**
-   * Changes the key, the metre and the pace from the beat asked about, as far
-   * as the next change of each: one change, put back as one. A metre is
-   * counted from the first beat of the beat's bar. A pace past what a
-   * metronome offers is held to it.
+   * Changes the key, the metre, the pace and the dynamic from the beat asked
+   * about, as far as the next change of each: one change, put back as one. A
+   * metre is counted from the first beat of the beat's bar. A pace past what
+   * a metronome offers is held to it. No dynamic takes away the one marked
+   * on the beat.
    */
-  private changeFromTheBeatAsked(metre: string, crotchetsPerMinute: number, key: KeyOfTheMusic): void {
+  private changeFromTheBeatAsked(
+    metre: string,
+    crotchetsPerMinute: number,
+    key: KeyOfTheMusic,
+    dynamic: DynamicLevel | null,
+  ): void {
     const bar = this.beatAskedAbout;
     const keyHere = this.keyAskedAbout?.here ?? null;
+    const dynamicHere = this.dynamicAskedAbout?.here ?? null;
+    this.dynamicAskedAbout = null;
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
@@ -14113,7 +14173,8 @@ export class AppView {
     const metreChanges = beatsInBar !== bar.metre.beatsInBar || beatType !== bar.metre.beatType;
     const paceChanges = pace !== bar.crotchetsPerMinute;
     const keyChanges = key.fifths !== keyHere.fifths || key.scale !== keyHere.scale;
-    if (!metreChanges && !paceChanges && !keyChanges) {
+    const dynamicChanges = dynamic !== dynamicHere;
+    if (!metreChanges && !paceChanges && !keyChanges && !dynamicChanges) {
       return;
     }
     // The first beat's key is the sketch's own, which the drawer's lists say;
@@ -14124,6 +14185,9 @@ export class AppView {
       events = takeWithTheKeyFrom(events, key, bar.atMs, key);
     } else if (keyChanges) {
       events = takeWithTheKeyFrom(events, this.theKeyTheSketchBeginsIn(stored), bar.atMs, key);
+    }
+    if (dynamicChanges) {
+      events = takeWithTheDynamicFrom(events, bar.atMs, dynamic);
     }
     // The bar keeps its first beat whatever its metre, and its later beats where they fall, so the pace changes from the same place.
     const counted = metreChanges

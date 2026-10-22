@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   barsAreHeardIn,
   damperIsDown,
+  takeWithTheDynamicFrom,
   takeWithTheKeyFrom,
   theBeatOfTheClickAt,
+  theDynamicAt,
+  theDynamicsOf,
   theChangesOfTheClick,
   theKeyChangesOf,
   theKeyOfTheMusicAt,
@@ -798,5 +801,48 @@ describe('the key music is in, changed from a bar', () => {
     expect(keysOf(slow.events)).toEqual(['4000 -2 minor']);
     const document = readMidiFile(writeMidiFile(changed, { beats: click(0, 500, 4), key: { fifths: 0, minor: false } }));
     expect(document.keyChanges).toEqual([{ atTicks: 4 * BEAT, fifths: -2, minor: true }]);
+  });
+});
+
+describe('the dynamic music is marked in, from a moment', () => {
+  const notes = struck(0, 2_000, 4_000, 6_000);
+  const marked = (events: readonly MidiFileEvent[]): string[] =>
+    theDynamicsOf(events).map((dynamic) => `${String(dynamic.atMs)} ${dynamic.level}`);
+
+  it('is the last marked by then, a moment on the mark being in it, or none', () => {
+    const changed = takeWithTheDynamicFrom(notes, 2_000, 'f');
+    expect(marked(changed)).toEqual(['2000 f']);
+    expect([1_999, 1_999.8, 2_000, 5_000].map((atMs) => theDynamicAt(changed, atMs))).toEqual([null, 'f', 'f', 'f']);
+    expect(theDynamicAt(notes, 5_000)).toBeNull();
+    // Before the notes at its moment, as a key is.
+    expect(changed.findIndex((event) => event.kind === 'dynamic')).toBe(2);
+  });
+
+  it('replaces one there, puts none where it is marked so already, takes the next away where it is the same, and is taken away by none', () => {
+    const twice = takeWithTheDynamicFrom(takeWithTheDynamicFrom(notes, 2_000, 'f'), 4_000, 'p');
+    expect(marked(twice)).toEqual(['2000 f', '4000 p']);
+    expect(marked(takeWithTheDynamicFrom(twice, 2_000, 'mf'))).toEqual(['2000 mf', '4000 p']);
+    // The same as the next: that one changes nothing any more.
+    expect(marked(takeWithTheDynamicFrom(twice, 2_000, 'p'))).toEqual(['2000 p']);
+    // Marked so already from before: none.
+    expect(marked(takeWithTheDynamicFrom(twice, 3_000, 'f'))).toEqual(['2000 f', '4000 p']);
+    // None asked for: the one there taken away, and the next, the same as the one before now, too.
+    expect(marked(takeWithTheDynamicFrom(takeWithTheDynamicFrom(twice, 6_000, 'f'), 4_000, null))).toEqual(['2000 f']);
+    expect(marked(takeWithTheDynamicFrom(twice, 2_000, null))).toEqual(['4000 p']);
+    expect(takeWithTheDynamicFrom(notes, 2_000, null)).toEqual(notes);
+  });
+
+  it('moves with the music at another pace, and is written to a file as a text the reader takes back as it was', () => {
+    const changed = takeWithTheDynamicFrom(takeWithTheDynamicFrom(notes, 0, 'p'), 2_000, 'ff');
+    expect(marked(thePlayingAtAnotherPace(changed, click(0, 500, 4), 60).events)).toEqual(['0 p', '4000 ff']);
+    const document = readMidiFile(writeMidiFile(changed, { beats: click(0, 500, 4), trackName: 'Marked' }));
+    expect(document.dynamics).toEqual([
+      { atTicks: 0, level: 'p' },
+      { atTicks: 4 * BEAT, level: 'ff' },
+    ]);
+    // A dynamic's text is not the file's title, and any other text is not a dynamic.
+    expect(document.title).toBe('Marked');
+    const untitled = readMidiFile(writeMidiFile(changed, { beats: click(0, 500, 4) }));
+    expect(untitled.title).toBeNull();
   });
 });

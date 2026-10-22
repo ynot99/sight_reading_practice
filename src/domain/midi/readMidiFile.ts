@@ -1,4 +1,5 @@
-import { damperIsDown } from './MidiFile.js';
+import { damperIsDown, theDynamicATextSays } from './MidiFile.js';
+import type { DynamicLevel } from '../model/Exercise.js';
 import { DomainError } from '../../shared/errors.js';
 
 /** One sounded note, in the file's own ticks. */
@@ -36,6 +37,8 @@ export interface MidiFileDocument {
   readonly keyChanges: readonly { readonly atTicks: number; readonly fifths: number; readonly minor: boolean }[];
   /** Where the file changes tempo after its first, in its own ticks, each to the nearest crotchet a minute and another than the one before. */
   readonly tempoChanges: readonly { readonly atTicks: number; readonly tempoBpm: number }[];
+  /** Where the file marks a dynamic, in its own ticks, each another than the one before: see `theTextOfADynamic`. */
+  readonly dynamics: readonly { readonly atTicks: number; readonly level: DynamicLevel }[];
   readonly title: string | null;
   /** Each track's own name where it gives one, by the track's number. */
   readonly trackNames: readonly (string | null)[];
@@ -169,6 +172,7 @@ interface TrackResult {
   readonly metres: { readonly atTicks: number; readonly beats: number; readonly beatType: number }[];
   readonly keys: { readonly atTicks: number; readonly fifths: number; readonly minor: boolean }[];
   readonly tempos: { readonly atTicks: number; readonly microsecondsPerQuarter: number }[];
+  readonly dynamics: { readonly atTicks: number; readonly level: DynamicLevel }[];
   name: string | null;
   /** Its track name, apart from any other text: a file's title may be either. */
   trackName: string | null;
@@ -198,6 +202,7 @@ function readTrack(bytes: Bytes, length: number, track: number): TrackResult {
     metres: [],
     keys: [],
     tempos: [],
+    dynamics: [],
     name: null,
     trackName: null,
   };
@@ -241,6 +246,7 @@ function readTrack(bytes: Bytes, length: number, track: number): TrackResult {
       const type = bytes.byte();
       const size = bytes.variable();
       const data = bytes.take(size);
+      const dynamic = type === 0x01 ? theDynamicATextSays(decodeText(data)) : null;
       // The last set where the track begins is its own, as is the first set
       // at all in a track that sets none there; the rest are where it changes.
       if (type === 0x51 && size === 3) {
@@ -261,6 +267,9 @@ function readTrack(bytes: Bytes, length: number, track: number): TrackResult {
         result.fifths = at === 0 ? fifths : (result.fifths ?? fifths);
         result.minor = at === 0 ? minor : (result.minor ?? minor);
         result.keys.push({ atTicks: at, fifths, minor });
+      } else if (dynamic !== null) {
+        // A dynamic, as this program writes one: no title.
+        result.dynamics.push({ atTicks: at, level: dynamic });
       } else if ((type === 0x03 || type === 0x01) && size > 0) {
         result.name ??= decodeText(data);
         if (type === 0x03) {
@@ -372,6 +381,7 @@ export function readMidiFile(data: Uint8Array): MidiFileDocument {
   const metres: { atTicks: number; beats: number; beatType: number }[] = [];
   const keys: { atTicks: number; fifths: number; minor: boolean }[] = [];
   const tempos: { atTicks: number; microsecondsPerQuarter: number }[] = [];
+  const dynamics: { atTicks: number; level: DynamicLevel }[] = [];
   let title: string | null = null;
   const trackNames: (string | null)[] = [];
   let track = 0;
@@ -396,6 +406,7 @@ export function readMidiFile(data: Uint8Array): MidiFileDocument {
     metres.push(...read.metres);
     keys.push(...read.keys);
     tempos.push(...read.tempos);
+    dynamics.push(...read.dynamics);
     title = title ?? read.name;
     trackNames.push(read.trackName);
     track += 1;
@@ -440,6 +451,9 @@ export function readMidiFile(data: Uint8Array): MidiFileDocument {
       atTicks,
       tempoBpm: Math.round(MICROSECONDS_PER_MINUTE / lasts),
     })),
+    dynamics: dynamics
+      .sort((one, other) => one.atTicks - other.atTicks)
+      .filter((dynamic, at, all) => dynamic.level !== all[at - 1]?.level),
     title,
     trackNames,
   };

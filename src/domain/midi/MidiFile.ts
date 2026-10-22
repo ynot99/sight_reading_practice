@@ -1,4 +1,5 @@
 import { SCALES, type ScaleName } from '../harmony/scales.js';
+import { DYNAMIC_LEVELS, type DynamicLevel } from '../model/Exercise.js';
 import { elementAt } from '../../shared/asserts.js';
 import { DomainError } from '../../shared/errors.js';
 
@@ -24,7 +25,13 @@ export type MidiFileEvent =
    * Nothing a hand plays - a file says it as a mark, as it says a tempo -
    * but kept among the events so that it moves with the music it is in.
    */
-  | { readonly kind: 'key'; readonly atMs: number; readonly fifths: number; readonly scale: ScaleName };
+  | { readonly kind: 'key'; readonly atMs: number; readonly fifths: number; readonly scale: ScaleName }
+  /**
+   * How loud the music is written from here: a dynamic, as a score marks
+   * one. Nothing a hand plays either, and kept among the events for the same
+   * reason a key is - it moves with the music it is in.
+   */
+  | { readonly kind: 'dynamic'; readonly atMs: number; readonly level: DynamicLevel };
 
 /** The two hands, as the two staves of a piano score are theirs. */
 export type Hand = 'left' | 'right';
@@ -439,6 +446,58 @@ export function takeWithTheKeyFrom(
   return inTheOrderPlayed(changes ? [...joined, { kind: 'key', atMs, fifths: key.fifths, scale: key.scale }] : joined);
 }
 
+/** The dynamic music is written in at a moment: the last marked by then, one on the moment being in it - or none. */
+export function theDynamicAt(events: readonly MidiFileEvent[], atMs: number): DynamicLevel | null {
+  let level: DynamicLevel | null = null;
+  for (const event of events) {
+    if (event.kind === 'dynamic' && event.atMs <= atMs + SAME_MOMENT_MS) {
+      level = event.level;
+    }
+  }
+  return level;
+}
+
+/**
+ * The music marked with a dynamic from a moment, as far as the next: one
+ * already there replaced, none put where the music is in it already, and the
+ * next taken away where it is the same - it changes nothing any more. With no
+ * dynamic asked for, the one there is taken away, and the music is in the one
+ * before.
+ */
+export function takeWithTheDynamicFrom(
+  events: readonly MidiFileEvent[],
+  atMs: number,
+  level: DynamicLevel | null,
+): readonly MidiFileEvent[] {
+  const here = (event: MidiFileEvent): boolean => event.kind === 'dynamic' && Math.abs(event.atMs - atMs) <= SAME_MOMENT_MS;
+  const kept = events.filter((event) => !here(event));
+  const before = theDynamicAt(kept, atMs);
+  const now = level ?? before;
+  const next = kept.find((event) => event.kind === 'dynamic' && event.atMs > atMs);
+  const joined = kept.filter((event) => event !== next || event.kind !== 'dynamic' || event.level !== now);
+  return inTheOrderPlayed(level !== null && level !== before ? [...joined, { kind: 'dynamic', atMs, level }] : joined);
+}
+
+/** Where music is marked with a dynamic, and which, in time order. */
+export function theDynamicsOf(events: readonly MidiFileEvent[]): readonly { readonly atMs: number; readonly level: DynamicLevel }[] {
+  return events.flatMap((event) => (event.kind === 'dynamic' ? [{ atMs: event.atMs, level: event.level }] : []));
+}
+
+/**
+ * A dynamic as a MIDI file says one: there is no event of its own for it,
+ * so a text event saying so, which a sequencer shows among its markers and
+ * this program's reader takes back as the dynamic it was.
+ */
+export function theTextOfADynamic(level: DynamicLevel): string {
+  return `dynamic ${level}`;
+}
+
+/** The dynamic a text event says, as `theTextOfADynamic` writes it, or `null` where it says anything else. */
+export function theDynamicATextSays(text: string): DynamicLevel | null {
+  const said = /^dynamic (\w+)$/.exec(text.trim());
+  return DYNAMIC_LEVELS.find((level) => level === said?.[1]) ?? null;
+}
+
 /** Where music changes key, and to what, in time order. */
 export function theKeyChangesOf(events: readonly MidiFileEvent[]): readonly ({ readonly atMs: number } & KeyOfTheMusic)[] {
   return events.flatMap((event) => (event.kind === 'key' ? [{ atMs: event.atMs, fifths: event.fifths, scale: event.scale }] : []));
@@ -636,6 +695,7 @@ export function inTheOrderPlayed(events: readonly MidiFileEvent[]): readonly Mid
 function orderAt(event: MidiFileEvent): number {
   switch (event.kind) {
     case 'key':
+    case 'dynamic':
       return -1;
     case 'noteOff':
       return 0;
@@ -856,6 +916,11 @@ function theTrack(
       case 'key':
         track.push(...keyMark({ fifths: event.fifths, minor: SCALES[event.scale].minor }));
         break;
+      case 'dynamic': {
+        const text = [...new TextEncoder().encode(theTextOfADynamic(event.level))];
+        track.push(0xff, 0x01, ...variableLength(text.length), ...text);
+        break;
+      }
     }
   }
   markUpTo(given.lastTick);

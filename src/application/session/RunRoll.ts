@@ -3,9 +3,11 @@ import { damperIsDown, inTheOrderPlayed, theClickOfTheTake, type Hand, type Midi
 import { Duration } from '../../domain/model/Duration.js';
 import {
   barLines,
+  DYNAMIC_LEVELS,
   elapsedMsAt,
   pedalSpans,
   velocityAt,
+  type DynamicLevel,
   type Exercise,
 } from '../../domain/model/Exercise.js';
 import { notesStruckAt, soundsFor, type ExerciseTimeline } from '../../domain/timeline/Timeline.js';
@@ -1344,6 +1346,7 @@ export interface ChangeCopied {
   readonly key?: { readonly fifths: number; readonly scale: ScaleName };
   readonly metre?: { readonly beatsInBar: number; readonly beatType: number };
   readonly crotchetsPerMinute?: number;
+  readonly dynamic?: DynamicLevel;
 }
 
 /** What a change copied is called on the clipboard, so a paste can tell it from notes and any other text. */
@@ -1360,7 +1363,8 @@ export function theClipboardTextOfTheChange(change: ChangeCopied): string {
  * each part is asked of, and one that is not what it says refuses the
  * whole: a key, a signature a key can have and a scale this program
  * knows; a metre, a whole number of beats in a bar and a beat a note's
- * value can be; a pace, some crotchets a minute.
+ * value can be; a pace, some crotchets a minute; a dynamic, a level a
+ * score marks.
  */
 export function theChangeOnTheClipboard(text: string): ChangeCopied | null {
   let read: unknown;
@@ -1373,7 +1377,12 @@ export function theChangeOnTheClipboard(text: string): ChangeCopied | null {
   if (typeof said !== 'object' || said === null || said.copied !== A_CHANGE_ON_THE_CLIPBOARD) {
     return null;
   }
-  const change = said.change as { readonly key?: unknown; readonly metre?: unknown; readonly crotchetsPerMinute?: unknown } | null;
+  const change = said.change as {
+    readonly key?: unknown;
+    readonly metre?: unknown;
+    readonly crotchetsPerMinute?: unknown;
+    readonly dynamic?: unknown;
+  } | null;
   if (typeof change !== 'object' || change === null) {
     return null;
   }
@@ -1391,13 +1400,20 @@ export function theChangeOnTheClipboard(text: string): ChangeCopied | null {
     Number.isInteger(metre.beatType) &&
     [1, 2, 4, 8, 16, 32].includes(Number(metre.beatType));
   const paceIsOne = Number.isFinite(pace) && Number(pace) > 0;
-  if ((key !== undefined && !keyIsOne) || (metre !== undefined && !metreIsOne) || (pace !== undefined && !paceIsOne)) {
+  const dynamic = DYNAMIC_LEVELS.find((level) => level === change.dynamic);
+  if (
+    (key !== undefined && !keyIsOne) ||
+    (metre !== undefined && !metreIsOne) ||
+    (pace !== undefined && !paceIsOne) ||
+    (change.dynamic !== undefined && dynamic === undefined)
+  ) {
     return null;
   }
   const copied: ChangeCopied = {
     ...(keyIsOne ? { key: { fifths: Number(key.fifths), scale: key.scale as ScaleName } } : {}),
     ...(metreIsOne ? { metre: { beatsInBar: Number(metre.beatsInBar), beatType: Number(metre.beatType) } } : {}),
     ...(paceIsOne ? { crotchetsPerMinute: Number(pace) } : {}),
+    ...(dynamic === undefined ? {} : { dynamic }),
   };
   return Object.keys(copied).length === 0 ? null : copied;
 }

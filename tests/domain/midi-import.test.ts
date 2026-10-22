@@ -270,6 +270,35 @@ describe('turning a MIDI file into a page', () => {
     ]);
   });
 
+  it('takes a text for a dynamic only where it says one as this program writes it', () => {
+    // "Waltz in f" ends with a dynamic's letter, and is a title; "dynamic p" is a dynamic.
+    const text = (words: string): number[] => [0x00, 0xff, 0x01, words.length, ...[...words].map((letter) => letter.charCodeAt(0))];
+    const document = readMidiFile(
+      handWritten([...text('Waltz in f'), ...text('dynamic p'), 0x00, 0x90, 60, 0x40, 0x83, 0x60, 0x80, 60, 0x40]),
+    );
+
+    expect(document.title).toBe('Waltz in f');
+    expect(document.dynamics).toEqual([{ atTicks: 0, level: 'p' }]);
+  });
+
+  it('prints the dynamics the file marks, on the grid, and none past the last bar', () => {
+    const marked: MidiFileEvent[] = [
+      ...note(60, 0, 4 * QUARTER_MS),
+      ...note(62, 4 * QUARTER_MS, 4 * QUARTER_MS),
+      { kind: 'dynamic', atMs: 0, level: 'mf' },
+      // Played a hair after the beat, printed on it.
+      { kind: 'dynamic', atMs: 6 * QUARTER_MS + 10, level: 'p' },
+      { kind: 'dynamic', atMs: 40 * QUARTER_MS, level: 'ff' },
+    ];
+    const { exercise } = pageOf(marked);
+
+    expect(exercise.dynamicMarks.map(({ measureIndex, offsetTicks, level, staffNumber }) => [measureIndex, offsetTicks, level, staffNumber])).toEqual([
+      [0, 0, 'mf', null],
+      [1, 2 * Duration.QUARTER.ticks, 'p', null],
+    ]);
+    expect(() => validateExercise(exercise)).not.toThrow();
+  });
+
   it('fills the silence a performance leaves with rests', () => {
     const { exercise } = pageOf(note(60, 2 * QUARTER_MS, QUARTER_MS));
 

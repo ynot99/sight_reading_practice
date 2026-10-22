@@ -1590,7 +1590,12 @@ describe('changing a recording', () => {
   it('reads back a change it wrote to the clipboard, any part of it, and nothing else', () => {
     const whole = { key: { fifths: -7, scale: 'dorian' as const }, metre: { beatsInBar: 6, beatType: 8 }, crotchetsPerMinute: 92.5 };
     expect(theChangeOnTheClipboard(theClipboardTextOfTheChange(whole))).toEqual(whole);
-    for (const part of [{ key: { fifths: 7, scale: 'major' as const } }, { metre: { beatsInBar: 1, beatType: 32 } }, { crotchetsPerMinute: 1 }]) {
+    for (const part of [
+      { key: { fifths: 7, scale: 'major' as const } },
+      { metre: { beatsInBar: 1, beatType: 32 } },
+      { crotchetsPerMinute: 1 },
+      { dynamic: 'pp' as const },
+    ]) {
       expect(theChangeOnTheClipboard(theClipboardTextOfTheChange(part))).toEqual(part);
     }
     // A change of nothing is nothing to paste.
@@ -1618,6 +1623,9 @@ describe('changing a recording', () => {
       { crotchetsPerMinute: -60 },
       { crotchetsPerMinute: '90' },
       { crotchetsPerMinute: null },
+      { dynamic: 'loud' },
+      { dynamic: 5 },
+      { dynamic: null },
     ]) {
       expect(theChangeOnTheClipboard(withPart(part)), JSON.stringify(part)).toBeNull();
     }

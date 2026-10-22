@@ -1,5 +1,6 @@
 import type { Hand, HeardBeat, MidiFileEvent } from '../domain/midi/MidiFile.js';
 import { SCALE_NAMES } from '../domain/harmony/scales.js';
+import { DYNAMIC_LEVELS } from '../domain/model/Exercise.js';
 
 /*
  * How a stream of playing is written into browser storage, for every shelf
@@ -32,6 +33,8 @@ export function pack(event: MidiFileEvent): Packed {
       return [2, Math.round(event.atMs), 0, Math.round(event.value * 127)];
     case 'key':
       return [3, Math.round(event.atMs), event.fifths, SCALE_NAMES.indexOf(event.scale)];
+    case 'dynamic':
+      return [4, Math.round(event.atMs), DYNAMIC_LEVELS.indexOf(event.level), 0];
   }
 }
 
@@ -61,6 +64,10 @@ export function unpack(value: unknown): MidiFileEvent | null {
       // A signature has seven sharps or flats at most, and the scale is one of those offered.
       const scale = SCALE_NAMES[b];
       return Number.isInteger(a) && a >= -7 && a <= 7 && scale !== undefined ? { kind: 'key', atMs, fifths: a, scale } : null;
+    }
+    case 4: {
+      const level = DYNAMIC_LEVELS[a];
+      return level === undefined ? null : { kind: 'dynamic', atMs, level };
     }
     default:
       return null;

@@ -9855,6 +9855,38 @@ describe('AppView', () => {
       drag(nearTheEnd, nearTheEnd + 600);
       expect(pressed()).toEqual([[1_000, 2_000]]);
       undo();
+      // Taken by its start, put down earlier, let up where it was; and later,
+      // never past its end.
+      const nearTheStart = 1_000 + (4 / zoom) * 1_000;
+      drag(nearTheStart, nearTheStart - 600);
+      expect(pressed()).toEqual([[500, 1_500]]);
+      undo();
+      drag(nearTheStart, nearTheStart + 2_000);
+      expect(pressed()).toEqual([[1_470, 1_500]]);
+      undo();
+      // The mouse resting on it says what it would take hold of.
+      for (const [ms, grip] of [
+        [nearTheStart, 'start'],
+        [1_250, 'note'],
+        [1_500 - (4 / zoom) * 1_000, 'end'],
+        [2_500, undefined],
+      ] as const) {
+        on('pointermove', ms);
+        expect(element('roll-body').dataset['grip'], String(ms)).toBe(grip);
+      }
+      // One too short for a grip at each end has a third of it for each, and the middle to move it by.
+      const short = (15 / zoom) * 1_000;
+      drag(2_100, 2_100 + short, { shiftKey: true });
+      expect(pressed().at(-1)).toEqual([2_100, Math.round(2_100 + short)]);
+      for (const [ms, grip] of [
+        [2_100 + short / 6, 'start'],
+        [2_100 + short / 2, 'note'],
+        [2_100 + (5 * short) / 6, 'end'],
+      ] as const) {
+        on('pointermove', ms);
+        expect(element('roll-body').dataset['grip'], String(ms)).toBe(grip);
+      }
+      undo();
       // Taken in the middle, moved.
       drag(1_200, 1_700);
       expect(pressed()).toEqual([[1_500, 2_000]]);
@@ -19203,6 +19235,39 @@ describe('AppView', () => {
       expect([held(), heldToo()]).toEqual([30, 780]);
       element<HTMLButtonElement>('roll-undo').click();
       expect([held(), heldToo()]).toEqual([600, 1_350]);
+
+      // Its start taken hold of, in its first few pixels, both begin later
+      // by as much, each let go of where it was - exactly, the grid being off.
+      const begun = (): number[] => [60, 62].map((pitch) => struck().find(([each]) => each === pitch)?.[1] ?? -1);
+      const start = { x: 3, y: first.y };
+      mouse('pointermove', start);
+      expect(element('roll-body').dataset['grip']).toBe('start');
+      mouse('pointerdown', start);
+      mouse('pointermove', { x: start.x + 0.1 * zoom, y: start.y });
+      mouse('pointerup', { x: start.x + 0.1 * zoom, y: start.y });
+      expect([begun(), [held(), heldToo()]]).toEqual([
+        [100, 850],
+        [600, 1_350],
+      ]);
+      element<HTMLButtonElement>('roll-undo').click();
+      // Never so late as to leave less than a note can be heard as.
+      mouse('pointerdown', start);
+      mouse('pointermove', { x: start.x + 3 * zoom, y: start.y });
+      mouse('pointerup', { x: start.x + 3 * zoom, y: start.y });
+      expect(begun()).toEqual([600 - 30, 1_350 - 30]);
+      element<HTMLButtonElement>('roll-undo').click();
+      // On the grid, earlier to the beat nearest, and never later than the last line before it ends.
+      element<HTMLInputElement>('roll-snap').click();
+      const second62 = { x: (753 / 1_000) * zoom, y: onNote(750, 62).y };
+      mouse('pointerdown', second62);
+      mouse('pointermove', { x: second62.x - 0.2 * zoom, y: second62.y });
+      mouse('pointerup', { x: second62.x - 0.2 * zoom, y: second62.y });
+      expect(begun()).toEqual([0, 600]);
+      element<HTMLButtonElement>('roll-undo').click();
+      mouse('pointerdown', second62);
+      mouse('pointermove', { x: second62.x + 3 * zoom, y: second62.y });
+      mouse('pointerup', { x: second62.x + 3 * zoom, y: second62.y });
+      expect(begun()).toEqual([0, 1_200]);
     });
 
     it('says so in the middle of the page when a take played to the click cannot be written down', async () => {

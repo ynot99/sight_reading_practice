@@ -2383,7 +2383,7 @@ describe('searching the settings', () => {
     expect(body(".roll-velocity[data-idle='true'] .roll-dynamics")).toMatch(/opacity\s*:\s*0?\.\d+/);
   });
 
-  it('shows the mouse what it would take hold of on a sketch: a note, or its end', () => {
+  it('shows the mouse what it would take hold of on a sketch: a note or a press of the pedal, or either end of one', () => {
     // The drawing itself, which a box drawn on it takes the pointer to, and
     // not the grid inside it, whose shape would be lost for as long as it has
     // it. The keys beside it are pressed too, and take it from the drawing.
@@ -2419,7 +2419,9 @@ describe('searching the settings', () => {
     expect(body(".roll__key[data-in-scale='true']")).toMatch(/background-image\s*:\s*linear-gradient\(to right,[^;]*0 3px, transparent 3px\)/);
     expect(body(".roll__key[data-in-scale='true']")).not.toMatch(/box-shadow|background\s*:/);
     expect(rules().find((rule) => rule.selector === ".roll-body[data-grip='note']")?.body).toMatch(/cursor\s*:\s*grab/);
-    expect(rules().find((rule) => rule.selector === ".roll-body[data-grip='end']")?.body).toMatch(/cursor\s*:\s*ew-resize/);
+    expect(rules().find((rule) => rule.selector === ".roll-body[data-grip='start'], .roll-body[data-grip='end']")?.body).toMatch(
+      /cursor\s*:\s*ew-resize/,
+    );
   });
 
   it('gives the scores their means of finding and adding a row under the title at every width', () => {

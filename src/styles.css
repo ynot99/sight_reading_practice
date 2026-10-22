@@ -5137,11 +5137,12 @@ body[data-take-on-keys='true'] #take-off-the-keys {
   font-weight: 700;
 }
 
-/* What the mouse would take hold of on a sketch being edited: a note, or its end. */
+/* What the mouse would take hold of on a sketch being edited: a note or a press of the pedal, or either end of one. */
 .roll-body[data-grip='note'] {
   cursor: grab;
 }
 
+.roll-body[data-grip='start'],
 .roll-body[data-grip='end'] {
   cursor: ew-resize;
 }

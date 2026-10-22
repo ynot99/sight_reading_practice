@@ -541,8 +541,24 @@ function sameKey(one: KeyNamed, other: KeyNamed): boolean {
   return one.midi === other.midi && one.downAtMs === other.downAtMs;
 }
 
-/** How near the end of a note the mouse or a finger takes hold of its end, in pixels. */
+/** How near either end of a note the mouse or a finger takes hold of that end, in pixels. */
 const GRIP_PX = 10;
+
+/** What of a note or a press of the pedal is taken hold of: the whole of it, moved, or one end, held longer or shorter. */
+type Grip = 'whole' | 'start' | 'end';
+
+/**
+ * Which part of a stretch across the drawing a moment is on: an end, for
+ * the last few pixels of it at either side - a third of one too short for
+ * that, so the middle of it can still be moved - or the whole of it.
+ */
+function theGripOfAStretch(fromMs: number, untilMs: number, atMs: number, pxPerMs: number): Grip {
+  const edgePx = Math.min(GRIP_PX, ((untilMs - fromMs) * pxPerMs) / 3);
+  if ((untilMs - atMs) * pxPerMs <= edgePx) {
+    return 'end';
+  }
+  return (atMs - fromMs) * pxPerMs <= edgePx ? 'start' : 'whole';
+}
 
 /**
  * The pitch a press of the pedal is named by for a second tap on it: one no
@@ -2040,8 +2056,8 @@ export class AppView {
     readonly letsGoOfIt: boolean;
     /** Whether a drag of the whole of it copies the keys it holds, leaving them where they were: Ctrl or Cmd held as it was pressed. */
     readonly copies: boolean;
-    /** What of it was taken hold of: the whole note, moved, or its end, held longer or shorter. */
-    readonly grip: 'whole' | 'end';
+    /** What of it was taken hold of: the whole note, moved, or one end, held longer or shorter. */
+    readonly grip: Grip;
     /** When it was let go of, which a drag of its end moves. */
     readonly upAtMs: number;
     readonly moved: {
@@ -2196,7 +2212,7 @@ export class AppView {
     readonly pointerId: number;
     readonly fromMs: number;
     readonly press: ScenePedal | null;
-    readonly grip: 'whole' | 'end';
+    readonly grip: Grip;
     readonly moved: readonly MidiFileEvent[] | null;
   } | null = null;
   /** A key of the strip beside the drawing held down by a pointer, and sounding till it is let go of. */
@@ -15120,9 +15136,9 @@ export class AppView {
 
   /**
    * Takes hold of the pedal's lane of a sketch being edited, where a finger,
-   * a pen or the mouse goes down on it: a press of the pedal by its end - the
-   * last few pixels of it - or as a whole, or the place a new one is drawn
-   * from. Says whether it did.
+   * a pen or the mouse goes down on it: a press of the pedal by an end - the
+   * first or last few pixels of it - or as a whole, or the place a new one is
+   * drawn from. Says whether it did.
    */
   private takeHoldOfThePedal(event: PointerEvent): boolean {
     if (
@@ -15137,18 +15153,15 @@ export class AppView {
       return false;
     }
     const press = this.thePedalPressAt(at);
-    const pxPerMs = Number(this.el.rollZoom.value) / 1000;
-    const nearItsEnd =
-      press !== null &&
-      (press.untilMs - at) * pxPerMs <= Math.min(GRIP_PX, ((press.untilMs - press.fromMs) * pxPerMs) / 3);
-    this.rollPedalDrag = { pointerId: event.pointerId, fromMs: at, press, grip: nearItsEnd ? 'end' : 'whole', moved: null };
+    const grip = press === null ? 'whole' : theGripOfAStretch(press.fromMs, press.untilMs, at, Number(this.el.rollZoom.value) / 1000);
+    this.rollPedalDrag = { pointerId: event.pointerId, fromMs: at, press, grip, moved: null };
     return true;
   }
 
   /**
    * The sketch as the pointer on the pedal's lane has it so far: a press drawn
    * from where it went down to where it is, or the press taken hold of made
-   * longer or shorter by its end, or moved - each on the nearest line of the
+   * longer or shorter by either end, or moved - each on the nearest line of the
    * grid where the marker is put on one, and exactly with Shift. Shown, and
    * kept to be kept when the pointer lets go.
    */
@@ -15181,6 +15194,12 @@ export class AppView {
         const until = Math.max(snap(press.untilMs + (at - drag.fromMs)), press.fromMs + SHORTEST_NOTE_MS);
         if (until !== press.untilMs) {
           moved = takeWithThePedalAt(freed, onTheRun(press.fromMs), onTheRun(until), true);
+        }
+      } else if (drag.grip === 'start') {
+        // Put down earlier or later, and let up where it was: never after that, nor before the run.
+        const from = Math.max(0, Math.min(snap(press.fromMs + (at - drag.fromMs)), press.untilMs - SHORTEST_NOTE_MS));
+        if (from !== press.fromMs) {
+          moved = takeWithThePedalAt(freed, onTheRun(from), endless ?? onTheRun(press.untilMs), true);
         }
       } else {
         const by = Math.max(0, snap(press.fromMs + (at - drag.fromMs))) - press.fromMs;
@@ -15369,36 +15388,43 @@ export class AppView {
     }
   }
 
-  /**
-   * Which part of a key a point is on: its end, for the last few pixels of
-   * it - a third of a note too short for that, so the rest of it can still
-   * be moved - or the whole of it.
-   */
-  private theGripOn(key: RolledPress, point: { readonly clientX: number; readonly clientY: number }): 'whole' | 'end' {
+  /** Which part of a key a point is on: see `theGripOfAStretch`. */
+  private theGripOn(key: RolledPress, point: { readonly clientX: number; readonly clientY: number }): Grip {
     const roll = this.theRoll();
     const at = this.thePointOnTheDrawing(point);
     if (roll === null || at === null) {
       return 'whole';
     }
-    const pxPerMs = Number(this.el.rollZoom.value) / 1000;
     const origin = rollBeganAtMs(roll);
-    const endMs = (key.upAtMs ?? rollEndedAtMs(roll)) - origin;
-    const widePx = (endMs - (key.downAtMs - origin)) * pxPerMs;
-    return (endMs - at.atMs) * pxPerMs <= Math.min(GRIP_PX, widePx / 3) ? 'end' : 'whole';
+    return theGripOfAStretch(
+      key.downAtMs - origin,
+      (key.upAtMs ?? rollEndedAtMs(roll)) - origin,
+      at.atMs,
+      Number(this.el.rollZoom.value) / 1000,
+    );
   }
 
   /**
    * Says, by the pointer's shape, what the mouse would take hold of where it
-   * rests on a sketch being edited.
+   * rests on a sketch being edited: a note or a press of the pedal, or one
+   * end of either.
    */
   private showTheGrip(event: PointerEvent): void {
     const editing = this.theOtherRollShowing?.sketch?.editing === true;
-    const key = editing && !this.isOnTheChords(event) ? this.theKeyUnder(event) : null;
-    if (key === null) {
+    let grip: Grip | null = null;
+    if (editing && this.isOnThePedal(event)) {
+      const at = this.theMomentUnder(event.clientX);
+      const press = at === null ? null : this.thePedalPressAt(at);
+      grip = press === null || at === null ? null : theGripOfAStretch(press.fromMs, press.untilMs, at, Number(this.el.rollZoom.value) / 1000);
+    } else {
+      const key = editing && !this.isOnTheChords(event) ? this.theKeyUnder(event) : null;
+      grip = key === null ? null : this.theGripOn(key, event);
+    }
+    if (grip === null) {
       delete this.el.rollBody.dataset['grip'];
       return;
     }
-    this.el.rollBody.dataset['grip'] = this.theGripOn(key, event) === 'end' ? 'end' : 'note';
+    this.el.rollBody.dataset['grip'] = grip === 'whole' ? 'note' : grip;
   }
 
   /**
@@ -15442,6 +15468,10 @@ export class AppView {
     const snapping = this.el.rollSnap.checked && !event.shiftKey;
     if (drag.grip === 'end') {
       this.dragTheEndsOfTheKeys(drag, keys, stored, acrossPx, origin, snapping);
+      return;
+    }
+    if (drag.grip === 'start') {
+      this.dragTheStartsOfTheKeys(drag, keys, stored, acrossPx, origin, snapping);
       return;
     }
     const wanted = drag.key.downAtMs - origin + (acrossPx / Number(this.el.rollZoom.value)) * 1000;
@@ -15507,6 +15537,48 @@ export class AppView {
         midi: key.midi,
         downAtMs: key.downAtMs,
         upAtMs: Math.max((key.upAtMs ?? end) + byMs, shortest(key)),
+      })),
+    );
+  }
+
+  /**
+   * Begins the keys a drag holds earlier or later, each let go of where it
+   * was: the start of the one it began on where the pointer has taken it, on
+   * the nearest line of the grid where the marker would be put on one, and
+   * the others' by as much. None later than the last line of the grid before
+   * it ends, where the start is put on one, nor, put anywhere, than leaves a
+   * note too short to be heard as one; and none before the run begins.
+   */
+  private dragTheStartsOfTheKeys(
+    drag: NonNullable<AppView['rollDrag']>,
+    keys: readonly KeyOfTheTake[],
+    stored: StoredSketch,
+    acrossPx: number,
+    origin: number,
+    snapping: boolean,
+  ): void {
+    const showing = this.theOtherRollShowing;
+    if (showing === null) {
+      return;
+    }
+    const wanted = drag.key.downAtMs - origin + (acrossPx / Number(this.el.rollZoom.value)) * 1000;
+    const at = snapping ? theBeatNearest(showing.roll, wanted, this.theRollsGrid()) : wanted;
+    const byMs = Math.round(at + origin) - drag.key.downAtMs;
+    const end = rollEndedAtMs(showing.roll);
+    const latest = (key: KeyOfTheTake): number => {
+      const until = key.upAtMs ?? end;
+      const line = snapping ? theNextLineOfTheGrid(showing.roll, until - origin, this.theRollsGrid(), -1) : null;
+      return line === null ? until - SHORTEST_NOTE_MS : Math.round(line + origin);
+    };
+    this.showTheDrag(
+      drag,
+      stored,
+      keys.map((key) => ({
+        key,
+        midi: key.midi,
+        // Nor before the run begins, as a press of the pedal is not.
+        downAtMs: Math.max(Math.min(key.downAtMs, origin), Math.min(key.downAtMs + byMs, latest(key))),
+        upAtMs: key.upAtMs,
       })),
     );
   }

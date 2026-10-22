@@ -905,16 +905,21 @@ export function velocityAt(
   const target =
     ends !== null && ends !== level ? DYNAMIC_VELOCITY[ends] : DYNAMIC_VELOCITY[next ?? level];
 
+  // At the far end and past it. A player does not fall back to where they
+  // began the moment a wedge stops being drawn - they stay where it left
+  // them until something says otherwise. So the written level wins only
+  // where it was written at the end or after it: one written at the end is
+  // where the wedge was heading, and reached, it is the level - not a step
+  // further on, which is what the wedge would head for from it.
+  const marked = markInForce(exercise, measureIndex, offsetTicks, staffNumber);
+  const markedAt = marked === null ? -1 : at(marked.measureIndex, marked.offsetTicks);
+  if (here >= until && markedAt >= until) {
+    return ground;
+  }
   if (here <= until) {
     return ground + (target - ground) * ((here - from) / (until - from));
   }
-  // Past the far end. A player does not fall back to where they began the
-  // moment a wedge stops being drawn - they stay where it left them until
-  // something says otherwise. So the written level wins only if it was
-  // written after the hairpin ended.
-  const marked = markInForce(exercise, measureIndex, offsetTicks, staffNumber);
-  const markedAt = marked === null ? -1 : at(marked.measureIndex, marked.offsetTicks);
-  return markedAt > until ? ground : target;
+  return target;
 }
 
 /**

@@ -146,6 +146,31 @@ describe('the dynamic in force at a moment', () => {
     expect(dynamicAt(piece, 0, 2 * q, 1)).toBe('f');
   });
 
+  it('arrives at the dynamic written where a hairpin ends, and stays there', () => {
+    const piece: Exercise = {
+      ...twoBarExercise(),
+      dynamicMarks: [
+        { measureIndex: 0, offsetTicks: 0, level: 'p', staffNumber: null },
+        { measureIndex: 1, offsetTicks: 0, level: 'f', staffNumber: null },
+      ],
+      hairpins: [
+        { measureIndex: 0, offsetTicks: 0, kind: 'crescendo', untilMeasureIndex: 1, untilOffsetTicks: 0, staffNumber: null },
+      ],
+    };
+    const heard = (bar: number, quarters: number): number => velocityAt(piece, bar, quarters * q, 1);
+
+    // On the way, as far along as it is; from the end on, forte, not a step past it.
+    expect(heard(0, 2)).toBeCloseTo((DYNAMIC_VELOCITY.p + DYNAMIC_VELOCITY.f) / 2, 9);
+    expect([heard(1, 0), heard(1, 1), heard(1, 3)]).toEqual([DYNAMIC_VELOCITY.f, DYNAMIC_VELOCITY.f, DYNAMIC_VELOCITY.f]);
+    // With nothing written at its end, a step on from where it began, and held there.
+    const unmarked: Exercise = { ...piece, dynamicMarks: piece.dynamicMarks.slice(0, 1) };
+    expect([0, 1, 3].map((quarters) => velocityAt(unmarked, 1, quarters * q, 1))).toEqual([
+      DYNAMIC_VELOCITY.mp,
+      DYNAMIC_VELOCITY.mp,
+      DYNAMIC_VELOCITY.mp,
+    ]);
+  });
+
   it('pays no heed to a hairpin that has not begun yet', () => {
     const piece: Exercise = {
       ...twoBarExercise(),

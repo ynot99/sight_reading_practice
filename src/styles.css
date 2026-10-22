@@ -1264,7 +1264,91 @@ textarea {
   display: flex;
   flex: 1 1 auto;
   gap: 8px;
+  min-width: 0;
   min-height: 0;
+}
+
+/*
+ * The drawing with its chords, and the circle of fifths: beside them where
+ * the screen is wider than tall, as wide as a third of it at most; under
+ * them where it is taller, as tall as a third of it, so the circle takes
+ * what the screen has to spare either way and the drawing keeps the rest.
+ */
+.roll-harmony {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 8px;
+  min-height: 0;
+}
+
+.roll-circle {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  justify-content: center;
+  width: min(300px, 32vw);
+  min-height: 0;
+}
+
+/* Square, as wide as its column and never taller than the room: the circle is drawn inside it either way. */
+.roll-circle__drawing {
+  width: 100%;
+  max-height: 100%;
+  aspect-ratio: 1;
+}
+
+@media (orientation: portrait) {
+  .roll-harmony {
+    flex-direction: column;
+  }
+
+  .roll-circle {
+    align-items: center;
+    width: auto;
+    height: min(32vh, calc(100vw - 32px));
+  }
+
+  .roll-circle__drawing {
+    width: auto;
+    height: 100%;
+  }
+}
+
+/*
+ * A chord's slice: the page's ground, a key's own chords lit with the accent
+ * - the scale rows' - and the chord the music is on more so. No verdict:
+ * nothing here was judged.
+ */
+.roll-circle__chord {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.roll-circle__chord path {
+  fill: var(--surface);
+  stroke: var(--border);
+  stroke-width: 0.6;
+}
+
+.roll-circle__chord[data-in-the-key='true'] path {
+  fill: color-mix(in srgb, var(--accent) 18%, var(--surface));
+}
+
+.roll-circle__chord[data-here='true'] path {
+  fill: color-mix(in srgb, var(--accent) 60%, var(--surface));
+}
+
+.roll-circle__chord text {
+  fill: var(--text-muted);
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
+.roll-circle__chord[data-in-the-key='true'] .roll-circle__name,
+.roll-circle__chord[data-here='true'] .roll-circle__name {
+  fill: var(--text);
+  font-weight: 700;
 }
 
 /*

@@ -299,6 +299,8 @@ import {
   type RollGhost,
   type RollHeads,
 } from './rollView.js';
+import { drawTheCircle, showOnTheCircle, thePlaceOnTheCircle } from './circleView.js';
+import { theKeysAtThePlace, theKeysOwnPlaces, whereOnTheCircle } from '../domain/harmony/circleOfFifths.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
 import { readBackup } from '../application/Backup.js';
 import { calibrationExercise } from '../domain/generation/calibrationExercise.js';
@@ -2017,6 +2019,10 @@ export class AppView {
   private readonly rollScroller = new RollScroller();
   /** The keys a run is shown again over. See `showTheReplaysKeys`. */
   private readonly replayKeyboard: ReplayKeyboard;
+  /** The circle of fifths beside a sketch's chords. See `showTheCircle`. */
+  private readonly circleDrawing: SVGSVGElement;
+  /** What the circle was last written to show, so a step of a playback that changes nothing writes nothing. */
+  private circleShows = '';
   /** The frame the notes over the keys are painted on next, while any fall. */
   private fallingFrame: number | null = null;
   /** The frame the keys under a take or a run shown again are next lit in, while it sounds. */
@@ -2686,6 +2692,7 @@ export class AppView {
     rollMarkYes: HTMLButtonElement;
     rollMarkNo: HTMLButtonElement;
     rollChords: HTMLElement;
+    rollCircle: HTMLElement;
     rollChordsList: HTMLElement;
     rollChordsKeep: HTMLButtonElement;
     rollChordsForget: HTMLButtonElement;
@@ -3084,6 +3091,7 @@ export class AppView {
       rollMarkYes: requireElement(doc, 'roll-mark-yes'),
       rollMarkNo: requireElement(doc, 'roll-mark-no'),
       rollChords: requireElement(doc, 'roll-chords'),
+      rollCircle: requireElement(doc, 'roll-circle'),
       rollChordsList: requireElement(doc, 'roll-chords-list'),
       rollChordsKeep: requireElement(doc, 'roll-chords-keep'),
       rollChordsForget: requireElement(doc, 'roll-chords-forget'),
@@ -3294,6 +3302,8 @@ export class AppView {
       computerKeyboard: requireElement(doc, 'computer-keyboard'),
     };
     this.replayKeyboard = drawTheKeyboard(this.el.replayKeys);
+    this.circleDrawing = drawTheCircle(doc);
+    this.el.rollCircle.append(this.circleDrawing);
   }
 
   async initialize(): Promise<void> {
@@ -10017,12 +10027,25 @@ export class AppView {
         // A key's click - Enter or Space on a chord - counts no presses. A
         // pointer's writes the chord it is let go of on, and was answered
         // there: see `letGoOfTheChord`.
-        const written = this.writeTheChordAtTheHead(Number(chord.dataset['chord']));
-        const now = this.runtime.clock.now();
-        for (const midi of written === null ? [] : written.struck) {
-          this.runtime.pitchPlayer.play(midi, written?.velocity ?? 0, now);
-          this.runtime.pitchPlayer.stop(midi, now + (written?.lengthMs ?? 0));
-        }
+        this.soundTheChordWritten(this.writeTheChordAtTheHead(Number(chord.dataset['chord'])));
+      }
+    });
+    // A chord of the circle written as one of the drawer is, and heard: any
+    // chord there is, the key's own or not, which is what a circle is read for.
+    const writeFromTheCircle = (target: EventTarget | null): void => {
+      const place = thePlaceOnTheCircle(target);
+      if (place !== null) {
+        this.soundTheChordWritten(this.writeTheChordWritten(this.theKeysWrittenAtTheHead(theKeysAtThePlace(place))));
+      }
+    };
+    this.listen(this.el.rollCircle, 'click', (event) => {
+      writeFromTheCircle(event.target);
+    });
+    this.listen(this.el.rollCircle, 'keydown', (event) => {
+      const key = (event as KeyboardEvent).key;
+      if (key === 'Enter' || key === ' ') {
+        event.preventDefault();
+        writeFromTheCircle(event.target);
       }
     });
     this.listen(this.el.rollChordsList, 'pointerdown', (event) => {
@@ -13830,9 +13853,13 @@ export class AppView {
    * it already sounding there is left out, as a paste leaves it.
    */
   private writeTheChordAtTheHead(at: number): ChordWritten | null {
+    return this.writeTheChordWritten(this.theChordWrittenAtTheHead(at));
+  }
+
+  /** Writes what a chord would make of the sketch, as `writeTheChordAtTheHead` says; what was written, or none. */
+  private writeTheChordWritten(written: ChordWritten | null): ChordWritten | null {
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
-    const written = this.theChordWrittenAtTheHead(at);
     if (sketch === undefined || stored === null || written === null || !written.changes) {
       return null;
     }
@@ -13964,16 +13991,23 @@ export class AppView {
    * answer, for writing it, hearing it and showing it ahead.
    */
   private theChordWrittenAtTheHead(at: number): ChordWritten | null {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const chord = stored === null ? undefined : this.theChordsInTheDrawer(this.theKeyAtTheHead(stored))[at];
+    return chord === undefined ? null : this.theKeysWrittenAtTheHead(chord.midis);
+  }
+
+  /** What a chord's keys would make of the sketch: see `theChordWrittenAtTheHead`. */
+  private theKeysWrittenAtTheHead(keys: readonly number[]): ChordWritten | null {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
-    const chord = stored === null ? undefined : this.theChordsInTheDrawer(this.theKeyAtTheHead(stored))[at];
-    if (showing === null || sketch === undefined || stored === null || chord === undefined) {
+    if (showing === null || sketch === undefined || stored === null) {
       return null;
     }
     const over = this.theChordChosenInTheLane();
     if (over !== null) {
-      return this.theChordWrittenOver(over, chord.midis);
+      return this.theChordWrittenOver(over, keys);
     }
     const roll = showing.roll;
     const origin = rollBeganAtMs(roll);
@@ -13985,12 +14019,12 @@ export class AppView {
     const velocity = theVelocityOfTheLevel(theDynamicAt(stored.events, fromMs + origin) ?? LOUDNESS_UNMARKED, 0);
     const { events, pasted } = takeWithTheNotesPasted(
       stored.events,
-      chord.midis.map((midi) => ({ afterMs: 0, lengthMs: untilMs - fromMs, midi, velocity, loudness: { level: null, shade: 0 } })),
+      keys.map((midi) => ({ afterMs: 0, lengthMs: untilMs - fromMs, midi, velocity, loudness: { level: null, shade: 0 } })),
       fromMs + origin,
     );
     return {
       changes: pasted.length > 0,
-      heard: chord.midis,
+      heard: keys,
       struck: pasted.map((key) => key.midi),
       events,
       chosen: pasted,
@@ -14082,6 +14116,42 @@ export class AppView {
       lengthMs: over.untilMs - over.fromMs,
       headAfterMs: null,
     };
+  }
+
+  /** Sounds the keys a chord written put in, for as long as it is written: a chord pressed by a key, or tapped on the circle. */
+  private soundTheChordWritten(written: ChordWritten | null): void {
+    const now = this.runtime.clock.now();
+    for (const midi of written === null ? [] : written.struck) {
+      this.runtime.pitchPlayer.play(midi, written?.velocity ?? 0, now);
+      this.runtime.pitchPlayer.stop(midi, now + (written?.lengthMs ?? 0));
+    }
+  }
+
+  /**
+   * The circle of fifths, open with the chords beside a sketch being edited:
+   * the key the cursor is in lit, with its numerals, and the chord the music
+   * makes where the cursor is - the one the lane under the notes names
+   * there - lit more, so a playback is watched going round it. Asked on every
+   * step of a playback, and written only when what it shows has changed.
+   */
+  private showTheCircle(): void {
+    const open = this.theChordsOfTheKeyAreOpen();
+    this.el.rollCircle.hidden = !open;
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    if (!open || stored === null) {
+      return;
+    }
+    const key = this.theKeyAtTheHead(stored);
+    const scene = this.drawnScene;
+    const chord = scene === null ? null : theChordAt(scene, this.headIsAtMs());
+    const here = chord === null ? null : whereOnTheCircle(chord.root, chord.kind);
+    const shows = JSON.stringify([key.fifths, theScaleOfTheKey(key), here]);
+    if (shows === this.circleShows) {
+      return;
+    }
+    this.circleShows = shows;
+    showOnTheCircle(this.circleDrawing, { fifths: key.fifths, ofTheKey: theKeysOwnPlaces(key.fifths, theScaleOfTheKey(key)), here });
   }
 
   /** Points at a chord of the drawer, or at none, and shows its notes where it would write them. */
@@ -17624,6 +17694,8 @@ export class AppView {
     }
     this.sayWhereBackGoes(sounding);
     this.followTheKeyWhereTheHeadGoes();
+    // The chord the music is on, round the circle with it.
+    this.showTheCircle();
 
     const drawn = this.el.rollBody.firstElementChild;
     if (!(drawn instanceof HTMLElement)) {

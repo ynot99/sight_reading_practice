@@ -9080,6 +9080,79 @@ describe('AppView', () => {
       expect(element('sheet-roll').dataset['chords']).toBe('false');
     });
 
+    it("opens the circle of fifths with the chords, the key's own lit with their numerals and the chord at the cursor more, to write any chord from", async () => {
+      const { view, sketches, clock, instrument } = createRig();
+      await view.initialize();
+      const held = (midis: readonly number[], atMs: number, upAtMs: number) =>
+        midis.flatMap((midi) => [
+          { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+          { kind: 'noteOff' as const, atMs: upAtMs, midi },
+        ]);
+      // C for a bar, then A minor, in C major.
+      const sketch = sketches.begin(
+        {
+          events: [...held([60, 64, 67], 0, 2_000), ...held([57, 60, 64], 2_000, 4_000)],
+          beats: Array.from({ length: 8 }, (_, beat) => ({ atMs: beat * 500, beat: beat % 4, beatsInBar: 4 })),
+        },
+        'Round',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const cursorAt = (ms: number): void => {
+        clock.advance(1_000);
+        tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: (ms / 1000) * zoom, clientY: 20 });
+      };
+      const circle = element('roll-circle');
+      const slice = (ring: string, place: number): Element | null => circle.querySelector(`[data-ring="${ring}"][data-place="${String(place)}"]`);
+      const said = (each: Element): string =>
+        `${each.querySelector('.roll-circle__name')?.textContent ?? ''} ${each.querySelector('.roll-circle__numeral')?.textContent ?? ''}`.trim();
+      const lit = (): string[] => [...circle.querySelectorAll('[data-in-the-key]')].map(said).sort();
+      const here = (): string[] => [...circle.querySelectorAll('[data-here]')].map(said);
+      const struck = (): string[] =>
+        (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'noteOn' ? [String(event.midi)] : []));
+
+      // Away until the chords are open, then every chord round it, the key's own lit.
+      expect(circle.hidden).toBe(true);
+      element<HTMLButtonElement>('roll-chords-open').click();
+      expect(circle.hidden).toBe(false);
+      expect(circle.querySelectorAll('[data-ring]')).toHaveLength(36);
+      expect(lit()).toEqual(['B° vii°', 'C I', 'Dm ii', 'Em iii', 'F IV', 'G V', 'Am vi'].sort());
+      // The chord the music makes where the cursor is, and the next as it is put there.
+      expect(here()).toEqual(['C I']);
+      cursorAt(2_600);
+      expect(here()).toEqual(['Am vi']);
+
+      // Tapped, a chord is written where the cursor is and heard: D minor, the key's own.
+      cursorAt(5_000);
+      expect(here()).toEqual([]);
+      instrument.played.length = 0;
+      slice('minor', 11)?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(struck().slice(-3).sort()).toEqual(['62', '65', '69']);
+      expect(instrument.played.map((note) => note.midi).sort()).toEqual([62, 65, 69]);
+      // And from a key, D major, which is not.
+      slice('major', 2)?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(struck().slice(-3).sort()).toEqual(['62', '66', '69']);
+      expect(slice('major', 2)?.getAttribute('aria-label')).toBe('Write D where the cursor is');
+
+      // In another key, the circle follows the cursor into it, on the same
+      // chord, and names every chord as that key spells it.
+      cursorAt(1_000);
+      expect(here()).toEqual(['C I']);
+      expect(said(slice('minor', 3) ?? circle)).toBe('F♯m');
+      sketches.changeTheKey(sketch.id, aKeyInTheScale(-1, 'major'));
+      cursorAt(1_000);
+      expect(lit()).toEqual(['B♭ IV', 'C V', 'Dm vi', 'E° vii°', 'F I', 'Gm ii', 'Am iii'].sort());
+      expect(here()).toEqual(['C V']);
+      expect(said(slice('minor', 3) ?? circle)).toBe('G♭m');
+      expect(slice('minor', 3)?.getAttribute('aria-label')).toBe('Write G♭m where the cursor is');
+      // Put away with the chords.
+      element<HTMLButtonElement>('roll-chords-open').click();
+      expect(circle.hidden).toBe(true);
+    });
+
     it('writes a chord of the drawer over the chord tapped in the lane, moving its notes as little as they can', async () => {
       const { view, sketches, instrument } = createRig();
       await view.initialize();

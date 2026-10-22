@@ -1418,6 +1418,32 @@ describe('the stylesheet', () => {
     expect(HTML).toMatch(/<div class="roll-stage">\s*<div id="roll-body"[^>]*><\/div>[\s\S]*?<div id="roll-box"/);
   });
 
+  it('puts the circle of fifths beside the drawing and its chords where the screen is wide, and under them where it is tall', () => {
+    const ruleOf = (selector: string, media = ''): string =>
+      rules().find((rule) => rule.selector === selector && inWhichMedia(rule.at) === media)?.body ?? '';
+    const portrait = '@media (orientation: portrait)';
+    expect(HTML).toMatch(
+      /<div class="roll-harmony">\s*<div class="roll-room">[\s\S]*?id="roll-chords-forget"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>\s*(?:<!--[\s\S]*?-->\s*)?<div id="roll-circle" class="roll-circle" hidden><\/div>\s*<\/div>/,
+    );
+    expect(ruleOf('.roll-harmony')).toMatch(/display\s*:\s*flex/);
+    expect(ruleOf('.roll-harmony')).not.toMatch(/flex-direction/);
+    expect(ruleOf('.roll-harmony')).toMatch(/flex\s*:\s*1 1 auto/);
+    expect(ruleOf('.roll-harmony')).toMatch(/min-height\s*:\s*0/);
+    expect(ruleOf('.roll-room')).toMatch(/min-width\s*:\s*0/);
+    expect(ruleOf('.roll-circle')).toMatch(/flex\s*:\s*none/);
+    expect(ruleOf('.roll-circle')).toMatch(/width\s*:\s*min\(300px, 32vw\)/);
+    expect(ruleOf('.roll-circle__drawing')).toMatch(/aspect-ratio\s*:\s*1/);
+    expect(ruleOf('.roll-circle__drawing')).toMatch(/max-height\s*:\s*100%/);
+    expect(ruleOf('.roll-harmony', portrait)).toMatch(/flex-direction\s*:\s*column/);
+    expect(ruleOf('.roll-circle', portrait)).toMatch(/height\s*:\s*min\(32vh, calc\(100vw - 32px\)\)/);
+    expect(ruleOf('.roll-circle', portrait)).toMatch(/width\s*:\s*auto/);
+    expect(ruleOf('.roll-circle__drawing', portrait)).toMatch(/height\s*:\s*100%/);
+    // Lit with the accent, never a verdict's colour; the music's chord more than the key's.
+    expect(ruleOf(".roll-circle__chord[data-in-the-key='true'] path")).toMatch(/var\(--accent\) 18%/);
+    expect(ruleOf(".roll-circle__chord[data-here='true'] path")).toMatch(/var\(--accent\) 60%/);
+    expect(ruleOf('.roll-circle__chord text')).toMatch(/pointer-events\s*:\s*none/);
+  });
+
   it('opens the drawer of chords at the right of the drawing, beside it rather than over it', () => {
     // In one row with the drawing, after it, and the drawing gives up its
     // width: a drawer laid over it would hide the notes at its right edge.

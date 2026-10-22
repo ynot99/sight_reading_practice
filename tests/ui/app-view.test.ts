@@ -11604,6 +11604,31 @@ describe('AppView', () => {
       expect(runtime.controller.barARunBeginsAt).toBe(0);
     });
 
+    it('opens the drawing of the score scrolled to the marker the page has put in it', async () => {
+      const lent = lendTheDrawingAScroller();
+      try {
+        const { view, runtime } = createRig();
+        await view.initialize();
+        // Bars of four seconds, the fifth far past a view of 360.
+        await runtime.controller.openScore(longExercise({ bars: 8, tempoBpm: 60 }));
+        runtime.controller.beginAtBar(4);
+        element<HTMLButtonElement>('focus-roll').click();
+        expect(headAt(element('roll-body'))).toBe('16.000');
+        // Standing in the view with room before it, as a playback keeps it.
+        expect(lent.headPx()).toBeGreaterThan(360);
+        expect(lent.headPx()).toBeGreaterThan(lent.scrolledTo());
+        expect(lent.headPx()).toBeLessThan(lent.scrolledTo() + 360);
+        element<HTMLButtonElement>('roll-close').click();
+
+        // At the top of the piece, the drawing opens at its beginning.
+        runtime.controller.beginAtTheStart();
+        element<HTMLButtonElement>('focus-roll').click();
+        expect(lent.scrolledTo()).toBe(0);
+      } finally {
+        lent.giveBack();
+      }
+    });
+
     it('lays the passage of the page as the slice of its drawing, and the slice laid there as the passage', async () => {
       const { view, runtime, clock } = createRig();
       await view.initialize();
@@ -11845,11 +11870,12 @@ describe('AppView', () => {
       const had = ['clientWidth', 'clientHeight'].map(
         (name) => [name, Object.getOwnPropertyDescriptor(HTMLElement.prototype, name)] as const,
       );
-      // A view of 360 along and 200 down.
+      // A view of 360 along and 200 down - and none at all on a hidden sheet,
+      // as a browser lays it out.
       Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
         configurable: true,
         get(this: HTMLElement) {
-          return this.classList.contains('roll__grid') ? 360 : 0;
+          return this.classList.contains('roll__grid') && this.closest('[hidden]') === null ? 360 : 0;
         },
       });
       Object.defineProperty(HTMLElement.prototype, 'clientHeight', {

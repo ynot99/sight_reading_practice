@@ -12975,8 +12975,24 @@ export class AppView {
     const at = bar === null ? null : this.theMomentOfTheBarOnThePage(bar);
     if (at !== null && at > 0) {
       this.putTheHeadAt(at);
+      this.bringTheHeadIntoView();
     }
     this.headWhereShown = this.rollPlacedAtMs;
+  }
+
+  /**
+   * Scrolls the drawing so the head stands in it where a playback would keep
+   * it. Measured first: the sheet has only just been shown, and the view it
+   * had before was of nothing.
+   */
+  private bringTheHeadIntoView(): void {
+    this.measureTheRoll();
+    const scrolled = this.rollScroller;
+    const headPx = (this.headIsAtMs() / 1000) * Number(this.el.rollZoom.value);
+    const to = keepTheHeadInView(headPx, scrolled.x, scrolled.viewWidePx);
+    if (to !== null) {
+      scrolled.to(to, scrolled.y);
+    }
   }
 
   /**

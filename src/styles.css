@@ -2269,7 +2269,11 @@ textarea {
   line-height: 16px;
   white-space: nowrap;
   color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  /*
+   * Its tint a little see-through, so the ticks of the ruler under it - the
+   * bar line it stands on, the beats after - still show through it.
+   */
+  background: color-mix(in srgb, color-mix(in srgb, var(--accent) 16%, var(--surface)) 72%, transparent);
   cursor: pointer;
   pointer-events: auto;
 }

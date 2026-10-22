@@ -2393,6 +2393,8 @@ describe('searching the settings', () => {
     expect(body('.roll__marks')).toMatch(/pointer-events\s*:\s*none/);
     expect(body('.roll__mark')).toMatch(/transform\s*:\s*translateX\(calc\(var\(--roll-second\) \* var\(--roll-at, 0\) - var\(--roll-x\)\)\)/);
     expect(body('.roll__mark')).toMatch(/pointer-events\s*:\s*auto/);
+    // Its tint a little see-through, for the ruler's ticks under it.
+    expect(body('.roll__mark')).toMatch(/background\s*:\s*color-mix\(in srgb, color-mix\(in srgb, var\(--accent\) 16%, var\(--surface\)\) 72%, transparent\)/);
     expect(body(".roll__mark[aria-pressed='true']")).toMatch(/background\s*:\s*var\(--accent\)/);
     expect(body('.roll__mark-tools')).toMatch(/top\s*:\s*100%/);
     expect(body('.roll__mark-tools')).toMatch(/transform\s*:\s*translateX\(calc\(var\(--roll-second\) \* var\(--roll-at, 0\) - var\(--roll-x\)\)\)/);

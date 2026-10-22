@@ -263,6 +263,7 @@ import {
   theCanvasesOf,
   theChordAt,
   theNotesOfTheChord,
+  theNotesHeldIntoTheChord,
   theKeysStripOf,
   theMapOfThePitches,
   stretchesIn,
@@ -15262,20 +15263,23 @@ export class AppView {
     }
     const presses = theNotesOfTheChord(roll, chord.fromMs, chord.untilMs);
     const notes = presses.map((press) => ({ midi: press.midi, downAtMs: press.downAtMs }));
+    // Heard whole, the notes held into it from before as well: chosen, it is only its own.
+    const heard = [...presses, ...theNotesHeldIntoTheChord(roll, chord.fromMs, chord.untilMs)];
     const adds = event.ctrlKey || event.metaKey || event.shiftKey;
     this.choose(adds ? [...sketch.chosen.filter((key) => !notes.some((note) => sameKey(note, key))), ...notes] : notes);
     this.chordTappedAt = chord.fromMs;
     this.showTheChordsOfTheKey();
     this.putTheHeadAt(chord.fromMs);
-    this.soundTheChordTapped(presses, chord.untilMs - chord.fromMs);
+    this.soundTheChordTapped(heard, chord.untilMs - chord.fromMs);
     return true;
   }
 
   /**
    * Sounds the notes of a chord tapped in the lane, so it is heard as well
-   * as chosen: each pitch once, as hard as it is struck hardest there, all
-   * at once, for as long as the chord lasts or a moment, whichever is less.
-   * The one tapped before is silenced first.
+   * as chosen, those held into it from before as well: each pitch once, as
+   * hard as it is struck hardest there, all at once, for as long as the
+   * chord lasts or a moment, whichever is less. The one tapped before is
+   * silenced first.
    */
   private soundTheChordTapped(presses: readonly { readonly midi: number; readonly velocity: number }[], lastsMs: number): void {
     for (const midi of this.chordTappedSounds) {

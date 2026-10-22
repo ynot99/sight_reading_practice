@@ -267,6 +267,8 @@ const LINE_WIDE: Readonly<Record<LineKind | 'rushed', number>> = {
 
 /** The dashes a line between the beats is drawn in: see `--roll-ink-division`. */
 const DASHES = [3, 3];
+/** The dots round a note held into a chord chosen, told apart from the dashes of a chord about to be written. */
+const HELD_INTO_THE_CHORD_DOTS = [2, 3];
 
 /** How round the corners of a note, a band and a capsule are. */
 const CORNER_PX = 2;
@@ -533,6 +535,18 @@ export function paintTheGrid(
     );
     paint.stroke();
   }
+  // A note held into a chord chosen in the lane from before it, heard in it
+  // and not chosen with it: rimmed in dots, as belonging and not chosen.
+  paint.setLineDash(HELD_INTO_THE_CHORD_DOTS);
+  for (const note of stretchesIn(scene.notes, fromMs - ms(NARROWEST_PX), untilMs)) {
+    if (note.heldIntoTheChordChosen !== true || !shows(note.row)) {
+      continue;
+    }
+    const inset = CHOSEN_RIM_PX / 2;
+    box(paint, x(note.fromMs) + inset, y(note.row) + inset, wide(note.fromMs, note.untilMs) - CHOSEN_RIM_PX, rowPx - CHOSEN_RIM_PX, CORNER_PX);
+    paint.stroke();
+  }
+  paint.setLineDash([]);
 
   // A capsule the press sits inside: filled, so it is a container rather than
   // a pair of edges to measure between, and rimmed more heavily than it is

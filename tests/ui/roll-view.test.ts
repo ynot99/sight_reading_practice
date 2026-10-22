@@ -12,6 +12,7 @@ import {
   whatThePedalSaysAt,
   whatTheChordsSayAt,
   theNotesOfTheChord,
+  theNotesHeldIntoTheChord,
   theKeyAt,
   theKeysInABox,
   whatTheGridSaysAt,
@@ -471,6 +472,33 @@ describe('drawing a run as a piano roll', () => {
     expect(drawn([]).chords.map((chord) => chord.chosen)).toEqual([false, false]);
     expect(drawn([57, 60, 64]).chords.map((chord) => chord.chosen)).toEqual([false, false]);
     expect(drawn([57, 60, 64, 67]).chords.map((chord) => chord.chosen)).toEqual([true, false]);
+  });
+
+  it('marks the notes held into a chord chosen from before it as heard in it, and not chosen with it', () => {
+    // C struck in the first bar and held through the second; E and G struck in the second.
+    const input = roll({
+      beats: [...barOfFour(0, 0), ...barOfFour(1, 4000)],
+      presses: [
+        press({ midi: 57, downAtMs: 0, upAtMs: 4000 }),
+        press({ midi: 60, downAtMs: 0, upAtMs: 8000 }),
+        ...[64, 67].map((midi) => press({ midi, downAtMs: 4000, upAtMs: 8000 })),
+        // Let go on the bar line: not held into it.
+        press({ midi: 69, downAtMs: 1000, upAtMs: 4000 }),
+      ],
+    });
+    const held = (chosen: readonly { readonly midi: number; readonly downAtMs: number }[]): number[] =>
+      theSceneOfTheRoll({ roll: input, barLabel: () => null, chordsIn: [], chosen })
+        .notes.filter((note) => note.heldIntoTheChordChosen === true)
+        .map((note) => note.fromMs);
+
+    expect(theNotesHeldIntoTheChord(input, 4000, 8000).map((note) => note.midi)).toEqual([60]);
+    expect(theNotesHeldIntoTheChord(input, 0, 4000)).toEqual([]);
+    expect(theNotesHeldIntoTheChord(input, 4000, 4000)).toEqual([]);
+    // The second bar's chord chosen: the C held into it is marked.
+    expect(held([64, 67].map((midi) => ({ midi, downAtMs: 4000 })))).toEqual([0]);
+    // Nothing chosen, nothing marked; and chosen itself, it is rimmed as chosen and not marked.
+    expect(held([])).toEqual([]);
+    expect(held([...[64, 67].map((midi) => ({ midi, downAtMs: 4000 })), { midi: 60, downAtMs: 0 }])).toEqual([]);
   });
 
   it('says a chord is only most of the notes where a melody passes over it', () => {

@@ -210,6 +210,28 @@ describe('painting the grid', () => {
     expect(recorder.marks.map((mark) => mark.alpha)).not.toContain(filled?.alpha);
   });
 
+  it("rims a note held into a chord chosen in dots, apart from the chosen notes' whole rim and a chord ahead's dashes", () => {
+    const base = sceneOf(roll({ presses: [press({ verdict: null }), press({ midi: MIDI.C4 + 4, verdict: null })] }));
+    const scene = {
+      ...base,
+      notes: base.notes.map((note, at) => (at === 0 ? { ...note, heldIntoTheChordChosen: true } : { ...note, chosen: true })),
+      // A note asked for, rimmed after them: whole, the dots let go of.
+      ghosts: [{ fromMs: 0, untilMs: 500, row: 2, says: null }],
+    };
+    const { surface: canvas, recorder } = surface();
+
+    paintTheGrid(canvas, scene, at(), INKS, 1, [], [{ row: 1, fromMs: 500, untilMs: 1_000 }]);
+
+    const rims = recorder.inked('chosen').map((mark) => [mark.y, (mark.dashes ?? []).join(',')]);
+    const top = (midi: number): number => (scene.notes.find((note) => scene.highest - note.row === midi)?.row ?? -1) * 14 + 1;
+    expect(rims).toEqual([
+      [top(MIDI.C4 + 4), ''],
+      [top(MIDI.C4), '2,3'],
+      [1 * 14 + 1, '3,3'],
+    ]);
+    expect(recorder.inked('ghost-edge').map((mark) => (mark.dashes ?? []).join(','))).toEqual(['']);
+  });
+
   it('rims the notes a chord would be written as where they would go, dashed in the accent, over everything', () => {
     const scene = theSceneOfTheRoll({
       roll: roll({ presses: [press({ verdict: null })] }),

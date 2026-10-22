@@ -9028,8 +9028,16 @@ describe('AppView', () => {
         ]);
       sketches.begin(
         {
-          // C for two bars of a second, its E struck twice, harder the second time; A minor for the third.
-          events: [...held([60, 67], 0, 2_000), ...held([64], 0, 900, 0.4), ...held([64], 1_000, 2_000, 0.8), ...held([57, 60, 64], 2_000, 3_000)],
+          // C for two bars of a second, its E struck twice, harder the second
+          // time; A minor for the third, its A struck at the end of the second
+          // and held into it.
+          events: [
+            ...held([60, 67], 0, 2_000),
+            ...held([64], 0, 900, 0.4),
+            ...held([64], 1_000, 2_000, 0.8),
+            ...held([57], 1_900, 3_000),
+            ...held([60, 64], 2_000, 3_000),
+          ],
           beats: Array.from({ length: 12 }, (_, beat) => ({ atMs: beat * 250, beat: beat % 4, beatsInBar: 4 })),
         },
         'Heard',
@@ -9048,16 +9056,25 @@ describe('AppView', () => {
       clock.advance(1_000);
       const struckAt = clock.now();
       tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: 0.5 * zoom, clientY: 5 }, lane());
-      expect(played()).toEqual(['60@0.5', '64@0.8', '67@0.5']);
-      expect(instrument.stopped.slice(-3).map((note) => note.atMs)).toEqual([1, 2, 3].map(() => struckAt + 1_200));
+      // The A struck at its end is its own as well.
+      expect(played()).toEqual(['57@0.5', '60@0.5', '64@0.8', '67@0.5']);
+      expect(instrument.stopped.slice(-4).map((note) => note.atMs)).toEqual([1, 2, 3, 4].map(() => struckAt + 1_200));
       // The next, as long as it lasts where that is less; the one before silenced first.
       instrument.played.length = 0;
       instrument.stopped.length = 0;
       clock.advance(1_000);
       tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: 2.4 * zoom, clientY: 5 }, lane());
-      expect(instrument.stopped.slice(0, 3).map((note) => `${String(note.midi)}${note.atMs === undefined ? ' now' : ''}`).sort()).toEqual(['60 now', '64 now', '67 now']);
+      expect(instrument.stopped.slice(0, 4).map((note) => `${String(note.midi)}${note.atMs === undefined ? ' now' : ''}`).sort()).toEqual([
+        '57 now',
+        '60 now',
+        '64 now',
+        '67 now',
+      ]);
+      // Heard whole, the A held into it too; chosen, only its own.
       expect(played()).toEqual(['57@0.5', '60@0.5', '64@0.5']);
-      expect(instrument.stopped.slice(3).map((note) => note.atMs)).toEqual([1, 2, 3].map(() => clock.now() + 1_000));
+      expect((view.rollScene?.notes ?? []).filter((note) => note.chosen === true).map((note) => note.fromMs)).toEqual([2_000, 2_000]);
+      expect((view.rollScene?.notes ?? []).filter((note) => note.heldIntoTheChordChosen === true).map((note) => note.fromMs)).toEqual([1_900]);
+      expect(instrument.stopped.slice(4).map((note) => note.atMs)).toEqual([1, 2, 3].map(() => clock.now() + 1_000));
       // Put away, the sheet says so too.
       element<HTMLButtonElement>('roll-chords-open').click();
       expect(element('sheet-roll').dataset['chords']).toBe('false');

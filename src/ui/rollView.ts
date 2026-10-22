@@ -287,6 +287,12 @@ export interface SceneNote extends SceneRowed {
   readonly open: boolean;
   /** Chosen on the drawing to be changed. */
   readonly chosen?: boolean;
+  /**
+   * Struck before a chord chosen in the lane, and held into it: heard in
+   * that chord, which is named with it, and not chosen with it - it is the
+   * chord's before, which a change to it would change.
+   */
+  readonly heldIntoTheChordChosen?: boolean;
   /** How hard it was struck, `0..1`: a note drawn by its hand is as strong as it is loud. */
   readonly loudness: number;
   /**
@@ -1111,6 +1117,31 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
     }
   }
 
+  const chords =
+    drawing.chordsIn === undefined
+      ? []
+      : theChordsAlongTheBars(
+          roll.presses.map((press) => ({ midi: press.midi, fromMs: press.downAtMs, untilMs: press.upAtMs ?? endMs })),
+          theBarsOfTheRoll(roll),
+          drawing.chordsIn,
+        ).map((chord) => ({
+          fromMs: chord.fromMs - origin,
+          untilMs: chord.untilMs - origin,
+          name: chord.name,
+          numeral: chord.numeral,
+          exactly: chord.exactly,
+          root: chord.root,
+          kind: chord.kind,
+          chosen: isEveryNoteChosen(theNotesOfTheChord(roll, chord.fromMs - origin, chord.untilMs - origin), drawing.chosen),
+          says: chord.exactly
+            ? `${chord.name} (${chord.numeral}): the chord the notes here make`
+            : `${chord.name} (${chord.numeral}): the chord most of the notes here make, by how long they sound`,
+        }));
+  // The notes held into a chord chosen in the lane, from before it.
+  const heldIn = new Set(
+    chords.filter((chord) => chord.chosen).flatMap((chord) => theNotesHeldIntoTheChord(roll, chord.fromMs, chord.untilMs)),
+  );
+
   return {
     highest: band.high,
     rows: band.high - band.low + 1,
@@ -1132,7 +1163,10 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
     rushes: momentsInTimeOrder(theRushes(roll).map((rush) => rushOf(rush, origin))),
     slips: inTimeOrder(slips),
     notes: inTimeOrder(
-      roll.presses.map((press) => noteOf(press, origin, band.high, endMs, drawing.chosen, drawing.freely === true, written)),
+      roll.presses.map((press) => {
+        const note = noteOf(press, origin, band.high, endMs, drawing.chosen, drawing.freely === true, written);
+        return heldIn.has(press) && note.chosen !== true ? { ...note, heldIntoTheChordChosen: true } : note;
+      }),
     ),
     ghosts: inTimeOrder(
       outlines.map(({ ghost, from, until }) => ({
@@ -1151,26 +1185,7 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
         says: span.upAtMs === null ? 'Pedal, still down' : 'Pedal',
       })),
     ),
-    chords:
-      drawing.chordsIn === undefined
-        ? []
-        : theChordsAlongTheBars(
-            roll.presses.map((press) => ({ midi: press.midi, fromMs: press.downAtMs, untilMs: press.upAtMs ?? endMs })),
-            theBarsOfTheRoll(roll),
-            drawing.chordsIn,
-          ).map((chord) => ({
-            fromMs: chord.fromMs - origin,
-            untilMs: chord.untilMs - origin,
-            name: chord.name,
-            numeral: chord.numeral,
-            exactly: chord.exactly,
-            root: chord.root,
-            kind: chord.kind,
-            chosen: isEveryNoteChosen(theNotesOfTheChord(roll, chord.fromMs - origin, chord.untilMs - origin), drawing.chosen),
-            says: chord.exactly
-              ? `${chord.name} (${chord.numeral}): the chord the notes here make`
-              : `${chord.name} (${chord.numeral}): the chord most of the notes here make, by how long they sound`,
-          })),
+    chords,
   };
 }
 
@@ -1182,6 +1197,18 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
 export function theNotesOfTheChord(roll: RunRoll, fromMs: number, untilMs: number): readonly RolledPress[] {
   const origin = rollBeganAtMs(roll);
   return roll.presses.filter((press) => press.downAtMs - origin >= fromMs && press.downAtMs - origin < untilMs);
+}
+
+/**
+ * The notes held into a chord in the lane from before it: struck before it
+ * begins and still sounding as it does - heard in it, and named with it.
+ */
+export function theNotesHeldIntoTheChord(roll: RunRoll, fromMs: number, untilMs: number): readonly RolledPress[] {
+  const origin = rollBeganAtMs(roll);
+  const endMs = rollEndedAtMs(roll);
+  return untilMs <= fromMs
+    ? []
+    : roll.presses.filter((press) => press.downAtMs - origin < fromMs && (press.upAtMs ?? endMs) - origin > fromMs);
 }
 
 /** Whether there are notes, and every one of them is among those chosen. */

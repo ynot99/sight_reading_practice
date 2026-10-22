@@ -684,6 +684,17 @@ interface ChordWritten {
   readonly headAfterMs: number | null;
 }
 
+/**
+ * How long a finger rests on a chord of the drawer before moving for the
+ * move to slide over the others, each heard, rather than scroll the column
+ * they stand in: a scroll is a finger moving as it comes down, a slide one
+ * that has stopped to listen first.
+ */
+const A_FINGER_LISTENS_MS = 250;
+
+/** How far a finger on a chord of the drawer goes before it is moving at all, and not only resting unsteadily. */
+const A_FINGER_MOVES_PX = 8;
+
 /** How the way a chord is broken is said on its button. */
 const ARPEGGIO_WAYS: Readonly<Record<ArpeggioWay, string>> = {
   up: 'up',
@@ -2201,13 +2212,20 @@ export class AppView {
   /**
    * The chord of the drawer a pointer is held down on, sounding until it is
    * let go of: by its place there, or none where the pointer has slid off
-   * the chords; its keys, and when they were struck.
+   * the chords; its keys, and when they were struck. And what its moving
+   * is, once it moves (see `A_FINGER_LISTENS_MS`): a slide over the chords,
+   * or the column scrolled, from where it was and where the pointer went
+   * down.
    */
   private chordHeld: {
     readonly pointerId: number;
     readonly at: number | null;
     readonly keys: readonly number[];
     readonly struckAtMs: number;
+    readonly downAtMs: number;
+    readonly downY: number;
+    readonly scrolledFrom: number;
+    readonly moving: 'not yet' | 'slides' | 'scrolls';
   } | null = null;
 
   /**
@@ -9645,8 +9663,9 @@ export class AppView {
     });
     for (const type of ['pointerup', 'pointercancel'] as const) {
       this.listen(this.doc, type, (event) => {
-        if (event instanceof PointerEvent && this.chordHeld?.pointerId === event.pointerId) {
-          this.letGoOfTheChord(type === 'pointerup' ? this.theChordUnder(event) : null);
+        const held = this.chordHeld;
+        if (event instanceof PointerEvent && held?.pointerId === event.pointerId) {
+          this.letGoOfTheChord(type === 'pointerup' && held.moving !== 'scrolls' ? this.theChordUnder(event) : null);
         }
       });
     }
@@ -13357,7 +13376,17 @@ export class AppView {
       return;
     }
     this.letGoOfTheChord(null);
-    this.chordHeld = { pointerId: event.pointerId, at: null, keys: [], struckAtMs: 0 };
+    this.chordHeld = {
+      pointerId: event.pointerId,
+      at: null,
+      keys: [],
+      struckAtMs: 0,
+      downAtMs: this.runtime.clock.now(),
+      downY: event.clientY,
+      scrolledFrom: this.el.rollChords.scrollTop,
+      // A mouse scrolls with its wheel, so its moving is always a slide.
+      moving: event.pointerType === 'mouse' ? 'slides' : 'not yet',
+    };
     this.strikeTheChord(Number(chord.dataset['chord']));
   }
 
@@ -13367,6 +13396,29 @@ export class AppView {
    * off the chords - and shows where it would be written.
    */
   private slideOverTheChords(event: PointerEvent): void {
+    const held = this.chordHeld;
+    if (held === null) {
+      return;
+    }
+    if (held.moving === 'not yet') {
+      if (Math.abs(event.clientY - held.downY) < A_FINGER_MOVES_PX) {
+        return;
+      }
+      // A column with nothing to scroll is slid over at once.
+      const scrolls =
+        this.el.rollChords.scrollHeight > this.el.rollChords.clientHeight &&
+        this.runtime.clock.now() - held.downAtMs < A_FINGER_LISTENS_MS;
+      if (scrolls) {
+        // The chord struck as it came down was not asked for: silenced, and nothing written.
+        this.strikeTheChord(null);
+        this.pointAtTheChord(null);
+      }
+      this.chordHeld = { ...(this.chordHeld ?? held), moving: scrolls ? 'scrolls' : 'slides' };
+    }
+    if (this.chordHeld?.moving === 'scrolls') {
+      this.el.rollChords.scrollTop = held.scrolledFrom - (event.clientY - held.downY);
+      return;
+    }
     const at = this.theChordUnder(event);
     if (at !== this.chordHeld?.at) {
       this.strikeTheChord(at);

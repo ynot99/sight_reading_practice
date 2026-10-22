@@ -1441,7 +1441,7 @@ describe('the stylesheet', () => {
     expect(ruleOf('.button')).toMatch(/padding\s*:\s*8px 14px/);
     // The chords stand in the column itself, sharing its height with the keep button.
     expect(ruleOf('.roll-chords__list')).toMatch(/display\s*:\s*contents/);
-    // A finger slides over the chords, each heard in turn, rather than scrolling them.
+    // A finger on the chords is followed by the page, which tells a slide over them from a scroll.
     expect(ruleOf('.roll-chords__chord')).toMatch(/touch-action\s*:\s*none/);
   });
 

@@ -8423,11 +8423,13 @@ describe('AppView', () => {
 
     it('sounds a chord of the drawer while it is held, slid over the others, and writes the one let go of', async () => {
       // jsdom lays nothing out, so where a pointer is says which chord it is
-      // over: y is the chord's place in the drawer, and anywhere else is off it.
+      // over: the chords stand fifty pixels apart down the drawer, and
+      // anywhere else is off them.
       Object.defineProperty(document, 'elementFromPoint', {
         configurable: true,
         value: (_x: number, y: number): Element | null =>
-          element('roll-chords-list').querySelector(`[data-chord="${String(y)}"] .roll-chords__name`) ?? document.body,
+          element('roll-chords-list').querySelector(`[data-chord="${String(Math.floor(y / 50))}"] .roll-chords__name`) ??
+          document.body,
       });
       try {
         const { view, sketches, instrument, clock } = createRig();
@@ -8455,7 +8457,7 @@ describe('AppView', () => {
           return found;
         };
         const pointer = (type: string, on: EventTarget, at: number, more: PointerEventInit = {}): void => {
-          on.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 7, pointerType: 'touch', clientY: at, ...more }));
+          on.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 7, pointerType: 'touch', clientY: at * 50 + 10, ...more }));
         };
         const written = (): number[][] =>
           (sketches.find(sketch.id)?.events ?? [])
@@ -8560,6 +8562,7 @@ describe('AppView', () => {
         pointer('pointerup', chord(Am), -1, { pointerId: 8 });
 
         // Deleting, a chord is only deleted: neither heard nor written.
+        const writtenNow = written().length;
         element<HTMLButtonElement>('roll-chords-keep').click();
         element<HTMLButtonElement>('roll-chords-forget').click();
         const kept = 7;
@@ -8568,8 +8571,51 @@ describe('AppView', () => {
         pointer('pointerup', chord(kept), kept, { pointerType: 'mouse', button: 0 });
         chord(kept).dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
         expect(heard()).toHaveLength(before);
-        expect(written()).toHaveLength(5);
+        expect(written()).toHaveLength(writtenNow);
         expect(element('roll-chords-list').querySelector(`[data-chord="${String(kept)}"]`)).toBeNull();
+
+        // Where the drawer holds more than is seen, a finger moving as it
+        // comes down scrolls it: the chord it struck silenced, and nothing
+        // written where it is let go of. A finger only resting unsteadily is
+        // not moving yet.
+        const column = element('roll-chords');
+        let scrolled = 200;
+        Object.defineProperty(column, 'scrollHeight', { configurable: true, value: 900 });
+        Object.defineProperty(column, 'clientHeight', { configurable: true, value: 300 });
+        Object.defineProperty(column, 'scrollTop', {
+          configurable: true,
+          get: () => scrolled,
+          set: (to: number) => {
+            scrolled = to;
+          },
+        });
+        instrument.stopped.length = 0;
+        const heardBefore = heard().length;
+        const writtenBefore = written().length;
+        pointer('pointerdown', chord(C), C);
+        pointer('pointermove', chord(C), C, { clientY: 10 + 3 });
+        expect([scrolled, silenced()]).toEqual([200, []]);
+        pointer('pointermove', chord(C), C, { clientY: 10 + 60 });
+        expect(scrolled).toBe(140);
+        expect(silenced().map(([midi]) => midi)).toEqual([60, 64, 67]);
+        pointer('pointermove', chord(C), C, { clientY: 10 - 50 });
+        expect(scrolled).toBe(250);
+        pointer('pointerup', chord(C), F);
+        expect(heard()).toHaveLength(heardBefore + 3);
+        expect(written()).toHaveLength(writtenBefore);
+        // Resting first, it slides over them, as where there is nothing to scroll.
+        pointer('pointerdown', chord(C), C);
+        clock.advance(300);
+        pointer('pointermove', chord(C), F);
+        expect(heard().slice(-3).map(([midi]) => midi)).toEqual([65, 69, 72]);
+        expect(scrolled).toBe(250);
+        pointer('pointerup', chord(C), F);
+        expect(written()).toHaveLength(writtenBefore + 3);
+        // A mouse, which scrolls with its wheel, slides at once.
+        pointer('pointerdown', chord(C), C, { pointerType: 'mouse', button: 0 });
+        pointer('pointermove', chord(C), Am, { pointerType: 'mouse', button: 0 });
+        expect(heard().slice(-3).map(([midi]) => midi)).toEqual([69, 72, 76]);
+        pointer('pointerup', chord(C), -1, { pointerType: 'mouse', button: 0 });
       } finally {
         Reflect.deleteProperty(document, 'elementFromPoint');
       }

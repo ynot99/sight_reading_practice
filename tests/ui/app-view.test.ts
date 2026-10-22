@@ -7905,6 +7905,19 @@ describe('AppView', () => {
       );
       expect([chosen(), slice()]).toEqual([0, '2.000+4.000']);
       expect(view.rollScene?.notes).toHaveLength(16);
+
+      // Stop takes the marker, put inside the slice, back to where the slice
+      // begins, where a lap of it begins; pressed again, to the beginning.
+      expect(head()).toBe('3.000');
+      element<HTMLButtonElement>('roll-stop').click();
+      expect(head()).toBe('2.000');
+      element<HTMLButtonElement>('roll-stop').click();
+      expect(head()).toBe('0.000');
+      // Put outside it, the marker is where stop finds it, and it goes to the beginning.
+      clickTheRuler(7.1);
+      expect(head()).toBe('7.000');
+      element<HTMLButtonElement>('roll-stop').click();
+      expect(head()).toBe('0.000');
     });
 
     it('lays a slice on the picture of a run played, as on a sketch, and goes round it', async () => {

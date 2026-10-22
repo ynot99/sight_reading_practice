@@ -16159,11 +16159,21 @@ export class AppView {
       return;
     }
     const sounding = this.runtime.takePlayer.playing === RUN_ROLL_ID;
-    if (!sounding && this.rollAtMs === this.rollPlacedAtMs) {
+    if (!sounding && this.rollAtMs === this.whereTheMarkerGoesBackTo()) {
       this.stopTheRoll();
       return;
     }
     this.goBackToTheMarker();
+  }
+
+  /**
+   * Where going back takes the marker: to the start of the slice where the
+   * marker is inside one - a playback from it goes round the slice, and
+   * each lap begins there - and to the marker otherwise.
+   */
+  private whereTheMarkerGoesBackTo(): number {
+    const slice = this.theSliceGoneRoundFrom(this.rollPlacedAtMs);
+    return slice === null ? this.rollPlacedAtMs : slice.fromMs;
   }
 
   /** Back to where the marker was put, a playback going stopped: what Shift+Space asks for. */
@@ -16172,6 +16182,7 @@ export class AppView {
     if (sounding) {
       this.runtime.takePlayer.stop();
     }
+    this.rollPlacedAtMs = this.whereTheMarkerGoesBackTo();
     this.rollAtMs = this.rollPlacedAtMs;
     this.clicksHandedOver(0);
     this.letTheRollTickGo();

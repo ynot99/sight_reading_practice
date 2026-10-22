@@ -7027,7 +7027,7 @@ describe('AppView', () => {
     });
 
     it('changes the metre and the pace from the bar the cursor is in, asked in a sheet, and marks it over the bar', async () => {
-      const { view, sketches } = createRig();
+      const { view, sketches, clock } = createRig();
       await view.initialize();
       const sketch = sketches.begin(
         {
@@ -7053,7 +7053,9 @@ describe('AppView', () => {
       const marks = (): string[] => (view.rollScene?.marks ?? []).map((each) => `${each.after}: ${each.says}`);
       const struck = (): number[] =>
         (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'noteOn' ? [Math.round(event.atMs)] : []));
+      // A click alone each time, and never the second of two, which writes a note.
       const cursorAt = (ms: number): void => {
+        clock.advance(1_000);
         tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: (ms / 1000) * zoom, clientY: 20 });
       };
       const asked = (): void => {
@@ -7148,7 +7150,9 @@ describe('AppView', () => {
       const scale = element<HTMLSelectElement>('roll-mark-scale');
       const remove = element<HTMLButtonElement>('roll-mark-remove');
       const marks = (): string[] => (view.rollScene?.marks ?? []).map((each) => `${each.after}: ${each.says}`);
+      // A click alone each time, and never the second of two, which writes a note.
       const cursorAt = (ms: number): void => {
+        clock.advance(1_000);
         tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: (ms / 1000) * zoom, clientY: 20 });
       };
       const change = (pitchClass: string, name: string): void => {

@@ -465,6 +465,13 @@ export class VerovioScoreRenderer
     this.turnToPage(this.pageAt + delta);
   }
 
+  showTheMarker(): void {
+    // The system last followed to is no longer where the reader is looking
+    // once they have scrolled, and following goes there again.
+    this.followed = null;
+    this.followTheMusic(true);
+  }
+
   showMeasure(measureIndex: number): void {
     if (!this.paged || !this.hasMusic) {
       return;
@@ -2071,11 +2078,12 @@ export class VerovioScoreRenderer
    * engraver where its bar is when that page is not drawn, which a run begun
    * far into the piece asks for. Scrolled, the column brings the marker's
    * system into the middle of the view, once for each system rather than for
-   * every note in it.
+   * every note in it. Pages left to the reader to turn are turned only where
+   * the reader asked to see the marker.
    */
-  private followTheMusic(): void {
+  private followTheMusic(askedFor = false): void {
     const stepIndex = this.reader.position;
-    if (this.paged && !this.pagesFollowTheMusic) {
+    if (this.paged && !this.pagesFollowTheMusic && !askedFor) {
       return;
     }
     const page = this.pageOfStep(stepIndex);

@@ -116,6 +116,14 @@ export interface IScorePages {
   /** Brings the page holding that bar into view, if it is not already. */
   showMeasure(measureIndex: number): void;
   /**
+   * Brings the reader's marker into view, put by the reader somewhere the
+   * page may not be showing - in the drawing of the music, which has no
+   * page of its own. A reader asking: turned to whether or not pages turn
+   * with the music, and scrolled to however the score has been scrolled
+   * since it last followed the marker.
+   */
+  showTheMarker(): void;
+  /**
    * Whether to show the top of the next page where the reader has finished.
    *
    * A page turn is the hardest moment in sight reading: the music the reader

@@ -12901,9 +12901,11 @@ export class AppView {
     const placed = this.rollPlacedAtMs;
     const bar = carryTheMarker && placed !== this.headWhereShown ? this.theBarOnThePageAt(placed) : null;
     this.stopTheRoll();
+    // And shown there: put in the drawing, it may be on a page not showing.
     const beginThere = (): void => {
       if (bar !== null) {
         this.beginAt(bar);
+        this.runtime.renderer.showTheMarker();
       }
     };
     this.el.sheetRollOptions.hidden = true;

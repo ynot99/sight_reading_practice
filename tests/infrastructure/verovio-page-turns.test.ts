@@ -177,6 +177,25 @@ describe('a page turned by the music', () => {
     renderer.cursor.moveTo(firstStepOf(surface, 1, 0) + 1);
     expect(renderer.pages.at).toBe(1);
   });
+
+  it('turns to the marker the reader asks to be shown, pages left to them to turn or not', async () => {
+    const { renderer, surface, engraver } = await aScore();
+    renderer.turnPagesWithTheMusic(false);
+    renderer.cursor.moveTo(firstStepOf(surface, 1, 0));
+    expect(renderer.pages.at).toBe(0);
+
+    renderer.showTheMarker();
+    expect(renderer.pages.at).toBe(1);
+
+    // And to a page not drawn, once the engraver has said which.
+    const page = ((await engraver.pageOf('m110')) ?? NaN) - 1;
+    renderer.cursor.moveTo(PIECE.steps.findIndex((each) => each.barId === 'm110'));
+    expect(renderer.pages.at).toBe(1);
+    renderer.showTheMarker();
+    await whenDrawn(() => {
+      expect(renderer.pages.at).toBe(page);
+    });
+  });
 });
 
 describe('a scrolled score following the music', () => {
@@ -242,6 +261,21 @@ describe('a scrolled score following the music', () => {
     await whenDrawn(() => {
       expect(asked.at(-1)?.top).toBe(page * height);
     });
+  });
+
+  it('scrolls to the marker the reader asks to be shown, though its system was followed to before', async () => {
+    // The reader may have scrolled the column anywhere since.
+    const stage = await aScore(false);
+    const asked = laidOut(stage);
+    const first = firstStepOf(stage.surface, 0, 1);
+    stage.renderer.cursor.moveTo(first);
+    stage.renderer.cursor.moveTo(first + 1);
+    expect(asked).toHaveLength(1);
+
+    stage.renderer.showTheMarker();
+
+    expect(asked).toHaveLength(2);
+    expect(asked[1]?.top).toBe(asked[0]?.top);
   });
 });
 

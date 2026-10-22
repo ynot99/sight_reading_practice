@@ -11542,7 +11542,7 @@ describe('AppView', () => {
     });
 
     it('carries the marker put in the drawing of the score to where the page begins, by its bar, and back', async () => {
-      const { view, runtime, clock } = createRig();
+      const { view, runtime, clock, renderer } = createRig();
       await view.initialize();
       // Bars of four seconds.
       await runtime.controller.openScore(longExercise({ bars: 8, tempoBpm: 60 }));
@@ -11558,12 +11558,16 @@ describe('AppView', () => {
       expect(headAt(body)).toBe('0.000');
       element<HTMLButtonElement>('roll-close').click();
       expect(runtime.controller.barARunBeginsAt).toBe(0);
-      // Put in the third bar, between its beats: the page begins at its bar line.
+      expect(renderer.markerShownAt).toEqual([]);
+      // Put in the third bar, between its beats: the page begins at its bar line,
+      // and is shown there, the marker being where it now is.
       element<HTMLButtonElement>('focus-roll').click();
       ruler(9.2);
       expect(headAt(body)).toBe('9.000');
       element<HTMLButtonElement>('roll-close').click();
       expect(runtime.controller.barARunBeginsAt).toBe(2);
+      expect(renderer.markerShownAt).toEqual([runtime.controller.beginsAt]);
+      expect(runtime.controller.beginsAt).toBeGreaterThan(0);
       // Shown again, the marker is where the page begins.
       element<HTMLButtonElement>('focus-roll').click();
       expect(headAt(body)).toBe('8.000');
@@ -11588,6 +11592,8 @@ describe('AppView', () => {
       ruler(25.2);
       element<HTMLButtonElement>('roll-practise').click();
       expect(runtime.controller.barARunBeginsAt).toBe(4);
+      // The marker put twice, and shown twice; the passage goes to its own beginning.
+      expect(renderer.markerShownAt).toHaveLength(2);
       // Shown and shut inside a passage that holds the page's beginning in,
       // the reader's own place stays theirs.
       runtime.controller.beginAtTheStart();

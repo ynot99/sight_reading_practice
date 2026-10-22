@@ -327,6 +327,8 @@ export class FakeScoreRenderer
   private pageListeners: ((state: ScorePageState) => void)[] = [];
   /** Every bar the reader was brought to, in order. */
   readonly shownMeasures: number[] = [];
+  /** The step the marker was at each time the reader asked to be shown it. */
+  readonly markerShownAt: number[] = [];
 
   setPaged(paged: boolean): void {
     this.isPaged = paged;
@@ -356,6 +358,10 @@ export class FakeScoreRenderer
     if (this.isPaged) {
       this.pageAt = Math.floor(measureIndex / this.barsPerPage);
     }
+  }
+
+  showTheMarker(): void {
+    this.markerShownAt.push(this.cursor.position);
   }
 
   onPagesChanged(listener: (state: ScorePageState) => void): () => void {

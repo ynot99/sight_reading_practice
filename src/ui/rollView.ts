@@ -373,8 +373,16 @@ export interface RollScene {
   readonly lengthMs: number;
   /** The rows the black keys are on, which are shaded as they are on the instrument. */
   readonly blackRows: readonly number[];
-  /** The rows of the notes of each scale the music is written in, as far as the next: see {@link RollDrawing.scales}. */
-  readonly scaleSpans: readonly { readonly fromMs: number; readonly untilMs: number; readonly rows: readonly number[] }[];
+  /**
+   * The rows of the notes of each scale the music is written in, as far as
+   * the next, and the rows of the notes outside it: see {@link RollDrawing.scales}.
+   */
+  readonly scaleSpans: readonly {
+    readonly fromMs: number;
+    readonly untilMs: number;
+    readonly rows: readonly number[];
+    readonly outside: readonly number[];
+  }[];
   /**
    * The rows each octave begins on, as far as the next scale: its tonic's,
    * where the music is written in one, and C's where it is not. A line runs
@@ -1064,16 +1072,16 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
   const scaleSpans = scales.map((scale, at) => {
     const inTheScale = new Set(scale.pitchClasses);
     const rows: number[] = [];
+    const outside: number[] = [];
     for (let midi = band.high; midi >= band.low; midi -= 1) {
-      if (inTheScale.has(((midi % 12) + 12) % 12)) {
-        rows.push(band.high - midi);
-      }
+      (inTheScale.has(((midi % 12) + 12) % 12) ? rows : outside).push(band.high - midi);
     }
     // The first from the very beginning, so nothing before the first bar is left unlit.
     return {
       fromMs: at === 0 ? Number.NEGATIVE_INFINITY : scale.fromMs - origin,
       untilMs: (scales[at + 1]?.fromMs ?? Number.POSITIVE_INFINITY) - origin,
       rows,
+      outside,
     };
   });
 

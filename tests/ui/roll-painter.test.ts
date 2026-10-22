@@ -36,6 +36,7 @@ const INKS: RollInks = {
   sounding: 'sounding',
   scale: 'scale',
   octave: 'octave',
+  outOfKey: 'out-of-key',
   right: 'right',
   left: 'left',
   tickDivision: 'tick-division',
@@ -416,10 +417,10 @@ describe('painting the grid', () => {
     const scene = {
       ...sceneOf(input),
       scaleSpans: [
-        { fromMs: Number.NEGATIVE_INFINITY, untilMs: 2_000, rows: [2, 50] },
-        { fromMs: 2_000, untilMs: Number.POSITIVE_INFINITY, rows: [3] },
+        { fromMs: Number.NEGATIVE_INFINITY, untilMs: 2_000, rows: [2, 50], outside: [] },
+        { fromMs: 2_000, untilMs: Number.POSITIVE_INFINITY, rows: [3], outside: [] },
         // Past the screen altogether.
-        { fromMs: 9_000, untilMs: 10_000, rows: [4] },
+        { fromMs: 9_000, untilMs: 10_000, rows: [4], outside: [] },
       ],
     };
     const { surface: canvas, recorder } = surface(700, 140);
@@ -435,6 +436,56 @@ describe('painting the grid', () => {
     const { surface: plain, recorder: none } = surface(700, 140);
     paintTheGrid(plain, sceneOf(input), at(), INKS, 1);
     expect(none.inked('scale')).toEqual([]);
+  });
+
+  it('lines the rows outside each scale across, as far as the next, laid from the drawing\'s beginning, under the notes, none out of sight', () => {
+    const input = roll({ presses: [press({ midi: 40 }), press({ midi: 90 })] });
+    // Outside one scale until two seconds in - 280 pixels at 140 a second - then another.
+    const scene = {
+      ...sceneOf(input),
+      scaleSpans: [
+        { fromMs: Number.NEGATIVE_INFINITY, untilMs: 2_000, rows: [], outside: [2, 50] },
+        { fromMs: 2_000, untilMs: Number.POSITIVE_INFINITY, rows: [], outside: [3] },
+        { fromMs: 9_000, untilMs: 10_000, rows: [], outside: [4] },
+      ],
+    };
+    // Scrolled along and down, so the lines are seen to keep to the drawing.
+    const view = at({ scrolledPx: 100, scrolledDownPx: 5 });
+    const { surface: canvas, recorder } = surface(700, 140);
+
+    paintTheGrid(canvas, scene, view, INKS, 1);
+
+    const lines = recorder.lines.filter((line) => line.ink === 'out-of-key');
+    const rowOf = (line: (typeof lines)[number]): number => Math.floor((Math.min(line.fromY, line.toY) + 5) / 14);
+    // Down to the left, at one slant, inside its row and its span.
+    for (const line of lines) {
+      expect(line.toX - line.fromX).toBeCloseTo(line.fromY - line.toY, 9);
+      expect(line.toY).toBeGreaterThan(line.fromY);
+      const row = rowOf(line);
+      expect(Math.max(line.fromY, line.toY) + 5).toBeLessThanOrEqual((row + 1) * 14);
+      const [from, until] = row === 2 ? [0, 180] : [180, 700];
+      expect(Math.min(line.fromX, line.toX)).toBeGreaterThanOrEqual(from);
+      expect(Math.max(line.fromX, line.toX)).toBeLessThanOrEqual(until);
+      // Each where across and down on the drawing add up to a whole number of gaps.
+      expect((((line.fromX + 100 + line.fromY + 5) % 6) + 6) % 6).toBeCloseTo(0, 9);
+    }
+    // The rows outside in sight, every gap of them: the second's lines from
+    // its span's beginning to the canvas's end.
+    expect([...new Set(lines.map(rowOf))].sort()).toEqual([2, 3]);
+    const ofRow = (row: number): number => lines.filter((line) => rowOf(line) === row).length;
+    expect(ofRow(2)).toBeGreaterThanOrEqual(Math.floor((180 + 14) / 6) - 1);
+    expect(ofRow(3)).toBeGreaterThanOrEqual(Math.floor((520 + 14) / 6) - 1);
+    // Whole lines inside a row are the row's height down.
+    expect(lines.filter((line) => rowOf(line) === 3 && line.toY - line.fromY === 14).length).toBeGreaterThan(70);
+    // Under the notes.
+    const { surface: still, recorder: unscrolled } = surface(700, 140);
+    paintTheGrid(still, scene, at(), INKS, 1);
+    expect(unscrolled.order).toContain('out-of-key');
+    expect(unscrolled.order.indexOf('correct')).toBeGreaterThan(0);
+    expect(unscrolled.order.indexOf('out-of-key')).toBeLessThan(unscrolled.order.indexOf('correct'));
+    const { surface: plain, recorder: none } = surface(700, 140);
+    paintTheGrid(plain, sceneOf(input), at(), INKS, 1);
+    expect(none.lines.filter((line) => line.ink === 'out-of-key')).toEqual([]);
   });
 
   it('lines the foot of the row each octave begins on, as far as the next scale, under the notes, none out of sight', () => {

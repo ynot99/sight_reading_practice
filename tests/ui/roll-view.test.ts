@@ -540,8 +540,8 @@ describe('drawing a run as a piano roll', () => {
     // On the drawing's own clock, which begins a second into the run.
     expect(rollBeganAtMs(input)).toBe(1_000);
     expect(scene.scaleSpans).toEqual([
-      { fromMs: Number.NEGATIVE_INFINITY, untilMs: 1_000, rows: [1, 2, 4, 6, 7, 9, 11] },
-      { fromMs: 1_000, untilMs: Number.POSITIVE_INFINITY, rows: [0, 2, 4, 6, 7, 9, 11] },
+      { fromMs: Number.NEGATIVE_INFINITY, untilMs: 1_000, rows: [1, 2, 4, 6, 7, 9, 11], outside: [0, 3, 5, 8, 10] },
+      { fromMs: 1_000, untilMs: Number.POSITIVE_INFINITY, rows: [0, 2, 4, 6, 7, 9, 11], outside: [1, 3, 5, 8, 10] },
     ]);
     expect(sceneOf(input).scaleSpans).toEqual([]);
     // Each octave begins on the tonic's row: C's, then G's from two seconds.

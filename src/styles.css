@@ -2011,6 +2011,11 @@ textarea {
    * read before an octave.
    */
   --roll-ink-octave: color-mix(in srgb, var(--border) 55%, transparent);
+  /*
+   * Lines across a row outside the scale: the beats' ink, fainter than the
+   * line between beats, so the grid is read before the pattern.
+   */
+  --roll-ink-out-of-key: color-mix(in srgb, var(--border) 40%, transparent);
   --roll-ink-downbeat: var(--border);
   /*
    * A bar line the reader gave after it fell due. Two lines at one bar line is

@@ -51,6 +51,8 @@ export interface RollInks {
   readonly scale: string;
   /** The line under the row an octave begins on. */
   readonly octave: string;
+  /** The lines across a row outside the scale: no verdict, the page's lines. */
+  readonly outOfKey: string;
   /** A note nothing judged, by the hand that plays it: colours no verdict wears. */
   readonly right: string;
   readonly left: string;
@@ -89,6 +91,7 @@ export const INKS: Readonly<Record<Exclude<keyof RollInks, 'font'>, string>> = {
   sounding: 'sounding',
   scale: 'scale',
   octave: 'octave',
+  outOfKey: 'out-of-key',
   right: 'right',
   left: 'left',
   tickDivision: 'tick-division',
@@ -282,6 +285,33 @@ const CHOSEN_RIM_PX = 2;
  */
 /** How thick the line under the row an octave begins on is. */
 const OCTAVE_LINE_PX = 1;
+/** How far apart the lines across a row outside the scale are, and how thick. */
+const HATCH_APART_PX = 6;
+const HATCH_LINE_PX = 1;
+
+/**
+ * Lines falling to the left across a box, each where across and down add up
+ * to the same, a gap apart counted from `laidFrom` - where the drawing's
+ * beginning is on the canvas - so the lines of one row meet those of the
+ * next, and of the next tile.
+ */
+function hatch(
+  paint: CanvasRenderingContext2D,
+  box: { readonly left: number; readonly right: number; readonly top: number; readonly tall: number },
+  laidFrom: number,
+): void {
+  const { left, right, top, tall } = box;
+  const first = laidFrom + Math.ceil((left + top - laidFrom) / HATCH_APART_PX) * HATCH_APART_PX;
+  for (let sum = first; sum < right + top + tall; sum += HATCH_APART_PX) {
+    // Down the line from where it comes into the box to where it leaves.
+    const fromY = Math.max(top, sum - right);
+    const toY = Math.min(top + tall, sum - left);
+    if (toY > fromY) {
+      paint.moveTo(sum - fromY, fromY);
+      paint.lineTo(sum - toY, toY);
+    }
+  }
+}
 
 const VELOCITY_INSET_PX = 3;
 const VELOCITY_TALL_PX = 2;
@@ -401,6 +431,23 @@ export function paintTheGrid(
       }
     }
   }
+  // The rows outside each scale, lined across: told from a row of it by a
+  // pattern, where a shade alone is also what the black keys are given. The
+  // lines are the drawing's, laid from its beginning, so they move with it.
+  paint.strokeStyle = inks.outOfKey;
+  paint.lineWidth = HATCH_LINE_PX;
+  paint.beginPath();
+  for (const span of scene.scaleSpans) {
+    const left = Math.max(0, x(span.fromMs));
+    const right = Math.min(widePx, x(span.untilMs));
+    // A span out of sight crosses no box, and draws nothing.
+    for (const row of span.outside) {
+      if (shows(row)) {
+        hatch(paint, { left, right, top: y(row), tall: rowPx }, x(0) + y(0));
+      }
+    }
+  }
+  paint.stroke();
   // Where each octave begins, a line along the foot of its row: under the
   // tonic the rows are lit from, or under C.
   paint.fillStyle = inks.octave;

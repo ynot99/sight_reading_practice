@@ -67,6 +67,10 @@ export class Recorder {
   font = '';
   textBaseline = '';
   readonly marks: Mark[] = [];
+  /** Every straight line stroked, one by one: a path of many lines is many here, and one mark. */
+  readonly lines: { readonly ink: string; readonly fromX: number; readonly fromY: number; readonly toX: number; readonly toY: number }[] = [];
+  private segments: { fromX: number; fromY: number; toX: number; toY: number }[] = [];
+  private pen: { x: number; y: number } | null = null;
   transform: readonly number[] = [];
   private path: { x: number; y: number; wide: number; tall: number; corners?: number | readonly number[] } | null =
     null;
@@ -81,6 +85,8 @@ export class Recorder {
   }
   beginPath(): void {
     this.path = null;
+    this.segments = [];
+    this.pen = null;
   }
   roundRect(x: number, y: number, wide: number, tall: number, corners: number | number[]): void {
     this.path = { x, y, wide, tall, corners };
@@ -90,11 +96,16 @@ export class Recorder {
   }
   moveTo(x: number, y: number): void {
     this.path = { x, y, wide: 0, tall: 0 };
+    this.pen = { x, y };
   }
   lineTo(x: number, y: number): void {
     if (this.path !== null) {
       this.path = { ...this.path, wide: x - this.path.x, tall: y - this.path.y };
     }
+    if (this.pen !== null) {
+      this.segments.push({ fromX: this.pen.x, fromY: this.pen.y, toX: x, toY: y });
+    }
+    this.pen = { x, y };
   }
   setLineDash(dashes: number[]): void {
     this.dashes = dashes;
@@ -108,6 +119,9 @@ export class Recorder {
     }
   }
   stroke(): void {
+    for (const segment of this.segments) {
+      this.lines.push({ ink: String(this.strokeStyle), ...segment });
+    }
     if (this.path !== null) {
       this.marks.push({
         how: 'stroke',

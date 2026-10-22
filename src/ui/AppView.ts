@@ -1993,6 +1993,14 @@ export class AppView {
     readonly key: KeyNamed;
     /** Whether a tap on it adds it to the notes chosen or takes it out, rather than choosing it alone. */
     readonly adds: boolean;
+    /**
+     * Whether it is taken out of the notes chosen on letting go, where it was
+     * not moved: with Ctrl on one already chosen, the press may be the start
+     * of a copy of them all, and only a tap takes it out.
+     */
+    readonly letsGoOfIt: boolean;
+    /** Whether a drag of the whole of it copies the keys it holds, leaving them where they were: Ctrl or Cmd held as it was pressed. */
+    readonly copies: boolean;
     /** What of it was taken hold of: the whole note, moved, or its end, held longer or shorter. */
     readonly grip: 'whole' | 'end';
     /** When it was let go of, which a drag of its end moves. */
@@ -15065,10 +15073,14 @@ export class AppView {
     // go of without one chooses it alone - see `letGoOfTheHeldKey`.
     const named = { midi: key.midi, downAtMs: key.downAtMs };
     const adds = addsToTheChoice(event);
+    const copies = event.ctrlKey || event.metaKey;
     const wasChosen = sketch.chosen.some((each) => sameKey(each, key));
-    if (adds) {
+    // With Ctrl, one already chosen stays chosen while held: dragged, it and
+    // the rest are copied; tapped, it is taken out as it is let go of.
+    const letsGoOfIt = copies && wasChosen;
+    if (adds && !letsGoOfIt) {
       this.chooseOrLetGo(named);
-    } else if (!wasChosen) {
+    } else if (!adds && !wasChosen) {
       this.choose([named]);
     }
     this.rollDrag = {
@@ -15079,6 +15091,8 @@ export class AppView {
       moved: null,
       key: named,
       adds,
+      letsGoOfIt,
+      copies,
       grip: this.theGripOn(key, event),
       upAtMs: key.upAtMs ?? rollEndedAtMs(showing.roll),
     };
@@ -15205,6 +15219,7 @@ export class AppView {
         downAtMs: key.downAtMs + byMs,
         upAtMs: key.upAtMs === null ? null : key.upAtMs + byMs,
       })),
+      drag.copies ? { byMs, bySemitones } : null,
     );
     // Heard where they are shown: a place refused is not where they went.
     const sounding = this.soundOfTheHeldKeys;
@@ -15249,12 +15264,26 @@ export class AppView {
 
   /**
    * Paints the sketch as a drag has it so far, and keeps it to be kept when
-   * the pointer lets go - unless a key would be over another of its pitch,
-   * when the drag stays where it last fitted, to go on from there once it
-   * fits again. Says whether it was shown.
+   * the pointer lets go - the keys moved, or, where it copies, copies of them
+   * moved and the keys left where they were - unless a key would be over
+   * another of its pitch, when the drag stays where it last fitted, to go on
+   * from there once it fits again. Says whether it was shown.
    */
-  private showTheDrag(drag: NonNullable<AppView['rollDrag']>, stored: StoredSketch, changes: readonly KeyChange[]): boolean {
-    const events = takeWithTheKeysChanged(stored.events, changes);
+  private showTheDrag(
+    drag: NonNullable<AppView['rollDrag']>,
+    stored: StoredSketch,
+    changes: readonly KeyChange[],
+    copied: { readonly byMs: number; readonly bySemitones: number } | null = null,
+  ): boolean {
+    const events =
+      copied === null
+        ? takeWithTheKeysChanged(stored.events, changes)
+        : takeWithTheKeysCopied(
+            stored.events,
+            changes.map(({ key }) => key),
+            copied.byMs,
+            copied.bySemitones,
+          );
     const to = changes.map(({ midi, downAtMs }) => ({ midi, downAtMs }));
     if (events === null || aKeyIsOverAnotherOfItsPitch(events, to)) {
       return false;
@@ -15289,7 +15318,9 @@ export class AppView {
           return;
         }
         // Added or taken out as it was pressed; otherwise chosen alone.
-        if (!drag.adds) {
+        if (drag.letsGoOfIt) {
+          this.chooseOrLetGo(drag.key);
+        } else if (!drag.adds) {
           this.choose([drag.key]);
         }
       }

@@ -6379,6 +6379,110 @@ describe('AppView', () => {
       expect(of(63)).toEqual([[500, 1_000]]);
     });
 
+    it('copies the notes held by a drag with Ctrl, leaving them where they were, and takes one out of the choice by a tap with it', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            [0, 400, 60],
+            [0, 400, 64],
+            [1_000, 1_400, 67],
+          ].flatMap(([atMs = 0, upAtMs = 0, midi = 0]) => [
+            { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: upAtMs, midi },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Copies',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const highest = view.rollScene?.highest ?? 0;
+      const scrolledDown =
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      const at = (ms: number, midi: number): { clientX: number; clientY: number } => ({
+        clientX: (ms / 1000) * zoom,
+        clientY: (highest - midi + 0.5) * 13 - scrolledDown,
+      });
+      const body = element('roll-body');
+      const pointer = (type: string, where: { clientX: number; clientY: number }, more: PointerEventInit = {}): void => {
+        body.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 96, pointerType: 'mouse', button: 0, ...where, ...more }));
+      };
+      const drag = (from: { clientX: number; clientY: number }, to: { clientX: number; clientY: number }, more: PointerEventInit = {}): void => {
+        pointer('pointerdown', from, more);
+        pointer('pointermove', to, more);
+        pointer('pointerup', to, more);
+        body.dispatchEvent(new MouseEvent('click', { bubbles: true, ...to, ...more }));
+      };
+      const tap = (where: { clientX: number; clientY: number }, more: PointerEventInit = {}): void => {
+        drag(where, where, more);
+      };
+      const notes = (): number[][] => {
+        const events = sketches.find(sketch.id)?.events ?? [];
+        return events
+          .flatMap((event, index) => {
+            if (event.kind !== 'noteOn') {
+              return [];
+            }
+            const off = events.slice(index + 1).find((later) => later.kind === 'noteOff' && later.midi === event.midi);
+            return [[event.midi, event.atMs, off?.atMs ?? -1]];
+          })
+          .sort(([a = 0, x = 0], [b = 0, y = 0]) => x - y || a - b);
+      };
+      const chosen = (): number[][] =>
+        (view.rollScene?.notes ?? [])
+          .filter((note) => note.chosen === true)
+          .map((note) => [highest - note.row, note.fromMs])
+          .sort(([a = 0, x = 0], [b = 0, y = 0]) => x - y || a - b);
+      const original = notes();
+
+      // A note not chosen, dragged with Ctrl: a copy of it goes where it is
+      // dragged, on the beat, and is chosen; it stays where it was.
+      drag(at(100, 60), at(1_100, 62), { ctrlKey: true });
+      expect(notes()).toEqual([...original.slice(0, 2), [62, 1_000, 1_400], [67, 1_000, 1_400]]);
+      expect(chosen()).toEqual([[62, 1_000]]);
+      // One change, put back as one.
+      element<HTMLButtonElement>('roll-undo').click();
+      expect(notes()).toEqual(original);
+
+      // Two chosen, dragged with Cmd from one of them: both copied, by as much.
+      tap(at(100, 60));
+      tap(at(100, 64), { shiftKey: true });
+      expect(chosen()).toEqual([
+        [60, 0],
+        [64, 0],
+      ]);
+      drag(at(100, 64), at(2_100, 64), { metaKey: true });
+      expect(notes()).toEqual([...original, [60, 2_000, 2_400], [64, 2_000, 2_400]]);
+      expect(chosen()).toEqual([
+        [60, 2_000],
+        [64, 2_000],
+      ]);
+
+      // Tapped with Ctrl, one chosen is taken out of the choice, and one not
+      // chosen added to it; nothing is copied.
+      tap(at(2_100, 60), { ctrlKey: true });
+      expect(chosen()).toEqual([[64, 2_000]]);
+      tap(at(1_100, 67), { ctrlKey: true });
+      expect(chosen()).toEqual([
+        [67, 1_000],
+        [64, 2_000],
+      ]);
+      expect(notes()).toHaveLength(5);
+
+      // Its end dragged with Ctrl, a note is held longer, to the beat, not copied.
+      tap(at(2_100, 64));
+      drag(at(2_390, 64), at(2_890, 64), { ctrlKey: true });
+      expect(notes()).toHaveLength(5);
+      expect(notes().at(-1)).toEqual([64, 2_000, 3_000]);
+    });
+
     it('moves a note neither by a drag nor by an arrow over another of its pitch', async () => {
       const { view, sketches, clock, instrument } = createRig();
       await view.initialize();

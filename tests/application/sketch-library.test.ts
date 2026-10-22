@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { theVelocityOfTheLevel } from '../../src/domain/midi/MidiFile.js';
+import { DYNAMIC_VELOCITY } from '../../src/domain/model/Exercise.js';
 import {
   ASSUMED_BEATS_IN_A_BAR,
   ASSUMED_BPM,
@@ -400,6 +402,68 @@ describe('the sketches being written', () => {
     store.write({ version: 1, sketches: [{ ...sketchAsKept(sketch), events: [...kept.slice(0, -2), [4, 2_000, 11, 0], [4, 2_000, -1, 0]] }] });
     next.load();
     expect(next.find(sketch.id)?.events).toEqual(PLAYED);
+  });
+
+  it('keeps how loud each note is written across visits, struck as it says, and leaves out what no loudness is', () => {
+    const store = new InMemorySettingsStore();
+    const library = new SketchLibrary(store, () => 0);
+    const events: MidiFileEvent[] = [
+      { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.2, loudness: { level: null, shade: -30 } },
+      { kind: 'noteOff', atMs: 400, midi: 60 },
+      { kind: 'noteOn', atMs: 500, midi: 62, velocity: 0.2, hand: 'left', loudness: { level: 'ff', shade: 0 } },
+      { kind: 'noteOff', atMs: 900, midi: 62 },
+      { kind: 'dynamic', atMs: 0, level: 'p' },
+    ];
+    const sketch = library.begin({ events, beats: THREE }, 'Written', 1);
+    // Struck as written, wherever the events came from.
+    expect(sketch.events.flatMap((event) => (event.kind === 'noteOn' ? [event.velocity] : []))).toEqual([
+      theVelocityOfTheLevel('p', -30),
+      DYNAMIC_VELOCITY.ff,
+    ]);
+    const next = new SketchLibrary(store, () => 0);
+    next.load();
+    expect(next.find(sketch.id)?.events).toEqual(sketch.events);
+    // After the hand, nought where none is said: the level from one, nought for the dynamic over it, and the share.
+    const kept = sketchAsKept(sketch)['events'] as unknown[];
+    expect(kept.slice(0, 1)).toEqual([[0, 0, 60, Math.round(theVelocityOfTheLevel('p', -30) * 127), 0, 0, -30]]);
+    expect(kept[2]).toEqual([0, 500, 62, Math.round(DYNAMIC_VELOCITY.ff * 127), 2, 9, 0]);
+    store.write({
+      version: 1,
+      sketches: [
+        {
+          ...sketchAsKept(sketch),
+          events: [[0, 0, 60, 40, 0, 12, 0], [1, 400, 60, 0], [0, 500, 62, 40, 0, 0, 101], [1, 900, 62, 0]],
+        },
+      ],
+    });
+    next.load();
+    expect(next.find(sketch.id)?.events.filter((event) => event.kind === 'noteOn')).toEqual([
+      { kind: 'noteOn', atMs: 0, midi: 60, velocity: 40 / 127 },
+      { kind: 'noteOn', atMs: 500, midi: 62, velocity: 40 / 127 },
+    ]);
+  });
+
+  it('reads a note kept before notes said how loud they are written as at a level where it is struck exactly as one', () => {
+    const store = new InMemorySettingsStore();
+    const library = new SketchLibrary(store, () => 0);
+    const sketch = library.begin({ events: PLAYED, beats: THREE }, 'Old', 1);
+    const atF = Math.round(DYNAMIC_VELOCITY.f * 127);
+    const old = { ...sketchAsKept(sketch), events: [[0, 0, 60, atF], [1, 400, 60, 0], [0, 500, 62, atF + 1], [1, 900, 62, 0]] };
+    delete (old as Record<string, unknown>)['loudness'];
+    store.write({ version: 1, sketches: [old] });
+    const next = new SketchLibrary(store, () => 0);
+    next.load();
+    const struck = (next.find(sketch.id)?.events ?? []).filter((event) => event.kind === 'noteOn');
+    expect(struck.map((event) => (event.kind === 'noteOn' ? event.loudness : null))).toEqual([{ level: 'f', shade: 0 }, undefined]);
+    // Kept since, it is read as it is, though struck exactly so.
+    store.write({ version: 1, sketches: [{ ...old, loudness: 1 }] });
+    next.load();
+    expect((next.find(sketch.id)?.events ?? []).some((event) => event.kind === 'noteOn' && event.loudness !== undefined)).toBe(false);
+    // As a note played exactly so, kept here, is.
+    const played = library.begin({ events: [{ kind: 'noteOn', atMs: 0, midi: 60, velocity: atF / 127 }, { kind: 'noteOff', atMs: 400, midi: 60 }], beats: THREE }, 'Played', 2);
+    const again = new SketchLibrary(store, () => 0);
+    again.load();
+    expect(again.find(played.id)?.events[0]).toEqual({ kind: 'noteOn', atMs: 0, midi: 60, velocity: atF / 127 });
   });
 
   it('keeps the beats a sketch is counted in across visits, its notes as they were', () => {

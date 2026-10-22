@@ -61,6 +61,7 @@ import {
 import { beginThePlaybackTimings } from '../../src/shared/playbackTimings.js';
 import { theLatestPlayback } from '../support/playbackTimings.js';
 import { Duration } from '../../src/domain/model/Duration.js';
+import { DYNAMIC_VELOCITY } from '../../src/domain/model/Exercise.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { theKeyChangesOf, type MidiFileEvent } from '../../src/domain/midi/MidiFile.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
@@ -4794,7 +4795,8 @@ describe('AppView', () => {
       tapOn(500);
       expect(chosen()).toEqual([]);
       // Two taps where there is no note write one: on the key of its row, in
-      // the cell of the grid tapped in, a beat long, as loud as the others, and chosen.
+      // the cell of the grid tapped in, a beat long, as loud as the flag over
+      // it says - none marked, mezzo-forte - following it, and chosen.
       const onTheRowOf = view.rollScene?.notes.find((note) => note.fromMs === 500)?.row ?? 0;
       tapTheDrawing({ clientX: 1.4 * zoom, clientY: (onTheRowOf + 0.5) * 13 - scrolledDown() });
       expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(3);
@@ -4803,7 +4805,7 @@ describe('AppView', () => {
         (event) => (event.kind === 'noteOn' || event.kind === 'noteOff') && event.midi === 64 && event.atMs >= 1_000,
       );
       expect(written).toEqual([
-        { kind: 'noteOn', atMs: 1_000, midi: 64, velocity: kept?.events[0]?.kind === 'noteOn' ? kept.events[0].velocity : -1 },
+        { kind: 'noteOn', atMs: 1_000, midi: 64, velocity: DYNAMIC_VELOCITY.mf, loudness: { level: null, shade: 0 } },
         { kind: 'noteOff', atMs: 1_500, midi: 64 },
       ]);
       expect(chosen()).toEqual([1_000]);
@@ -5801,14 +5803,14 @@ describe('AppView', () => {
         [64, undefined],
       ]);
 
-      // A note written where there was none: heard now, as loud as the notes around it, for the beat it is long.
+      // A note written where there was none: heard now, as loud as the flag over it says, for the beat it is long.
       instrument.played.length = 0;
       instrument.stopped.length = 0;
       const now = clock.now();
       tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(1_600, 67) });
       expect(heard()).toEqual([]);
       tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(1_600, 67) });
-      expect(heard()).toEqual([[67, 0.75, now]]);
+      expect(heard()).toEqual([[67, DYNAMIC_VELOCITY.mf, now]]);
       expect(ended()).toEqual([[67, now + 500]]);
 
       // A drag over empty space sounds nothing.
@@ -8414,19 +8416,19 @@ describe('AppView', () => {
       expect(chords()).toEqual(['CI', 'Dmii', 'Emiii', 'FIV', 'GV', 'Amvi', 'Bdimvii°']);
 
       // Written from the cursor to the next line of the grid, as loud as the
-      // sketch is, heard, and chosen; and the cursor goes on to its end.
+      // flag over it says, heard, and chosen; and the cursor goes on to its end.
       tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(3_000, 50) });
       tapTheChord('Am');
-      expect(notes()).toEqual([...original, [3_000, 69, 3_500, 0.5], [3_000, 72, 3_500, 0.5], [3_000, 76, 3_500, 0.5]]);
+      expect(notes()).toEqual([...original, [3_000, 69, 3_500, DYNAMIC_VELOCITY.mf], [3_000, 72, 3_500, DYNAMIC_VELOCITY.mf], [3_000, 76, 3_500, DYNAMIC_VELOCITY.mf]]);
       expect(chosen()).toEqual([
         [3_000, 69],
         [3_000, 72],
         [3_000, 76],
       ]);
       expect(instrument.played.slice(-3).map(({ midi, velocity }) => [midi, velocity])).toEqual([
-        [69, 0.5],
-        [72, 0.5],
-        [76, 0.5],
+        [69, DYNAMIC_VELOCITY.mf],
+        [72, DYNAMIC_VELOCITY.mf],
+        [76, DYNAMIC_VELOCITY.mf],
       ]);
       // The button keeps the focus it was pressed with, and the arrows are
       // still the notes': Shift takes the chord just written up an octave.
@@ -8451,7 +8453,11 @@ describe('AppView', () => {
       key({ key: 'z', code: 'KeyZ', ctrlKey: true });
       key({ key: 'z', code: 'KeyZ', ctrlKey: true });
       tapTheChord('F');
-      expect(notes().slice(5)).toEqual([[3_500, 65, 4_000, 0.5], [3_500, 69, 4_000, 0.5], [3_500, 72, 4_000, 0.5]]);
+      expect(notes().slice(5)).toEqual([[3_500, 65, 4_000, DYNAMIC_VELOCITY.mf], [3_500, 69, 4_000, DYNAMIC_VELOCITY.mf], [3_500, 72, 4_000, DYNAMIC_VELOCITY.mf]]);
+      // Following the flags over them, as a note written by hand does.
+      expect(
+        (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'noteOn' && event.atMs >= 3_000 ? [event.loudness] : [])),
+      ).toEqual(Array.from({ length: 6 }, () => ({ level: null, shade: 0 })));
       // Each one change, put back as one.
       key({ key: 'z', code: 'KeyZ', ctrlKey: true });
       expect(notes()).toHaveLength(5);
@@ -9951,8 +9957,10 @@ describe('AppView', () => {
       const track = element('roll-velocity-level').closest<HTMLElement>('.roll-velocity__track');
       const said = element('roll-velocity-said');
       const mark = (level: string): HTMLButtonElement | null => marks.querySelector<HTMLButtonElement>(`[data-dynamic="${level}"]`);
-      const pressed = (): string[] =>
-        [...marks.querySelectorAll<HTMLButtonElement>('[data-dynamic]')].filter((button) => button.getAttribute('aria-pressed') === 'true').map((button) => button.textContent);
+      const pressed = (): (string | undefined)[] =>
+        [...marks.querySelectorAll<HTMLButtonElement>('[data-dynamic]')]
+          .filter((button) => button.getAttribute('aria-pressed') === 'true')
+          .map((button) => button.dataset['dynamic']);
 
       // The slider first, the switch saying what it would show instead.
       expect(as.getAttribute('aria-checked')).toBe('false');
@@ -9965,24 +9973,36 @@ describe('AppView', () => {
       expect(as.title).toBe('Set how hard by a slider, from 1 to 127');
       expect([marks.hidden, track?.hidden, said.hidden]).toEqual([false, true, true]);
       expect(runtime.controller.settings.velocityAsDynamics).toBe(true);
-      expect([...marks.querySelectorAll('[data-dynamic]')].map((button) => button.textContent)).toEqual(['pp', 'p', 'mp', 'mf', 'f', 'ff']);
+      // The flags' own first - the notes given back to the flags over them -
+      // then a level of their own.
+      expect([...marks.querySelectorAll<HTMLElement>('[data-dynamic]')].map((button) => button.dataset['dynamic'])).toEqual([
+        'flag',
+        'pp',
+        'p',
+        'mp',
+        'mf',
+        'f',
+        'ff',
+      ]);
+      const dashed = (): (string | undefined)[] =>
+        [...marks.querySelectorAll<HTMLElement>('[data-from-the-flags="true"]')].map((button) => button.dataset['dynamic']);
 
       // Nothing chosen, none pressed; each says so and does nothing.
       expect(pressed()).toEqual([]);
-      expect(mark('f')?.title).toBe('Strike the chosen notes f, at 99. Choose a note first.');
+      expect(mark('f')?.title).toBe('Write the chosen notes f, a level of their own, at 99. Choose a note first.');
       expect(mark('f')?.getAttribute('aria-label')).toBe(mark('f')?.title);
       mark('f')?.click();
       expect(loudness()).toEqual([64, 96, 100]);
-      // Two chosen, at no mark: none pressed.
+      // Two chosen, as they were played: none pressed.
       tapOn(0);
       tapOn(500);
       expect(pressed()).toEqual([]);
-      expect(mark('f')?.title).toBe('Strike the chosen notes f, at 99');
-      // Struck at f, both - the one not chosen left - and f pressed.
+      expect(mark('f')?.title).toBe('Write the chosen notes f, a level of their own, at 99');
+      // At f, both - the one not chosen left - and f pressed.
       mark('f')?.click();
       expect(loudness()).toEqual([99, 99, 100]);
       expect(pressed()).toEqual(['f']);
-      // With the one at 100 chosen too, they differ, and none is pressed.
+      // With the one played chosen too, they differ, and none is pressed.
       tapOn(1_000);
       expect(pressed()).toEqual([]);
       tapOn(1_000);
@@ -9994,6 +10014,21 @@ describe('AppView', () => {
       mark('pp')?.click();
       undo();
       expect(loudness()).toEqual([99, 99, 100]);
+
+      // Given back to the flags: none marked yet, so mezzo-forte, which is
+      // edged in dashes - the level they are at, not their own.
+      expect(mark('flag')?.title).toBe('Make the chosen notes as loud as the flag over each says');
+      mark('flag')?.click();
+      expect(loudness()).toEqual([79, 79, 100]);
+      expect([pressed(), dashed()]).toEqual([['flag'], ['mf']]);
+      // A flag marking piano from the start: they follow it, the one played does not.
+      element<HTMLButtonElement>('roll-mark').click();
+      element<HTMLSelectElement>('roll-mark-dynamic').value = 'p';
+      element<HTMLButtonElement>('roll-mark-yes').click();
+      expect(loudness()).toEqual([42, 42, 100]);
+      expect([pressed(), dashed()]).toEqual([['flag'], ['p']]);
+      undo();
+      undo();
       undo();
       expect(loudness()).toEqual([64, 96, 100]);
 
@@ -10001,6 +10036,15 @@ describe('AppView', () => {
       as.click();
       expect([marks.hidden, track?.hidden, said.hidden]).toEqual([true, false, false]);
       expect(runtime.controller.settings.velocityAsDynamics).toBe(false);
+      // Set by a number, the notes are as loud as that, and at no level.
+      as.click();
+      mark('mp')?.click();
+      as.click();
+      const level = element<HTMLInputElement>('roll-velocity-level');
+      level.value = '70';
+      level.dispatchEvent(new Event('change'));
+      expect(loudness()).toEqual([70, 70, 100]);
+      expect((sketches.find(sketch.id)?.events ?? []).some((event) => event.kind === 'noteOn' && event.loudness !== undefined)).toBe(false);
     });
 
     it('sets how hard the chosen notes of a sketch are struck, by as much each, in the passage row', async () => {

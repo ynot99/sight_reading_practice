@@ -289,6 +289,12 @@ export interface SceneNote extends SceneRowed {
   readonly chosen?: boolean;
   /** How hard it was struck, `0..1`: a note drawn by its hand is as strong as it is loud. */
   readonly loudness: number;
+  /**
+   * The level it is written at, its own or the dynamic over it, where it is
+   * written at one; none for a note as loud as it was struck. Drawn on the
+   * bar of its loudness.
+   */
+  readonly written?: { readonly level: string; readonly own: boolean };
 }
 
 /** The gap between where a note was owed and where it was taken: see `slipBetween`. */
@@ -371,6 +377,11 @@ export interface RollScene {
   readonly rushes: readonly SceneMoment[];
   readonly slips: readonly SceneSlip[];
   readonly notes: readonly SceneNote[];
+  /**
+   * Whether any note is written at a level, as a sketch's may be: then a note
+   * as loud as it was struck is told apart from them on its bar.
+   */
+  readonly written: boolean;
   /** The notes the music asked for: see {@link RollDrawing.ghosts}. */
   readonly ghosts: readonly SceneRowed[];
   readonly bars: readonly SceneBar[];
@@ -452,6 +463,7 @@ function noteOf(
   endMs: number,
   chosen: RollDrawing['chosen'],
   freely: boolean,
+  amongWritten: boolean,
 ): SceneNote {
   const until = press.upAtMs ?? endMs;
   // What it was, for a finger on a cell. The deviation is the reason the view
@@ -465,8 +477,11 @@ function noteOf(
     row: high - press.midi,
     shade: shadeOf(press, freely),
     loudness: press.velocity,
+    ...(press.written === undefined ? {} : { written: press.written }),
     open: press.upAtMs === null,
-    says: `${midiToLabel(press.midi)} · ${press.verdict ?? 'not judged'}${off}${press.hand === undefined ? '' : ` · ${press.hand} hand`}`,
+    says: `${midiToLabel(press.midi)} · ${press.verdict ?? 'not judged'}${off}${press.hand === undefined ? '' : ` · ${press.hand} hand`}${
+      !freely || !amongWritten ? '' : press.written === undefined ? ' · as played' : press.written.own ? ` · ${press.written.level}, its own` : ` · ${press.written.level}, from the flag over it`
+    }`,
     ...(chosen?.some((each) => each.midi === press.midi && each.downAtMs === press.downAtMs) === true
       ? { chosen: true }
       : {}),
@@ -1011,6 +1026,8 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
   const endMs = rollEndedAtMs(roll);
   const ghosts = drawing.ghosts ?? [];
   const band = bandOf(roll.presses, ghosts, drawing.wholeKeyboard);
+  // Whether any note is written at a level: see `RollScene.written`.
+  const written = roll.presses.some((press) => press.written !== undefined);
 
   const blackRows: number[] = [];
   for (let midi = band.high; midi >= band.low; midi -= 1) {
@@ -1095,8 +1112,9 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
     rushes: momentsInTimeOrder(theRushes(roll).map((rush) => rushOf(rush, origin))),
     slips: inTimeOrder(slips),
     notes: inTimeOrder(
-      roll.presses.map((press) => noteOf(press, origin, band.high, endMs, drawing.chosen, drawing.freely === true)),
+      roll.presses.map((press) => noteOf(press, origin, band.high, endMs, drawing.chosen, drawing.freely === true, written)),
     ),
+    written,
     ghosts: inTimeOrder(
       outlines.map(({ ghost, from, until }) => ({
         fromMs: from,

@@ -1,5 +1,5 @@
-import { barsAreHeardIn, type HeardBeat, type MidiFileEvent } from '../domain/midi/MidiFile.js';
-import { barLines, elapsedMsAt, type Exercise } from '../domain/model/Exercise.js';
+import { barsAreHeardIn, takeWithTheLoudnessWritten, type HeardBeat, type MidiFileEvent } from '../domain/midi/MidiFile.js';
+import { barLines, DYNAMIC_LEVELS, DYNAMIC_VELOCITY, elapsedMsAt, type Exercise } from '../domain/model/Exercise.js';
 import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
 import { eachKeyOnce, sameKeys, theChordsMerged } from '../domain/harmony/chordsOfTheKey.js';
 import { SCALES, isAScale, type ScaleName } from '../domain/harmony/scales.js';
@@ -164,6 +164,8 @@ export function sketchAsKept(sketch: StoredSketch): Record<string, unknown> {
     title: sketch.title,
     begunAtMs: sketch.begunAtMs,
     events: sketch.events.map(pack),
+    // Its notes say how loud they are written: see `readSketch`.
+    loudness: 1,
     beats: sketch.beats.map(packBeat),
     key: [
       sketch.key.fifths,
@@ -187,7 +189,22 @@ function readSketch(value: unknown): StoredSketch | null {
     return null;
   }
   const unpacked = events.map(unpack).filter((event): event is MidiFileEvent => event !== null);
-  return sketchOf(id, title, begunAtMs, unpacked, theBeatsIfWhole(beats), readKey(key));
+  const written = value['loudness'] === 1 ? unpacked : unpacked.map(theLevelItWasStruckAt);
+  return sketchOf(id, title, begunAtMs, written, theBeatsIfWhole(beats), readKey(key));
+}
+
+/**
+ * A note kept before notes said how loud they are written, read as written
+ * at a level where it is struck exactly as hard as one: a level's button
+ * struck it so, and nothing else strikes so exactly. Any other was played,
+ * and is as loud as it is.
+ */
+function theLevelItWasStruckAt(event: MidiFileEvent): MidiFileEvent {
+  if (event.kind !== 'noteOn' || event.loudness !== undefined) {
+    return event;
+  }
+  const level = DYNAMIC_LEVELS.find((each) => Math.round(DYNAMIC_VELOCITY[each] * 127) === Math.round(event.velocity * 127));
+  return level === undefined ? event : { ...event, loudness: { level, shade: 0 } };
 }
 
 function sketchOf(
@@ -198,13 +215,16 @@ function sketchOf(
   beats: readonly HeardBeat[],
   key: SketchKey,
 ): StoredSketch {
+  // Each note written at a level struck as hard as it says, wherever the
+  // events came from: the one place its velocity is worked out.
+  const written = takeWithTheLoudnessWritten(events);
   return {
     id,
     title,
     begunAtMs,
-    events,
+    events: written,
     beats,
-    noteCount: events.filter((event) => event.kind === 'noteOn').length,
+    noteCount: written.filter((event) => event.kind === 'noteOn').length,
     key,
   };
 }

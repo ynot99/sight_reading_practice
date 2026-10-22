@@ -42,6 +42,7 @@ import {
   takeWithThePedalAt,
   theKeysOnTheGrid,
   theKeysHumanized,
+  HUMANIZED_SHADE_AT_MOST,
   HUMANIZED_BY_AT_MOST,
   takeWithAKeyAdded,
   theKeysOfTheTake,
@@ -1587,6 +1588,45 @@ describe('changing a recording', () => {
     ]);
   });
 
+  it('keeps how loud a key is written where it is moved, takes it away where asked, and draws it on the roll', () => {
+    const events = inTheOrderPlayed([
+      { kind: 'noteOn', atMs: 0, midi: MIDI.C4, velocity: 0.5, loudness: { level: 'mp', shade: 20 } },
+      off(200, MIDI.C4),
+      { kind: 'noteOn', atMs: 0, midi: MIDI.E4, velocity: 0.5, loudness: { level: null, shade: 0 } },
+      off(200, MIDI.E4),
+      { kind: 'dynamic', atMs: 0, level: 'pp' },
+    ]);
+    const moved = takeWithTheKeysChanged(events, [{ key: { midi: MIDI.C4, downAtMs: 0 }, midi: MIDI.D4, downAtMs: 100, upAtMs: 300 }]) ?? [];
+    expect(moved.find((event) => event.kind === 'noteOn' && event.midi === MIDI.D4)).toMatchObject({ loudness: { level: 'mp', shade: 20 } });
+    const unwritten = takeWithTheKeysChanged(events, [{ key: { midi: MIDI.C4, downAtMs: 0 }, midi: MIDI.C4, downAtMs: 0, upAtMs: 200, loudness: null }]) ?? [];
+    expect(unwritten.find((event) => event.kind === 'noteOn' && event.midi === MIDI.C4)).not.toHaveProperty('loudness');
+    expect(rollOfTheTake({ events, beats: [] }).presses.map((press) => [press.midi, press.written])).toEqual([
+      [MIDI.C4, { level: 'mp', own: true }],
+      [MIDI.E4, { level: 'pp', own: false }],
+    ]);
+  });
+
+  it('copies how loud each note is written with it, and takes back no loudness that is none', () => {
+    const events = inTheOrderPlayed([
+      { kind: 'noteOn', atMs: 0, midi: MIDI.C4, velocity: 0.5, loudness: { level: 'mp', shade: 20 } },
+      off(200, MIDI.C4),
+      { kind: 'noteOn', atMs: 100, midi: MIDI.E4, velocity: 0.5 },
+      off(300, MIDI.E4),
+    ]);
+    const copied = theNotesCopied(events, [
+      { midi: MIDI.C4, downAtMs: 0 },
+      { midi: MIDI.E4, downAtMs: 100 },
+    ]);
+    expect(copied.map((note) => note.loudness)).toEqual([{ level: 'mp', shade: 20 }, undefined]);
+    expect(theNotesOnTheClipboard(theClipboardTextOf(copied))).toEqual(copied);
+    const pasted = takeWithTheNotesPasted([], copied, 1_000).events.filter((event) => event.kind === 'noteOn');
+    expect(pasted.map((event) => (event.kind === 'noteOn' ? event.loudness : null))).toEqual([{ level: 'mp', shade: 20 }, undefined]);
+    const written = JSON.parse(theClipboardTextOf(copied)) as { copied: string; notes: Record<string, unknown>[] };
+    for (const loudness of [{ level: 'loud', shade: 0 }, { level: 'mp', shade: 101 }, { level: 'mp' }, 'mp', null]) {
+      expect(theNotesOnTheClipboard(JSON.stringify({ ...written, notes: [{ ...written.notes[0], loudness }] }))).toBeNull();
+    }
+  });
+
   it('reads back a change it wrote to the clipboard, any part of it, and nothing else', () => {
     const whole = { key: { fifths: -7, scale: 'dorian' as const }, metre: { beatsInBar: 6, beatType: 8 }, crotchetsPerMinute: 92.5 };
     expect(theChangeOnTheClipboard(theClipboardTextOfTheChange(whole))).toEqual(whole);
@@ -1946,6 +1986,29 @@ describe('changing a recording', () => {
       [500, 700],
       [1_000, 1_200],
     ]);
+  });
+
+  it('humanizes a key written at a level within half the way to the next, its level kept, and a played one by its velocity', () => {
+    const shades = new Set<number>();
+    for (let at = 0; at < 300; at += 1) {
+      const events = inTheOrderPlayed([
+        { kind: 'noteOn', atMs: at, midi: MIDI.C4, velocity: 0.5, loudness: { level: 'p', shade: 0 } },
+        off(at + 200, MIDI.C4),
+        { kind: 'noteOn', atMs: at, midi: MIDI.E4, velocity: 0.5, loudness: { level: null, shade: 0 } },
+        off(at + 200, MIDI.E4),
+      ]);
+      for (const change of theKeysHumanized(events, [
+        { midi: MIDI.C4, downAtMs: at },
+        { midi: MIDI.E4, downAtMs: at },
+      ])) {
+        expect(change.velocity).toBeUndefined();
+        expect(change.loudness?.level).toBe(change.midi === MIDI.C4 ? 'p' : null);
+        shades.add(change.loudness?.shade ?? 0);
+      }
+    }
+    expect(Math.min(...shades)).toBe(-HUMANIZED_SHADE_AT_MOST);
+    expect(Math.max(...shades)).toBe(HUMANIZED_SHADE_AT_MOST);
+    expect(shades.has(0)).toBe(false);
   });
 
   it('strikes the named keys each up to the most humanizing moves harder or softer, the same keys alike, all else as it was', () => {

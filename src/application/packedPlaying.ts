@@ -25,7 +25,18 @@ export function pack(event: MidiFileEvent): Packed {
   switch (event.kind) {
     case 'noteOn': {
       const packed = [0, Math.round(event.atMs), event.midi, Math.round(event.velocity * 127)];
-      return event.hand === undefined ? packed : [...packed, HAND_CODES[event.hand]];
+      const hand = event.hand === undefined ? [] : [HAND_CODES[event.hand]];
+      // How loud it is written after its hand, none being said as nought:
+      // the level by its place in the list from one, or nought for the
+      // dynamic it is in, and the share towards the next.
+      return event.loudness === undefined
+        ? [...packed, ...hand]
+        : [
+            ...packed,
+            hand[0] ?? 0,
+            event.loudness.level === null ? 0 : DYNAMIC_LEVELS.indexOf(event.loudness.level) + 1,
+            Math.round(event.loudness.shade),
+          ];
     }
     case 'noteOff':
       return [1, Math.round(event.atMs), event.midi, 0];
@@ -42,13 +53,23 @@ export function unpack(value: unknown): MidiFileEvent | null {
   if (!Array.isArray(value) || value.length < 4) {
     return null;
   }
-  const [kind, atMs, a, b, hand] = value as readonly unknown[];
+  const [kind, atMs, a, b, hand, level, shade] = value as readonly unknown[];
   if (typeof kind !== 'number' || typeof atMs !== 'number' || typeof a !== 'number' || typeof b !== 'number') {
     return null;
   }
   switch (kind) {
     case 0: {
-      const struck = { kind: 'noteOn' as const, atMs, midi: a, velocity: b / 127 };
+      const played = { kind: 'noteOn' as const, atMs, midi: a, velocity: b / 127 };
+      // A level not known, or a share past the next level, is no loudness
+      // written: the note is as loud as it is.
+      const written = typeof level === 'number' && Number.isInteger(level) && typeof shade === 'number' && Math.abs(shade) <= 100
+        ? level === 0
+          ? { level: null, shade }
+          : DYNAMIC_LEVELS[level - 1] === undefined
+            ? undefined
+            : { level: DYNAMIC_LEVELS[level - 1] ?? null, shade }
+        : undefined;
+      const struck = written === undefined ? played : { ...played, loudness: written };
       // A hand not known is no hand said, which is what the note had before.
       return hand === HAND_CODES.right
         ? { ...struck, hand: 'right' }

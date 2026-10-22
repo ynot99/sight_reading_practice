@@ -1,5 +1,5 @@
 import { SCALES, type ScaleName } from '../harmony/scales.js';
-import { DYNAMIC_LEVELS, type DynamicLevel } from '../model/Exercise.js';
+import { DYNAMIC_LEVELS, DYNAMIC_VELOCITY, type DynamicLevel } from '../model/Exercise.js';
 import { elementAt } from '../../shared/asserts.js';
 import { DomainError } from '../../shared/errors.js';
 
@@ -17,6 +17,12 @@ export type MidiFileEvent =
       readonly velocity: number;
       /** Which hand plays it, where that has been said: see {@link HANDS_SPLIT_AT_MIDI}. */
       readonly hand?: Hand;
+      /**
+       * How loud it is written, where it is: its velocity then follows from
+       * it (see `takeWithTheLoudnessWritten`). None, and it is as loud as it
+       * was struck - a note played rather than written.
+       */
+      readonly loudness?: NoteLoudness;
     }
   | { readonly kind: 'noteOff'; readonly atMs: number; readonly midi: number }
   | { readonly kind: 'sustain'; readonly atMs: number; readonly value: number }
@@ -496,6 +502,57 @@ export function theTextOfADynamic(level: DynamicLevel): string {
 export function theDynamicATextSays(text: string): DynamicLevel | null {
   const said = /^dynamic (\w+)$/.exec(text.trim());
   return DYNAMIC_LEVELS.find((level) => level === said?.[1]) ?? null;
+}
+
+/**
+ * How loud a note is written: at a level - its own, or none, which is the
+ * dynamic the music is marked in where it is struck - and a share of the
+ * way from it to the level next to it, in hundredths: up towards the louder
+ * one, down towards the softer. Kept as a level and a share rather than as a
+ * velocity, so the levels can be heard otherwise one day and every note
+ * written at one goes with them.
+ */
+export interface NoteLoudness {
+  readonly level: DynamicLevel | null;
+  readonly shade: number;
+}
+
+/** The level a note following the marks is at where none is marked yet. */
+export const LOUDNESS_UNMARKED: DynamicLevel = 'mf';
+
+/** How hard a level is struck, `0..1`, a share of the way to the next level up or down. */
+export function theVelocityOfTheLevel(level: DynamicLevel, shade: number): number {
+  const at = DYNAMIC_LEVELS.indexOf(level);
+  const toward = DYNAMIC_LEVELS[at + Math.sign(shade)] ?? level;
+  const from = DYNAMIC_VELOCITY[level];
+  return from + (DYNAMIC_VELOCITY[toward] - from) * Math.min(1, Math.abs(shade) / 100);
+}
+
+/** The level a note written at one is at: its own, or the dynamic it is in, or the unmarked one. */
+export function theLevelOfTheNote(events: readonly MidiFileEvent[], atMs: number, loudness: NoteLoudness): DynamicLevel {
+  return loudness.level ?? theDynamicAt(events, atMs) ?? LOUDNESS_UNMARKED;
+}
+
+/**
+ * The events with every note written at a level struck as hard as it says:
+ * the one place a written note's velocity comes from, so a dynamic marked,
+ * moved or taken away is heard in every note that follows it. A note played
+ * keeps the velocity it was struck with.
+ */
+export function takeWithTheLoudnessWritten(events: readonly MidiFileEvent[]): readonly MidiFileEvent[] {
+  let changed = false;
+  const written = events.map((event) => {
+    if (event.kind !== 'noteOn' || event.loudness === undefined) {
+      return event;
+    }
+    const velocity = theVelocityOfTheLevel(theLevelOfTheNote(events, event.atMs, event.loudness), event.loudness.shade);
+    if (velocity === event.velocity) {
+      return event;
+    }
+    changed = true;
+    return { ...event, velocity };
+  });
+  return changed ? written : events;
 }
 
 /** Where music changes key, and to what, in time order. */

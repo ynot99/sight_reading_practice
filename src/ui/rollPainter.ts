@@ -277,6 +277,11 @@ const CHOSEN_RIM_PX = 2;
  */
 const VELOCITY_INSET_PX = 3;
 const VELOCITY_TALL_PX = 2;
+/** The pin at the end of the bar of a note at its own level: as wide, and as much again above and below the bar. */
+const VELOCITY_PIN_PX = 3;
+/** The dashes of the bar of a note as loud as it was struck: so long, so far apart. */
+const VELOCITY_DASH_PX = 3;
+const VELOCITY_GAP_PX = 2;
 
 function inkOfLine(inks: RollInks, kind: LineKind): string {
   switch (kind) {
@@ -460,13 +465,30 @@ export function paintTheGrid(
   // length, as the note was loud of the loudest - a soft note a short bar, a
   // note struck as hard as a key goes the whole of it. Seen at a glance
   // across a phrase, where a number on every note would be read one by one.
+  // And where its loudness comes from, by the bar's shape, in the one ink:
+  // whole where the dynamic over it says; pinned at its end where the note
+  // is at a level of its own; in dashes where it is as loud as it was struck,
+  // of a sketch whose notes are written at levels. Of a run, which is all
+  // played, a whole bar.
   paint.fillStyle = inks.velocity;
   for (const note of stretchesIn(scene.notes, fromMs - ms(NARROWEST_PX), untilMs)) {
     const room = wide(note.fromMs, note.untilMs) - 2 * VELOCITY_INSET_PX;
     if (!shows(note.row) || room <= 0 || rowPx < 2 * VELOCITY_INSET_PX + VELOCITY_TALL_PX) {
       continue;
     }
-    paint.fillRect(x(note.fromMs) + VELOCITY_INSET_PX, y(note.row) + VELOCITY_INSET_PX, room * note.loudness, VELOCITY_TALL_PX);
+    const left = x(note.fromMs) + VELOCITY_INSET_PX;
+    const top = y(note.row) + VELOCITY_INSET_PX;
+    const long = room * note.loudness;
+    if (note.written === undefined && scene.written) {
+      for (let at = 0; at < long; at += VELOCITY_DASH_PX + VELOCITY_GAP_PX) {
+        paint.fillRect(left + at, top, Math.min(VELOCITY_DASH_PX, long - at), VELOCITY_TALL_PX);
+      }
+      continue;
+    }
+    paint.fillRect(left, top, long, VELOCITY_TALL_PX);
+    if (note.written?.own === true) {
+      paint.fillRect(left + long - VELOCITY_PIN_PX, top - VELOCITY_TALL_PX / 2, VELOCITY_PIN_PX, VELOCITY_TALL_PX * 2);
+    }
   }
   // Rimmed after every note is down, so a neighbour drawn later cannot cover it.
   paint.strokeStyle = inks.chosen;

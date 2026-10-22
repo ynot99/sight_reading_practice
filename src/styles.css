@@ -1792,6 +1792,23 @@ textarea {
   color: var(--surface);
 }
 
+/*
+ * The level the chosen notes are at where they follow the flags over them:
+ * edged in dashes, as the level they are at but not their own - the flag
+ * button beside it is the one pressed.
+ */
+.roll-dynamics .button[data-from-the-flags='true'] {
+  border-style: dashed;
+  border-color: var(--accent);
+}
+
+/* The flag that gives the notes back to the flags over them, drawn as the flags' own button is. */
+.roll-dynamics__flag {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .roll-velocity[data-idle='true'] .roll-dynamics {
   opacity: 0.45;
 }

@@ -72,6 +72,9 @@ import {
   takeWithTheDynamicFrom,
   theDynamicAt,
   theDynamicsOf,
+  theVelocityOfTheLevel,
+  LOUDNESS_UNMARKED,
+  type NoteLoudness,
   theHandThatPlays,
   thePaceOfTheClick,
   thePlayingAtAnotherPace,
@@ -9518,7 +9521,19 @@ export class AppView {
     this.listen(this.el.rollVelocityLevel, 'change', () => {
       this.setTheLoudnessAsked();
     });
+    // First, the notes given back to the flags over them; then a level of their own.
+    const toTheFlags = this.doc.createElement('button');
+    toTheFlags.type = 'button';
+    toTheFlags.className = 'button roll-dynamics__flag';
+    toTheFlags.dataset['dynamic'] = 'flag';
+    toTheFlags.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="take-transport__icon"><path d="M14.4 6 14 4H5v17h2v-7h5.6l.4 2h7V6z" /></svg>';
+    toTheFlags.setAttribute('aria-pressed', 'false');
+    this.listen(toTheFlags, 'click', () => {
+      this.writeTheChosenAt({ level: null, shade: 0 });
+    });
     this.el.rollDynamics.replaceChildren(
+      toTheFlags,
       ...DYNAMICS_OFFERED.map((level) => {
         const button = this.doc.createElement('button');
         button.type = 'button';
@@ -9527,7 +9542,7 @@ export class AppView {
         button.textContent = level;
         button.setAttribute('aria-pressed', 'false');
         this.listen(button, 'click', () => {
-          this.strikeTheChosenAt(level);
+          this.writeTheChosenAt({ level, shade: 0 });
         });
         return button;
       }),
@@ -13566,10 +13581,11 @@ export class AppView {
     const head = this.headIsAtMs();
     const fromMs = this.el.rollSnap.checked ? theLineOfTheGridUnder(roll, head, grid) : head;
     const untilMs = theNextLineOfTheGrid(roll, fromMs, grid, 1) ?? fromMs + theBeatAt(roll, fromMs + origin);
-    const velocity = theUsualLoudness(stored.events);
+    // As loud as the flag over them says, and following it.
+    const velocity = theVelocityOfTheLevel(theDynamicAt(stored.events, fromMs + origin) ?? LOUDNESS_UNMARKED, 0);
     const { events, pasted } = takeWithTheNotesPasted(
       stored.events,
-      chord.midis.map((midi) => ({ afterMs: 0, lengthMs: untilMs - fromMs, midi, velocity })),
+      chord.midis.map((midi) => ({ afterMs: 0, lengthMs: untilMs - fromMs, midi, velocity, loudness: { level: null, shade: 0 } })),
       fromMs + origin,
     );
     return {
@@ -14368,33 +14384,55 @@ export class AppView {
         hidden.hidden = asMarks;
       }
     }
+    // Pressed where every chosen note is at that level of its own, or follows
+    // the flags; a level's edge dashed where every one follows the flags and
+    // a flag over each says that level.
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const chosen = this.theChosenKeys();
+    const following = chosen.length > 0 && chosen.every((key) => key.loudness?.level === null);
+    const flagsSay = (key: KeyOfTheTake): DynamicLevel => (stored === null ? LOUDNESS_UNMARKED : theDynamicAt(stored.events, key.downAtMs) ?? LOUDNESS_UNMARKED);
     for (const button of this.el.rollDynamics.querySelectorAll<HTMLButtonElement>('[data-dynamic]')) {
-      const level = button.dataset['dynamic'] as DynamicLevel;
-      const struck = theLoudnessOfTheDynamic(level);
-      button.setAttribute('aria-pressed', String(loudness.length > 0 && loudness.every((each) => each === struck)));
-      button.title =
-        loudness.length === 0
-          ? `Strike the chosen notes ${level}, at ${String(struck)}. Choose a note first.`
-          : `Strike the chosen notes ${level}, at ${String(struck)}`;
+      const said = button.dataset['dynamic'];
+      const level = DYNAMIC_LEVELS.find((each) => each === said) ?? null;
+      const pressed = level === null ? following : chosen.length > 0 && chosen.every((key) => key.loudness?.level === level);
+      button.setAttribute('aria-pressed', String(pressed));
+      if (level !== null && following && chosen.every((key) => flagsSay(key) === level)) {
+        button.dataset['fromTheFlags'] = 'true';
+      } else {
+        delete button.dataset['fromTheFlags'];
+      }
+      const does =
+        level === null
+          ? 'Make the chosen notes as loud as the flag over each says'
+          : `Write the chosen notes ${level}, a level of their own, at ${String(theLoudnessOfTheDynamic(level))}`;
+      button.title = loudness.length === 0 ? `${does}. Choose a note first.` : does;
       button.setAttribute('aria-label', button.title);
     }
   }
 
-  /** Every chosen note struck at a mark's loudness: one change, and none where all are already. */
-  private strikeTheChosenAt(level: DynamicLevel): void {
+  /**
+   * Every chosen note written at a level - one of its own, or none, as loud as
+   * the flag over it says - and no further from it: one change, and none where
+   * all are already. How hard each is then struck follows from it.
+   */
+  private writeTheChosenAt(loudness: NoteLoudness): void {
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
-    const struck = theLoudnessOfTheDynamic(level);
-    const loudness = this.theLoudnessOfTheChosen();
-    if (sketch === undefined || stored === null || loudness.every((each) => each === struck)) {
+    const keys = this.theChosenKeys();
+    if (
+      sketch === undefined ||
+      stored === null ||
+      keys.every((key) => key.loudness?.level === loudness.level && key.loudness.shade === loudness.shade)
+    ) {
       return;
     }
-    const changes: KeyChange[] = this.theChosenKeys().map((key) => ({
+    const changes: KeyChange[] = keys.map((key) => ({
       key,
       midi: key.midi,
       downAtMs: key.downAtMs,
       upAtMs: key.upAtMs,
-      velocity: struck / 127,
+      loudness,
     }));
     const events = takeWithTheKeysChanged(stored.events, changes);
     if (events !== null) {
@@ -14431,6 +14469,8 @@ export class AppView {
       downAtMs: key.downAtMs,
       upAtMs: key.upAtMs,
       velocity: clampTheLoudness(Math.round(key.velocity * 127) + by) / 127,
+      // Set by a number, a note is as loud as it is, and no longer at a level.
+      loudness: null,
     }));
     const events = takeWithTheKeysChanged(stored.events, changes);
     if (events !== null) {
@@ -14767,7 +14807,14 @@ export class AppView {
     if (upAtMs === null) {
       return;
     }
-    const key = { midi, downAtMs, upAtMs, velocity: theUsualLoudness(stored.events) };
+    // As loud as the flag over it says, and following it.
+    const key = {
+      midi,
+      downAtMs,
+      upAtMs,
+      velocity: theVelocityOfTheLevel(theDynamicAt(stored.events, downAtMs) ?? LOUDNESS_UNMARKED, 0),
+      loudness: { level: null, shade: 0 },
+    };
     // Heard as it is written, for as long as it is: both ends handed to the
     // instrument at once, so no timer outlives the drawing.
     const now = this.runtime.clock.now();

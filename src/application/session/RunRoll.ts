@@ -1,5 +1,13 @@
 import type { NoteVerdict } from '../../domain/matching/ChordMatcher.js';
-import { damperIsDown, inTheOrderPlayed, theClickOfTheTake, type Hand, type MidiFileEvent } from '../../domain/midi/MidiFile.js';
+import {
+  damperIsDown,
+  inTheOrderPlayed,
+  theClickOfTheTake,
+  theLevelOfTheNote,
+  type Hand,
+  type MidiFileEvent,
+  type NoteLoudness,
+} from '../../domain/midi/MidiFile.js';
 import { Duration } from '../../domain/model/Duration.js';
 import {
   barLines,
@@ -55,6 +63,11 @@ export interface RolledPress {
   readonly deviationMs: number | null;
   /** Which hand plays it, where that has been said: a sketch's notes may say. */
   readonly hand?: Hand;
+  /**
+   * The level it is written at, where it is written at one - its own, or the
+   * dynamic marked over it - rather than as loud as it was struck.
+   */
+  readonly written?: { readonly level: DynamicLevel; readonly own: boolean };
 }
 
 /** One click of the pulse, at the moment it was heard. */
@@ -941,6 +954,9 @@ export function rollOfTheTake(take: Pick<Take, 'events' | 'beats'>, beatsAfter =
     stepIndex: null,
     deviationMs: null,
     ...(key.hand === undefined ? {} : { hand: key.hand }),
+    ...(key.loudness === undefined
+      ? {}
+      : { written: { level: theLevelOfTheNote(take.events, key.downAtMs, key.loudness), own: key.loudness.level !== null } }),
   }));
   const pedal: RolledPedal[] = [];
   let pedalDownAt: number | null = null;
@@ -976,6 +992,7 @@ export interface KeyOfTheTake {
   readonly midi: number;
   readonly velocity: number;
   readonly hand?: Hand;
+  readonly loudness?: NoteLoudness;
   readonly downAtMs: number;
   readonly upAtMs: number | null;
   readonly on: number;
@@ -1001,6 +1018,7 @@ export function theKeysOfTheTake(events: readonly MidiFileEvent[]): readonly Key
         midi: event.midi,
         velocity: event.velocity,
         ...(event.hand === undefined ? {} : { hand: event.hand }),
+        ...(event.loudness === undefined ? {} : { loudness: event.loudness }),
         downAtMs: event.atMs,
         upAtMs: null,
         on: at,
@@ -1037,6 +1055,8 @@ export interface KeyChange {
   readonly velocity?: number;
   /** The hand that plays it, `null` for whichever its pitch is in; left as it was where not said. */
   readonly hand?: Hand | null;
+  /** How loud it is written, `null` for as loud as it is struck; left as it was where not said. */
+  readonly loudness?: NoteLoudness | null;
 }
 
 /** Each named key's place in the take's pairing, or `null` where any is not there. */
@@ -1095,14 +1115,16 @@ export function takeWithTheKeysChanged(
     if (key === undefined || struck?.kind !== 'noteOn') {
       return;
     }
-    const { hand: was, ...rest } = struck;
+    const { hand: was, loudness: written, ...rest } = struck;
     const hand = change.hand === undefined ? was : (change.hand ?? undefined);
+    const loudness = change.loudness === undefined ? written : (change.loudness ?? undefined);
     changed.set(key.on, {
       ...rest,
       atMs: change.downAtMs,
       midi: change.midi,
       velocity: change.velocity ?? struck.velocity,
       ...(hand === undefined ? {} : { hand }),
+      ...(loudness === undefined ? {} : { loudness }),
     });
     if (change.upAtMs === null) {
       return;
@@ -1209,11 +1231,23 @@ export function theBarsAcross(roll: RunRoll, oneMs: number, otherMs: number): { 
 /** A take's events with a key added, struck and let go of, in its place in time. */
 export function takeWithAKeyAdded(
   events: readonly MidiFileEvent[],
-  key: { readonly midi: number; readonly downAtMs: number; readonly upAtMs: number; readonly velocity: number },
+  key: {
+    readonly midi: number;
+    readonly downAtMs: number;
+    readonly upAtMs: number;
+    readonly velocity: number;
+    readonly loudness?: NoteLoudness;
+  },
 ): readonly MidiFileEvent[] {
   return inTheOrderPlayed([
     ...events,
-    { kind: 'noteOn', atMs: key.downAtMs, midi: key.midi, velocity: key.velocity },
+    {
+      kind: 'noteOn',
+      atMs: key.downAtMs,
+      midi: key.midi,
+      velocity: key.velocity,
+      ...(key.loudness === undefined ? {} : { loudness: key.loudness }),
+    },
     { kind: 'noteOff', atMs: key.upAtMs, midi: key.midi },
   ]);
 }
@@ -1256,6 +1290,7 @@ export interface NoteCopied {
   readonly midi: number;
   readonly velocity: number;
   readonly hand?: Hand;
+  readonly loudness?: NoteLoudness;
 }
 
 /**
@@ -1281,6 +1316,7 @@ export function theNotesCopied(events: readonly MidiFileEvent[], named: readonly
       midi: key.midi,
       velocity: key.velocity,
       ...(key.hand === undefined ? {} : { hand: key.hand }),
+      ...(key.loudness === undefined ? {} : { loudness: key.loudness }),
     }));
 }
 
@@ -1323,7 +1359,8 @@ export function theNotesOnTheClipboard(text: string): readonly NoteCopied[] | nu
       note.midi > 127 ||
       !isANumber(note.velocity) ||
       !(note.velocity > 0 && note.velocity <= 1) ||
-      !(note.hand === undefined || note.hand === 'left' || note.hand === 'right')
+      !(note.hand === undefined || note.hand === 'left' || note.hand === 'right') ||
+      !(note.loudness === undefined || isALoudness(note.loudness))
     ) {
       return null;
     }
@@ -1333,9 +1370,22 @@ export function theNotesOnTheClipboard(text: string): readonly NoteCopied[] | nu
       midi: note.midi,
       velocity: note.velocity,
       ...(note.hand === undefined ? {} : { hand: note.hand }),
+      ...(note.loudness === undefined ? {} : { loudness: note.loudness }),
     });
   }
   return notes.length === 0 ? null : notes;
+}
+
+/** Whether something read is a note's loudness: a level or none, and a share no further than the next level. */
+function isALoudness(value: unknown): value is NoteLoudness {
+  const said = value as { readonly level?: unknown; readonly shade?: unknown } | null;
+  return (
+    typeof said === 'object' &&
+    said !== null &&
+    (said.level === null || DYNAMIC_LEVELS.some((level) => level === said.level)) &&
+    Number.isFinite(said.shade) &&
+    Math.abs(Number(said.shade)) <= 100
+  );
 }
 
 /**
@@ -1439,6 +1489,7 @@ export function takeWithTheNotesPasted(
       midi: note.midi,
       velocity: note.velocity,
       ...(note.hand === undefined ? {} : { hand: note.hand }),
+      ...(note.loudness === undefined ? {} : { loudness: note.loudness }),
     };
     const released: MidiFileEvent = { kind: 'noteOff', atMs: Math.round(atMs + note.afterMs + note.lengthMs), midi: note.midi };
     const withIt = inTheOrderPlayed([...taken, struck, released]);
@@ -1570,6 +1621,7 @@ export function takeWithTheChordsBroken(
               midi: struck.midi,
               velocity: struck.velocity,
               ...(struck.hand === undefined ? {} : { hand: struck.hand }),
+              ...(struck.loudness === undefined ? {} : { loudness: struck.loudness }),
             },
           ];
     });
@@ -1687,10 +1739,20 @@ export function takeWithThePedalAt(
 export const HUMANIZED_BY_AT_MOST = 10;
 
 /**
- * The named keys each struck a little harder or softer, by up to
- * `HUMANIZED_BY_AT_MOST` steps either way and within 1 to 127, as no hand
- * strikes two keys alike: where they are and how long they are held left as
- * they were. One that comes out as loud as it was is left out.
+ * How far humanizing takes a key written at a level, at most, either way: a
+ * share of the way to the next level, so it is always nearer its own level
+ * than any other, and the level it is written at - the one a score prints -
+ * is never in doubt.
+ */
+export const HUMANIZED_SHADE_AT_MOST = 50;
+
+/**
+ * The named keys each struck a little harder or softer, as no hand strikes
+ * two keys alike: one played by up to `HUMANIZED_BY_AT_MOST` steps either
+ * way and within 1 to 127; one written at a level anywhere up to
+ * `HUMANIZED_SHADE_AT_MOST` of the way to the next, its level kept. Where
+ * they are and how long they are held left as they were. One that comes out
+ * as loud as it was is left out.
  *
  * Random, but drawn from the keys themselves - where each is and how loud -
  * so the same keys give the same answer, and humanized again, being other
@@ -1706,12 +1768,15 @@ export function theKeysHumanized(events: readonly MidiFileEvent[], named: readon
     }
   }
   const rng = createRng(seed);
-  return keys.flatMap((key) => {
+  return keys.flatMap((key): KeyChange[] => {
+    const named = { key: { midi: key.midi, downAtMs: key.downAtMs }, midi: key.midi, downAtMs: key.downAtMs, upAtMs: key.upAtMs };
+    if (key.loudness !== undefined) {
+      const shade = rng.int(-HUMANIZED_SHADE_AT_MOST, HUMANIZED_SHADE_AT_MOST);
+      return shade === key.loudness.shade ? [] : [{ ...named, loudness: { level: key.loudness.level, shade } }];
+    }
     const was = steps(key);
     const struck = Math.min(127, Math.max(1, was + rng.int(-HUMANIZED_BY_AT_MOST, HUMANIZED_BY_AT_MOST)));
-    return struck === was
-      ? []
-      : [{ key: { midi: key.midi, downAtMs: key.downAtMs }, midi: key.midi, downAtMs: key.downAtMs, upAtMs: key.upAtMs, velocity: struck / 127 }];
+    return struck === was ? [] : [{ ...named, velocity: struck / 127 }];
   });
 }
 

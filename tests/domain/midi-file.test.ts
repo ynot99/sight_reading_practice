@@ -4,6 +4,8 @@ import {
   damperIsDown,
   takeWithTheDynamicFrom,
   takeWithTheKeyFrom,
+  takeWithTheLoudnessWritten,
+  theVelocityOfTheLevel,
   theBeatOfTheClickAt,
   theDynamicAt,
   theDynamicsOf,
@@ -21,6 +23,7 @@ import {
 } from '../../src/domain/midi/MidiFile.js';
 import { DomainError } from '../../src/shared/errors.js';
 import { readMidiFile } from '../../src/domain/midi/readMidiFile.js';
+import { DYNAMIC_VELOCITY } from '../../src/domain/model/Exercise.js';
 
 function ascii(bytes: Uint8Array, from: number, length: number): string {
   return [...bytes.slice(from, from + length)].map((byte) => String.fromCharCode(byte)).join('');
@@ -844,5 +847,52 @@ describe('the dynamic music is marked in, from a moment', () => {
     expect(document.title).toBe('Marked');
     const untitled = readMidiFile(writeMidiFile(changed, { beats: click(0, 500, 4) }));
     expect(untitled.title).toBeNull();
+  });
+});
+
+describe('how loud a note written at a level is struck', () => {
+  it('is its level, a share of the way to the next one up or down, and no further than the ends', () => {
+    expect(theVelocityOfTheLevel('mf', 0)).toBe(DYNAMIC_VELOCITY.mf);
+    expect(theVelocityOfTheLevel('mf', 100)).toBeCloseTo(DYNAMIC_VELOCITY.f, 9);
+    expect(theVelocityOfTheLevel('mf', -100)).toBeCloseTo(DYNAMIC_VELOCITY.mp, 9);
+    expect(theVelocityOfTheLevel('mf', 50)).toBeCloseTo((DYNAMIC_VELOCITY.mf + DYNAMIC_VELOCITY.f) / 2, 9);
+    expect(theVelocityOfTheLevel('mf', -25)).toBeCloseTo(DYNAMIC_VELOCITY.mf + (DYNAMIC_VELOCITY.mp - DYNAMIC_VELOCITY.mf) / 4, 9);
+    // Past a whole level, no further; at the ends, nowhere further to go.
+    expect(theVelocityOfTheLevel('mf', 300)).toBeCloseTo(DYNAMIC_VELOCITY.f, 9);
+    expect(theVelocityOfTheLevel('ffff', 80)).toBe(DYNAMIC_VELOCITY.ffff);
+    expect(theVelocityOfTheLevel('n', -80)).toBe(DYNAMIC_VELOCITY.n);
+  });
+
+  it('follows the dynamic marked over it, a level of its own, or as it was played', () => {
+    const notes: MidiFileEvent[] = [
+      { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.1, loudness: { level: null, shade: 0 } },
+      { kind: 'noteOff', atMs: 400, midi: 60 },
+      { kind: 'noteOn', atMs: 1_000, midi: 62, velocity: 0.1, loudness: { level: null, shade: 50 } },
+      { kind: 'noteOff', atMs: 1_400, midi: 62 },
+      { kind: 'noteOn', atMs: 1_000, midi: 64, velocity: 0.1, loudness: { level: 'pp', shade: 0 } },
+      { kind: 'noteOff', atMs: 1_400, midi: 64 },
+      { kind: 'noteOn', atMs: 1_000, midi: 67, velocity: 0.1 },
+      { kind: 'noteOff', atMs: 1_400, midi: 67 },
+    ];
+    const struck = (events: readonly MidiFileEvent[]): number[] =>
+      events.flatMap((event) => (event.kind === 'noteOn' ? [event.velocity] : []));
+
+    // None marked: mezzo-forte.
+    expect(struck(takeWithTheLoudnessWritten(notes))).toEqual([
+      DYNAMIC_VELOCITY.mf,
+      theVelocityOfTheLevel('mf', 50),
+      DYNAMIC_VELOCITY.pp,
+      0.1,
+    ]);
+    // Forte from the second note on: it follows; the first, before it, does not.
+    expect(struck(takeWithTheLoudnessWritten(takeWithTheDynamicFrom(notes, 1_000, 'f')))).toEqual([
+      DYNAMIC_VELOCITY.mf,
+      theVelocityOfTheLevel('f', 50),
+      DYNAMIC_VELOCITY.pp,
+      0.1,
+    ]);
+    // Nothing to change, the same events.
+    const written = takeWithTheLoudnessWritten(notes);
+    expect(takeWithTheLoudnessWritten(written)).toBe(written);
   });
 });

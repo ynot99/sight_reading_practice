@@ -320,6 +320,46 @@ describe('painting the grid', () => {
     expect(short.recorder.inked('velocity')).toEqual([]);
   });
 
+  it('shapes the bar by where its loudness comes from: whole from the flags, pinned at its own level, in dashes as played', () => {
+    const scene = theSceneOfTheRoll({
+      roll: roll({
+        presses: [
+          press({ midi: MIDI.C4, velocity: 0.5, verdict: null, written: { level: 'mf', own: false } }),
+          press({ midi: MIDI.C4 + 2, velocity: 0.5, verdict: null, written: { level: 'f', own: true } }),
+          press({ midi: MIDI.C4 + 4, velocity: 0.5, verdict: null }),
+        ],
+      }),
+      barLabel: () => null,
+      freely: true,
+    });
+    const { surface: canvas, recorder } = surface();
+
+    paintTheGrid(canvas, scene, at(), INKS, 1);
+
+    const top = (midi: number): number => (scene.notes.find((note) => scene.highest - note.row === midi)?.row ?? -1) * 14 + 3;
+    const bars = recorder.inked('velocity').map((mark) => [mark.x, mark.y, Number(mark.wide.toFixed(6)), mark.tall]);
+    // Half the note's 64 pixels inside its insets: whole; whole and a pin at its end; and dashes of three, two apart.
+    expect(bars.filter(([, y]) => y === top(MIDI.C4))).toEqual([[3, top(MIDI.C4), 32, 2]]);
+    expect(bars.filter(([, y]) => y === top(MIDI.C4 + 2) || y === top(MIDI.C4 + 2) - 1)).toEqual([
+      [3, top(MIDI.C4 + 2), 32, 2],
+      [32, top(MIDI.C4 + 2) - 1, 3, 4],
+    ]);
+    expect(bars.filter(([, y]) => y === top(MIDI.C4 + 4))).toEqual(
+      [0, 5, 10, 15, 20, 25, 30].map((at) => [3 + at, top(MIDI.C4 + 4), Math.min(3, 32 - at), 2]),
+    );
+    expect(scene.notes.map((note) => note.says)).toEqual([
+      'C4 · not judged · mf, from the flag over it',
+      'D4 · not judged · f, its own',
+      'E4 · not judged · as played',
+    ]);
+    // Among notes none of which is written at a level, as played says nothing, and the bar is whole.
+    const played = theSceneOfTheRoll({ roll: roll({ presses: [press({ velocity: 0.5, verdict: null })] }), barLabel: () => null, freely: true });
+    const plain = surface();
+    paintTheGrid(plain.surface, played, at(), INKS, 1);
+    expect(plain.recorder.inked('velocity')).toHaveLength(1);
+    expect(played.notes[0]?.says).toBe('C4 · not judged');
+  });
+
   it('colours each press by its verdict', () => {
     const scene = sceneOf(
       roll({

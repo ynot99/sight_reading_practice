@@ -209,6 +209,67 @@ describe('turning a MIDI file into a page', () => {
     expect(demanded.filter((midi) => midi === 60)).toHaveLength(1);
   });
 
+  it('beams its eighths and sixteenths by the beat, as a generated bar is', () => {
+    // Two eighths, four sixteenths, an eighth alone before a rest, and a quarter.
+    const eighth = QUARTER_MS / 2;
+    const sixteenth = QUARTER_MS / 4;
+    const { exercise } = pageOf([
+      ...note(72, 0, eighth),
+      ...note(74, eighth, eighth),
+      ...[76, 77, 79, 81].flatMap((midi, at) => note(midi, QUARTER_MS + at * sixteenth, sixteenth)),
+      ...note(72, 2 * QUARTER_MS, eighth),
+      ...note(74, 3 * QUARTER_MS, QUARTER_MS),
+    ]);
+    const right = exercise.staves.find((staff) => staff.staffNumber === 1);
+    const said = (right?.measures[0]?.entries ?? []).map((entry) =>
+      entry.kind === 'note' && entry.beams.length > 0 ? entry.beams.map((beam) => `${String(beam.level)}:${beam.type}`).join(' ') : '-',
+    );
+
+    expect(said).toEqual([
+      '1:begin',
+      '1:end',
+      '1:begin 2:begin',
+      '1:continue 2:continue',
+      '1:continue 2:continue',
+      '1:end 2:end',
+      '-',
+      '-',
+      '-',
+    ]);
+    expect(() => validateExercise(exercise)).not.toThrow();
+  });
+
+  it('beams a bar of six-eight by its dotted quarters', () => {
+    const eighth = QUARTER_MS / 2;
+    const file = readMidiFile(fileOf([0, 1, 2, 3, 4, 5].flatMap((at) => note(72 + at, at * eighth, eighth))));
+    const { exercise } = midiToExercise({ ...file, beats: 6, beatType: 8 }, 'Six Eight');
+    const right = exercise.staves.find((staff) => staff.staffNumber === 1);
+    const said = (right?.measures[0]?.entries ?? []).map((entry) =>
+      entry.kind === 'note' ? entry.beams.map((beam) => beam.type).join(' ') : '-',
+    );
+
+    expect(exercise.timeSignature.toString()).toBe('6/8');
+    expect(said).toEqual(['begin', 'continue', 'end', 'begin', 'continue', 'end']);
+
+    // And each bar by its own metre: a bar of two-four, then that six-eight.
+    const changed = midiToExercise(
+      {
+        ...readMidiFile(fileOf([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].flatMap((at) => note(60 + at, at * eighth, eighth)))),
+        beats: 2,
+        beatType: 4,
+        metreChanges: [{ atTicks: file.division * 2, beats: 6, beatType: 8 }],
+      },
+      'Changing',
+    ).exercise;
+    const bars = (changed.staves.find((staff) => staff.staffNumber === 1)?.measures ?? []).map((measure) =>
+      measure.entries.map((entry) => (entry.kind === 'note' ? entry.beams.map((beam) => beam.type).join(' ') : '-')),
+    );
+    expect(bars.slice(0, 2)).toEqual([
+      ['begin', 'end', 'begin', 'end'],
+      ['begin', 'continue', 'end', 'begin', 'continue', 'end'],
+    ]);
+  });
+
   it('fills the silence a performance leaves with rests', () => {
     const { exercise } = pageOf(note(60, 2 * QUARTER_MS, QUARTER_MS));
 

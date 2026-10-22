@@ -5,6 +5,7 @@ import { measureOf, noteEntry, restEntry, validateExercise } from '../model/Exer
 import { KeySignature } from '../model/KeySignature.js';
 import { Pitch } from '../model/Pitch.js';
 import { TimeSignature } from '../model/TimeSignature.js';
+import { beamedByTheBeat } from '../generation/beaming.js';
 import { splitIntoRests } from '../generation/RhythmFiller.js';
 import type { MidiFileDocument, MidiFileNote } from '../midi/readMidiFile.js';
 import { HANDS_SPLIT_AT_MIDI } from '../midi/MidiFile.js';
@@ -427,9 +428,14 @@ function buildStaff(
   }
   silence(at, layout.bars.bars[bars - 1]?.endTicks ?? at);
 
-  const measures = Array.from({ length: bars }, (_, index) =>
-    measureOf(placed.filter((each) => each.measureIndex === index).map((each) => each.entry)),
-  );
+  // Beamed by the beat of each bar's own metre, as a generated bar is: a file
+  // says nothing of beams, and an engraver handed none draws every eighth
+  // with a flag of its own.
+  const measures = Array.from({ length: bars }, (_, index) => {
+    const measure = measureOf(placed.filter((each) => each.measureIndex === index).map((each) => each.entry));
+    const metre = layout.bars.bars[index]?.timeSignature;
+    return metre === undefined ? measure : beamedByTheBeat(measure, metre);
+  });
 
   return {
     staffNumber,

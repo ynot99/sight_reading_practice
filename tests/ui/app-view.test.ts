@@ -6379,7 +6379,7 @@ describe('AppView', () => {
       expect(of(63)).toEqual([[500, 1_000]]);
     });
 
-    it('copies the notes held by a drag with Ctrl, leaving them where they were, and takes one out of the choice by a tap with it', async () => {
+    it('copies the notes held by a drag with Ctrl, leaving them where they were, and takes one out of the choice by a tap with it; and holds none shorter than the grid', async () => {
       const { view, sketches } = createRig();
       await view.initialize();
       const sketch = sketches.begin(
@@ -6481,6 +6481,14 @@ describe('AppView', () => {
       drag(at(2_390, 64), at(2_890, 64), { ctrlKey: true });
       expect(notes()).toHaveLength(5);
       expect(notes().at(-1)).toEqual([64, 2_000, 3_000]);
+
+      // Pulled back past where it begins, it ends on the next line of the
+      // grid after that, and is never a sliver off it; with Shift, which puts
+      // an end anywhere, as short as a note can be heard.
+      drag(at(2_990, 64), at(1_500, 64));
+      expect(notes().at(-1)).toEqual([64, 2_000, 2_500]);
+      drag(at(2_490, 64), at(1_500, 64), { shiftKey: true });
+      expect(notes().at(-1)).toEqual([64, 2_000, 2_030]);
     });
 
     it('moves a note neither by a drag nor by an arrow over another of its pitch', async () => {

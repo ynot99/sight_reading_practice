@@ -15231,8 +15231,10 @@ export class AppView {
   /**
    * Holds the keys a drag holds longer or shorter: the end of the one it began
    * on where the pointer has taken it, on the nearest line of the grid where
-   * the marker would be put on one, and the others' by as much - none shorter
-   * than a note can be heard as one.
+   * the marker would be put on one, and the others' by as much. None shorter
+   * than to the next line of the grid after it begins, where the end is put
+   * on one - pulled back past its start, a note was left a sliver off the
+   * grid - nor, put anywhere, than a note can be heard as one.
    */
   private dragTheEndsOfTheKeys(
     drag: NonNullable<AppView['rollDrag']>,
@@ -15250,6 +15252,10 @@ export class AppView {
     const at = snapping ? theBeatNearest(showing.roll, wanted, this.theRollsGrid()) : wanted;
     const byMs = Math.round(at + origin) - drag.upAtMs;
     const end = rollEndedAtMs(showing.roll);
+    const shortest = (key: KeyOfTheTake): number => {
+      const line = snapping ? theNextLineOfTheGrid(showing.roll, key.downAtMs - origin, this.theRollsGrid(), 1) : null;
+      return line === null ? key.downAtMs + SHORTEST_NOTE_MS : Math.round(line + origin);
+    };
     this.showTheDrag(
       drag,
       stored,
@@ -15257,7 +15263,7 @@ export class AppView {
         key,
         midi: key.midi,
         downAtMs: key.downAtMs,
-        upAtMs: Math.max((key.upAtMs ?? end) + byMs, key.downAtMs + SHORTEST_NOTE_MS),
+        upAtMs: Math.max((key.upAtMs ?? end) + byMs, shortest(key)),
       })),
     );
   }

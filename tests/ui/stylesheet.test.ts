@@ -1441,6 +1441,9 @@ describe('the stylesheet', () => {
     // Lit with the accent, never a verdict's colour; the music's chord more than the key's.
     expect(ruleOf(".roll-circle__chord[data-in-the-key='true'] path")).toMatch(/var\(--accent\) 18%/);
     expect(ruleOf(".roll-circle__chord[data-here='true'] path")).toMatch(/var\(--accent\) 60%/);
+    // Focus is the slice's own edge, for a key only: the browser's ring is round its box.
+    expect(ruleOf('.roll-circle__chord:focus')).toMatch(/outline\s*:\s*none/);
+    expect(ruleOf('.roll-circle__chord:focus-visible path')).toMatch(/stroke\s*:\s*var\(--accent\)/);
     // The way round and the names over it let a finger through to the slices.
     expect(ruleOf('.roll-circle__names')).toMatch(/pointer-events\s*:\s*none/);
     expect(ruleOf('.roll-circle__way')).toMatch(/pointer-events\s*:\s*none/);

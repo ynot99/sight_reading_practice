@@ -1338,6 +1338,21 @@ textarea {
   fill: color-mix(in srgb, var(--accent) 60%, var(--surface));
 }
 
+/*
+ * A slice's focus is its own edge, not the browser's ring: the ring is drawn
+ * round the box the slice stands in, which on a circle is nowhere near it.
+ * And only for a key, which is the only way to tell where focus is - a slice
+ * clicked is already lit by what the click did.
+ */
+.roll-circle__chord:focus {
+  outline: none;
+}
+
+.roll-circle__chord:focus-visible path {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
 /* The names, over the way round, letting a finger through to the slice under each. */
 .roll-circle__names {
   pointer-events: none;

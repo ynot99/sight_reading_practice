@@ -2210,6 +2210,15 @@ export class AppView {
   private chordTappedAt: number | null = null;
 
   /**
+   * What the last press on the drawing went down on, which is what its
+   * click is on. Not the click's own target: the drawing takes the pointer
+   * as it goes down, and Safari then sends the click to the drawing as a
+   * whole - a tap on the ruler or the lane of chords arrived as a tap on the
+   * grid, and over a note was taken for one on the note.
+   */
+  private pressedOn: EventTarget | null = null;
+
+  /**
    * The chord of the drawer a pointer is held down on, sounding until it is
    * let go of: by its place there, or none where the pointer has slid off
    * the chords; its keys, and when they were struck. And what its moving
@@ -9411,6 +9420,10 @@ export class AppView {
       this.goAndPractiseThePassage();
     });
     this.listen(this.el.rollBody, 'click', (event) => {
+      // Asked of where the press went down, where there was one; a key's
+      // click, with none, is on its own target.
+      const on = this.pressedOn ?? event.target;
+      this.pressedOn = null;
       if (this.pinched || this.panned) {
         return;
       }
@@ -9421,7 +9434,7 @@ export class AppView {
       }
       // A flag pressed was answered as it went down; one clicked by the keys
       // is a click with no press before it.
-      if (event.target instanceof Element && event.target.closest('.roll__marks') !== null) {
+      if (on instanceof Element && on.closest('.roll__marks') !== null) {
         if ((event as MouseEvent).detail === 0) {
           this.answerTheFlags(event);
         }
@@ -9432,18 +9445,19 @@ export class AppView {
       // The ruler places the marker whatever the drawing is for: editing, the
       // notes under it answer a tap, and the marker still has to be put
       // somewhere to listen from.
-      const onTheRuler = this.isOnTheRuler(event);
+      const onTheRuler = on instanceof Element && on.closest('.roll__ruler') !== null;
+      const onTheChords = on instanceof Element && on.closest('.roll__chords') !== null;
       const mouse = event as MouseEvent;
       if (onTheRuler && (mouse.ctrlKey || mouse.metaKey || mouse.altKey)) {
         this.sliceByAClick(mouse);
         return;
       }
-      if (this.isOnTheChords(event) && this.chooseTheChordTapped(event)) {
+      if (onTheChords && this.chooseTheChordTapped(event)) {
         return;
       }
       // The lane of chords is not the notes: a tap there puts the marker, as
       // the ruler's does.
-      if (!onTheRuler && !this.isOnTheChords(event) && this.theOtherRollShowing?.sketch?.editing === true) {
+      if (!onTheRuler && !onTheChords && this.theOtherRollShowing?.sketch?.editing === true) {
         this.chooseTheKeyTapped(event);
         return;
       }
@@ -9717,6 +9731,7 @@ export class AppView {
       this.bringBackTheLastPutBack();
     });
     this.listen(this.el.rollBody, 'pointerdown', (event) => {
+      this.pressedOn = event.target;
       this.pinched = false;
       this.panned = false;
       this.stopTheFling();

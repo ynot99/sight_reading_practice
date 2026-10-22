@@ -8301,6 +8301,23 @@ describe('AppView', () => {
       expect(marker()).toBe('0.000');
       tapTheDrawing({ pointerType: 'mouse', button: 0, ...overE4 }, theLane());
       expect(chosenKeys()).toEqual(cChosen);
+      // As Safari sends a tap: pressed on the lane, the click to the drawing,
+      // which took the pointer as it went down - and over a note's row.
+      const tapAsSafariDoes = (at: { clientX: number; clientY: number }): void => {
+        theLane().dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 41, pointerType: 'touch', button: 0, ...at }));
+        element('roll-body').dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 41, pointerType: 'touch', button: 0, ...at }));
+        element('roll-body').dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1, ...at }));
+      };
+      tapAsSafariDoes({ clientX: 2.5 * zoom, clientY: overE4.clientY });
+      expect(chosenKeys()).toEqual([
+        [2000, 57],
+        [2000, 60],
+        [2000, 64],
+      ]);
+      expect(marker()).toBe('2.000');
+      // And a tap on the grid itself is still the grid's.
+      tapTheDrawing({ pointerType: 'mouse', button: 0, ...overE4 }, element('roll-body').querySelector('.roll__grid > .roll__paint') ?? theLane());
+      expect(chosenKeys()).toEqual([[0, 64]]);
 
       // Put away, and listening rather than editing, there is no lane.
       element<HTMLButtonElement>('roll-chords-open').click();

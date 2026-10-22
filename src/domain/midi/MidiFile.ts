@@ -492,16 +492,64 @@ export function theDynamicsOf(events: readonly MidiFileEvent[]): readonly { read
 /**
  * A dynamic as a MIDI file says one: there is no event of its own for it,
  * so a text event saying so, which a sequencer shows among its markers and
- * this program's reader takes back as the dynamic it was.
+ * this program's reader takes back as the dynamic it was. One for a hand
+ * alone says which.
  */
-export function theTextOfADynamic(level: DynamicLevel): string {
-  return `dynamic ${level}`;
+export function theTextOfADynamic(level: DynamicLevel, hand: Hand | null = null): string {
+  return hand === null ? `dynamic ${level}` : `dynamic ${level}, ${hand} hand`;
 }
 
-/** The dynamic a text event says, as `theTextOfADynamic` writes it, or `null` where it says anything else. */
-export function theDynamicATextSays(text: string): DynamicLevel | null {
-  const said = /^dynamic (\w+)$/.exec(text.trim());
-  return DYNAMIC_LEVELS.find((level) => level === said?.[1]) ?? null;
+/** The dynamic a text event says, and the hand it is for if one alone, as `theTextOfADynamic` writes it; `null` where it says anything else. */
+export function theDynamicATextSays(text: string): { readonly level: DynamicLevel; readonly hand: Hand | null } | null {
+  const said = /^dynamic (\w+)(?:, (right|left) hand)?$/.exec(text.trim());
+  const level = DYNAMIC_LEVELS.find((each) => each === said?.[1]);
+  const hand = said?.[2];
+  return level === undefined ? null : { level, hand: hand === 'right' || hand === 'left' ? hand : null };
+}
+
+/**
+ * Where one hand's music is printed at a level the dynamics over both do not
+ * say, and which: a note's own level, and back to the dynamic over it after.
+ * Each hand on its own, as a pianist reads a mark against one staff: what the
+ * page says for it is the last dynamic over both, or the last of its own
+ * since. A moment's notes are at the level most of them are at, the louder
+ * of two as many; a note played, at none, reads as the dynamic over it.
+ */
+export function theDynamicsOfEachHand(
+  events: readonly MidiFileEvent[],
+): readonly { readonly atMs: number; readonly level: DynamicLevel; readonly hand: Hand }[] {
+  const ordered = inTheOrderPlayed(events);
+  const marks: { atMs: number; level: DynamicLevel; hand: Hand }[] = [];
+  for (const hand of ['right', 'left'] as const) {
+    const moments: { atMs: number; levels: DynamicLevel[] }[] = [];
+    for (const event of ordered) {
+      if (event.kind !== 'noteOn' || theHandThatPlays(event) !== hand) {
+        continue;
+      }
+      const level = event.loudness === undefined ? (theDynamicAt(ordered, event.atMs) ?? LOUDNESS_UNMARKED) : theLevelOfTheNote(ordered, event.atMs, event.loudness);
+      const last = moments[moments.length - 1];
+      if (last !== undefined && event.atMs - last.atMs <= SAME_MOMENT_MS) {
+        last.levels.push(level);
+      } else {
+        moments.push({ atMs: event.atMs, levels: [level] });
+      }
+    }
+    let own: { readonly atMs: number; readonly level: DynamicLevel } | null = null;
+    for (const moment of moments) {
+      const overBoth = ordered.filter((event) => event.kind === 'dynamic' && event.atMs <= moment.atMs + SAME_MOMENT_MS);
+      const since = overBoth[overBoth.length - 1]?.atMs ?? -Infinity;
+      const says: DynamicLevel = own !== null && own.atMs >= since ? own.level : (theDynamicAt(ordered, moment.atMs) ?? LOUDNESS_UNMARKED);
+      const count = (level: DynamicLevel): number => moment.levels.filter((each) => each === level).length;
+      const level = moment.levels.reduce((best, each) =>
+        count(each) > count(best) || (count(each) === count(best) && DYNAMIC_LEVELS.indexOf(each) > DYNAMIC_LEVELS.indexOf(best)) ? each : best,
+      );
+      if (level !== says) {
+        own = { atMs: moment.atMs, level };
+        marks.push({ atMs: moment.atMs, level, hand });
+      }
+    }
+  }
+  return marks.sort((one, other) => one.atMs - other.atMs);
 }
 
 /**
@@ -886,15 +934,41 @@ export function writeMidiFile(
   const ordered = inTheOrderPlayed(events);
   const lastTick = Math.max(0, ...ordered.map((event) => Math.max(0, ticks()(event.atMs))));
 
+  // Where a hand is printed at a level of its own, said in the track it is
+  // played in, or the one there is.
+  const ofEachHand = theDynamicsOfEachHand(ordered).map(
+    (mark): WrittenInATrack => ({ kind: 'dynamicOfAHand', atMs: mark.atMs, level: mark.level, hand: mark.hand }),
+  );
+  const ofTheHand = (hand: Hand): readonly WrittenInATrack[] => ofEachHand.filter((mark) => mark.kind === 'dynamicOfAHand' && mark.hand === hand);
   const hands = theHandsOf(ordered);
   if (hands === null) {
-    return theFile(0, [theTrack(ordered, { marks, opening, name: options.trackName, tickOf: ticks(), lastTick })]);
+    return theFile(0, [
+      theTrack(withTheMarksOfAHand(ordered, ofEachHand), { marks, opening, name: options.trackName, tickOf: ticks(), lastTick }),
+    ]);
   }
   return theFile(1, [
     // The tempo and the bars go with the first, as a conductor's do.
-    theTrack(hands.right, { marks, opening, name: TRACK_OF_A_HAND.right, tickOf: ticks(), lastTick }),
-    theTrack(hands.left, { marks: [], opening: [], name: TRACK_OF_A_HAND.left, tickOf: ticks(), lastTick }),
+    theTrack(withTheMarksOfAHand(hands.right, ofTheHand('right')), { marks, opening, name: TRACK_OF_A_HAND.right, tickOf: ticks(), lastTick }),
+    theTrack(withTheMarksOfAHand(hands.left, ofTheHand('left')), { marks: [], opening: [], name: TRACK_OF_A_HAND.left, tickOf: ticks(), lastTick }),
   ]);
+}
+
+/** What a track is written from: the events, and the dynamics of a hand alone, which no event of a take holds. */
+type WrittenInATrack =
+  | MidiFileEvent
+  | { readonly kind: 'dynamicOfAHand'; readonly atMs: number; readonly level: DynamicLevel; readonly hand: Hand };
+
+/** A track's events with a hand's marks among them, each after whatever else is at its moment, the marks before it included. */
+function withTheMarksOfAHand(
+  events: readonly MidiFileEvent[],
+  marks: readonly WrittenInATrack[],
+): readonly WrittenInATrack[] {
+  const written: WrittenInATrack[] = [...events];
+  for (const mark of marks) {
+    const at = written.findIndex((event) => event.atMs > mark.atMs);
+    written.splice(at === -1 ? written.length : at, 0, mark);
+  }
+  return written;
 }
 
 /**
@@ -929,7 +1003,7 @@ function theHandsOf(
 
 /** One track's bytes: its opening, its name, its events, and the marks of the click among them. */
 function theTrack(
-  ordered: readonly MidiFileEvent[],
+  ordered: readonly WrittenInATrack[],
   given: {
     readonly marks: readonly { readonly tick: number; readonly bytes: readonly number[] }[];
     readonly opening: readonly number[];
@@ -973,8 +1047,9 @@ function theTrack(
       case 'key':
         track.push(...keyMark({ fifths: event.fifths, minor: SCALES[event.scale].minor }));
         break;
-      case 'dynamic': {
-        const text = [...new TextEncoder().encode(theTextOfADynamic(event.level))];
+      case 'dynamic':
+      case 'dynamicOfAHand': {
+        const text = [...new TextEncoder().encode(theTextOfADynamic(event.level, event.kind === 'dynamic' ? null : event.hand))];
         track.push(0xff, 0x01, ...variableLength(text.length), ...text);
         break;
       }

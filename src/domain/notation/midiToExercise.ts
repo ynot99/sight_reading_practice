@@ -599,10 +599,17 @@ export function midiToExercise(
     tempoChanges,
     pedalMarks,
     // What the file marks, on the page's grid, and none past the last bar.
+    // One for a hand alone goes on its staff, and on the side away from the
+    // other, so it is not read as for both: those go between the staves.
     dynamicMarks: document.dynamics
-      .map((dynamic) => ({ ticks: pull(dynamic.atTicks * scale), level: dynamic.level }))
+      .map((dynamic) => ({ ticks: pull(dynamic.atTicks * scale), level: dynamic.level, hand: dynamic.hand }))
       .filter((dynamic) => dynamic.ticks < (laid.bars[bars - 1]?.endTicks ?? 0))
-      .map((dynamic) => ({ ...placed(dynamic.ticks), level: dynamic.level, staffNumber: null })),
+      .map((dynamic) => ({
+        ...placed(dynamic.ticks),
+        level: dynamic.level,
+        staffNumber: dynamic.hand === undefined ? null : dynamic.hand === 'right' ? RIGHT_HAND : LEFT_HAND,
+        ...(dynamic.hand === 'right' ? { placement: 'above' as const } : {}),
+      })),
     tempoWords: [],
     hairpins: [],
     octaveShifts: [],

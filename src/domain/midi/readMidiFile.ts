@@ -1,4 +1,4 @@
-import { damperIsDown, theDynamicATextSays } from './MidiFile.js';
+import { damperIsDown, theDynamicATextSays, type Hand } from './MidiFile.js';
 import type { DynamicLevel } from '../model/Exercise.js';
 import { DomainError } from '../../shared/errors.js';
 
@@ -37,8 +37,12 @@ export interface MidiFileDocument {
   readonly keyChanges: readonly { readonly atTicks: number; readonly fifths: number; readonly minor: boolean }[];
   /** Where the file changes tempo after its first, in its own ticks, each to the nearest crotchet a minute and another than the one before. */
   readonly tempoChanges: readonly { readonly atTicks: number; readonly tempoBpm: number }[];
-  /** Where the file marks a dynamic, in its own ticks, each another than the one before: see `theTextOfADynamic`. */
-  readonly dynamics: readonly { readonly atTicks: number; readonly level: DynamicLevel }[];
+  /**
+   * Where the file marks a dynamic, in its own ticks, each another than the
+   * one before it for the same music: see `theTextOfADynamic`. One for a hand
+   * alone says which.
+   */
+  readonly dynamics: readonly { readonly atTicks: number; readonly level: DynamicLevel; readonly hand?: Hand }[];
   readonly title: string | null;
   /** Each track's own name where it gives one, by the track's number. */
   readonly trackNames: readonly (string | null)[];
@@ -172,10 +176,24 @@ interface TrackResult {
   readonly metres: { readonly atTicks: number; readonly beats: number; readonly beatType: number }[];
   readonly keys: { readonly atTicks: number; readonly fifths: number; readonly minor: boolean }[];
   readonly tempos: { readonly atTicks: number; readonly microsecondsPerQuarter: number }[];
-  readonly dynamics: { readonly atTicks: number; readonly level: DynamicLevel }[];
+  readonly dynamics: { readonly atTicks: number; readonly level: DynamicLevel; readonly hand?: Hand }[];
   name: string | null;
   /** Its track name, apart from any other text: a file's title may be either. */
   trackName: string | null;
+}
+
+/**
+ * The dynamics in time order, each another than the one before it for the
+ * same music - over both hands, or one hand alone: a hand's mark says nothing
+ * of the other's.
+ */
+function theChangesOfEachHand<T extends { readonly level: DynamicLevel; readonly hand?: Hand }>(sorted: readonly T[]): T[] {
+  const last = new Map<Hand | undefined, DynamicLevel>();
+  return sorted.filter((dynamic) => {
+    const changes = last.get(dynamic.hand) !== dynamic.level;
+    last.set(dynamic.hand, dynamic.level);
+    return changes;
+  });
 }
 
 function decodeText(bytes: Uint8Array): string {
@@ -269,7 +287,7 @@ function readTrack(bytes: Bytes, length: number, track: number): TrackResult {
         result.keys.push({ atTicks: at, fifths, minor });
       } else if (dynamic !== null) {
         // A dynamic, as this program writes one: no title.
-        result.dynamics.push({ atTicks: at, level: dynamic });
+        result.dynamics.push({ atTicks: at, level: dynamic.level, ...(dynamic.hand === null ? {} : { hand: dynamic.hand }) });
       } else if ((type === 0x03 || type === 0x01) && size > 0) {
         result.name ??= decodeText(data);
         if (type === 0x03) {
@@ -381,7 +399,7 @@ export function readMidiFile(data: Uint8Array): MidiFileDocument {
   const metres: { atTicks: number; beats: number; beatType: number }[] = [];
   const keys: { atTicks: number; fifths: number; minor: boolean }[] = [];
   const tempos: { atTicks: number; microsecondsPerQuarter: number }[] = [];
-  const dynamics: { atTicks: number; level: DynamicLevel }[] = [];
+  const dynamics: { atTicks: number; level: DynamicLevel; hand?: Hand }[] = [];
   let title: string | null = null;
   const trackNames: (string | null)[] = [];
   let track = 0;
@@ -451,9 +469,7 @@ export function readMidiFile(data: Uint8Array): MidiFileDocument {
       atTicks,
       tempoBpm: Math.round(MICROSECONDS_PER_MINUTE / lasts),
     })),
-    dynamics: dynamics
-      .sort((one, other) => one.atTicks - other.atTicks)
-      .filter((dynamic, at, all) => dynamic.level !== all[at - 1]?.level),
+    dynamics: theChangesOfEachHand(dynamics.sort((one, other) => one.atTicks - other.atTicks)),
     title,
     trackNames,
   };

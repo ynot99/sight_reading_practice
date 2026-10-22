@@ -281,6 +281,27 @@ describe('turning a MIDI file into a page', () => {
     expect(document.dynamics).toEqual([{ atTicks: 0, level: 'p' }]);
   });
 
+  it('takes each dynamic once where it says what the one before it for the same music said', () => {
+    const text = (words: string): number[] => [0x00, 0xff, 0x01, words.length, ...[...words].map((letter) => letter.charCodeAt(0))];
+    const document = readMidiFile(
+      handWritten([
+        ...text('dynamic p'),
+        ...text('dynamic f, left hand'),
+        ...text('dynamic p'),
+        ...text('dynamic f, left hand'),
+        // The same level for the other hand alone says something.
+        ...text('dynamic f, right hand'),
+        0x00, 0x90, 60, 0x40, 0x83, 0x60, 0x80, 60, 0x40,
+      ]),
+    );
+
+    expect(document.dynamics).toEqual([
+      { atTicks: 0, level: 'p' },
+      { atTicks: 0, level: 'f', hand: 'left' },
+      { atTicks: 0, level: 'f', hand: 'right' },
+    ]);
+  });
+
   it('prints the dynamics the file marks, on the grid, and none past the last bar', () => {
     const marked: MidiFileEvent[] = [
       ...note(60, 0, 4 * QUARTER_MS),
@@ -295,6 +316,37 @@ describe('turning a MIDI file into a page', () => {
     expect(exercise.dynamicMarks.map(({ measureIndex, offsetTicks, level, staffNumber }) => [measureIndex, offsetTicks, level, staffNumber])).toEqual([
       [0, 0, 'mf', null],
       [1, 2 * Duration.QUARTER.ticks, 'p', null],
+    ]);
+    expect(() => validateExercise(exercise)).not.toThrow();
+  });
+
+  it("prints a hand's own dynamic on its staff, the right hand's above it, apart from those for both between them", () => {
+    const struck = (midi: number, atMs: number, level: 'f' | null, hand: 'right' | 'left'): MidiFileEvent[] => [
+      { kind: 'noteOn', atMs, midi, velocity: 0.5, loudness: { level, shade: 0 }, hand },
+      { kind: 'noteOff', atMs: atMs + QUARTER_MS, midi },
+    ];
+    const { exercise } = pageOf([
+      { kind: 'dynamic', atMs: 0, level: 'mf' },
+      ...struck(72, 0, null, 'right'),
+      ...struck(48, 0, null, 'left'),
+      ...struck(72, QUARTER_MS, 'f', 'right'),
+      ...struck(48, 2 * QUARTER_MS, 'f', 'left'),
+      ...struck(72, 3 * QUARTER_MS, null, 'right'),
+    ]);
+
+    expect(
+      exercise.dynamicMarks.map(({ measureIndex, offsetTicks, level, staffNumber, placement }) => [
+        measureIndex,
+        offsetTicks / Duration.QUARTER.ticks,
+        level,
+        staffNumber,
+        placement ?? null,
+      ]),
+    ).toEqual([
+      [0, 0, 'mf', null, null],
+      [0, 1, 'f', 1, 'above'],
+      [0, 2, 'f', 2, null],
+      [0, 3, 'mf', 1, 'above'],
     ]);
     expect(() => validateExercise(exercise)).not.toThrow();
   });

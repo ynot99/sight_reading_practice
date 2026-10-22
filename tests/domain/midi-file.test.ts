@@ -9,6 +9,7 @@ import {
   theBeatOfTheClickAt,
   theDynamicAt,
   theDynamicsOf,
+  theDynamicsOfEachHand,
   theChangesOfTheClick,
   theKeyChangesOf,
   theKeyOfTheMusicAt,
@@ -20,6 +21,7 @@ import {
   writeMidiFile,
   type HeardBeat,
   type MidiFileEvent,
+  type NoteLoudness,
 } from '../../src/domain/midi/MidiFile.js';
 import { DomainError } from '../../src/shared/errors.js';
 import { readMidiFile } from '../../src/domain/midi/readMidiFile.js';
@@ -894,5 +896,107 @@ describe('how loud a note written at a level is struck', () => {
     // Nothing to change, the same events.
     const written = takeWithTheLoudnessWritten(notes);
     expect(takeWithTheLoudnessWritten(written)).toBe(written);
+  });
+});
+
+describe('the dynamics printed for one hand alone', () => {
+  const OWN = (level: NoteLoudness['level']): NoteLoudness => ({ level, shade: 0 });
+  const FOLLOWS: NoteLoudness = { level: null, shade: 0 };
+  const struck = (atMs: number, midi: number, loudness?: NoteLoudness, hand?: 'right' | 'left'): MidiFileEvent[] => [
+    {
+      kind: 'noteOn',
+      atMs,
+      midi,
+      velocity: 0.5,
+      ...(loudness === undefined ? {} : { loudness }),
+      ...(hand === undefined ? {} : { hand }),
+    },
+    { kind: 'noteOff', atMs: atMs + 400, midi },
+  ];
+  const said = (events: readonly MidiFileEvent[]): string[] =>
+    theDynamicsOfEachHand(events).map((mark) => `${String(mark.atMs)} ${mark.hand} ${mark.level}`);
+
+  it('marks where a hand is at a level the dynamic over both does not say, and back to it after', () => {
+    const events: MidiFileEvent[] = [
+      { kind: 'dynamic', atMs: 0, level: 'mf' },
+      ...struck(0, 72, FOLLOWS),
+      ...struck(0, 48, FOLLOWS),
+      // Its own forte, said once however long it lasts, and the left hand left as it is.
+      ...struck(500, 72, OWN('f')),
+      ...struck(1_000, 74, { level: 'f', shade: 30 }),
+      ...struck(1_000, 48, FOLLOWS),
+      // Back to the dynamic over it, said again; a note played reads as it.
+      ...struck(1_500, 72, FOLLOWS),
+      ...struck(1_700, 74),
+      ...struck(1_500, 48, OWN('p')),
+      // A dynamic over both says it for both, so a level of its own the same says nothing.
+      { kind: 'dynamic', atMs: 2_000, level: 'p' },
+      ...struck(2_000, 72, OWN('p')),
+      ...struck(2_500, 48, FOLLOWS),
+      // And after one of its own, the next dynamic over both is what the hand is in again.
+      ...struck(3_000, 72, OWN('f')),
+      { kind: 'dynamic', atMs: 3_500, level: 'ff' },
+      ...struck(3_500, 72, FOLLOWS),
+      // A moment at the level most of its notes are at, and the louder of two as many.
+      ...struck(4_000, 55, FOLLOWS),
+      ...struck(4_000, 48, OWN('f')),
+      ...struck(4_000, 52, OWN('f')),
+      ...struck(4_500, 76, OWN('pp')),
+      ...struck(4_500, 72, OWN('p')),
+      // The hand a note is said to be in, or the one its pitch is in.
+      ...struck(5_000, 40, OWN('ff')),
+      ...struck(5_500, 64, OWN('fff'), 'left'),
+      // One of its own on the moment of a dynamic over both outlasts it.
+      { kind: 'dynamic', atMs: 6_000, level: 'mp' },
+      ...struck(6_000, 72, OWN('f')),
+      ...struck(6_500, 72, FOLLOWS),
+    ];
+
+    expect(said(events)).toEqual([
+      '500 right f',
+      '1500 right mf',
+      '1500 left p',
+      '3000 right f',
+      '4000 left f',
+      '4500 right p',
+      '5000 left ff',
+      '5500 left fff',
+      '6000 right f',
+      '6500 right mp',
+    ]);
+  });
+
+  it('says nothing where every note follows the dynamics over both or was played, and none marked is mezzo-forte', () => {
+    expect(
+      said([{ kind: 'dynamic', atMs: 0, level: 'p' }, ...struck(0, 72, FOLLOWS), ...struck(500, 48), ...struck(1_000, 72, OWN('p'))]),
+    ).toEqual([]);
+    expect(said([...struck(0, 72, OWN('mf')), ...struck(500, 72, OWN('f')), ...struck(1_000, 72, FOLLOWS)])).toEqual([
+      '500 right f',
+      '1000 right mf',
+    ]);
+  });
+
+  it('is written to a file as a text saying the hand, in its track or the one there is, and read back so', () => {
+    const marked = (hand: (midi: number) => 'right' | 'left' | undefined): MidiFileEvent[] => [
+      { kind: 'dynamic', atMs: 0, level: 'mf' },
+      ...struck(0, 72, FOLLOWS, hand(72)),
+      ...struck(500, 72, OWN('f'), hand(72)),
+      ...struck(500, 48, OWN('f'), hand(48)),
+      ...struck(1_000, 72, FOLLOWS, hand(72)),
+      ...struck(1_000, 48, FOLLOWS, hand(48)),
+    ];
+    const read = (events: readonly MidiFileEvent[]) => readMidiFile(writeMidiFile(events, { beats: click(0, 500, 4) }));
+    const expected = [
+      { atTicks: 0, level: 'mf' },
+      { atTicks: BEAT, level: 'f', hand: 'right' },
+      { atTicks: BEAT, level: 'f', hand: 'left' },
+      { atTicks: 2 * BEAT, level: 'mf', hand: 'right' },
+      { atTicks: 2 * BEAT, level: 'mf', hand: 'left' },
+    ];
+
+    const twoTracks = read(marked((midi) => (midi >= 60 ? 'right' : 'left')));
+    expect(twoTracks.trackNames).toEqual([TRACK_OF_A_HAND.right, TRACK_OF_A_HAND.left]);
+    expect(twoTracks.dynamics).toEqual(expected);
+    expect(read(marked(() => undefined)).dynamics).toEqual(expected);
   });
 });

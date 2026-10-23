@@ -377,6 +377,12 @@ export interface PracticeSettings {
    */
   readonly rollSounds: boolean;
   /**
+   * Whether the middle of the circle of fifths names the chord sounding, with
+   * its numeral: worth seeing at times, and a distraction at others. The
+   * slice of the chord is lit either way.
+   */
+  readonly circleNamesTheChord: boolean;
+  /**
    * Whether how hard the chosen notes of a sketch are struck is set by the
    * marks a score writes - pp to ff - rather than by a slider of 127 steps:
    * the one is how a writer thinks of it, the other how a file keeps it.
@@ -1119,6 +1125,7 @@ export class PracticeController {
       // than one that is moving.
       rollHeadAtPercent: 15,
       rollSounds: true,
+      circleNamesTheChord: true,
       velocityAsDynamics: false,
       rangeFromBar: null,
       rangeToBar: null,

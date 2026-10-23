@@ -1410,6 +1410,29 @@ textarea {
   stroke-linecap: round;
 }
 
+/* The hole in the middle, a press to show or hide the chord sounding: edged only under a pointer or a key's focus. */
+.roll-circle__middle {
+  fill: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.roll-circle__middle:focus {
+  outline: none;
+}
+
+.roll-circle__middle:focus-visible {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+@media (hover: hover) {
+  .roll-circle__middle:hover {
+    stroke: var(--accent);
+    stroke-width: 1.5;
+  }
+}
+
 /* The chord sounding, in the hole in the middle, in the text's own ink: named, not judged; its numeral under it, quieter. */
 .roll-circle__sounding {
   pointer-events: none;

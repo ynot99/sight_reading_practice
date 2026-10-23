@@ -9768,7 +9768,7 @@ describe('AppView', () => {
     });
 
     it('names the chord sounding in the middle of the circle with its numeral - the keys held where they make one, the cursor\'s otherwise - and lights its slice', async () => {
-      const { view, sketches, clock, midi } = createRig();
+      const { view, sketches, clock, midi, runtime } = createRig();
       await view.initialize();
       const held = (midis: readonly number[], atMs: number, upAtMs: number) =>
         midis.flatMap((key) => [
@@ -9851,6 +9851,7 @@ describe('AppView', () => {
       up(56, 59, 63, 67);
       // Spelt and numbered as the key the sketch is in: in D major, with sharps.
       sketches.changeTheKey(sketch.id, aKeyInTheScale(2, 'major'));
+      const notesBefore = sketches.find(sketch.id)?.events.length;
       down(63, 66, 70);
       expect([middle(), numeral()]).toEqual(['D♯m', '♭ii']);
       up(63, 66, 70);
@@ -9859,6 +9860,28 @@ describe('AppView', () => {
       up(62, 66, 69);
       down(63, 66, 70);
       // Put away with the chords, the pill names the keys held again; nowhere, nothing.
+      // Pressed, the middle is empty, the slice still lit; pressed again, or from a key, it names it again.
+      const theMiddle = circle.querySelector('.roll-circle__middle');
+      const middleSays = (): string => theMiddle?.getAttribute('aria-label') ?? '';
+      expect([middleSays(), theMiddle?.querySelector('title')?.textContent, theMiddle?.getAttribute('aria-pressed')]).toEqual([
+        'Hide the chord sounding',
+        'Hide the chord sounding',
+        'true',
+      ]);
+      const litAsHeld = here();
+      theMiddle?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect([middle(), numeral(), here(), runtime.controller.settings.circleNamesTheChord]).toEqual(['', '', litAsHeld, false]);
+      expect([middleSays(), theMiddle?.getAttribute('aria-pressed')]).toEqual(['Show the chord sounding here', 'false']);
+      // Nothing was written for it.
+      expect(sketches.find(sketch.id)?.events.length).toBe(notesBefore);
+      // Hidden still as the keys change.
+      up(63, 66, 70);
+      down(62, 66, 69);
+      expect(middle()).toBe('');
+      up(62, 66, 69);
+      down(63, 66, 70);
+      theMiddle?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect([middle(), numeral(), runtime.controller.settings.circleNamesTheChord]).toEqual(['D♯m', '♭ii', true]);
       element<HTMLButtonElement>('roll-chords-open').click();
       expect([pill.hidden, (pill.textContent ?? '').trim()]).toEqual([false, 'D♯m']);
       up(63, 66, 70);
@@ -9978,8 +10001,8 @@ describe('AppView', () => {
       expect(steps()).toEqual([]);
       // Over the slices, and under their names, which it never hides; the chord sounding in the middle over all.
       const layers = [...(element('roll-circle').querySelector('svg')?.children ?? [])].map((layer) => layer.getAttribute('class'));
-      expect(layers.slice(-3)).toEqual(['roll-circle__way', 'roll-circle__names', 'roll-circle__sounding']);
-      expect(layers.slice(0, -3).every((layer) => layer === 'roll-circle__chord')).toBe(true);
+      expect(layers.slice(-4)).toEqual(['roll-circle__middle', 'roll-circle__way', 'roll-circle__names', 'roll-circle__sounding']);
+      expect(layers.slice(0, -4).every((layer) => layer === 'roll-circle__chord')).toBe(true);
       cursorAt(2_600);
       expect(steps()).toEqual(['major 0 > minor 0 0.90']);
       cursorAt(6_600);

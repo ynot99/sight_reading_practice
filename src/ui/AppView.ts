@@ -311,7 +311,7 @@ import {
   type RollGhost,
   type RollHeads,
 } from './rollView.js';
-import { drawTheCircle, showOnTheCircle, thePlaceOnTheCircle } from './circleView.js';
+import { drawTheCircle, isTheMiddleOfTheCircle, showOnTheCircle, thePlaceOnTheCircle } from './circleView.js';
 import {
   theKeysAtThePlace,
   theKeysOwnPlaces,
@@ -10183,8 +10183,17 @@ export class AppView {
         this.soundTheChordWritten(this.writeTheChordWritten(this.theKeysWrittenAtTheHead(theKeysAtThePlace(place))));
       }
     };
+    // The middle shows or hides the chord sounding written in it.
+    const nameTheChordInTheMiddleOrNot = (): void => {
+      this.runtime.controller.updateSettings({ circleNamesTheChord: !this.runtime.controller.settings.circleNamesTheChord });
+      this.showTheCircle();
+    };
     this.listen(this.el.rollCircle, 'click', (event) => {
-      writeFromTheCircle(event.target);
+      if (isTheMiddleOfTheCircle(event.target)) {
+        nameTheChordInTheMiddleOrNot();
+      } else {
+        writeFromTheCircle(event.target);
+      }
     });
     // Over a slice, its notes are shown where it would write them, as a chord of the drawer's are.
     this.listen(this.el.rollCircle, 'pointerover', (event) => {
@@ -10198,7 +10207,11 @@ export class AppView {
       const key = (event as KeyboardEvent).key;
       if (key === 'Enter' || key === ' ') {
         event.preventDefault();
-        writeFromTheCircle(event.target);
+        if (isTheMiddleOfTheCircle(event.target)) {
+          nameTheChordInTheMiddleOrNot();
+        } else {
+          writeFromTheCircle(event.target);
+        }
       }
     });
     this.listen(this.el.rollChordsList, 'pointerdown', (event) => {
@@ -14413,8 +14426,9 @@ export class AppView {
         : { ...held, numeral: theNumeralOfTheChord(held, thePitchClassesOfTheScale(key.fifths, theScaleOfTheKey(key))) };
     const here = chord === null ? null : whereOnTheCircle(chord.root, chord.kind);
     const sounding = chord === null ? null : { name: chord.name, numeral: chord.numeral };
+    const named = this.runtime.controller.settings.circleNamesTheChord;
     const way = scene === null ? [] : theWayRoundTheCircle(scene.chords, this.headIsAtMs(), THE_WAY_ROUND_SHOWN);
-    const shows = JSON.stringify([key.fifths, theScaleOfTheKey(key), here, sounding, way]);
+    const shows = JSON.stringify([key.fifths, theScaleOfTheKey(key), here, sounding, named, way]);
     if (shows === this.circleShows) {
       return;
     }
@@ -14424,6 +14438,7 @@ export class AppView {
       ofTheKey: theKeysOwnPlaces(key.fifths, theScaleOfTheKey(key)),
       here,
       sounding,
+      named,
       way,
     });
   }

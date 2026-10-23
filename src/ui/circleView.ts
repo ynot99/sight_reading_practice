@@ -122,6 +122,14 @@ export function drawTheCircle(doc: Document): SVGSVGElement {
       names.append(label);
     }
   }
+  // The hole in the middle, pressed to show or hide the chord sounding written in it.
+  const middle = doc.createElementNS(SVG, 'circle');
+  middle.setAttribute('class', 'roll-circle__middle');
+  middle.setAttribute('r', String(RING_EDGES.diminished[0]));
+  middle.setAttribute('role', 'button');
+  middle.setAttribute('tabindex', '0');
+  middle.append(doc.createElementNS(SVG, 'title'));
+  drawing.append(middle);
   // Over the slices, and nothing to press: a finger goes through it to the chord under it.
   const way = doc.createElementNS(SVG, 'g');
   way.setAttribute('class', 'roll-circle__way');
@@ -150,13 +158,32 @@ function writeInTheMiddle(written: Element | null, words: string, size: number):
   written.setAttribute('font-size', Math.min(size, SOUNDING_ROOM / (Math.max(letters, 1) * A_LETTER_IS)).toFixed(2));
 }
 
-/** Writes the chord sounding in the middle, its numeral under it; nothing there for none. */
+/**
+ * Writes the chord sounding in the middle, its numeral under it, where the
+ * middle names it; nothing there for none. And says what pressing the
+ * middle does.
+ */
 function nameTheChordSounding(
   drawing: SVGSVGElement,
   sounding: { readonly name: string; readonly numeral: string } | null,
+  named: boolean,
 ): void {
-  writeInTheMiddle(drawing.querySelector('.roll-circle__sounding-name'), sounding?.name ?? '', SOUNDING_SIZE);
-  writeInTheMiddle(drawing.querySelector('.roll-circle__sounding-numeral'), sounding?.numeral ?? '', SOUNDING_NUMERAL_SIZE);
+  const shown = named ? sounding : null;
+  writeInTheMiddle(drawing.querySelector('.roll-circle__sounding-name'), shown?.name ?? '', SOUNDING_SIZE);
+  writeInTheMiddle(drawing.querySelector('.roll-circle__sounding-numeral'), shown?.numeral ?? '', SOUNDING_NUMERAL_SIZE);
+  const middle = drawing.querySelector('.roll-circle__middle');
+  const says = named ? 'Hide the chord sounding' : 'Show the chord sounding here';
+  middle?.setAttribute('aria-label', says);
+  middle?.setAttribute('aria-pressed', String(named));
+  const title = middle?.querySelector('title');
+  if (title !== null && title !== undefined) {
+    title.textContent = says;
+  }
+}
+
+/** Whether a pointer or a key is on the middle of the circle. */
+export function isTheMiddleOfTheCircle(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('.roll-circle__middle') !== null;
 }
 
 /**
@@ -211,12 +238,14 @@ export function showOnTheCircle(
     readonly here: PlaceOnTheCircle | null;
     /** The chord sounding, its name and its degree in the key, which `here` is the place of where it has one. */
     readonly sounding: { readonly name: string; readonly numeral: string } | null;
+    /** Whether the middle names it: see `circleNamesTheChord`. */
+    readonly named: boolean;
     /** The way the music came to where it is, oldest first: see `theWayRoundTheCircle`. */
     readonly way: readonly PlaceOnTheCircle[];
   },
 ): void {
   showTheWayRound(drawing, shown.way);
-  nameTheChordSounding(drawing, shown.sounding);
+  nameTheChordSounding(drawing, shown.sounding, shown.named);
   // A slice's name is the one drawn in the same turn as it.
   const labels = [...drawing.querySelectorAll('.roll-circle__label')];
   for (const [turn, slice] of [...drawing.querySelectorAll<SVGGElement>('[data-ring]')].entries()) {

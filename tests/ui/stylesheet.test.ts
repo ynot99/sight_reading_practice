@@ -1440,7 +1440,7 @@ describe('the stylesheet', () => {
     const portrait = '@media (orientation: portrait)';
     // The drawing, then a column of the circle over the chords, the keep and the delete at its foot.
     expect(HTML).toMatch(
-      /<div class="roll-harmony">\s*<div class="roll-room">\s*<div class="roll-frame">[\s\S]*?id="roll-map"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>\s*<div id="roll-side" class="roll-side" hidden>\s*(?:<!--[\s\S]*?-->\s*)?<div id="roll-circle" class="roll-circle"><\/div>\s*<div id="roll-chords"[^>]*>[\s\S]*?id="roll-chords-keep"[^>]*>\+<\/button>\s*<button id="roll-chords-forget"[\s\S]*?<\/button>\s*<\/div>\s*<\/div>\s*<\/div>\s*<\/div>/,
+      /<div class="roll-harmony">\s*<div class="roll-room">\s*<div class="roll-frame">[\s\S]*?id="roll-map"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>\s*<div id="roll-side" class="roll-side" hidden>\s*(?:<!--[\s\S]*?-->\s*)?<div id="roll-circle" class="roll-circle">\s*<button id="roll-circle-names"[\s\S]*?<\/button>\s*<\/div>\s*<div id="roll-chords"[^>]*>[\s\S]*?id="roll-chords-keep"[^>]*>\+<\/button>\s*<button id="roll-chords-forget"[\s\S]*?<\/button>\s*<\/div>\s*<\/div>\s*<\/div>\s*<\/div>/,
     );
     expect(ruleOf('.roll-harmony')).toMatch(/display\s*:\s*flex/);
     expect(ruleOf('.roll-harmony')).not.toMatch(/flex-direction/);
@@ -1452,6 +1452,11 @@ describe('the stylesheet', () => {
     expect(ruleOf('.roll-side')).toMatch(/width\s*:\s*min\(300px, 32vw\)/);
     expect(ruleOf('.roll-side')).toMatch(/min-height\s*:\s*0/);
     expect(ruleOf('.roll-circle')).toMatch(/flex\s*:\s*none/);
+    // The switch of the name in the middle in the circle's corner, which the round drawing leaves empty.
+    expect(ruleOf('.roll-circle')).toMatch(/position\s*:\s*relative/);
+    expect(ruleOf('.roll-circle-names')).toMatch(/position\s*:\s*absolute/);
+    expect(ruleOf('.roll-circle-names')).toMatch(/top\s*:\s*0/);
+    expect(ruleOf('.roll-circle-names')).toMatch(/left\s*:\s*0/);
     expect(ruleOf('.roll-circle__drawing')).toMatch(/aspect-ratio\s*:\s*1/);
     expect(ruleOf('.roll-circle__drawing')).toMatch(/max-height\s*:\s*100%/);
     // Under the chords' column the rest of its height, scrolled where there are more.

@@ -14,6 +14,7 @@ import {
   theChordTheKeysMake,
   theChordTheNotesMake,
   theNumeralOfTheChord,
+  type ChordKind,
 } from '../domain/harmony/chordName.js';
 import { DYNAMIC_LEVELS, DYNAMIC_VELOCITY, type DynamicLevel } from '../domain/model/Exercise.js';
 import { eachKeyOnce, sameKeys, theChordsOfTheScale } from '../domain/harmony/chordsOfTheKey.js';
@@ -312,8 +313,33 @@ import {
   type RollHeads,
 } from './rollView.js';
 import { drawTheCircle, isTheMiddleOfTheCircle, showOnTheCircle, thePlaceOnTheCircle } from './circleView.js';
+
+/**
+ * A chord pressed or pointed at: one of the drawer, by its place there; one
+ * of the circle, by its slice; or the one sounding, named in the circle's
+ * middle (see `theChordSounding`).
+ */
+type ChordAskedFor =
+  | { readonly inTheDrawer: number }
+  | { readonly onTheCircle: PlaceOnTheCircle }
+  | { readonly inTheMiddle: true };
+
+/** Whether two chords asked for are the same one. */
+function theSameChordAskedFor(one: ChordAskedFor | null, other: ChordAskedFor | null): boolean {
+  return JSON.stringify(one) === JSON.stringify(other);
+}
+
+/** The chord of the circle a pointer or a key is on: a slice's, or the middle's; none off them. */
+function theChordAskedForOnTheCircle(target: EventTarget | null): ChordAskedFor | null {
+  if (isTheMiddleOfTheCircle(target)) {
+    return { inTheMiddle: true };
+  }
+  const place = thePlaceOnTheCircle(target);
+  return place === null ? null : { onTheCircle: place };
+}
 import {
   theKeysAtThePlace,
+  theKeysOfTheChord,
   theKeysOwnPlaces,
   theWayRoundTheCircle,
   whereOnTheCircle,
@@ -2301,11 +2327,10 @@ export class AppView {
   private paceTapped: readonly number[] = [];
 
   /**
-   * The chord the pointer is on - of the drawer, by its place there, or of
-   * the circle, by its slice - whose notes are shown where it would write
+   * The chord the pointer is on, whose notes are shown where it would write
    * them; or none.
    */
-  private chordPointedAt: { readonly inTheDrawer: number } | { readonly onTheCircle: PlaceOnTheCircle } | null = null;
+  private chordPointedAt: ChordAskedFor | null = null;
   /** Those notes, where they would go: painted dashed over the drawing until the pointer leaves the chord. */
   private notesShownAhead: readonly NoteShownAhead[] = [];
   /** The notes played into a recording under way, where they go, painted as they are played: see `showWhatIsBeingRecorded`. */
@@ -2394,8 +2419,8 @@ export class AppView {
   private placedBeforeTheTap: number | null = null;
 
   /**
-   * The chord of the drawer a pointer is held down on, sounding until it is
-   * let go of: by its place there, or none where the pointer has slid off
+   * The chord of the drawer or the circle a pointer is held down on,
+   * sounding until it is let go of, or none where the pointer has slid off
    * the chords; its keys, and when they were struck. And what its moving
    * is, once it moves (see `A_FINGER_LISTENS_MS`): a slide over the chords,
    * or the column scrolled, from where it was and where the pointer went
@@ -2403,7 +2428,7 @@ export class AppView {
    */
   private chordHeld: {
     readonly pointerId: number;
-    readonly at: number | null;
+    readonly at: ChordAskedFor | null;
     readonly keys: readonly number[];
     readonly struckAtMs: number;
     readonly downAtMs: number;
@@ -2749,6 +2774,7 @@ export class AppView {
     rollChords: HTMLElement;
     rollSide: HTMLElement;
     rollCircle: HTMLElement;
+    rollCircleNames: HTMLButtonElement;
     rollChordsList: HTMLElement;
     rollChordsKeep: HTMLButtonElement;
     rollChordsForget: HTMLButtonElement;
@@ -3155,6 +3181,7 @@ export class AppView {
       rollChords: requireElement(doc, 'roll-chords'),
       rollSide: requireElement(doc, 'roll-side'),
       rollCircle: requireElement(doc, 'roll-circle'),
+      rollCircleNames: requireElement(doc, 'roll-circle-names'),
       rollChordsList: requireElement(doc, 'roll-chords-list'),
       rollChordsKeep: requireElement(doc, 'roll-chords-keep'),
       rollChordsForget: requireElement(doc, 'roll-chords-forget'),
@@ -10172,46 +10199,44 @@ export class AppView {
         // A key's click - Enter or Space on a chord - counts no presses. A
         // pointer's writes the chord it is let go of on, and was answered
         // there: see `letGoOfTheChord`.
-        this.soundTheChordWritten(this.writeTheChordAtTheHead(Number(chord.dataset['chord'])));
+        this.soundTheChordWritten(this.writeTheChordAtTheHead({ inTheDrawer: Number(chord.dataset['chord']) }));
       }
     });
     // A chord of the circle written as one of the drawer is, and heard: any
     // chord there is, the key's own or not, which is what a circle is read for.
+    // A pointer's is struck as it goes down and written where it is let go
+    // of, as the drawer's are; a key's click counts no presses.
     const writeFromTheCircle = (target: EventTarget | null): void => {
-      const place = thePlaceOnTheCircle(target);
-      if (place !== null) {
-        this.soundTheChordWritten(this.writeTheChordWritten(this.theKeysWrittenAtTheHead(theKeysAtThePlace(place))));
+      const asked = theChordAskedForOnTheCircle(target);
+      if (asked !== null) {
+        this.soundTheChordWritten(this.writeTheChordAtTheHead(asked));
       }
     };
-    // The middle shows or hides the chord sounding written in it.
-    const nameTheChordInTheMiddleOrNot = (): void => {
-      this.runtime.controller.updateSettings({ circleNamesTheChord: !this.runtime.controller.settings.circleNamesTheChord });
-      this.showTheCircle();
-    };
     this.listen(this.el.rollCircle, 'click', (event) => {
-      if (isTheMiddleOfTheCircle(event.target)) {
-        nameTheChordInTheMiddleOrNot();
-      } else {
+      if ((event as MouseEvent).detail === 0) {
         writeFromTheCircle(event.target);
       }
     });
-    // Over a slice, its notes are shown where it would write them, as a chord of the drawer's are.
+    this.listen(this.el.rollCircle, 'pointerdown', (event) => {
+      this.holdTheChord(event);
+    });
+    this.listen(this.el.rollCircleNames, 'click', () => {
+      this.runtime.controller.updateSettings({ circleNamesTheChord: !this.runtime.controller.settings.circleNamesTheChord });
+      this.showTheCircle();
+    });
+    // Over a slice or the middle, its notes are shown where it would write them, as a chord of the drawer's are.
     this.listen(this.el.rollCircle, 'pointerover', (event) => {
-      this.pointAtTheCircle(thePlaceOnTheCircle(event.target));
+      this.pointAtTheChord(theChordAskedForOnTheCircle(event.target));
     });
     // Off it, onto another slice or anything else - out of the window, even.
     this.listen(this.el.rollCircle, 'pointerout', (event) => {
-      this.pointAtTheCircle(thePlaceOnTheCircle((event as PointerEvent).relatedTarget));
+      this.pointAtTheChord(theChordAskedForOnTheCircle((event as PointerEvent).relatedTarget));
     });
     this.listen(this.el.rollCircle, 'keydown', (event) => {
       const key = (event as KeyboardEvent).key;
       if (key === 'Enter' || key === ' ') {
         event.preventDefault();
-        if (isTheMiddleOfTheCircle(event.target)) {
-          nameTheChordInTheMiddleOrNot();
-        } else {
-          writeFromTheCircle(event.target);
-        }
+        writeFromTheCircle(event.target);
       }
     });
     this.listen(this.el.rollChordsList, 'pointerdown', (event) => {
@@ -10238,12 +10263,12 @@ export class AppView {
     // finger leaves it, and the click writes them there.
     this.listen(this.el.rollChordsList, 'pointerover', (event) => {
       const chord = (event.target as Element | null)?.closest<HTMLElement>('[data-chord]');
-      this.pointAtTheChord(chord === null || chord === undefined ? null : Number(chord.dataset['chord']));
+      this.pointAtTheChord(chord === null || chord === undefined ? null : { inTheDrawer: Number(chord.dataset['chord']) });
     });
     this.listen(this.el.rollChordsList, 'pointerout', (event) => {
       const into = (event as PointerEvent).relatedTarget;
       const chord = into instanceof Element ? into.closest<HTMLElement>('[data-chord]') : null;
-      this.pointAtTheChord(chord === null || !this.el.rollChordsList.contains(chord) ? null : Number(chord.dataset['chord']));
+      this.pointAtTheChord(chord === null || !this.el.rollChordsList.contains(chord) ? null : { inTheDrawer: Number(chord.dataset['chord']) });
     });
     // The right button deletes a chord kept, as it deletes a note on the
     // drawing; a finger held there asks for nothing.
@@ -14120,8 +14145,8 @@ export class AppView {
    * follows it, and a progression is written by tapping it through. A key of
    * it already sounding there is left out, as a paste leaves it.
    */
-  private writeTheChordAtTheHead(at: number): ChordWritten | null {
-    return this.writeTheChordWritten(this.theChordWrittenAtTheHead(at));
+  private writeTheChordAtTheHead(at: ChordAskedFor): ChordWritten | null {
+    return this.writeTheChordWritten(this.theChordAskedForWritten(at));
   }
 
   /** Writes what a chord would make of the sketch, as `writeTheChordAtTheHead` says; what was written, or none. */
@@ -14142,14 +14167,16 @@ export class AppView {
   }
 
   /**
-   * Strikes the chord of the drawer a pointer goes down on - the mouse's
-   * left button, a finger or a pen - to sound until it is let go of, and
-   * holds it there to slide over the others. Deleting, the drawer only
-   * deletes: the sound is a hearing of what would be written.
+   * Strikes the chord of the drawer or the circle a pointer goes down on -
+   * the mouse's left button, a finger or a pen - to sound until it is let go
+   * of, and holds it there to slide over the others. Deleting, the drawer
+   * only deletes: the sound is a hearing of what would be written.
    */
   private holdTheChord(event: PointerEvent): void {
     const chord = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-chord]') : null;
-    if (chord === null || this.chordsBeingForgotten || (event.pointerType === 'mouse' && event.button !== 0)) {
+    const asked: ChordAskedFor | null =
+      chord === null ? theChordAskedForOnTheCircle(event.target) : this.chordsBeingForgotten ? null : { inTheDrawer: Number(chord.dataset['chord']) };
+    if (asked === null || (event.pointerType === 'mouse' && event.button !== 0)) {
       return;
     }
     this.letGoOfTheChord(null);
@@ -14161,10 +14188,10 @@ export class AppView {
       downAtMs: this.runtime.clock.now(),
       downY: event.clientY,
       scrolledFrom: this.el.rollChords.scrollTop,
-      // A mouse scrolls with its wheel, so its moving is always a slide.
-      moving: event.pointerType === 'mouse' ? 'slides' : 'not yet',
+      // A mouse scrolls with its wheel, and the circle not at all, so moving there is always a slide.
+      moving: event.pointerType === 'mouse' || chord === null ? 'slides' : 'not yet',
     };
-    this.strikeTheChord(Number(chord.dataset['chord']));
+    this.strikeTheChord(asked);
   }
 
   /**
@@ -14197,18 +14224,18 @@ export class AppView {
       return;
     }
     const at = this.theChordUnder(event);
-    if (at !== this.chordHeld?.at) {
+    if (!theSameChordAskedFor(at, this.chordHeld?.at ?? null)) {
       this.strikeTheChord(at);
       this.pointAtTheChord(at);
     }
   }
 
   /**
-   * Silences the chord held, if one is sounding, and strikes the one at a
-   * place of the drawer, as loud as the sketch is on the whole: all its keys,
-   * those the sketch already has there too, so the chord is heard whole.
+   * Silences the chord held, if one is sounding, and strikes the one asked
+   * for, as loud as the sketch is on the whole: all its keys, those the
+   * sketch already has there too, so the chord is heard whole.
    */
-  private strikeTheChord(at: number | null): void {
+  private strikeTheChord(at: ChordAskedFor | null): void {
     const held = this.chordHeld;
     if (held === null) {
       return;
@@ -14216,7 +14243,7 @@ export class AppView {
     for (const midi of held.keys) {
       this.runtime.pitchPlayer.stop(midi);
     }
-    const written = at === null ? null : this.theChordWrittenAtTheHead(at);
+    const written = at === null ? null : this.theChordAskedForWritten(at);
     const keys = written === null ? [] : written.heard;
     const now = this.runtime.clock.now();
     for (const midi of keys) {
@@ -14232,7 +14259,7 @@ export class AppView {
    * it is let go of. Its one strike is the hearing: the writing strikes
    * nothing again.
    */
-  private letGoOfTheChord(at: number | null): void {
+  private letGoOfTheChord(at: ChordAskedFor | null): void {
     const held = this.chordHeld;
     if (held === null) {
       return;
@@ -14245,11 +14272,57 @@ export class AppView {
     }
   }
 
-  /** The chord of the drawer under a point, by its place there; `null` off the chords. */
-  private theChordUnder(event: PointerEvent): number | null {
+  /** The chord of the drawer or the circle under a point; `null` off the chords. */
+  private theChordUnder(event: PointerEvent): ChordAskedFor | null {
     const under = this.doc.elementFromPoint(event.clientX, event.clientY);
     const chord = under?.closest<HTMLElement>('[data-chord]') ?? null;
-    return chord === null ? null : Number(chord.dataset['chord']);
+    return chord === null ? theChordAskedForOnTheCircle(under) : this.chordsBeingForgotten ? null : { inTheDrawer: Number(chord.dataset['chord']) };
+  }
+
+  /**
+   * What a chord asked for would make of the sketch: see
+   * `theChordWrittenAtTheHead`. None for one of the drawer while it is
+   * deleting what it keeps, since a press there then writes nothing.
+   */
+  private theChordAskedForWritten(at: ChordAskedFor): ChordWritten | null {
+    if ('inTheDrawer' in at) {
+      return this.chordsBeingForgotten ? null : this.theChordWrittenAtTheHead(at.inTheDrawer);
+    }
+    const keys = 'onTheCircle' in at ? theKeysAtThePlace(at.onTheCircle) : (this.theChordSounding()?.keys ?? null);
+    return keys === null ? null : this.theKeysWrittenAtTheHead(keys);
+  }
+
+  /**
+   * The chord sounding, as the middle of the circle names it: the one the
+   * keys held make, where they make one, as they are held and numbered in
+   * the key the cursor is in, as the lane numbers the music there; and
+   * otherwise the one the lane names at the cursor, its root in the octave
+   * of middle C. None with no sketch shown.
+   */
+  private theChordSounding(): {
+    readonly name: string;
+    readonly numeral: string;
+    readonly root: number;
+    readonly kind: ChordKind;
+    readonly keys: readonly number[];
+  } | null {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    if (stored === null) {
+      return null;
+    }
+    const key = this.theKeyAtTheHead(stored);
+    const keysHeld = [...new Set(this.theKeysHeld())];
+    const held = theChordTheKeysMake(keysHeld, key.fifths);
+    if (held !== null) {
+      const numeral = theNumeralOfTheChord(held, thePitchClassesOfTheScale(key.fifths, theScaleOfTheKey(key)));
+      return { name: held.name, numeral, root: held.root, kind: held.kind, keys: keysHeld };
+    }
+    const scene = this.drawnScene;
+    const chord = scene === null ? null : theChordAt(scene, this.headIsAtMs());
+    return chord === null
+      ? null
+      : { name: chord.name, numeral: chord.numeral, root: chord.root, kind: chord.kind, keys: theKeysOfTheChord(chord.root, chord.kind) };
   }
 
   /**
@@ -14416,17 +14489,15 @@ export class AppView {
     }
     const key = this.theKeyAtTheHead(stored);
     const scene = this.drawnScene;
-    const held = theChordTheKeysMake(this.theKeysHeld(), key.fifths);
-    // The keys held numbered in the key the cursor is in, as the lane numbers the music there.
-    const chord =
-      held === null
-        ? scene === null
-          ? null
-          : theChordAt(scene, this.headIsAtMs())
-        : { ...held, numeral: theNumeralOfTheChord(held, thePitchClassesOfTheScale(key.fifths, theScaleOfTheKey(key))) };
+    const chord = this.theChordSounding();
     const here = chord === null ? null : whereOnTheCircle(chord.root, chord.kind);
     const sounding = chord === null ? null : { name: chord.name, numeral: chord.numeral };
     const named = this.runtime.controller.settings.circleNamesTheChord;
+    this.el.rollCircleNames.setAttribute('aria-pressed', String(named));
+    this.el.rollCircleNames.title = named
+      ? 'The chord sounding is named in the middle: press to hide it'
+      : 'The chord sounding is not named in the middle: press to name it';
+    this.el.rollCircleNames.setAttribute('aria-label', this.el.rollCircleNames.title);
     const way = scene === null ? [] : theWayRoundTheCircle(scene.chords, this.headIsAtMs(), THE_WAY_ROUND_SHOWN);
     const shows = JSON.stringify([key.fifths, theScaleOfTheKey(key), here, sounding, named, way]);
     if (shows === this.circleShows) {
@@ -14443,15 +14514,9 @@ export class AppView {
     });
   }
 
-  /** Points at a chord of the drawer, or at none, and shows its notes where it would write them. */
-  private pointAtTheChord(at: number | null): void {
-    this.chordPointedAt = at === null ? null : { inTheDrawer: at };
-    this.showTheChordAhead();
-  }
-
-  /** Points at a chord of the circle, or at none, and shows its notes where it would write them. */
-  private pointAtTheCircle(place: PlaceOnTheCircle | null): void {
-    this.chordPointedAt = place === null ? null : { onTheCircle: place };
+  /** Points at a chord, or at none, and shows its notes where it would write them. */
+  private pointAtTheChord(at: ChordAskedFor | null): void {
+    this.chordPointedAt = at;
     this.showTheChordAhead();
   }
 
@@ -14464,14 +14529,7 @@ export class AppView {
   private showTheChordAhead(): void {
     const pointed = this.chordPointedAt;
     const scene = this.drawnScene;
-    const written =
-      pointed === null || scene === null
-        ? null
-        : 'onTheCircle' in pointed
-          ? this.theKeysWrittenAtTheHead(theKeysAtThePlace(pointed.onTheCircle))
-          : this.chordsBeingForgotten
-            ? null
-            : this.theChordWrittenAtTheHead(pointed.inTheDrawer);
+    const written = pointed === null || scene === null ? null : this.theChordAskedForWritten(pointed);
     this.notesShownAhead =
       written === null || scene === null
         ? []

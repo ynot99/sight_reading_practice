@@ -4,6 +4,7 @@ import {
   CIRCLE_RINGS,
   PLACES_ON_THE_CIRCLE,
   theKeysAtThePlace,
+  theKeysOfTheChord,
   theNameAtThePlace,
   theKeysOwnPlaces,
   theRingOfTheKind,
@@ -69,6 +70,23 @@ describe('the circle of fifths', () => {
     // E flat minor in A flat major; D sharp minor in E major.
     expect(theNameAtThePlace({ ring: 'minor', place: 6 }, -4)).toBe('E♭m');
     expect(theNameAtThePlace({ ring: 'minor', place: 6 }, 4)).toBe('D♯m');
+  });
+
+  it('writes a chord of any kind from middle C, as its own name names it, and as its place does for a triad', () => {
+    for (let root = 0; root < 12; root += 1) {
+      for (const kind of CHORD_KINDS) {
+        const keys = theKeysOfTheChord(root, kind);
+        expect(keys[0], `${String(root)}${kind.suffix}`).toBe(60 + root);
+        expect(keys.map((key) => key - (keys[0] ?? 0))).toEqual(kind.intervals);
+        const at = whereOnTheCircle(root, kind);
+        if (at !== null && kind.intervals.length === 3 && kind.suffix !== 'sus4' && kind.suffix !== 'sus2') {
+          expect(keys).toEqual(theKeysAtThePlace(at));
+        }
+      }
+    }
+    // A root given past the octave is taken back into it.
+    const major = CHORD_KINDS.find((kind) => kind.suffix === '');
+    expect(major === undefined ? [] : theKeysOfTheChord(14, major)).toEqual([62, 66, 69]);
   });
 
   it('follows the way the music came round to a moment, each place once where it stays, the last few only', () => {

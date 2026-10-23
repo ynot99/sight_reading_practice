@@ -122,13 +122,16 @@ export function drawTheCircle(doc: Document): SVGSVGElement {
       names.append(label);
     }
   }
-  // The hole in the middle, pressed to show or hide the chord sounding written in it.
+  // The hole in the middle: the chord sounding, pressed as a slice is.
   const middle = doc.createElementNS(SVG, 'circle');
   middle.setAttribute('class', 'roll-circle__middle');
   middle.setAttribute('r', String(RING_EDGES.diminished[0]));
   middle.setAttribute('role', 'button');
   middle.setAttribute('tabindex', '0');
-  middle.append(doc.createElementNS(SVG, 'title'));
+  middle.setAttribute('aria-label', 'Write the chord sounding where the cursor is');
+  const middleTitle = doc.createElementNS(SVG, 'title');
+  middleTitle.textContent = 'Write the chord sounding where the cursor is';
+  middle.append(middleTitle);
   drawing.append(middle);
   // Over the slices, and nothing to press: a finger goes through it to the chord under it.
   const way = doc.createElementNS(SVG, 'g');
@@ -158,11 +161,7 @@ function writeInTheMiddle(written: Element | null, words: string, size: number):
   written.setAttribute('font-size', Math.min(size, SOUNDING_ROOM / (Math.max(letters, 1) * A_LETTER_IS)).toFixed(2));
 }
 
-/**
- * Writes the chord sounding in the middle, its numeral under it, where the
- * middle names it; nothing there for none. And says what pressing the
- * middle does.
- */
+/** Writes the chord sounding in the middle, its numeral under it, where the middle names it; nothing there for none. */
 function nameTheChordSounding(
   drawing: SVGSVGElement,
   sounding: { readonly name: string; readonly numeral: string } | null,
@@ -171,14 +170,6 @@ function nameTheChordSounding(
   const shown = named ? sounding : null;
   writeInTheMiddle(drawing.querySelector('.roll-circle__sounding-name'), shown?.name ?? '', SOUNDING_SIZE);
   writeInTheMiddle(drawing.querySelector('.roll-circle__sounding-numeral'), shown?.numeral ?? '', SOUNDING_NUMERAL_SIZE);
-  const middle = drawing.querySelector('.roll-circle__middle');
-  const says = named ? 'Hide the chord sounding' : 'Show the chord sounding here';
-  middle?.setAttribute('aria-label', says);
-  middle?.setAttribute('aria-pressed', String(named));
-  const title = middle?.querySelector('title');
-  if (title !== null && title !== undefined) {
-    title.textContent = says;
-  }
 }
 
 /** Whether a pointer or a key is on the middle of the circle. */

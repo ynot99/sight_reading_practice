@@ -9860,19 +9860,20 @@ describe('AppView', () => {
       up(62, 66, 69);
       down(63, 66, 70);
       // Put away with the chords, the pill names the keys held again; nowhere, nothing.
-      // Pressed, the middle is empty, the slice still lit; pressed again, or from a key, it names it again.
-      const theMiddle = circle.querySelector('.roll-circle__middle');
-      const middleSays = (): string => theMiddle?.getAttribute('aria-label') ?? '';
-      expect([middleSays(), theMiddle?.querySelector('title')?.textContent, theMiddle?.getAttribute('aria-pressed')]).toEqual([
-        'Hide the chord sounding',
-        'Hide the chord sounding',
+      // Switched in the circle's corner, the middle is empty, the slice still lit, and nothing written; switched again, named.
+      const switched = element<HTMLButtonElement>('roll-circle-names');
+      expect([switched.getAttribute('aria-pressed'), switched.title, switched.getAttribute('aria-label')]).toEqual([
         'true',
+        'The chord sounding is named in the middle: press to hide it',
+        'The chord sounding is named in the middle: press to hide it',
       ]);
       const litAsHeld = here();
-      theMiddle?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      switched.click();
       expect([middle(), numeral(), here(), runtime.controller.settings.circleNamesTheChord]).toEqual(['', '', litAsHeld, false]);
-      expect([middleSays(), theMiddle?.getAttribute('aria-pressed')]).toEqual(['Show the chord sounding here', 'false']);
-      // Nothing was written for it.
+      expect([switched.getAttribute('aria-pressed'), switched.title]).toEqual([
+        'false',
+        'The chord sounding is not named in the middle: press to name it',
+      ]);
       expect(sketches.find(sketch.id)?.events.length).toBe(notesBefore);
       // Hidden still as the keys change.
       up(63, 66, 70);
@@ -9880,7 +9881,7 @@ describe('AppView', () => {
       expect(middle()).toBe('');
       up(62, 66, 69);
       down(63, 66, 70);
-      theMiddle?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      switched.click();
       expect([middle(), numeral(), runtime.controller.settings.circleNamesTheChord]).toEqual(['D♯m', '♭ii', true]);
       element<HTMLButtonElement>('roll-chords-open').click();
       expect([pill.hidden, (pill.textContent ?? '').trim()]).toEqual([false, 'D♯m']);
@@ -9888,6 +9889,102 @@ describe('AppView', () => {
       cursorAt(5_000);
       element<HTMLButtonElement>('roll-chords-open').click();
       expect([middle(), numeral(), here()]).toEqual(['', '', []]);
+    });
+
+    it('strikes a chord of the circle as a pointer goes down on it and writes the one it is let go of on, the middle the chord sounding', async () => {
+      const { view, sketches, clock, instrument, midi } = createRig();
+      await view.initialize();
+      const held = (midis: readonly number[], atMs: number, upAtMs: number) =>
+        midis.flatMap((key) => [
+          { kind: 'noteOn' as const, atMs, midi: key, velocity: 0.5 },
+          { kind: 'noteOff' as const, atMs: upAtMs, midi: key },
+        ]);
+      // C for a bar, then A minor, in C major.
+      const sketch = sketches.begin(
+        {
+          events: [...held([60, 64, 67], 0, 2_000), ...held([57, 60, 64], 2_000, 4_000)],
+          beats: Array.from({ length: 8 }, (_, beat) => ({ atMs: beat * 500, beat: beat % 4, beatsInBar: 4 })),
+        },
+        'Struck',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      element<HTMLButtonElement>('roll-chords-open').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      clock.advance(1_000);
+      tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: 2.6 * zoom, clientY: 20 });
+      const circle = element('roll-circle');
+      const slice = (ring: string, place: number): Element => {
+        const found = circle.querySelector(`[data-ring="${ring}"][data-place="${String(place)}"] path`);
+        if (found === null) {
+          throw new Error('expected a slice');
+        }
+        return found;
+      };
+      const theMiddle = circle.querySelector('.roll-circle__middle');
+      if (theMiddle === null) {
+        throw new Error('expected the middle');
+      }
+      const highest = view.rollScene?.highest ?? 0;
+      const ahead = (): number[] => view.rollNotesShownAhead.map((note) => highest - note.row).sort((a, b) => a - b);
+      const written = (): number[] =>
+        (sketches.find(sketch.id)?.events ?? [])
+          .flatMap((event) => (event.kind === 'noteOn' && event.atMs !== 0 && event.atMs !== 2_000 ? [event.midi] : []))
+          .sort((a, b) => a - b);
+      const heard = (): number[] => [...new Set(instrument.played.map((note) => note.midi))].sort((a, b) => a - b);
+      let under: Element | null = null;
+      Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: () => under });
+      try {
+        const mouse = { bubbles: true, pointerId: 52, pointerType: 'mouse', button: 0 };
+        // Down on G: heard and not yet written; slid onto D minor, that instead.
+        instrument.played.length = 0;
+        under = slice('major', 1);
+        slice('major', 1).dispatchEvent(new PointerEvent('pointerdown', mouse));
+        expect(heard()).toEqual([67, 71, 74]);
+        expect(written()).toEqual([]);
+        // Moved about on it, it is not struck again.
+        instrument.played.length = 0;
+        document.dispatchEvent(new PointerEvent('pointermove', mouse));
+        expect(heard()).toEqual([]);
+        under = slice('minor', 11);
+        document.dispatchEvent(new PointerEvent('pointermove', mouse));
+        expect(heard()).toEqual([62, 65, 69]);
+        // Let go of there, D minor is written, once: the click after it writes nothing.
+        document.dispatchEvent(new PointerEvent('pointerup', mouse));
+        slice('minor', 11).dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+        expect(written()).toEqual([62, 65, 69]);
+        // The right button is no press.
+        instrument.played.length = 0;
+        slice('major', 1).dispatchEvent(new PointerEvent('pointerdown', { ...mouse, button: 2 }));
+        expect(heard()).toEqual([]);
+
+        // The middle is the chord sounding: at the cursor, A minor from middle C, shown, struck and written.
+        clock.advance(1_000);
+        tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: 3.6 * zoom, clientY: 20 });
+        theMiddle.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse' }));
+        expect(ahead()).toEqual([69, 72, 76]);
+        instrument.played.length = 0;
+        under = theMiddle;
+        theMiddle.dispatchEvent(new PointerEvent('pointerdown', mouse));
+        expect(heard()).toEqual([69, 72, 76]);
+        document.dispatchEvent(new PointerEvent('pointerup', mouse));
+        expect(written()).toEqual([62, 65, 69, 69, 72, 76]);
+        // The keys held, as they are held.
+        theMiddle.dispatchEvent(new PointerEvent('pointerout', { bubbles: true, pointerType: 'mouse', relatedTarget: null }));
+        expect(ahead()).toEqual([]);
+        midi.noteOn(50, clock.now());
+        midi.noteOn(65, clock.now());
+        midi.noteOn(69, clock.now());
+        theMiddle.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse' }));
+        expect(ahead()).toEqual([50, 65, 69]);
+        // From a key, as a slice is.
+        theMiddle.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        expect(written()).toEqual([50, 62, 65, 65, 69, 69, 69, 72, 76]);
+      } finally {
+        Reflect.deleteProperty(document, 'elementFromPoint');
+      }
     });
 
     it('shows the notes a slice of the circle would write while the pointer rests on it, and writes those', async () => {
@@ -10000,7 +10097,7 @@ describe('AppView', () => {
 
       expect(steps()).toEqual([]);
       // Over the slices, and under their names, which it never hides; the chord sounding in the middle over all.
-      const layers = [...(element('roll-circle').querySelector('svg')?.children ?? [])].map((layer) => layer.getAttribute('class'));
+      const layers = [...(element('roll-circle').querySelector('.roll-circle__drawing')?.children ?? [])].map((layer) => layer.getAttribute('class'));
       expect(layers.slice(-4)).toEqual(['roll-circle__middle', 'roll-circle__way', 'roll-circle__names', 'roll-circle__sounding']);
       expect(layers.slice(0, -4).every((layer) => layer === 'roll-circle__chord')).toBe(true);
       cursorAt(2_600);

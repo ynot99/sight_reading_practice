@@ -54,6 +54,7 @@ import {
 import type { SessionScore } from '../domain/scoring/IScoringStrategy.js';
 import {
   SAMPLE_LOADING_MODES,
+  type IPitchPlayer,
   type SampleLoading,
 } from '../application/ports/IPitchPlayer.js';
 import type { PerformanceReport } from '../domain/scoring/PerformanceReport.js';
@@ -2764,6 +2765,7 @@ export class AppView {
     rollGhosts: HTMLInputElement;
     rollSlips: HTMLInputElement;
     rollScrollPlayback: HTMLInputElement;
+    rollSounds: HTMLButtonElement;
     rollHeadAt: HTMLInputElement;
     rollHeadAtValue: HTMLOutputElement;
     rollOptions: HTMLButtonElement;
@@ -3166,6 +3168,7 @@ export class AppView {
       rollGhosts: requireElement(doc, 'roll-ghosts'),
       rollSlips: requireElement(doc, 'roll-slips'),
       rollScrollPlayback: requireElement(doc, 'roll-scroll-playback'),
+      rollSounds: requireElement(doc, 'roll-sounds'),
       rollHeadAt: requireElement(doc, 'roll-head-at'),
       rollHeadAtValue: requireElement(doc, 'roll-head-at-value'),
       rollOptions: requireElement(doc, 'roll-options'),
@@ -9100,6 +9103,7 @@ export class AppView {
     this.dimWhatHasNothingToSay();
     this.el.showPlaybackNotes.checked = settings.showPlaybackNotes;
     this.el.rollScrollPlayback.checked = settings.rollScrollPlayback;
+    this.sayWhetherTheEditingIsHeard();
     this.sayWhereTheHeadStands();
     this.el.restEvery.value = String(settings.restEveryMinutes);
     this.el.restEverySettings.value = this.el.restEvery.value;
@@ -9793,6 +9797,10 @@ export class AppView {
         return;
       }
       this.showTheRowsWhereTheyWerePointedAt(event);
+    });
+    this.listen(this.el.rollSounds, 'click', () => {
+      this.runtime.controller.updateSettings({ rollSounds: !this.runtime.controller.settings.rollSounds });
+      this.sayWhetherTheEditingIsHeard();
     });
     this.listen(this.el.rollScrollPlayback, 'change', () => {
       this.runtime.controller.updateSettings({
@@ -14144,7 +14152,7 @@ export class AppView {
     const keys = written === null ? [] : written.heard;
     const now = this.runtime.clock.now();
     for (const midi of keys) {
-      this.runtime.pitchPlayer.play(midi, written?.velocity ?? 0, now);
+      this.theEditingsInstrument.play(midi, written?.velocity ?? 0, now);
     }
     this.chordHeld = { ...held, at: written === null ? null : at, keys, struckAtMs: now };
   }
@@ -14315,7 +14323,7 @@ export class AppView {
   private soundTheChordWritten(written: ChordWritten | null): void {
     const now = this.runtime.clock.now();
     for (const midi of written === null ? [] : written.struck) {
-      this.runtime.pitchPlayer.play(midi, written?.velocity ?? 0, now);
+      this.theEditingsInstrument.play(midi, written?.velocity ?? 0, now);
       this.runtime.pitchPlayer.stop(midi, now + (written?.lengthMs ?? 0));
     }
   }
@@ -15364,7 +15372,7 @@ export class AppView {
     }
     const now = this.runtime.clock.now();
     const atMs = tapped.atMs + rollBeganAtMs(tapped.roll);
-    this.runtime.pitchPlayer.play(tapped.midi, theLoudnessWrittenAt(tapped.stored.events, atMs), now);
+    this.theEditingsInstrument.play(tapped.midi, theLoudnessWrittenAt(tapped.stored.events, atMs), now);
     this.runtime.pitchPlayer.stop(tapped.midi, now + HEARD_ON_A_TAP_MS);
   }
 
@@ -15391,9 +15399,34 @@ export class AppView {
     }
     this.letGoOfTheRowHeld();
     const atMs = pressed.atMs + rollBeganAtMs(pressed.roll);
-    this.runtime.pitchPlayer.play(pressed.midi, theLoudnessWrittenAt(pressed.stored.events, atMs));
+    this.theEditingsInstrument.play(pressed.midi, theLoudnessWrittenAt(pressed.stored.events, atMs));
     this.rowHeld = { pointerId: event.pointerId, midi: pressed.midi };
     this.lightTheSoundingRows();
+  }
+
+  /** Says on the corner's switch whether what is done to the notes is heard. */
+  private sayWhetherTheEditingIsHeard(): void {
+    const heard = this.runtime.controller.settings.rollSounds;
+    this.el.rollSounds.setAttribute('aria-pressed', String(heard));
+    this.el.rollSounds.title = heard ? 'Notes sound as they are edited' : 'Notes are silent as they are edited: press to hear them';
+    this.el.rollSounds.setAttribute('aria-label', this.el.rollSounds.title);
+  }
+
+  /**
+   * The instrument as what is done to the notes of a drawing strikes it:
+   * not at all while that is asked for. What it struck is let go of on the
+   * instrument itself, so a key struck before it went quiet is not left
+   * sounding.
+   */
+  private get theEditingsInstrument(): Pick<IPitchPlayer, 'play'> {
+    const instrument = this.runtime.pitchPlayer;
+    return {
+      play: (midi, velocity, atMs) => {
+        if (this.runtime.controller.settings.rollSounds) {
+          instrument.play(midi, velocity, atMs);
+        }
+      },
+    };
   }
 
   /** Lets go of the key of the row a mouse held down, if one is. */
@@ -15634,7 +15667,7 @@ export class AppView {
     // Heard as it is written, for as long as it is: both ends handed to the
     // instrument at once, so no timer outlives the drawing.
     const now = this.runtime.clock.now();
-    this.runtime.pitchPlayer.play(midi, key.velocity, now);
+    this.theEditingsInstrument.play(midi, key.velocity, now);
     this.runtime.pitchPlayer.stop(midi, now + (key.upAtMs - key.downAtMs));
     this.changeTheSketchShowing(takeWithAKeyAdded(stored.events, key), [...sketch.before, asItWas(stored, sketch.chosen)], [
       { midi, downAtMs },
@@ -15690,7 +15723,7 @@ export class AppView {
     }
     this.letGoOfTheKeyOnTheStrip();
     const velocity = theUsualLoudness(rollAsEvents(roll));
-    this.runtime.pitchPlayer.play(midi, velocity);
+    this.theEditingsInstrument.play(midi, velocity);
     this.keyHeldOnTheStrip = { pointerId: event.pointerId, midi, velocity };
     this.panned = true;
     this.lightTheSoundingRows();
@@ -15717,7 +15750,7 @@ export class AppView {
       return;
     }
     this.runtime.pitchPlayer.stop(held.midi);
-    this.runtime.pitchPlayer.play(midi, held.velocity);
+    this.theEditingsInstrument.play(midi, held.velocity);
     this.keyHeldOnTheStrip = { ...held, midi };
     this.lightTheSoundingRows();
   }
@@ -15784,7 +15817,7 @@ export class AppView {
     const now = this.runtime.clock.now();
     const keys = oneKeyForEachPitch(presses);
     for (const { midi, velocity } of keys) {
-      this.runtime.pitchPlayer.play(midi, velocity, now);
+      this.theEditingsInstrument.play(midi, velocity, now);
       this.runtime.pitchPlayer.stop(midi, now + Math.min(lastsMs, A_CHORD_TAPPED_SOUNDS_MS));
     }
     this.chordTappedSounds = keys.map(({ midi }) => midi);
@@ -16073,7 +16106,7 @@ export class AppView {
   private soundTheHeldKeys(keys: readonly { readonly midi: number; readonly velocity: number }[], bySemitones: number): void {
     this.letTheHeldKeysFallSilent();
     for (const key of keys) {
-      this.runtime.pitchPlayer.play(key.midi + bySemitones, key.velocity);
+      this.theEditingsInstrument.play(key.midi + bySemitones, key.velocity);
     }
     this.soundOfTheHeldKeys = { keys, bySemitones };
   }
@@ -16738,7 +16771,7 @@ export class AppView {
       // Heard where they went, a moment each, both ends handed over at once.
       const now = this.runtime.clock.now();
       for (const { midi, velocity } of oneKeyForEachPitch(changes.map(({ midi, key }) => ({ midi, velocity: key.velocity })))) {
-        this.runtime.pitchPlayer.play(midi, velocity, now);
+        this.theEditingsInstrument.play(midi, velocity, now);
         this.runtime.pitchPlayer.stop(midi, now + HEARD_ON_A_STEP_MS);
       }
     }

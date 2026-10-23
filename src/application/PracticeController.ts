@@ -371,6 +371,12 @@ export interface PracticeSettings {
    */
   readonly rollHeadAtPercent: number;
   /**
+   * Whether what is done to the notes of a drawing is heard as it is done: a
+   * key pressed on the strip or a row tapped, a note dragged or written, a
+   * chord tapped or pointed at. A playback is heard either way.
+   */
+  readonly rollSounds: boolean;
+  /**
    * Whether how hard the chosen notes of a sketch are struck is set by the
    * marks a score writes - pp to ff - rather than by a slider of 127 steps:
    * the one is how a writer thinks of it, the other how a file keeps it.
@@ -1107,6 +1113,7 @@ export class PracticeController {
       // hard against the keys reads as a drawing that has been cut off rather
       // than one that is moving.
       rollHeadAtPercent: 15,
+      rollSounds: true,
       velocityAsDynamics: false,
       rangeFromBar: null,
       rangeToBar: null,

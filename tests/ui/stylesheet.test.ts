@@ -1487,6 +1487,23 @@ describe('the stylesheet', () => {
     expect(ruleOf('.roll-circle__step')).toMatch(/stroke\s*:\s*var\(--accent\)/);
   });
 
+  it('puts the switch of whether the editing is heard in the corner over the keys, its face by its state', () => {
+    const ruleOf = (selector: string): string => rules().find((rule) => rule.selector === selector)?.body ?? '';
+    expect(HTML).toMatch(/<div class="roll-stage">\s*<div id="roll-body"[^>]*><\/div>\s*(?:<!--[\s\S]*?-->\s*)?<button id="roll-sounds"/);
+    const corner = ruleOf('.roll-sounds');
+    expect(corner).toMatch(/position\s*:\s*absolute/);
+    expect(corner).toMatch(/top\s*:\s*0/);
+    expect(corner).toMatch(/left\s*:\s*0/);
+    expect(corner).toMatch(/width\s*:\s*var\(--roll-keys\)/);
+    expect(corner).toMatch(/height\s*:\s*var\(--roll-ruler\)/);
+    // The keys' width named where the switch can read it, beside the drawing's.
+    expect(ruleOf('.roll-stage')).toMatch(/--roll-keys\s*:\s*44px/);
+    expect(ruleOf('.roll')).not.toMatch(/--roll-keys\s*:/);
+    expect(ruleOf(".roll-sounds[aria-pressed='true'] .roll-sounds__off, .roll-sounds[aria-pressed='false'] .roll-sounds__on")).toMatch(
+      /display\s*:\s*none/,
+    );
+  });
+
   it('gives the drawing the room the chords leave it, never laying them over its notes', () => {
     const ruleOf = (selector: string): string => rules().find((rule) => rule.selector === selector)?.body ?? '';
     expect(ruleOf('.roll-room')).toMatch(/display\s*:\s*flex/);

@@ -4264,6 +4264,130 @@ describe('AppView', () => {
       }
     });
 
+    it('hears what is done to the notes or not by the switch in the corner over the keys, and a playback either way', async () => {
+      const giveBack = lendTheDrawingASize({ wide: 100, tall: 0 });
+      vi.useFakeTimers();
+      try {
+        const rig = createRig();
+        await rig.view.initialize();
+        const sketch = rig.sketches.begin(
+          {
+            events: [
+              [0, 60],
+              [500, 64],
+            ].flatMap(([atMs = 0, midi = 0]) => [
+              { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+              { kind: 'noteOff' as const, atMs: atMs + 400, midi },
+            ]),
+            beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+          },
+          'Quiet',
+          1,
+        );
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-sketches').click();
+        rowButton('sketches-list', 'Edit this sketch').click();
+        const body = element('roll-body');
+        const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+        const highest = rig.view.rollScene?.highest ?? 0;
+        const scrolledDown =
+          Number.parseFloat(body.querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0') || 0;
+        const at = (ms: number, midi: number): { clientX: number; clientY: number } => ({
+          clientX: (ms / 1000) * zoom,
+          clientY: (highest - midi + 0.5) * 13 - scrolledDown,
+        });
+        const keyOf = (midi: number): HTMLElement => body.querySelector<HTMLElement>(`.roll__key[data-midi='${String(midi)}']`) ?? body;
+        const press = (type: string, on: Element, where: { clientX: number; clientY: number } = { clientX: 5, clientY: 5 }): void => {
+          on.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 91, pointerType: 'mouse', button: 0, ...where }));
+        };
+        const heard = (): number[] => rig.instrument.played.map((note) => note.midi);
+        const notes = (): number => (rig.sketches.find(sketch.id)?.events ?? []).filter((event) => event.kind === 'noteOn').length;
+        const forget = (): void => {
+          rig.instrument.played.length = 0;
+          rig.instrument.stopped.length = 0;
+        };
+        const switched = element<HTMLButtonElement>('roll-sounds');
+
+        // Heard, as it says, until it is pressed.
+        expect([switched.getAttribute('aria-pressed'), switched.title]).toEqual(['true', 'Notes sound as they are edited']);
+        expect(switched.getAttribute('aria-label')).toBe(switched.title);
+        press('pointerdown', keyOf(67));
+        expect(heard()).toEqual([67]);
+        // A key struck before it went quiet is let go of all the same.
+        switched.click();
+        press('pointerup', keyOf(67));
+        expect(rig.instrument.stopped.map((note) => note.midi)).toEqual([67]);
+        expect([switched.getAttribute('aria-pressed'), rig.runtime.controller.settings.rollSounds]).toEqual(['false', false]);
+        expect(switched.title).toBe('Notes are silent as they are edited: press to hear them');
+
+        // Silent: the strip, a row, a note written, a note dragged.
+        forget();
+        press('pointerdown', keyOf(65));
+        press('pointerup', keyOf(65));
+        tapTheDrawing({ pointerType: 'touch', ...at(1_800, 62) });
+        rig.clock.advance(1_000);
+        tapTheDrawing({ pointerType: 'touch', ...at(2_800, 69) });
+        tapTheDrawing({ pointerType: 'touch', ...at(2_800, 69) });
+        expect(notes()).toBe(3);
+        press('pointerdown', body, at(100, 60));
+        press('pointermove', body, at(100, 62));
+        press('pointerup', body, at(100, 62));
+        expect(rig.view.rollScene?.notes.map((note) => highest - note.row)).toContain(62);
+        // A mouse held on a row, and slid along the strip.
+        press('pointerdown', body, at(3_600, 71));
+        press('pointerup', body, at(3_600, 71));
+        press('pointerdown', keyOf(65));
+        press('pointermove', keyOf(65), { clientX: 5, clientY: at(0, 67).clientY });
+        press('pointerup', keyOf(65), { clientX: 5, clientY: at(0, 67).clientY });
+        // The chosen note moved by an arrow.
+        rig.clock.advance(1_000);
+        tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(100, 62) });
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowUp' }));
+        expect(rig.view.rollScene?.notes.map((note) => highest - note.row)).toContain(63);
+        // A chord from the drawer, from the circle, and one tapped in the lane.
+        element<HTMLButtonElement>('roll-chords-open').click();
+        const drawn = element('roll-chords-list').querySelector<HTMLButtonElement>('[data-chord]');
+        expect(drawn).not.toBeNull();
+        // jsdom lays nothing out: the drawer's first chord is under the pointer.
+        Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: () => drawn });
+        for (const type of ['pointerdown', 'pointerup']) {
+          drawn?.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 92, pointerType: 'mouse', button: 0 }));
+        }
+        Reflect.deleteProperty(document, 'elementFromPoint');
+        element('roll-circle').querySelector('[data-ring="major"][data-place="1"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        const before = notes();
+        const named = rig.view.rollScene?.chords[0];
+        expect(named).toBeDefined();
+        rig.clock.advance(1_000);
+        tapTheDrawing(
+          { pointerType: 'mouse', button: 0, clientX: (((named?.fromMs ?? 0) + 100) / 1000) * zoom, clientY: 5 },
+          body.querySelector('.roll__chords > .roll__paint') ?? body,
+        );
+        expect(rig.view.rollScene?.chords[0]?.chosen).toBe(true);
+        expect(before).toBeGreaterThan(3);
+        expect(heard()).toEqual([]);
+        element<HTMLButtonElement>('roll-chords-open').click();
+
+        // A playback is heard either way.
+        element<HTMLButtonElement>('roll-stop').click();
+        element<HTMLButtonElement>('roll-play').click();
+        rig.clock.advance(100);
+        vi.advanceTimersByTime(100);
+        expect(heard().length).toBeGreaterThan(0);
+        element<HTMLButtonElement>('roll-play').click();
+
+        // Pressed again, heard again.
+        switched.click();
+        forget();
+        press('pointerdown', keyOf(65));
+        expect(heard()).toEqual([65]);
+        press('pointerup', keyOf(65));
+      } finally {
+        vi.useRealTimers();
+        giveBack();
+      }
+    });
+
     it('scrolls up and down to where a finger is on the strip', async () => {
       // Centred on the finger, as along the run: half way down the strip is
       // half the rows' worth, less half of the sixty on the screen.

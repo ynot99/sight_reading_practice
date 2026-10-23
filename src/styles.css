@@ -1576,6 +1576,8 @@ textarea {
    * drawing. The lane of chords has no height until they are asked for.
    */
   --roll-ruler: 20px;
+  /* And the keys' width, which the switch in the corner over them reads. */
+  --roll-keys: 44px;
   --roll-chords: 0px;
   --roll-pedal: 16px;
 }
@@ -1583,6 +1585,38 @@ textarea {
 /* The chords of a sketch open to be written: the chords its notes make, named under them. */
 .roll-stage[data-chords='true'] {
   --roll-chords: 30px;
+}
+
+/*
+ * Whether the editing is heard, in the corner over the keys and beside the
+ * ruler, which nothing else uses: the keys' width and the ruler's height.
+ */
+.roll-sounds {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--roll-keys);
+  height: var(--roll-ruler);
+  padding: 0;
+  border: 0;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.roll-sounds svg {
+  width: 14px;
+  height: 14px;
+  fill: currentcolor;
+}
+
+.roll-sounds[aria-pressed='true'] .roll-sounds__off,
+.roll-sounds[aria-pressed='false'] .roll-sounds__on {
+  display: none;
 }
 
 /*
@@ -2151,7 +2185,6 @@ textarea {
     var(--roll-row-asked),
     calc((100cqh - var(--roll-ruler) - var(--roll-pedal) - var(--roll-chords) - 2px) / var(--roll-rows, 12))
   );
-  --roll-keys: 44px;
   /*
    * The inks the run is painted in, read by the painter off the page rather
    * than written into it, so the drawing wears the page's colours on a dark

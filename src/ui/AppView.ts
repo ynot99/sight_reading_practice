@@ -616,6 +616,14 @@ const GOAL_SAID: Readonly<Record<Exclude<GoalOfTheNextChord, 'release'>, string>
   darker: 'darker',
 };
 
+/**
+ * The notes heard in a chord of the lane: its own, and those held into it
+ * from before - heard whole, though only its own are chosen with it.
+ */
+function theNotesHeardInTheChord(roll: RunRoll, chord: SceneChord): readonly RolledPress[] {
+  return [...theNotesOfTheChord(roll, chord.fromMs, chord.untilMs), ...theNotesHeldIntoTheChord(roll, chord.fromMs, chord.untilMs)];
+}
+
 /** The fewest notes a chord drafted on the keys under the circle is written with. */
 const A_DRAFT_HAS_AT_LEAST = 2;
 
@@ -10289,10 +10297,7 @@ export class AppView {
           : this.drawnScene?.chords.find((each) => each.fromMs === Number(pressed.dataset['from']));
       const at = curves === null || curves === undefined ? null : theMomentOnTheCurves(curves, mouse.clientX);
       if (chord !== undefined) {
-        // Only a sketch being edited has notes to choose: anything else, the cursor there.
-        if (!this.chooseTheChordOfTheLane(chord, mouse.ctrlKey || mouse.metaKey || mouse.shiftKey)) {
-          this.putTheHeadAt(chord.fromMs);
-        }
+        this.pressTheChordOfTheLane(chord, mouse.ctrlKey || mouse.metaKey || mouse.shiftKey);
       } else if (at !== null) {
         this.putTheHeadAt(at);
       }
@@ -16348,7 +16353,26 @@ export class AppView {
     const scene = this.drawnScene;
     const at = this.thePointOnTheDrawing(event);
     const chord = scene === null || at === null ? null : theChordAt(scene, at.atMs);
-    return chord !== null && this.chooseTheChordOfTheLane(chord, event.ctrlKey || event.metaKey || event.shiftKey);
+    return chord !== null && this.pressTheChordOfTheLane(chord, event.ctrlKey || event.metaKey || event.shiftKey);
+  }
+
+  /**
+   * A chord of the lane tapped there or pressed on the chart: chosen where
+   * the sketch is edited (see `chooseTheChordOfTheLane`); and anywhere else
+   * - a score read, a sketch listened to - the cursor put where it begins.
+   * Heard either way. Says whether there was a drawing to do it in.
+   */
+  private pressTheChordOfTheLane(chord: SceneChord, adds: boolean): boolean {
+    if (this.chooseTheChordOfTheLane(chord, adds)) {
+      return true;
+    }
+    const roll = this.theRoll();
+    if (roll === null) {
+      return false;
+    }
+    this.putTheHeadAt(chord.fromMs);
+    this.soundTheChordTapped(theNotesHeardInTheChord(roll, chord), chord.untilMs - chord.fromMs);
+    return true;
   }
 
   /**
@@ -16363,10 +16387,8 @@ export class AppView {
     if (roll === null || sketch?.editing !== true) {
       return false;
     }
-    const presses = theNotesOfTheChord(roll, chord.fromMs, chord.untilMs);
-    const notes = presses.map((press) => ({ midi: press.midi, downAtMs: press.downAtMs }));
-    // Heard whole, the notes held into it from before as well: chosen, it is only its own.
-    const heard = [...presses, ...theNotesHeldIntoTheChord(roll, chord.fromMs, chord.untilMs)];
+    const notes = theNotesOfTheChord(roll, chord.fromMs, chord.untilMs).map((press) => ({ midi: press.midi, downAtMs: press.downAtMs }));
+    const heard = theNotesHeardInTheChord(roll, chord);
     this.choose(adds ? [...sketch.chosen.filter((key) => !notes.some((note) => sameKey(note, key))), ...notes] : notes);
     this.chordTappedAt = chord.fromMs;
     this.showTheChordsOfTheKey();

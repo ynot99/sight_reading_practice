@@ -10041,7 +10041,7 @@ describe('AppView', () => {
     });
 
     it('reads the chords of a score in its own keys, the circle and the chart there to read and nothing to write with', async () => {
-      const { view, runtime, clock } = createRig();
+      const { view, runtime, clock, instrument } = createRig();
       await view.initialize();
       // In A minor for a bar, then G major.
       await runtime.controller.openScore({
@@ -10075,15 +10075,29 @@ describe('AppView', () => {
       expect(said()).toEqual(['A minor F5/C VI5', 'G major G5 I5']);
       // Its parts as the score names them, each beginning a row.
       expect([...chart.querySelectorAll<HTMLElement>('.roll-chart__bar')].map((bar) => bar.dataset['section'] ?? null)).toEqual(['Verse', 'Chorus']);
-      // A chord pressed puts the cursor there, nothing being chosen to write over; the circle reads it in G.
+      // A chord pressed puts the cursor there, nothing being chosen to write over, and is heard; the circle reads it in G.
       clock.advance(1_000);
+      instrument.played.length = 0;
       [...chart.querySelectorAll<HTMLElement>('.roll-chart__chord')][1]?.click();
+      expect([...new Set(instrument.played.map((note) => note.midi))].sort((a, b) => a - b)).toEqual([43, 50, 67]);
       expect([...chart.querySelectorAll<HTMLElement>('[data-here]')].map((chord) => chord.querySelector('.roll-chart__name')?.textContent)).toEqual(['G5']);
       expect(`${circle.querySelector('.roll-circle__sounding-name')?.textContent ?? ''} ${circle.querySelector('.roll-circle__sounding-numeral')?.textContent ?? ''}`).toBe('G5 I5');
       expect(circle.querySelectorAll('[data-ring][data-in-the-key]')).toHaveLength(7);
       // D, the dominant of G and nothing of A minor; F, the other way round.
       expect(circle.querySelector('[data-ring="major"][data-place="2"]')?.getAttribute('data-in-the-key')).toBe('true');
       expect(circle.querySelector('[data-ring="major"][data-place="11"]')?.hasAttribute('data-in-the-key')).toBe(false);
+      // Tapped in the lane under the notes, a chord is heard too, and the cursor goes where it begins.
+      element<HTMLButtonElement>('roll-chart-open').click();
+      const lane = element('roll-body').querySelector<HTMLCanvasElement>('.roll__chords > .roll__paint');
+      if (lane === null) {
+        throw new Error('No lane of chords.');
+      }
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      clock.advance(1_000);
+      instrument.played.length = 0;
+      tapTheDrawing({ pointerType: 'touch', button: 0, clientX: 1.5 * zoom, clientY: 5 }, lane);
+      expect([...new Set(instrument.played.map((note) => note.midi))].sort((a, b) => a - b)).toEqual([48, 60, 62, 64, 65]);
+      expect(`${circle.querySelector('.roll-circle__sounding-name')?.textContent ?? ''}`).toBe('F5/C');
     });
 
     it('opens the chords as a chart over the drawing, bar by bar, a chord pressed there chosen, heard and the cursor on it', async () => {

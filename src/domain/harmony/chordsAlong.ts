@@ -42,6 +42,38 @@ export interface ChordAlong {
 }
 
 /**
+ * The notes sounding in each bar, a list for each: a note held across a
+ * bar line is in both. The bars are in time order, as a piece's are.
+ */
+export function theNotesOfEachBar(
+  notes: readonly NoteSounding[],
+  bars: readonly BarOfBeats[],
+): readonly (readonly NoteSounding[])[] {
+  const ofEachBar: NoteSounding[][] = bars.map(() => []);
+  for (const note of notes) {
+    // The first bar ending after the note begins, found by halving; then on while each begins before it ends.
+    let low = 0;
+    let high = bars.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if ((bars[middle]?.untilMs ?? 0) > note.fromMs) {
+        high = middle;
+      } else {
+        low = middle + 1;
+      }
+    }
+    for (let index = low; index < bars.length; index += 1) {
+      const bar = bars[index];
+      if (bar === undefined || (bar.beatsMs[0] ?? bar.untilMs) >= note.untilMs) {
+        break;
+      }
+      ofEachBar[index]?.push(note);
+    }
+  }
+  return ofEachBar;
+}
+
+/**
  * What a change of chord costs, as a share of how long all the notes of the
  * bar it cuts sound: two chords have to account for that much more of it
  * than one does to be heard as two. Enough that a melody note on a beat of
@@ -72,12 +104,16 @@ export function theChordsAlongTheBars(
 ): readonly ChordAlong[] {
   const keyAt = (atMs: number): KeyFrom =>
     keys.filter((key) => key.fromMs <= atMs).at(-1) ?? keys[0] ?? { fromMs: 0, fifths: 0, scale: 'major' };
-  const soundingIn = (fromMs: number, untilMs: number): { readonly midi: number; readonly lengthMs: number }[] =>
-    notes
+  const soundingIn = (
+    among: readonly NoteSounding[],
+    fromMs: number,
+    untilMs: number,
+  ): { readonly midi: number; readonly lengthMs: number }[] =>
+    among
       .map((note) => ({ midi: note.midi, lengthMs: Math.min(untilMs, note.untilMs) - Math.max(fromMs, note.fromMs) }))
       .filter((note) => note.lengthMs > 0);
-  const read = (fromMs: number, untilMs: number): ChordMostlyHeard | null => {
-    const sounding = soundingIn(fromMs, untilMs);
+  const read = (among: readonly NoteSounding[], fromMs: number, untilMs: number): ChordMostlyHeard | null => {
+    const sounding = soundingIn(among, fromMs, untilMs);
     return sounding.length === 0 ? null : theChordMostOfTheNotesMake(sounding, keyAt(fromMs).fifths);
   };
   const along: ChordAlong[] = [];
@@ -100,16 +136,16 @@ export function theChordsAlongTheBars(
       });
     }
   };
-  const readTheBar = (moments: readonly number[]): void => {
+  const readTheBar = (moments: readonly number[], among: readonly NoteSounding[]): void => {
     const cost =
-      A_CHANGE_COSTS * soundingIn(moments[0] ?? 0, moments.at(-1) ?? 0).reduce((sum, note) => sum + note.lengthMs, 0);
+      A_CHANGE_COSTS * soundingIn(among, moments[0] ?? 0, moments.at(-1) ?? 0).reduce((sum, note) => sum + note.lengthMs, 0);
     // The best reading of the bar as far as each beat: what it is worth, and
     // the beat its last stretch begins on.
     const best: { readonly worth: number; readonly from: number }[] = [{ worth: 0, from: 0 }];
     for (let until = 1; until < moments.length; until += 1) {
       let chosen = { worth: Number.NEGATIVE_INFINITY, from: 0 };
       for (let from = 0; from < until; from += 1) {
-        const stretch = read(moments[from] ?? 0, moments[until] ?? 0);
+        const stretch = read(among, moments[from] ?? 0, moments[until] ?? 0);
         // Every stretch is charged a change, the first too: the same to every
         // reading, and so nothing between them.
         const worth = (best[from]?.worth ?? 0) + (stretch?.worth ?? 0) - cost;
@@ -127,15 +163,19 @@ export function theChordsAlongTheBars(
     for (const until of ends) {
       const fromMs = moments[from] ?? 0;
       const untilMs = moments[until] ?? 0;
-      const stretch = read(fromMs, untilMs);
+      const stretch = read(among, fromMs, untilMs);
       if (stretch !== null) {
         write(fromMs, untilMs, stretch);
       }
       from = until;
     }
   };
-  for (const bar of bars) {
-    readTheBar([...bar.beatsMs, bar.untilMs]);
+  // Each bar read among its own notes: a stretch of it is read many times
+  // over, and a score's thousands of notes each time cost a long score half
+  // a minute.
+  const ofEachBar = theNotesOfEachBar(notes, bars);
+  for (const [index, bar] of bars.entries()) {
+    readTheBar([...bar.beatsMs, bar.untilMs], ofEachBar[index] ?? []);
   }
   return along;
 }

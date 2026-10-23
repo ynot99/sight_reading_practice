@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { theChordsAlongTheBars, type BarOfBeats, type NoteSounding } from '../../src/domain/harmony/chordsAlong.js';
+import { theChordsAlongTheBars, theNotesOfEachBar, type BarOfBeats, type NoteSounding } from '../../src/domain/harmony/chordsAlong.js';
 
 const C4 = 60;
 const BEAT_MS = 500;
@@ -150,5 +150,18 @@ describe('the chords along the bars', () => {
     ];
     expect(said([...underAMelody(0), ...struck(Am, 4, 4)], barsOfFour(2))).toEqual(['0-8 Am vi ≈']);
     expect(said([...struck(Am, 0, 4), ...underAMelody(1)], barsOfFour(2))).toEqual(['0-8 Am vi ≈']);
+  });
+});
+
+describe('the notes of each bar', () => {
+  it('puts a note in every bar it sounds in, one held over a bar line in both, and one ending where a bar begins in the bar before only', () => {
+    const bars: BarOfBeats[] = [0, 1_000, 2_000].map((fromMs) => ({ beatsMs: [fromMs, fromMs + 500], untilMs: fromMs + 1_000 }));
+    const notes: NoteSounding[] = [
+      { midi: 60, fromMs: 0, untilMs: 1_000 },
+      { midi: 62, fromMs: 900, untilMs: 2_100 },
+      { midi: 64, fromMs: 2_500, untilMs: 2_600 },
+      { midi: 65, fromMs: 3_000, untilMs: 3_500 },
+    ];
+    expect(theNotesOfEachBar(notes, bars).map((bar) => bar.map((note) => note.midi))).toEqual([[60, 62], [62], [62, 64]]);
   });
 });

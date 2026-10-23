@@ -149,6 +149,7 @@ import {
 import {
   MIDI,
   beamedSixteenths,
+  chordsExercise,
   compoundBarExercise,
   longExercise,
   offBeatAfterALongNote,
@@ -10038,6 +10039,68 @@ describe('AppView', () => {
         'A minor',
         'G major',
       ]);
+    });
+
+    it('offers no chords beside a recording, whose keys nothing says, though a score is open, nor beside a sketch no longer kept', async () => {
+      const { view, runtime, sketches, midi, clock } = createRig();
+      await view.initialize();
+      await runtime.controller.openScore(twoBarExercise({ title: 'Open' }));
+      const open = element<HTMLButtonElement>('roll-chords-open');
+      midi.noteOn(60, clock.now());
+      clock.advance(300);
+      midi.noteOff(60, clock.now());
+      element<HTMLButtonElement>('focus-keep').click();
+      rowButton('takes-list', 'Look at this take').click();
+      expect(open.hidden).toBe(true);
+      element<HTMLButtonElement>('roll-close').click();
+      // A sketch shown, and let go of elsewhere.
+      const sketch = sketches.begin(
+        {
+          events: [
+            { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: 400, midi: 60 },
+          ],
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Gone',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      expect(open.hidden).toBe(false);
+      sketches.remove(sketch.id);
+      open.click();
+      expect(open.hidden).toBe(true);
+    });
+
+    it('reads a score in the key its music comes home to, where its signature says only which notes are flat, and begins a sketch of it there', async () => {
+      const { view, runtime, sketches } = createRig();
+      await view.initialize();
+      const inDMinor = [
+        ['D3', 'F4', 'A4'],
+        ['G3', 'Bb4', 'D5'],
+        ['A3', 'C#5', 'E5'],
+        ['D3', 'F4', 'A4'],
+      ];
+      // One flat, which F major is written with as well.
+      await runtime.controller.openScore(chordsExercise([...inDMinor, ...inDMinor], { title: 'One flat', key: KeySignature.major(-1) }));
+      element<HTMLButtonElement>('focus-roll').click();
+      element<HTMLButtonElement>('roll-chords-open').click();
+      element<HTMLButtonElement>('roll-chart-open').click();
+      const said = [...element('roll-chart').querySelectorAll('.roll-chart__chord')].map(
+        (chord) =>
+          `${chord.querySelector('.roll-chart__key')?.textContent ?? '-'} ${chord.querySelector('.roll-chart__name')?.textContent ?? ''} ${chord.querySelector('.roll-chart__numeral')?.textContent ?? ''}`,
+      );
+      expect(said.slice(0, 3)).toEqual(['D minor Dm i', '- Gm iv', '- A V']);
+      // The circle reads it there too: D minor the tonic, F the third.
+      const numeralOf = (name: string): string | undefined =>
+        [...element('roll-circle').querySelectorAll('.roll-circle__label')]
+          .find((label) => label.querySelector('.roll-circle__name')?.textContent === name)
+          ?.querySelector('.roll-circle__numeral')?.textContent ?? undefined;
+      expect([numeralOf('Dm'), numeralOf('F')]).toEqual(['i', 'III']);
+      element<HTMLButtonElement>('roll-edit').click();
+      expect(sketches.list()[0]?.key).toEqual({ fifths: -1, mode: 'minor' });
     });
 
     it('reads the chords of a score in its own keys, the circle and the chart there to read and nothing to write with', async () => {

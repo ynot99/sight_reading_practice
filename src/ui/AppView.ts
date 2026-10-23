@@ -113,6 +113,7 @@ import {
   type SketchKey,
   type StoredSketch,
 } from '../application/SketchLibrary.js';
+import { theKeysOfTheScore } from '../application/keysOfTheScore.js';
 import { CONFLICTING_COPY, type SketchOnTheDrive, type SketchSyncOutcome } from '../application/SketchSync.js';
 import type { DrillTask } from '../application/drill/SectionDrill.js';
 import type { ControlBinding } from '../application/ControlBinding.js';
@@ -13929,7 +13930,7 @@ export class AppView {
     const open = this.theChordsOfTheKeyAreOpen();
     const written = this.theChordsAreWritten();
     // There for any music whose keys are known; read only, but beside a sketch being edited.
-    this.el.rollChordsOpen.hidden = this.theKeysOfTheMusicShown() === null;
+    this.el.rollChordsOpen.hidden = !this.theKeysOfTheMusicAreKnown();
     this.el.rollChordsOpen.setAttribute('aria-pressed', String(this.chordsOfTheKeyOpen));
     this.el.rollChordsOpen.title = this.chordsOfTheKeyOpen
       ? 'Put the chords away'
@@ -14210,7 +14211,7 @@ export class AppView {
    * whose keys are known - a sketch's, or the open score's.
    */
   private theChordsOfTheKeyAreOpen(): boolean {
-    return this.chordsOfTheKeyOpen && this.theKeysOfTheMusicShown() !== null;
+    return this.chordsOfTheKeyOpen && this.theKeysOfTheMusicAreKnown();
   }
 
   /** Whether the chords open are written with as well as read: only beside a sketch being edited. */
@@ -14222,34 +14223,47 @@ export class AppView {
   /**
    * The keys the music drawn is in, each from where it begins on the run's
    * clock: a sketch's own, or, for a drawing of the open score's music,
-   * the score's by its bars - its signature, minor where it says so. None
-   * for anything else, a recording's, whose key nothing says.
+   * the score's by its bars, as its music says them (see
+   * `theKeysOfTheScore`). None for anything else, a recording's, whose key
+   * nothing says.
    */
   private theKeysOfTheMusicShown(): readonly KeyFrom[] | null {
-    const showing = this.theOtherRollShowing;
-    const sketch = showing?.sketch;
-    if (sketch !== undefined) {
-      return this.runtime.sketches.find(sketch.id) === null ? null : this.theKeysOfTheSketchShown();
+    if (!this.theKeysOfTheMusicAreKnown()) {
+      return null;
     }
-    const exercise = this.runtime.controller.currentTimeline?.exercise;
+    if (this.theOtherRollShowing?.sketch !== undefined) {
+      return this.theKeysOfTheSketchShown();
+    }
+    const timeline = this.runtime.controller.currentTimeline;
     const roll = this.theRoll();
-    if ((showing !== null && !showing.ofTheOpenScore) || exercise === undefined || roll === null) {
+    if (timeline === null || roll === null) {
       return null;
     }
     const began = rollBeganAtMs(roll);
-    const lines = barLines(exercise);
-    const keyOf = (key: KeySignature): { fifths: number; scale: ScaleName } => ({
-      fifths: key.fifths,
-      scale: key.mode === 'minor' ? 'minor' : 'major',
+    const lines = barLines(timeline.exercise);
+    return theKeysOfTheScore(timeline.exercise, timeline).flatMap(({ measureIndex, fifths, scale }) => {
+      if (measureIndex === 0) {
+        return [{ fromMs: Number.NEGATIVE_INFINITY, fifths, scale }];
+      }
+      const startTicks = lines[measureIndex]?.startTicks;
+      const atMs = startTicks === undefined ? null : momentOfTicks(roll, startTicks);
+      return atMs === null ? [] : [{ fromMs: atMs + began, fifths, scale }];
     });
-    return [
-      { fromMs: Number.NEGATIVE_INFINITY, ...keyOf(exercise.key) },
-      ...exercise.keyChanges.flatMap((change) => {
-        const startTicks = lines[change.measureIndex]?.startTicks;
-        const atMs = startTicks === undefined ? null : momentOfTicks(roll, startTicks);
-        return atMs === null ? [] : [{ fromMs: atMs + began, ...keyOf(change.key) }];
-      }),
-    ];
+  }
+
+  /**
+   * Whether the keys of the music drawn are known - a sketch's, or the open
+   * score's - asked without working them out: reading a score's keys off
+   * its music reads its every chord, which is wanted only where the chords
+   * are open.
+   */
+  private theKeysOfTheMusicAreKnown(): boolean {
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    if (sketch !== undefined) {
+      return this.runtime.sketches.find(sketch.id) !== null;
+    }
+    return (showing === null || showing.ofTheOpenScore) && this.theRoll() !== null;
   }
 
   /**
@@ -14268,7 +14282,7 @@ export class AppView {
       return theSectionsOf(stored.events).map((section) => ({ atMs: section.atMs - rollBeganAtMs(roll), name: section.name }));
     }
     const exercise = this.runtime.controller.currentTimeline?.exercise;
-    if (sketch !== undefined || exercise === undefined || this.theKeysOfTheMusicShown() === null) {
+    if (sketch !== undefined || exercise === undefined || !this.theKeysOfTheMusicAreKnown()) {
       return [];
     }
     const lines = barLines(exercise);
@@ -15817,11 +15831,13 @@ export class AppView {
     if (timeline === null || exercise === null) {
       return;
     }
+    // Begun in the key the score's music begins in, which its chords are read in.
+    const [key] = theKeysOfTheScore(exercise, timeline);
     const sketch = this.runtime.sketches.begin(
       theSketchOfTheScore(exercise, timeline),
       `Sketch of ${exercise.title || 'the score'}`,
       Date.now(),
-      { fifths: exercise.key.fifths, mode: exercise.key.mode },
+      key === undefined ? { fifths: exercise.key.fifths, mode: exercise.key.mode } : aKeyInTheScale(key.fifths, key.scale),
       // Whoever wrote the score, and not whoever is sketching it.
       exercise.composer,
     );

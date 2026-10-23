@@ -226,6 +226,30 @@ export function beamedSixteenths(overrides: ExerciseOverrides = {}): Exercise {
   };
 }
 
+/**
+ * A bar of 4/4 for each chord, held the whole bar, in one voice: for
+ * anything that is about the harmony, which is read off the notes alone.
+ */
+export function chordsExercise(
+  chords: readonly (readonly string[])[],
+  overrides: ExerciseOverrides & { readonly keyChanges?: Exercise['keyChanges'] } = {},
+): Exercise {
+  return {
+    ...twoBarExercise(overrides),
+    id: overrides.id ?? 'fixture-chords',
+    keyChanges: overrides.keyChanges ?? [],
+    staves: [
+      {
+        staffNumber: 1,
+        voice: 1,
+        clef: 'treble',
+        clefChanges: [],
+        measures: chords.map((names) => bar(noteEntry(names.map(p), Duration.WHOLE))),
+      },
+    ],
+  };
+}
+
 /** One bar of 4/4, treble only, four quarter notes: the simplest useful case. */
 export function singleBarExercise(overrides: ExerciseOverrides = {}): Exercise {
   return {

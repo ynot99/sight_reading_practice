@@ -28,6 +28,7 @@ import {
   theNameOfTheKey,
   thePitchClassesOfTheScale,
   theTonicPitchClass,
+  type ScaleName,
 } from '../domain/harmony/scales.js';
 import { barsOfThePicture, tiersOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
@@ -10288,7 +10289,10 @@ export class AppView {
           : this.drawnScene?.chords.find((each) => each.fromMs === Number(pressed.dataset['from']));
       const at = curves === null || curves === undefined ? null : theMomentOnTheCurves(curves, mouse.clientX);
       if (chord !== undefined) {
-        this.chooseTheChordOfTheLane(chord, mouse.ctrlKey || mouse.metaKey || mouse.shiftKey);
+        // Only a sketch being edited has notes to choose: anything else, the cursor there.
+        if (!this.chooseTheChordOfTheLane(chord, mouse.ctrlKey || mouse.metaKey || mouse.shiftKey)) {
+          this.putTheHeadAt(chord.fromMs);
+        }
       } else if (at !== null) {
         this.putTheHeadAt(at);
       }
@@ -13741,7 +13745,6 @@ export class AppView {
       this.el.rollUndo,
       this.el.rollRedo,
       this.el.rollMark,
-      this.el.rollChordsOpen,
       this.el.rollRecord,
     ]) {
       button.hidden = sketch === undefined;
@@ -13916,13 +13919,21 @@ export class AppView {
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
     const open = this.theChordsOfTheKeyAreOpen();
+    const written = this.theChordsAreWritten();
+    // There for any music whose keys are known; read only, but beside a sketch being edited.
+    this.el.rollChordsOpen.hidden = this.theKeysOfTheMusicShown() === null;
     this.el.rollChordsOpen.setAttribute('aria-pressed', String(this.chordsOfTheKeyOpen));
     this.el.rollChordsOpen.title = this.chordsOfTheKeyOpen
       ? 'Put the chords away'
-      : 'Chords, to write where the cursor is';
+      : written
+        ? 'Chords, to write where the cursor is'
+        : 'The chords of the music: the circle of fifths and their chart';
     this.el.rollChordsOpen.setAttribute('aria-label', this.el.rollChordsOpen.title);
     this.el.rollSide.hidden = !open;
-    if (!open || stored === null || sketch === undefined) {
+    // What writes - the drawer, the goals, the circle's slices - only where it can.
+    this.el.rollSide.dataset['writes'] = String(written);
+    this.el.rollChords.hidden = !written;
+    if (!open || !written || stored === null || sketch === undefined) {
       this.pointAtTheChord(null);
       return;
     }
@@ -14186,10 +14197,62 @@ export class AppView {
     }));
   }
 
-  /** Whether the chords of the key are open beside a sketch being edited. */
+  /**
+   * Whether the chords are open beside the drawing: asked for, of music
+   * whose keys are known - a sketch's, or the open score's.
+   */
   private theChordsOfTheKeyAreOpen(): boolean {
+    return this.chordsOfTheKeyOpen && this.theKeysOfTheMusicShown() !== null;
+  }
+
+  /** Whether the chords open are written with as well as read: only beside a sketch being edited. */
+  private theChordsAreWritten(): boolean {
     const sketch = this.theOtherRollShowing?.sketch;
-    return this.chordsOfTheKeyOpen && sketch?.editing === true && this.runtime.sketches.find(sketch.id) !== null;
+    return sketch?.editing === true && this.runtime.sketches.find(sketch.id) !== null;
+  }
+
+  /**
+   * The keys the music drawn is in, each from where it begins on the run's
+   * clock: a sketch's own, or, for a drawing of the open score's music,
+   * the score's by its bars - its signature, minor where it says so. None
+   * for anything else, a recording's, whose key nothing says.
+   */
+  private theKeysOfTheMusicShown(): readonly KeyFrom[] | null {
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    if (sketch !== undefined) {
+      return this.runtime.sketches.find(sketch.id) === null ? null : this.theKeysOfTheSketchShown();
+    }
+    const exercise = this.runtime.controller.currentTimeline?.exercise;
+    const roll = this.theRoll();
+    if ((showing !== null && !showing.ofTheOpenScore) || exercise === undefined || roll === null) {
+      return null;
+    }
+    const began = rollBeganAtMs(roll);
+    const lines = barLines(exercise);
+    const keyOf = (key: KeySignature): { fifths: number; scale: ScaleName } => ({
+      fifths: key.fifths,
+      scale: key.mode === 'minor' ? 'minor' : 'major',
+    });
+    return [
+      { fromMs: Number.NEGATIVE_INFINITY, ...keyOf(exercise.key) },
+      ...exercise.keyChanges.flatMap((change) => {
+        const startTicks = lines[change.measureIndex]?.startTicks;
+        const atMs = startTicks === undefined ? null : momentOfTicks(roll, startTicks);
+        return atMs === null ? [] : [{ fromMs: atMs + began, ...keyOf(change.key) }];
+      }),
+    ];
+  }
+
+  /** The key the music drawn is in where the cursor is: see `theKeysOfTheMusicShown`. None where its keys are not known. */
+  private theKeyAtTheCursor(): { readonly fifths: number; readonly scale: ScaleName } | null {
+    const keys = this.theKeysOfTheMusicShown();
+    const roll = this.theRoll();
+    if (keys === null || roll === null) {
+      return null;
+    }
+    const atMs = this.headIsAtMs() + rollBeganAtMs(roll);
+    return keys.filter((key) => key.fromMs <= atMs).at(-1) ?? keys[0] ?? null;
   }
 
   /**
@@ -14494,17 +14557,12 @@ export class AppView {
     readonly kind: ChordKind;
     readonly keys: readonly number[];
   } | null {
-    const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
-    if (stored === null) {
+    const key = this.theKeyAtTheCursor();
+    const made = key === null ? null : theChordTheKeysMake(keys, key.fifths);
+    if (key === null || made === null) {
       return null;
     }
-    const key = this.theKeyAtTheHead(stored);
-    const made = theChordTheKeysMake(keys, key.fifths);
-    if (made === null) {
-      return null;
-    }
-    const numeral = theNumeralOfTheChord(made, thePitchClassesOfTheScale(key.fifths, theScaleOfTheKey(key)));
+    const numeral = theNumeralOfTheChord(made, thePitchClassesOfTheScale(key.fifths, key.scale));
     return { name: made.name, numeral, root: made.root, kind: made.kind, keys };
   }
 
@@ -14514,7 +14572,7 @@ export class AppView {
    * held make, where they make one, as they are held and numbered in the
    * key the cursor is in, as the lane numbers the music there; and
    * otherwise the one the lane names at the cursor, its root in the octave
-   * of middle C. None with no sketch shown.
+   * of middle C. None where the music's keys are not known.
    */
   private theChordSounding(): {
     readonly name: string;
@@ -14695,12 +14753,10 @@ export class AppView {
    */
   private showTheCircle(): void {
     const open = this.theChordsOfTheKeyAreOpen();
-    const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
-    if (!open || stored === null) {
+    const key = this.theKeyAtTheCursor();
+    if (!open || key === null) {
       return;
     }
-    const key = this.theKeyAtTheHead(stored);
     const scene = this.drawnScene;
     const chord = this.theChordSounding();
     const here = chord === null ? null : whereOnTheCircle(chord.root, chord.kind);
@@ -14736,7 +14792,8 @@ export class AppView {
     this.el.rollCircle.dataset['keys'] = String(onTheKeys);
     const way = scene === null ? [] : theWayRoundTheCircle(scene.chords, this.headIsAtMs(), THE_WAY_ROUND_SHOWN);
     const hints = this.theChordsOffered();
-    const shows = JSON.stringify([key.fifths, theScaleOfTheKey(key), here, sounding, chord?.keys, draft, named, way, hints]);
+    const writes = this.theChordsAreWritten();
+    const shows = JSON.stringify([key.fifths, key.scale, here, sounding, chord?.keys, draft, named, way, hints, writes]);
     if (shows === this.circleShows) {
       return;
     }
@@ -14748,7 +14805,8 @@ export class AppView {
     );
     showOnTheCircle(this.circleDrawing, {
       fifths: key.fifths,
-      ofTheKey: theKeysOwnPlaces(key.fifths, theScaleOfTheKey(key)),
+      ofTheKey: theKeysOwnPlaces(key.fifths, key.scale),
+      writes,
       here,
       sounding,
       named,
@@ -17352,7 +17410,7 @@ export class AppView {
       freely: this.nothingOnTheDrawingIsJudged(),
       scales: this.theScalesOfTheSketchShown(),
       marks: this.theMarksOfTheSketchShown(),
-      chordsIn: this.theChordsOfTheKeyAreOpen() ? this.theKeysOfTheSketchShown() : undefined,
+      chordsIn: this.theChordsOfTheKeyAreOpen() ? (this.theKeysOfTheMusicShown() ?? undefined) : undefined,
     });
   }
 

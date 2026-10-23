@@ -259,6 +259,8 @@ export function showOnTheCircle(
     readonly sounding: { readonly name: string; readonly numeral: string } | null;
     /** Whether the middle names it: see `circleNamesTheChord`. */
     readonly named: boolean;
+    /** Whether a slice or the middle pressed writes its chord: read only, each is only named. */
+    readonly writes: boolean;
     /** The chords offered next, each with what it would do: see `theChordsTowards`. */
     readonly hints: readonly { readonly place: PlaceOnTheCircle; readonly says: string }[];
     /** The way the music came to where it is, oldest first: see `theWayRoundTheCircle`. */
@@ -267,6 +269,7 @@ export function showOnTheCircle(
 ): void {
   showTheWayRound(drawing, shown.way);
   nameTheChordSounding(drawing, shown.sounding, shown.named);
+  drawing.querySelector('.roll-circle__middle')?.setAttribute('tabindex', shown.writes ? '0' : '-1');
   // A slice's name is the one drawn in the same turn as it.
   const labels = [...drawing.querySelectorAll('.roll-circle__label')];
   for (const [turn, slice] of [...drawing.querySelectorAll<SVGGElement>('[data-ring]')].entries()) {
@@ -275,7 +278,9 @@ export function showOnTheCircle(
     const place = Number(slice.getAttribute('data-place'));
     const name = theNameAtThePlace({ ring, place }, shown.fifths);
     const hint = shown.hints.find((each) => each.place.ring === ring && each.place.place === place);
-    const says = `Write ${name} where the cursor is${hint === undefined ? '' : `. ${hint.says}`}`;
+    const says = shown.writes ? `Write ${name} where the cursor is${hint === undefined ? '' : `. ${hint.says}`}` : name;
+    // Nothing to press while it only reads: a key does not stop on it.
+    slice.setAttribute('tabindex', shown.writes ? '0' : '-1');
     if (hint === undefined) {
       slice.removeAttribute('data-hint');
     } else {

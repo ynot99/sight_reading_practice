@@ -9548,12 +9548,17 @@ describe('AppView', () => {
       keyOfTheSketch.dispatchEvent(new Event('change'));
       expect(chords()).toEqual(['Gmi', 'Adimii°', 'B♭III', 'Cmiv', 'Dmv', 'E♭VI', 'FVII']);
 
-      // Listening, it is put away, and back with the editing.
+      // Listening, it only reads: the circle stays, the drawer of chords to write goes, and is back with the editing.
+      const aSlice = (): Element | null => element('roll-circle').querySelector('[data-ring="major"][data-place="0"]');
+      expect(aSlice()?.getAttribute('tabindex')).toBe('0');
       element<HTMLButtonElement>('roll-edit').click();
-      expect(element('roll-side').hidden).toBe(true);
-      expect(open.dataset['away']).toBe('true');
+      expect([element('roll-side').hidden, element('roll-side').dataset['writes'], element('roll-chords').hidden]).toEqual([false, 'false', true]);
+      expect([open.hidden, open.dataset['away']]).toEqual([false, undefined]);
+      // Its slices only named, and no stop for a key.
+      expect([aSlice()?.getAttribute('tabindex'), aSlice()?.getAttribute('aria-label')]).toEqual(['-1', 'C']);
       element<HTMLButtonElement>('roll-edit').click();
-      expect(element('roll-side').hidden).toBe(false);
+      expect([element('roll-side').hidden, element('roll-side').dataset['writes'], element('roll-chords').hidden]).toEqual([false, 'true', false]);
+      expect(aSlice()?.getAttribute('tabindex')).toBe('0');
       // Put away by its button.
       open.click();
       expect(open.getAttribute('aria-pressed')).toBe('false');
@@ -9687,14 +9692,14 @@ describe('AppView', () => {
       tapTheDrawing({ pointerType: 'mouse', button: 0, ...overE4 }, element('roll-body').querySelector('.roll__grid > .roll__paint') ?? theLane());
       expect(chosenKeys()).toEqual([[0, 64]]);
 
-      // Put away, and listening rather than editing, there is no lane.
+      // Put away, there is no lane; listening rather than editing, it is there to read.
       element<HTMLButtonElement>('roll-chords-open').click();
       expect(stage()?.dataset['chords']).toBe('false');
       expect(lane()).toEqual([]);
       element<HTMLButtonElement>('roll-chords-open').click();
       element<HTMLButtonElement>('roll-edit').click();
-      expect(stage()?.dataset['chords']).toBe('false');
-      expect(lane()).toEqual([]);
+      expect(stage()?.dataset['chords']).toBe('true');
+      expect(lane().length).toBeGreaterThan(0);
     });
 
     it('sounds a chord tapped in the lane as it chooses it, each pitch once, for a moment, the one before silenced', async () => {
@@ -9998,6 +10003,81 @@ describe('AppView', () => {
       cursorAt(5_000);
       element<HTMLButtonElement>('roll-chords-open').click();
       expect([middle(), numeral(), here(), onTheKeys()]).toEqual(['', '', [], []]);
+    });
+
+    it('reads the chords of a run of a score in the keys of the score, where the run began late on its clock', async () => {
+      const { view, runtime, clock, midi } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ modeId: 'mode.wait', countInBars: 0 });
+      await runtime.controller.openScore({
+        ...twoBarExercise({ title: 'Played', key: KeySignature.minor(0) }),
+        keyChanges: [{ measureIndex: 1, key: KeySignature.major(1) }],
+      });
+      clock.advance(10_000);
+      element<HTMLButtonElement>('focus-play').click();
+      const session = runtime.controller.session;
+      for (let guard = 50; session?.status === 'running' && guard > 0; guard -= 1) {
+        const step = session.currentStep;
+        if (step === null) {
+          break;
+        }
+        clock.advance(1_000);
+        for (const key of step.expectedMidi) {
+          midi.noteOn(key, clock.now());
+        }
+      }
+      clock.advance(2_000);
+      expect(session?.status).toBe('completed');
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      element<HTMLButtonElement>('roll-chords-open').click();
+      element<HTMLButtonElement>('roll-chart-open').click();
+      // Each bar in its own key, the change at the second bar on the run's clock as the notes are.
+      const chart = element('roll-chart');
+      expect([...chart.querySelectorAll('.roll-chart__bar')].map((bar) => bar.querySelector('.roll-chart__key')?.textContent ?? '')).toEqual([
+        'A minor',
+        'G major',
+      ]);
+    });
+
+    it('reads the chords of a score in its own keys, the circle and the chart there to read and nothing to write with', async () => {
+      const { view, runtime, clock } = createRig();
+      await view.initialize();
+      // In A minor for a bar, then G major.
+      await runtime.controller.openScore({
+        ...twoBarExercise({ title: 'Read', key: KeySignature.minor(0) }),
+        keyChanges: [{ measureIndex: 1, key: KeySignature.major(1) }],
+      });
+      element<HTMLButtonElement>('focus-roll').click();
+      const open = element<HTMLButtonElement>('roll-chords-open');
+      const side = element('roll-side');
+      const circle = element('roll-circle');
+      // There for the score, to read.
+      expect([open.hidden, open.title]).toEqual([false, 'The chords of the music: the circle of fifths and their chart']);
+      open.click();
+      // The circle to read, and nothing to write with: no drawer, no goals, slices no stop for a key.
+      expect([side.hidden, side.dataset['writes'], element('roll-chords').hidden]).toEqual([false, 'false', true]);
+      const slice = circle.querySelector('[data-ring="major"][data-place="0"]');
+      expect([slice?.getAttribute('tabindex'), slice?.getAttribute('aria-label')]).toEqual(['-1', 'C']);
+      expect(circle.querySelector('.roll-circle__middle')?.getAttribute('tabindex')).toBe('-1');
+      // The chart, in the score's own keys, each named where it begins.
+      element<HTMLButtonElement>('roll-chart-open').click();
+      const chart = element('roll-chart');
+      const said = (): string[] =>
+        [...chart.querySelectorAll('.roll-chart__chord')].map(
+          (chord) =>
+            `${chord.querySelector('.roll-chart__key')?.textContent ?? '-'} ${chord.querySelector('.roll-chart__name')?.textContent ?? ''} ${chord.querySelector('.roll-chart__numeral')?.textContent ?? ''}`,
+        );
+      expect(said()).toEqual(['A minor F5/C VI5', 'G major G5 I5']);
+      // A chord pressed puts the cursor there, nothing being chosen to write over; the circle reads it in G.
+      clock.advance(1_000);
+      [...chart.querySelectorAll<HTMLElement>('.roll-chart__chord')][1]?.click();
+      expect([...chart.querySelectorAll<HTMLElement>('[data-here]')].map((chord) => chord.querySelector('.roll-chart__name')?.textContent)).toEqual(['G5']);
+      expect(`${circle.querySelector('.roll-circle__sounding-name')?.textContent ?? ''} ${circle.querySelector('.roll-circle__sounding-numeral')?.textContent ?? ''}`).toBe('G5 I5');
+      expect(circle.querySelectorAll('[data-ring][data-in-the-key]')).toHaveLength(7);
+      // D, the dominant of G and nothing of A minor; F, the other way round.
+      expect(circle.querySelector('[data-ring="major"][data-place="2"]')?.getAttribute('data-in-the-key')).toBe('true');
+      expect(circle.querySelector('[data-ring="major"][data-place="11"]')?.hasAttribute('data-in-the-key')).toBe(false);
     });
 
     it('opens the chords as a chart over the drawing, bar by bar, a chord pressed there chosen, heard and the cursor on it', async () => {

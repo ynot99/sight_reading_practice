@@ -1816,6 +1816,13 @@ textarea {
   display: none;
 }
 
+/* Read only, beside music that is not a sketch being edited: the slices and the middle only show. */
+.roll-side[data-writes='false'] .roll-circle__chord,
+.roll-side[data-writes='false'] .roll-circle__middle {
+  pointer-events: none;
+  cursor: default;
+}
+
 /* The hole in the middle, the chord sounding to press: edged only under a pointer or a key's focus. */
 .roll-circle__middle {
   fill: transparent;

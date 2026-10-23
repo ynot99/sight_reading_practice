@@ -1530,6 +1530,61 @@ textarea {
   pointer-events: none;
 }
 
+/*
+ * While a chord of the lane is chosen, the keys are pressed to draft
+ * another: each key of the draft ringed in the accent rather than filled,
+ * so the draft is not taken for what is written.
+ */
+.roll-circle-keys[data-drafts='true'] {
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.roll-circle-keys[data-draft='true'] .replay-keys__white[data-lit]::after,
+.roll-circle-keys[data-draft='true'] .replay-keys__black[data-lit]::after {
+  background: transparent;
+  box-shadow: inset 0 0 0 3px var(--accent);
+}
+
+/* Its keep and its leave, at the foot of the circle's corners, over the keys. */
+.roll-circle-draft {
+  position: absolute;
+  right: 0;
+  bottom: var(--circle-keys);
+  left: 0;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.roll-circle-draft button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.roll-circle-draft .roll-circle-draft__yes {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--surface);
+}
+
+.roll-circle-draft svg {
+  width: 18px;
+  height: 18px;
+  fill: currentcolor;
+}
+
 /* The chord sounding on the keys in the accent, its root the more: named, not judged. */
 .roll-circle-keys .replay-keys__white[data-lit]::after,
 .roll-circle-keys .replay-keys__black[data-lit]::after {

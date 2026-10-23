@@ -795,8 +795,26 @@
                 <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm-5.5 16h-3v-5.5h.5a1 1 0 0 0 1-1V5h1v7.5a1 1 0 0 0 1 1h.5V19zM5 5h1v7.5a1 1 0 0 0 1 1h.5V19H5V5zm14 14h-2.5v-5.5h.5a1 1 0 0 0 1-1V5h1v14z" />
               </svg>
             </button>
+            <!--
+              A chord drafted on the keys under the circle, while a chord of
+              the lane is chosen: kept as the chosen one's, or written over it.
+            -->
+            <div id="roll-circle-draft" class="roll-circle-draft" hidden>
+              <button id="roll-circle-draft-no" type="button" class="roll-circle-draft__no"
+                title="Leave the chosen chord as it is" aria-label="Leave the chosen chord as it is">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                </svg>
+              </button>
+              <button id="roll-circle-draft-yes" type="button" class="roll-circle-draft__yes"
+                title="Write this chord over the chosen one" aria-label="Write this chord over the chosen one">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" />
+                </svg>
+              </button>
+            </div>
             <!-- An octave of keys, drawn by the page: see `drawTheKeysUnderTheCircle`. -->
-            <div id="roll-circle-keys" class="roll-circle-keys" aria-hidden="true"></div>
+            <div id="roll-circle-keys" class="roll-circle-keys"></div>
           </div>
           <div id="roll-chords" class="roll-chords" role="group" aria-label="The chords of the key">
             <!-- The key's chords, then the writer's own, each one press to write. -->

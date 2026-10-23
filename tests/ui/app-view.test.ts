@@ -10030,6 +10030,98 @@ describe('AppView', () => {
       expect([open.hidden, chart.hidden]).toEqual([true, true]);
     });
 
+    it('drafts another chord over the one chosen on the keys under the circle, heard as it changes, written or left', async () => {
+      const { view, sketches, clock, instrument } = createRig();
+      await view.initialize();
+      const held = (midis: readonly number[], atMs: number, upAtMs: number) =>
+        midis.flatMap((key) => [
+          { kind: 'noteOn' as const, atMs, midi: key, velocity: 0.5 },
+          { kind: 'noteOff' as const, atMs: upAtMs, midi: key },
+        ]);
+      // C for a bar, then A minor, in C major.
+      sketches.begin(
+        {
+          events: [...held([60, 64, 67], 0, 2_000), ...held([57, 60, 64], 2_000, 4_000)],
+          beats: Array.from({ length: 8 }, (_, beat) => ({ atMs: beat * 500, beat: beat % 4, beatsInBar: 4 })),
+        },
+        'Drafted',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      element<HTMLButtonElement>('roll-chords-open').click();
+      element<HTMLButtonElement>('roll-chart-open').click();
+      const chart = element('roll-chart');
+      const keys = element('roll-circle-keys');
+      const draft = element('roll-circle-draft');
+      const yes = element<HTMLButtonElement>('roll-circle-draft-yes');
+      const no = element<HTMLButtonElement>('roll-circle-draft-no');
+      const middle = (): string => element('roll-circle').querySelector('.roll-circle__sounding-name')?.textContent ?? '';
+      const numeral = (): string => element('roll-circle').querySelector('.roll-circle__sounding-numeral')?.textContent ?? '';
+      const lit = (): string[] =>
+        [...keys.querySelectorAll<HTMLElement>('[data-shade]')].map((key) => `${key.dataset['midi'] ?? ''}${key.dataset['root'] === 'true' ? ' root' : ''}`);
+      const press = (midi: number): void => {
+        keys.querySelector(`[data-midi="${String(midi)}"]`)?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      };
+      const onTheChart = (at: number): void => {
+        clock.advance(1_000);
+        [...chart.querySelectorAll<HTMLElement>('.roll-chart__chord')][at]?.click();
+      };
+      const firstBar = (): string => chart.querySelector('.roll-chart__bar .roll-chart__name')?.textContent ?? '';
+      const heard = (): number[] => [...new Set(instrument.played.map((note) => note.midi))].sort((a, b) => a - b);
+
+      // With no chord chosen, the keys only show.
+      expect([keys.dataset['drafts'], draft.hidden]).toEqual(['false', true]);
+      press(63);
+      expect([keys.dataset['draft'], draft.hidden, middle()]).toEqual(['false', true, 'C']);
+
+      // C chosen on the chart: the keys take a draft, begun as C. E pressed away: C and G, a fifth, heard so.
+      onTheChart(0);
+      expect([keys.dataset['drafts'], keys.title]).toEqual(['true', 'Press keys to make the chosen chord another, heard as it changes']);
+      instrument.played.length = 0;
+      press(64);
+      expect([keys.dataset['draft'], draft.hidden, middle(), lit()]).toEqual(['true', false, 'C5', ['60 root', '67']]);
+      expect(heard()).toEqual([60, 67]);
+      // E flat pressed in: C minor, the key's tonic minor.
+      instrument.played.length = 0;
+      keys.querySelector('[data-midi="63"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect([middle(), numeral(), lit()]).toEqual(['Cm', 'i', ['60 root', '63', '67']]);
+      expect(heard()).toEqual([60, 63, 67]);
+      expect(firstBar()).toBe('C');
+      // Written: over the C, on the chart at once; the draft gone, the chord still chosen.
+      yes.click();
+      expect([firstBar(), keys.dataset['draft'], draft.hidden, keys.dataset['drafts']]).toEqual(['Cm', 'false', true, 'true']);
+      expect(lit()).toEqual(['60 root', '63', '67']);
+
+      // Down to one note, the draft is no chord: shown without a root, the keep idle with why.
+      press(60);
+      press(63);
+      expect([lit(), middle(), yes.dataset['idle'], yes.title]).toEqual([
+        ['67'],
+        '',
+        'true',
+        'Write this chord over the chosen one. A chord has two notes at least.',
+      ]);
+      yes.click();
+      expect([firstBar(), draft.hidden, lit()]).toEqual(['Cm', false, ['67']]);
+      // Left: the chosen chord shown again, and the draft heard last silenced.
+      instrument.stopped.length = 0;
+      no.click();
+      expect(instrument.stopped.map((note) => note.midi)).toEqual([67]);
+      expect([keys.dataset['draft'], draft.hidden, middle(), lit()]).toEqual(['false', true, 'Cm', ['60 root', '63', '67']]);
+      // Another chord chosen leaves no draft behind.
+      press(62);
+      expect(draft.hidden).toBe(false);
+      onTheChart(1);
+      expect([draft.hidden, middle()]).toEqual([true, 'Am']);
+      // A draft is voiced from the chosen chord's root: A minor with a G is A minor seventh, not over C.
+      instrument.played.length = 0;
+      press(67);
+      expect(middle()).toBe('Am7');
+      expect(instrument.played.map((note) => note.midi).sort((a, b) => a - b)).toEqual([69, 72, 76, 79]);
+    });
+
     it('strikes a chord of the circle as a pointer goes down on it and writes the one it is let go of on, the middle the chord sounding', async () => {
       const { view, sketches, clock, instrument, midi } = createRig();
       await view.initialize();

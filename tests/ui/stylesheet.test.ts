@@ -1477,7 +1477,7 @@ describe('the stylesheet', () => {
     const portrait = '@media (orientation: portrait)';
     // The drawing, then a column of the circle over the chords, the keep and the delete at its foot.
     expect(HTML).toMatch(
-      /<div class="roll-harmony">\s*<div class="roll-room">\s*<div class="roll-frame">[\s\S]*?id="roll-map"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>\s*<div id="roll-side" class="roll-side" hidden>\s*(?:<!--[\s\S]*?-->\s*)?<div id="roll-circle" class="roll-circle">\s*<button id="roll-circle-names"[\s\S]*?<\/button>\s*<button id="roll-circle-keys-shown"[\s\S]*?<\/button>\s*(?:<!--[\s\S]*?-->\s*)?<div id="roll-circle-keys" class="roll-circle-keys"[^>]*><\/div>\s*<\/div>\s*<div id="roll-chords"[^>]*>[\s\S]*?id="roll-chords-keep"[^>]*>\+<\/button>\s*<button id="roll-chords-forget"[\s\S]*?<\/button>\s*<\/div>\s*<\/div>\s*<\/div>\s*<\/div>/,
+      /<div class="roll-harmony">\s*<div class="roll-room">\s*<div class="roll-frame">[\s\S]*?id="roll-map"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>\s*<div id="roll-side" class="roll-side" hidden>\s*(?:<!--[\s\S]*?-->\s*)?<div id="roll-circle" class="roll-circle">\s*<button id="roll-circle-names"[\s\S]*?<\/button>\s*<button id="roll-circle-keys-shown"[\s\S]*?<\/button>\s*(?:<!--[\s\S]*?-->\s*)?<div id="roll-circle-draft" class="roll-circle-draft" hidden>[\s\S]*?id="roll-circle-draft-yes"[\s\S]*?<\/div>\s*(?:<!--[\s\S]*?-->\s*)?<div id="roll-circle-keys" class="roll-circle-keys"[^>]*><\/div>\s*<\/div>\s*<div id="roll-chords"[^>]*>[\s\S]*?id="roll-chords-keep"[^>]*>\+<\/button>\s*<button id="roll-chords-forget"[\s\S]*?<\/button>\s*<\/div>\s*<\/div>\s*<\/div>\s*<\/div>/,
     );
     expect(ruleOf('.roll-harmony')).toMatch(/display\s*:\s*flex/);
     expect(ruleOf('.roll-harmony')).not.toMatch(/flex-direction/);
@@ -1500,6 +1500,14 @@ describe('the stylesheet', () => {
     expect(ruleOf('.roll-circle')).toMatch(/flex-direction\s*:\s*column/);
     expect(ruleOf('.roll-circle')).toMatch(/--circle-keys\s*:\s*34px/);
     expect(ruleOf(".roll-circle[data-keys='false']")).toMatch(/--circle-keys\s*:\s*0px/);
+    // Pressed only while they draft, the draft ringed rather than filled, and its keep and leave over them.
+    expect(ruleOf('.roll-circle-keys')).toMatch(/pointer-events\s*:\s*none/);
+    expect(ruleOf(".roll-circle-keys[data-drafts='true']")).toMatch(/pointer-events\s*:\s*auto/);
+    expect(
+      ruleOf(".roll-circle-keys[data-draft='true'] .replay-keys__white[data-lit]::after, .roll-circle-keys[data-draft='true'] .replay-keys__black[data-lit]::after"),
+    ).toMatch(/box-shadow\s*:\s*inset 0 0 0 3px var\(--accent\)/);
+    expect(ruleOf('.roll-circle-draft')).toMatch(/position\s*:\s*absolute/);
+    expect(ruleOf('.roll-circle-draft')).toMatch(/bottom\s*:\s*var\(--circle-keys\)/);
     expect(ruleOf('.roll-circle-keys')).toMatch(/align-self\s*:\s*stretch/);
     expect(ruleOf('.roll-circle-keys')).toMatch(/height\s*:\s*calc\(var\(--circle-keys\) - 4px\)/);
     expect(ruleOf('.roll-circle__drawing', portrait)).toMatch(/height\s*:\s*calc\(100% - var\(--circle-keys\)\)/);

@@ -603,6 +603,9 @@ const THE_WAY_ROUND_SHOWN = 4;
 /** How long a chord tapped in the lane sounds at most: long enough to be heard as a chord, short of a bar of one. */
 const A_CHORD_TAPPED_SOUNDS_MS = 1_200;
 
+/** The fewest notes a chord drafted on the keys under the circle is written with. */
+const A_DRAFT_HAS_AT_LEAST = 2;
+
 /** The grid of bar lines alone, which a slice's ends go to. */
 const BAR_LINES_ONLY: GridChoice = { beats: false, parts: 1 };
 
@@ -2186,6 +2189,13 @@ export class AppView {
   private rollSlice: { readonly of: string; readonly fromMs: number; readonly toMs: number } | null = null;
   /** The keys of the chord last tapped in the lane, sounding for a moment: see `soundTheChordTapped`. */
   private chordTappedSounds: readonly number[] = [];
+  /**
+   * A chord drafted on the keys under the circle to write over the chord of
+   * the lane chosen - the one beginning where this says - as the pitches
+   * pressed into it there; none while nothing is drafted. Only that chord's:
+   * see `theDraft`.
+   */
+  private chordDraft: { readonly overFromMs: number; readonly pitchClasses: readonly number[] } | null = null;
   /** An end of the slice held by a pointer on the ruler, and where its other end stays: see `takeHoldOfAnEndOfTheSlice`. */
   private sliceEndHeld: { readonly pointerId: number; readonly otherMs: number } | null = null;
   /** Where the marker stood as the drawing was shown, so shutting it carries the marker only where it was put: see `closeTheRoll`. */
@@ -2792,6 +2802,9 @@ export class AppView {
     rollCircleNames: HTMLButtonElement;
     rollCircleKeysShown: HTMLButtonElement;
     rollCircleKeys: HTMLElement;
+    rollCircleDraft: HTMLElement;
+    rollCircleDraftYes: HTMLButtonElement;
+    rollCircleDraftNo: HTMLButtonElement;
     rollChordsList: HTMLElement;
     rollChordsKeep: HTMLButtonElement;
     rollChordsForget: HTMLButtonElement;
@@ -3203,6 +3216,9 @@ export class AppView {
       rollCircleNames: requireElement(doc, 'roll-circle-names'),
       rollCircleKeysShown: requireElement(doc, 'roll-circle-keys-shown'),
       rollCircleKeys: requireElement(doc, 'roll-circle-keys'),
+      rollCircleDraft: requireElement(doc, 'roll-circle-draft'),
+      rollCircleDraftYes: requireElement(doc, 'roll-circle-draft-yes'),
+      rollCircleDraftNo: requireElement(doc, 'roll-circle-draft-no'),
       rollChordsList: requireElement(doc, 'roll-chords-list'),
       rollChordsKeep: requireElement(doc, 'roll-chords-keep'),
       rollChordsForget: requireElement(doc, 'roll-chords-forget'),
@@ -10275,6 +10291,21 @@ export class AppView {
       this.runtime.controller.updateSettings({ circleNamesTheChord: !this.runtime.controller.settings.circleNamesTheChord });
       this.showTheCircle();
     });
+    // A key under the circle pressed, while a chord of the lane is chosen, drafts another.
+    this.listen(this.el.rollCircleKeys, 'click', (event) => {
+      const key = (event.target as Element | null)?.closest<HTMLElement>('[data-midi]');
+      if (key !== null && key !== undefined) {
+        this.draftTheKey(Number(key.dataset['midi']));
+      }
+    });
+    this.listen(this.el.rollCircleDraftYes, 'click', () => {
+      this.writeTheDraft();
+    });
+    this.listen(this.el.rollCircleDraftNo, 'click', () => {
+      this.chordDraft = null;
+      this.soundTheChordTapped([], 0);
+      this.showTheCircle();
+    });
     this.listen(this.el.rollCircleKeysShown, 'click', () => {
       this.runtime.controller.updateSettings({ circleShowsTheKeys: !this.runtime.controller.settings.circleShowsTheKeys });
       this.showTheCircle();
@@ -14348,13 +14379,68 @@ export class AppView {
   }
 
   /**
-   * The chord sounding, as the middle of the circle names it: the one the
-   * keys held make, where they make one, as they are held and numbered in
-   * the key the cursor is in, as the lane numbers the music there; and
-   * otherwise the one the lane names at the cursor, its root in the octave
-   * of middle C. None with no sketch shown.
+   * The chord drafted on the keys under the circle, as its pitch classes:
+   * only while the chord it is to be written over is still the one chosen
+   * in the lane, so choosing another, or none, leaves no draft behind.
    */
-  private theChordSounding(): {
+  private theDraft(): readonly number[] | null {
+    const draft = this.chordDraft;
+    const over = draft === null ? null : this.theChordChosenInTheLane();
+    return over !== null && draft !== null && over.fromMs === draft.overFromMs ? draft.pitchClasses : null;
+  }
+
+  /**
+   * A key under the circle pressed while a chord of the lane is chosen: the
+   * draft - begun as the chosen chord's own notes - takes the key in, or
+   * gives it back where it has it, and is heard as it now is.
+   */
+  private draftTheKey(midi: number): void {
+    const over = this.theChordChosenInTheLane();
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    if (over === null || stored === null) {
+      return;
+    }
+    const was = this.theDraft() ?? theKeysOfTheChord(over.root, over.kind).map((key) => key % 12);
+    const pitchClass = ((midi % 12) + 12) % 12;
+    const now = was.includes(pitchClass) ? was.filter((each) => each !== pitchClass) : [...was, pitchClass];
+    this.chordDraft = { overFromMs: over.fromMs, pitchClasses: now };
+    const velocity = theUsualLoudness(stored.events);
+    this.soundTheChordTapped(
+      this.theKeysOfTheDraft(now).map((key) => ({ midi: key, velocity })),
+      over.untilMs - over.fromMs,
+    );
+    this.showTheCircle();
+  }
+
+  /**
+   * The keys a draft is written and heard as: its pitches upward from the
+   * root of the chord chosen, from middle C's octave - so a draft of the
+   * chord's own notes is in its own root position, and named as itself
+   * rather than over whichever of them is nearest C.
+   */
+  private theKeysOfTheDraft(pitchClasses: readonly number[]): readonly number[] {
+    const root = this.theChordChosenInTheLane()?.root ?? 0;
+    return pitchClasses.map((pitchClass) => MIDDLE_C + root + ((((pitchClass - root) % 12) + 12) % 12));
+  }
+
+  /**
+   * Writes the draft over the chosen chord, as a chord of the circle is
+   * written over it - its notes moved as little as they can - and heard; the
+   * chord stays chosen, to draft another over it.
+   */
+  private writeTheDraft(): void {
+    const draft = this.theDraft();
+    if (draft === null || draft.length < A_DRAFT_HAS_AT_LEAST) {
+      return;
+    }
+    this.chordDraft = null;
+    this.soundTheChordWritten(this.writeTheChordWritten(this.theKeysWrittenAtTheHead(this.theKeysOfTheDraft(draft))));
+    this.showTheCircle();
+  }
+
+  /** A chord as named and numbered in the key the cursor is in, from its keys; none where they make none. */
+  private theChordOfTheKeys(keys: readonly number[]): {
     readonly name: string;
     readonly numeral: string;
     readonly root: number;
@@ -14367,11 +14453,36 @@ export class AppView {
       return null;
     }
     const key = this.theKeyAtTheHead(stored);
-    const keysHeld = [...new Set(this.theKeysHeld())];
-    const held = theChordTheKeysMake(keysHeld, key.fifths);
+    const made = theChordTheKeysMake(keys, key.fifths);
+    if (made === null) {
+      return null;
+    }
+    const numeral = theNumeralOfTheChord(made, thePitchClassesOfTheScale(key.fifths, theScaleOfTheKey(key)));
+    return { name: made.name, numeral, root: made.root, kind: made.kind, keys };
+  }
+
+  /**
+   * The chord sounding, as the middle of the circle names it: the one
+   * drafted on the keys under it while there is a draft; the one the keys
+   * held make, where they make one, as they are held and numbered in the
+   * key the cursor is in, as the lane numbers the music there; and
+   * otherwise the one the lane names at the cursor, its root in the octave
+   * of middle C. None with no sketch shown.
+   */
+  private theChordSounding(): {
+    readonly name: string;
+    readonly numeral: string;
+    readonly root: number;
+    readonly kind: ChordKind;
+    readonly keys: readonly number[];
+  } | null {
+    const draft = this.theDraft();
+    if (draft !== null) {
+      return this.theChordOfTheKeys(this.theKeysOfTheDraft(draft));
+    }
+    const held = this.theChordOfTheKeys([...new Set(this.theKeysHeld())]);
     if (held !== null) {
-      const numeral = theNumeralOfTheChord(held, thePitchClassesOfTheScale(key.fifths, theScaleOfTheKey(key)));
-      return { name: held.name, numeral, root: held.root, kind: held.kind, keys: keysHeld };
+      return held;
     }
     const scene = this.drawnScene;
     const chord = scene === null ? null : theChordAt(scene, this.headIsAtMs());
@@ -14560,15 +14671,33 @@ export class AppView {
       : 'The keys under the circle are hidden: press to show the chord sounding on them';
     this.el.rollCircleKeysShown.setAttribute('aria-label', this.el.rollCircleKeysShown.title);
     this.el.rollCircleKeys.hidden = !onTheKeys;
+    // Pressed to draft another over the chord chosen in the lane, while one is.
+    const draft = this.theDraft();
+    const drafts = this.theChordChosenInTheLane() !== null;
+    this.el.rollCircleKeys.dataset['drafts'] = String(drafts);
+    this.el.rollCircleKeys.dataset['draft'] = String(draft !== null);
+    this.el.rollCircleKeys.title = drafts ? 'Press keys to make the chosen chord another, heard as it changes' : '';
+    this.el.rollCircleDraft.hidden = draft === null;
+    sayWhetherIdle(
+      this.el.rollCircleDraftYes,
+      draft !== null && draft.length < A_DRAFT_HAS_AT_LEAST
+        ? 'Write this chord over the chosen one. A chord has two notes at least.'
+        : 'Write this chord over the chosen one',
+      draft !== null && draft.length < A_DRAFT_HAS_AT_LEAST,
+    );
     // And the room they take given back to the circle: see `--circle-keys`.
     this.el.rollCircle.dataset['keys'] = String(onTheKeys);
     const way = scene === null ? [] : theWayRoundTheCircle(scene.chords, this.headIsAtMs(), THE_WAY_ROUND_SHOWN);
-    const shows = JSON.stringify([key.fifths, theScaleOfTheKey(key), here, sounding, chord?.keys, named, way]);
+    const shows = JSON.stringify([key.fifths, theScaleOfTheKey(key), here, sounding, chord?.keys, draft, named, way]);
     if (shows === this.circleShows) {
       return;
     }
     this.circleShows = shows;
-    showTheChordOnTheKeys(this.circleKeys, chord);
+    // A draft that makes no chord yet still shows its keys, with no root.
+    showTheChordOnTheKeys(
+      this.circleKeys,
+      chord ?? (draft === null ? null : { root: Number.NaN, keys: this.theKeysOfTheDraft(draft) }),
+    );
     showOnTheCircle(this.circleDrawing, {
       fifths: key.fifths,
       ofTheKey: theKeysOwnPlaces(key.fifths, theScaleOfTheKey(key)),

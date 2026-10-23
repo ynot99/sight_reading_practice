@@ -225,6 +225,17 @@ describe('a score written out from its repeats', () => {
     expect(exercise.tempoWords.map((word) => word.measureIndex)).toEqual([2, 4]);
   });
 
+  it('reads a part of the piece named on both readings of its bar, and none where none is named', () => {
+    const { exercise } = importer.read(withDirection(3, '<direction-type><rehearsal> B </rehearsal></direction-type>'));
+
+    expect(exercise.rehearsalMarks?.map((mark) => [mark.measureIndex, mark.offsetTicks, mark.text])).toEqual([
+      [2, 0, 'B'],
+      [4, 0, 'B'],
+    ]);
+    expect('rehearsalMarks' in importer.read(REPEATED).exercise).toBe(false);
+    expect(importer.read(withDirection(3, '<direction-type><rehearsal>  </rehearsal></direction-type>')).exercise.rehearsalMarks).toBeUndefined();
+  });
+
   it('draws an octave sign under every reading of the bars it covers', () => {
     // Bars two and three, read twice. The second reading had no sign over
     // notes written an octave from where they sound.

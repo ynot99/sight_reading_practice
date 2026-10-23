@@ -11,6 +11,7 @@ import type {
   DynamicMark,
   OctaveShift,
   PedalMark,
+  RehearsalMark,
   TempoWord,
   StaffPart,
   TempoChange,
@@ -453,6 +454,8 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         const words = exercise.tempoWords.filter(
           (word) => word.measureIndex === measureIndex && word.kind !== 'other',
         );
+        // A part of the piece named here: the piece's, written once with the first voice.
+        const rehearsals = (exercise.rehearsalMarks ?? []).filter((mark) => mark.measureIndex === measureIndex);
         const firstOfStaff = new Map<number, number>();
         present.forEach((staff, index) => {
           if (!firstOfStaff.has(staff.staffNumber)) {
@@ -493,6 +496,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
                   (change) => change.measureIndex === measureIndex && change.offsetTicks > 0,
                 )
               : [],
+            index === 0 ? rehearsals : [],
           );
         });
         this.writeTempoChanges(writer, tempos, barTicks, present.length > 0);
@@ -742,6 +746,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     hairpins: readonly DynamicHairpin[] = [],
     shifts: readonly OctaveShift[] = [],
     clefs: readonly ClefChange[] = [],
+    rehearsals: readonly RehearsalMark[] = [],
   ): void {
     const measure = staff.measures[measureIndex];
     if (measure === undefined) {
@@ -762,6 +767,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     let nextDynamic = 0;
     let nextWord = 0;
     let nextClef = 0;
+    let nextRehearsal = 0;
     /** Which ends of which hairpins have been written into this bar. */
     const drawn = new Set<string>();
     measure.entries.forEach((entry, entryIndex) => {
@@ -775,6 +781,13 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
       ) {
         this.writeDynamic(writer, dynamics[nextDynamic], staff.staffNumber);
         nextDynamic += 1;
+      }
+      // A part named partway through the note this voice has there is
+      // written at that note: the nearest place it has before, rather than
+      // after it, in the next part.
+      while (nextRehearsal < rehearsals.length && (rehearsals[nextRehearsal]?.offsetTicks ?? 0) < offset + entry.duration.ticks) {
+        this.writeRehearsal(writer, rehearsals[nextRehearsal]);
+        nextRehearsal += 1;
       }
       while (nextWord < words.length && (words[nextWord]?.offsetTicks ?? 0) <= offset) {
         this.writeWords(writer, words[nextWord]);
@@ -808,6 +821,10 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     while (nextDynamic < dynamics.length) {
       this.writeDynamic(writer, dynamics[nextDynamic], staff.staffNumber);
       nextDynamic += 1;
+    }
+    while (nextRehearsal < rehearsals.length) {
+      this.writeRehearsal(writer, rehearsals[nextRehearsal]);
+      nextRehearsal += 1;
     }
     while (nextWord < words.length) {
       this.writeWords(writer, words[nextWord]);
@@ -1172,6 +1189,18 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         });
       }
     }
+  }
+
+  /** A part of the piece named from here, above the staff, as the engraver boxes it. */
+  private writeRehearsal(writer: XmlWriter, mark: RehearsalMark | undefined): void {
+    if (mark === undefined) {
+      return;
+    }
+    writer.element('direction', { placement: 'above' }, () => {
+      writer.element('direction-type', undefined, () => {
+        writer.leaf('rehearsal', mark.text);
+      });
+    });
   }
 
   private writeWords(writer: XmlWriter, word: TempoWord | undefined): void {

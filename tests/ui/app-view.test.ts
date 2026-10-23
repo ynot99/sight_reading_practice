@@ -10047,6 +10047,10 @@ describe('AppView', () => {
       await runtime.controller.openScore({
         ...twoBarExercise({ title: 'Read', key: KeySignature.minor(0) }),
         keyChanges: [{ measureIndex: 1, key: KeySignature.major(1) }],
+        rehearsalMarks: [
+          { measureIndex: 0, offsetTicks: 0, text: 'Verse' },
+          { measureIndex: 1, offsetTicks: 0, text: 'Chorus' },
+        ],
       });
       element<HTMLButtonElement>('focus-roll').click();
       const open = element<HTMLButtonElement>('roll-chords-open');
@@ -10069,6 +10073,8 @@ describe('AppView', () => {
             `${chord.querySelector('.roll-chart__key')?.textContent ?? '-'} ${chord.querySelector('.roll-chart__name')?.textContent ?? ''} ${chord.querySelector('.roll-chart__numeral')?.textContent ?? ''}`,
         );
       expect(said()).toEqual(['A minor F5/C VI5', 'G major G5 I5']);
+      // Its parts as the score names them, each beginning a row.
+      expect([...chart.querySelectorAll<HTMLElement>('.roll-chart__bar')].map((bar) => bar.dataset['section'] ?? null)).toEqual(['Verse', 'Chorus']);
       // A chord pressed puts the cursor there, nothing being chosen to write over; the circle reads it in G.
       clock.advance(1_000);
       [...chart.querySelectorAll<HTMLElement>('.roll-chart__chord')][1]?.click();

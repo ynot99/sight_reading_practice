@@ -960,6 +960,16 @@ export interface PedalMark {
   readonly line: boolean;
 }
 
+/**
+ * A part of the piece the score names from a place on: its rehearsal mark -
+ * a letter, A or B, or a word, Verse or Chorus - as far as the next.
+ */
+export interface RehearsalMark {
+  readonly measureIndex: number;
+  readonly offsetTicks: number;
+  readonly text: string;
+}
+
 /** A key the score changes to, from the given measure onwards. */
 export interface KeyChange {
   readonly measureIndex: number;
@@ -1055,6 +1065,8 @@ export interface Exercise {
    * left out.
    */
   readonly dynamicMarks: readonly DynamicMark[];
+  /** The parts of the piece the score names, in the order written: see {@link RehearsalMark}. None where it names none. */
+  readonly rehearsalMarks?: readonly RehearsalMark[];
   /** Words about the speed, printed and - for some of them - obeyed. */
   readonly tempoWords: readonly TempoWord[];
   /** Hairpins: getting louder, getting quieter. */

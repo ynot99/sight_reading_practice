@@ -7,6 +7,7 @@ import type {
   KeyChange,
   PedalMark,
   TempoChange,
+  RehearsalMark,
   TempoWord,
   TimeChange,
 } from '../model/Exercise.js';
@@ -151,6 +152,7 @@ export function unrollRepeats(exercise: Exercise, order: readonly number[]): Exe
   const tempoChanges: TempoChange[] = [];
   const dynamicMarks: DynamicMark[] = [];
   const tempoWords: TempoWord[] = [];
+  const rehearsalMarks: RehearsalMark[] = [];
   const staffNumbers = [...new Set(exercise.staves.map((staff) => staff.staffNumber))];
   // How things stood as each bar was first read.
   const asFirstRead = new Map<number, InForce>();
@@ -181,6 +183,12 @@ export function unrollRepeats(exercise: Exercise, order: readonly number[]): Exe
     for (const word of exercise.tempoWords) {
       if (word.measureIndex === from) {
         tempoWords.push({ ...word, measureIndex: at });
+      }
+    }
+    // A part named again as often as it is read: the second verse is a verse.
+    for (const mark of exercise.rehearsalMarks ?? []) {
+      if (mark.measureIndex === from) {
+        rehearsalMarks.push({ ...mark, measureIndex: at });
       }
     }
     standing = readOn(standing, dynamics, tempos, pedal);
@@ -215,6 +223,7 @@ export function unrollRepeats(exercise: Exercise, order: readonly number[]): Exe
     tempoChanges,
     dynamicMarks,
     tempoWords,
+    ...(exercise.rehearsalMarks === undefined ? {} : { rehearsalMarks }),
     hairpins: spannedAcross(exercise, exercise.hairpins, runs),
     octaveShifts: spannedAcross(exercise, exercise.octaveShifts, runs),
     keyChanges,

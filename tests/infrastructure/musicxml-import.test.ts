@@ -478,6 +478,39 @@ describe('the dynamics on the page', () => {
     expect([...printed.matchAll(/<dynamics>/g)]).toHaveLength(1);
   });
 
+  it('writes a part of the piece named as a rehearsal mark where it begins, once, and reads it back', () => {
+    const named = {
+      ...twoBarExercise(),
+      rehearsalMarks: [
+        { measureIndex: 0, offsetTicks: 0, text: 'A' },
+        { measureIndex: 0, offsetTicks: Duration.HALF.ticks, text: 'A2' },
+        { measureIndex: 1, offsetTicks: Duration.HALF.ticks, text: 'Chorus' },
+      ],
+    };
+
+    const printed = serializer.serialize(named);
+    const { exercise } = importer.read(printed);
+
+    // Once each, though the bar has two staves.
+    expect([...printed.matchAll(/<rehearsal>([^<]*)<\/rehearsal>/g)].map((found) => found[1])).toEqual(['A', 'A2', 'Chorus']);
+    // Where it was, on the beat a note of the first voice begins; partway
+    // through the whole note of the second bar, at that note.
+    expect(exercise.rehearsalMarks).toEqual([
+      { measureIndex: 0, offsetTicks: 0, text: 'A' },
+      { measureIndex: 0, offsetTicks: Duration.HALF.ticks, text: 'A2' },
+      { measureIndex: 1, offsetTicks: 0, text: 'Chorus' },
+    ]);
+    // Nothing named, nothing written.
+    expect(serializer.serialize(twoBarExercise())).not.toContain('<rehearsal>');
+    // Named by two parts alike, it is the piece's once.
+    const part = /<part id="P1">[\s\S]*<\/part>/.exec(printed)?.[0] ?? '';
+    const listed = /<score-part id="P1">[\s\S]*?<\/score-part>/.exec(printed)?.[0] ?? '';
+    const twice = printed
+      .replace(listed, `${listed}${listed.replace('id="P1"', 'id="P2"')}`)
+      .replace(part, `${part}${part.replace('id="P1"', 'id="P2"')}`);
+    expect(importer.read(twice).exercise.rehearsalMarks?.map((mark) => mark.text)).toEqual(['A', 'A2', 'Chorus']);
+  });
+
   it('puts a word back where its writer put it', () => {
     // Reported from Avatar, bar 59: a `rit.` printed on top of the metronome
     // mark. Both go above when nobody says otherwise, and we were saying

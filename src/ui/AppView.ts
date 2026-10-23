@@ -14244,6 +14244,33 @@ export class AppView {
     ];
   }
 
+  /**
+   * The parts of the music drawn, each named where it begins on the
+   * drawing's clock, as its bars and chords are: a sketch's sections, or the
+   * open score's rehearsal marks where the drawing is of its music.
+   */
+  private theSectionsOfTheMusicShown(): readonly { readonly atMs: number; readonly name: string }[] {
+    const roll = this.theRoll();
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    if (roll === null) {
+      return [];
+    }
+    if (stored !== null) {
+      return theSectionsOf(stored.events).map((section) => ({ atMs: section.atMs - rollBeganAtMs(roll), name: section.name }));
+    }
+    const exercise = this.runtime.controller.currentTimeline?.exercise;
+    if (sketch !== undefined || exercise === undefined || this.theKeysOfTheMusicShown() === null) {
+      return [];
+    }
+    const lines = barLines(exercise);
+    return (exercise.rehearsalMarks ?? []).flatMap((mark) => {
+      const startTicks = lines[mark.measureIndex]?.startTicks;
+      const atMs = startTicks === undefined ? null : momentOfTicks(roll, startTicks + mark.offsetTicks);
+      return atMs === null ? [] : [{ atMs, name: mark.text }];
+    });
+  }
+
   /** The key the music drawn is in where the cursor is: see `theKeysOfTheMusicShown`. None where its keys are not known. */
   private theKeyAtTheCursor(): { readonly fifths: number; readonly scale: ScaleName } | null {
     const keys = this.theKeysOfTheMusicShown();
@@ -14874,15 +14901,7 @@ export class AppView {
     if (!open) {
       return;
     }
-    const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
-    const roll = this.theRoll();
-    // On the drawing's clock, as its bars and chords are.
-    const sections =
-      stored === null || roll === null
-        ? []
-        : theSectionsOf(stored.events).map((section) => ({ atMs: section.atMs - rollBeganAtMs(roll), name: section.name }));
-    const chart = theChartOfTheChords(scene.bars, scene.chords, sections);
+    const chart = theChartOfTheChords(scene.bars, scene.chords, this.theSectionsOfTheMusicShown());
     const shows = JSON.stringify(chart);
     if (shows !== this.chartShows) {
       this.chartShows = shows;

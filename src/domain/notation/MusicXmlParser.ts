@@ -21,6 +21,7 @@ import type {
   DynamicMark,
   OctaveShift,
   DynamicLevel,
+  RehearsalMark,
   TempoWord,
   GraceNote,
   KeyChange,
@@ -162,6 +163,7 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
     tempoWords,
     hairpins,
     octaveShifts,
+    rehearsalMarks,
   } = readEveryPart(
     parts,
     measures.length,
@@ -191,6 +193,7 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
     pedalMarks: pedalAsPressed(pedalMarks),
     dynamicMarks,
     tempoWords,
+    ...(rehearsalMarks.length === 0 ? {} : { rehearsalMarks }),
     hairpins,
     octaveShifts,
     timeSignature: header.timeSignature,
@@ -1117,6 +1120,7 @@ function readMeasureNotes(
   wedges: RawWedge[] = [],
   shifts: RawShift[] = [],
   clefChanges: RawClefChange[] = [],
+  rehearsalMarks: RehearsalMark[] = [],
 ): RawNote[] {
   const notes: RawNote[] = [];
   let cursor = 0;
@@ -1253,6 +1257,11 @@ function readMeasureNotes(
           staffNumber: childNumber(node, 'staff') ?? null,
           ...sideOf(node),
         });
+      }
+      // A part of the piece named from here: the piece's, as a tempo is.
+      const rehearsal = inDirection(node, 'rehearsal')?.text.trim() ?? '';
+      if (rehearsal !== '') {
+        rehearsalMarks.push({ measureIndex, offsetTicks: Math.max(0, cursor), text: rehearsal });
       }
       continue;
     }
@@ -1515,12 +1524,14 @@ function readEveryPart(
   readonly tempoWords: readonly TempoWord[];
   readonly hairpins: readonly DynamicHairpin[];
   readonly octaveShifts: readonly OctaveShift[];
+  readonly rehearsalMarks: readonly RehearsalMark[];
 } {
   const staves: StaffPart[] = [];
   const pedalMarks: PedalMark[] = [];
   const tempoMarks: TempoChange[] = [];
   const dynamicMarks: DynamicMark[] = [];
   const tempoWords: TempoWord[] = [];
+  const rehearsalMarks: RehearsalMark[] = [];
   const hairpins: DynamicHairpin[] = [];
   const octaveShifts: OctaveShift[] = [];
 
@@ -1568,6 +1579,15 @@ function readEveryPart(
         tempoWords.push(word);
       }
     }
+    // And a part of the piece named, kept once, however many parts name it.
+    for (const mark of built.rehearsalMarks) {
+      const named = rehearsalMarks.some(
+        (seen) => seen.measureIndex === mark.measureIndex && seen.offsetTicks === mark.offsetTicks && seen.text === mark.text,
+      );
+      if (!named) {
+        rehearsalMarks.push(mark);
+      }
+    }
     octaveShifts.push(
       ...built.octaveShifts.map((shift) => ({
         ...shift,
@@ -1588,7 +1608,7 @@ function readEveryPart(
     );
   }
 
-  return { staves, pedalMarks, tempoMarks, dynamicMarks, tempoWords, hairpins, octaveShifts };
+  return { staves, pedalMarks, tempoMarks, dynamicMarks, tempoWords, hairpins, octaveShifts, rehearsalMarks };
 }
 
 /** What a part says about itself: how finely it counts, and its clefs. */
@@ -1617,11 +1637,13 @@ function buildStaves(
   readonly tempoWords: readonly TempoWord[];
   readonly hairpins: readonly DynamicHairpin[];
   readonly octaveShifts: readonly OctaveShift[];
+  readonly rehearsalMarks: readonly RehearsalMark[];
 } {
   const pedalMarks: PedalMark[] = [];
   const tempoMarks: TempoChange[] = [];
   const dynamicMarks: DynamicMark[] = [];
   const tempoWords: TempoWord[] = [];
+  const rehearsalMarks: RehearsalMark[] = [];
   const wedges: RawWedge[] = [];
   const shifts: RawShift[] = [];
   const clefChanges: RawClefChange[] = [];
@@ -1638,6 +1660,7 @@ function buildStaves(
       wedges,
       shifts,
       clefChanges,
+      rehearsalMarks,
     ),
   );
   const octaveShifts = pairShifts(shifts, (bar) => barTicksAt(header, bar));
@@ -1735,6 +1758,9 @@ function buildStaves(
       word.measureIndex === 0 && word.offsetTicks > 0
         ? { ...word, offsetTicks: word.offsetTicks + pickupShift }
         : word,
+    ),
+    rehearsalMarks: rehearsalMarks.map((mark) =>
+      mark.measureIndex === 0 && mark.offsetTicks > 0 ? { ...mark, offsetTicks: mark.offsetTicks + pickupShift } : mark,
     ),
     octaveShifts: octaveShifts.map((shift) =>
       shift.measureIndex === 0 && shift.offsetTicks > 0

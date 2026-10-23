@@ -19,7 +19,7 @@ import { barLines } from '../../src/domain/model/Exercise.js';
 import { midiToExercise } from '../../src/domain/notation/midiToExercise.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { Duration } from '../../src/domain/model/Duration.js';
-import { compoundBarExercise } from '../support/fixtures.js';
+import { compoundBarExercise, twoBarExercise } from '../support/fixtures.js';
 import type { HeardBeat, MidiFileEvent } from '../../src/domain/midi/MidiFile.js';
 
 // A velocity the stored form of 127 steps gives back exactly.
@@ -68,6 +68,22 @@ describe('a sketch of a score', () => {
     expect(page.timeSignature.toString()).toBe('6/8');
     const treble = buildTimeline(page).steps.flatMap((step) => (step.expectedMidi.some((midi) => midi >= 60) ? [step.onsetTicks] : []));
     expect(treble).toEqual([0, 1, 2, 3, 4, 5].map((at) => at * Duration.EIGHTH.ticks));
+  });
+});
+
+describe('a sketch of a score that names its parts', () => {
+  it('begins each section where the score names one, on the sketch\'s own clock', () => {
+    const exercise = {
+      ...twoBarExercise({ tempoBpm: 60 }),
+      rehearsalMarks: [
+        { measureIndex: 0, offsetTicks: 0, text: 'A' },
+        { measureIndex: 1, offsetTicks: Duration.QUARTER.ticks, text: 'B' },
+      ],
+    };
+    const { events } = theSketchOfTheScore(exercise, buildTimeline(exercise));
+    // A crotchet a second: the second bar four seconds in, a crotchet into it five.
+    expect(events.flatMap((event) => (event.kind === 'section' ? [`${String(event.atMs)} ${event.name}`] : []))).toEqual(['0 A', '5000 B']);
+    expect(theSketchOfTheScore(twoBarExercise(), buildTimeline(twoBarExercise())).events.some((event) => event.kind === 'section')).toBe(false);
   });
 });
 

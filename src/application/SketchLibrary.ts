@@ -1,4 +1,4 @@
-import { barsAreHeardIn, takeWithTheLoudnessWritten, type HeardBeat, type MidiFileEvent } from '../domain/midi/MidiFile.js';
+import { barsAreHeardIn, takeWithTheLoudnessWritten, takeWithTheSectionAt, type HeardBeat, type MidiFileEvent } from '../domain/midi/MidiFile.js';
 import { barLines, DYNAMIC_LEVELS, DYNAMIC_VELOCITY, elapsedMsAt, type Exercise } from '../domain/model/Exercise.js';
 import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
 import { eachKeyOnce, sameKeys, theChordsMerged } from '../domain/harmony/chordsOfTheKey.js';
@@ -142,7 +142,18 @@ export function theSketchOfTheScore(
       beatType: timeSignature.beatType,
     })),
   );
-  return { events: rollAsEvents(roll), beats };
+  // And the parts of the piece it names, where they begin.
+  const lines = barLines(exercise);
+  const events = (exercise.rehearsalMarks ?? []).reduce<readonly MidiFileEvent[]>(
+    (playing, mark) =>
+      takeWithTheSectionAt(
+        playing,
+        elapsedMsAt(exercise, (lines[mark.measureIndex]?.startTicks ?? 0) + mark.offsetTicks) - origin,
+        mark.text,
+      ),
+    rollAsEvents(roll),
+  );
+  return { events, beats };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

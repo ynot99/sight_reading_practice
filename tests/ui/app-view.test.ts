@@ -9971,6 +9971,16 @@ describe('AppView', () => {
       [...chart.querySelectorAll<HTMLElement>('.roll-chart__chord')][2]?.click();
       expect(here()).toEqual(['G7']);
       expect(element('roll-circle').querySelector('.roll-circle__sounding-name')?.textContent).toBe('G7');
+      // Pressed on the curves over the chart, the cursor goes where it was pressed along the piece: a fifth of it, in the C.
+      const curves = chart.querySelector('.roll-chart__curves svg');
+      if (curves === null) {
+        throw new Error('expected the curves');
+      }
+      curves.getBoundingClientRect = () => ({ left: 0, width: 1_000, top: 0, height: 72, right: 1_000, bottom: 72, x: 0, y: 0, toJSON: () => ({}) });
+      clock.advance(1_000);
+      curves.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 200 }));
+      expect(here()).toEqual(['C']);
+      expect(chart.querySelector('.roll-chart__cursor')?.getAttribute('x1')).toBe('200.00');
       // Back to the notes, the cursor put in the third bar and a chord written from the circle there.
       open.click();
       expect([chart.hidden, open.getAttribute('aria-pressed'), open.title]).toEqual([true, 'false', 'The chart of the chords']);

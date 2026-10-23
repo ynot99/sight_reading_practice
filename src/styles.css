@@ -1297,6 +1297,85 @@ textarea {
   background: var(--surface);
 }
 
+/*
+ * The tension and the brightness along the piece, over the chart and kept
+ * in view as it scrolls: the tension in amber, the brightness in the text's
+ * ink about a dashed line of nought - neither a verdict's colour.
+ */
+.roll-chart__curves {
+  position: sticky;
+  top: -8px;
+  z-index: 1;
+  margin: -8px -8px 8px;
+  padding: 8px 8px 4px;
+  background: var(--surface);
+}
+
+.roll-chart__legend {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+}
+
+.roll-chart__legend-tension {
+  color: var(--star-5);
+}
+
+.roll-chart__legend-brightness {
+  color: var(--text);
+}
+
+.roll-chart__curves svg {
+  display: block;
+  width: 100%;
+  height: 72px;
+  cursor: pointer;
+}
+
+/* Each chord's own steps faint, and the trend over a phrase bold over them: the shape of the piece. */
+.roll-chart__tension,
+.roll-chart__brightness,
+.roll-chart__tension-trend,
+.roll-chart__brightness-trend {
+  fill: none;
+}
+
+.roll-chart__tension,
+.roll-chart__brightness {
+  stroke-width: 1;
+  opacity: 0.35;
+}
+
+.roll-chart__tension-trend,
+.roll-chart__brightness-trend {
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+
+.roll-chart__tension,
+.roll-chart__tension-trend {
+  stroke: var(--star-5);
+}
+
+.roll-chart__brightness,
+.roll-chart__brightness-trend {
+  stroke: var(--text);
+}
+
+.roll-chart__nought {
+  stroke: var(--border);
+  stroke-dasharray: 4 4;
+}
+
+.roll-chart__row-line {
+  stroke: var(--border);
+}
+
+.roll-chart__cursor {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
 .roll-chart__grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

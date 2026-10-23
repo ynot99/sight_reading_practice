@@ -312,7 +312,7 @@ import {
   type RollGhost,
   type RollHeads,
 } from './rollView.js';
-import { drawTheChart, showWhereOnTheChart, theChartOfTheChords } from './chordChart.js';
+import { drawTheChart, showWhereOnTheChart, theChartOfTheChords, theCurvesOfTheChords, theMomentOnTheCurves } from './chordChart.js';
 import {
   drawTheCircle,
   drawTheKeysUnderTheCircle,
@@ -10220,10 +10220,19 @@ export class AppView {
       }
     });
     // A chord of the chart puts the cursor where it begins, and the circle and the keys show it.
+    // And a press on the curves over it, where it was pressed.
     this.listen(this.el.rollChart, 'click', (event) => {
-      const chord = (event.target as Element | null)?.closest<HTMLElement>('.roll-chart__chord');
-      if (chord !== null && chord !== undefined) {
-        this.putTheHeadAt(Number(chord.dataset['from']));
+      const target = event.target as Element | null;
+      const chord = target?.closest<HTMLElement>('.roll-chart__chord');
+      const curves = target?.closest('.roll-chart__curves svg');
+      const at =
+        chord !== null && chord !== undefined
+          ? Number(chord.dataset['from'])
+          : curves === null || curves === undefined
+            ? null
+            : theMomentOnTheCurves(curves, (event as MouseEvent).clientX);
+      if (at !== null) {
+        this.putTheHeadAt(at);
       }
     });
     this.listen(this.el.rollChordsList, 'click', (event) => {
@@ -14587,7 +14596,7 @@ export class AppView {
     const shows = JSON.stringify(chart);
     if (shows !== this.chartShows) {
       this.chartShows = shows;
-      drawTheChart(this.el.rollChart, chart);
+      drawTheChart(this.el.rollChart, chart, theCurvesOfTheChords(scene.chords));
     }
     showWhereOnTheChart(this.el.rollChart, this.headIsAtMs());
   }

@@ -1457,6 +1457,18 @@ describe('the stylesheet', () => {
     }
     expect(ruleOf(".roll-chart__chord[data-of-the-key='false']")).toMatch(/border-style\s*:\s*dashed/);
     expect(ruleOf(".roll-chart__chord[data-here='true']")).toMatch(/outline\s*:\s*2px solid var\(--accent\)/);
+    // The curves over it, kept in view as it scrolls, as wide as it, in none of the verdicts' inks either.
+    expect(ruleOf('.roll-chart__curves')).toMatch(/position\s*:\s*sticky/);
+    expect(ruleOf('.roll-chart__curves')).toMatch(/background\s*:\s*var\(--surface\)/);
+    expect(ruleOf('.roll-chart__curves svg')).toMatch(/width\s*:\s*100%/);
+    expect(ruleOf('.roll-chart__tension, .roll-chart__tension-trend')).toMatch(/stroke\s*:\s*var\(--star-5\)/);
+    expect(ruleOf('.roll-chart__brightness, .roll-chart__brightness-trend')).toMatch(/stroke\s*:\s*var\(--text\)/);
+    expect(ruleOf('.roll-chart__tension, .roll-chart__brightness, .roll-chart__tension-trend, .roll-chart__brightness-trend')).toMatch(
+      /fill\s*:\s*none/,
+    );
+    // Each chord's steps faint under the trend.
+    expect(ruleOf('.roll-chart__tension, .roll-chart__brightness')).toMatch(/opacity\s*:\s*0\.35/);
+    expect(ruleOf('.roll-chart__tension-trend, .roll-chart__brightness-trend')).toMatch(/stroke-width\s*:\s*2\.5/);
   });
 
   it('puts the circle of fifths and the chords under it beside the drawing where the screen is wide, and under it side by side where it is tall', () => {

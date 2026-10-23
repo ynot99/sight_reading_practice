@@ -1,3 +1,4 @@
+import { theBrightnessOfTheChord, theTensionOfTheChord } from '../domain/harmony/chordFeeling.js';
 import { theChordInTheKey, theNotesOfTheChordNamed, type HarmonicFunction } from '../domain/harmony/harmonicFunction.js';
 import { theNameOfTheKey } from '../domain/harmony/scales.js';
 import type { SceneBar, SceneChord } from './rollView.js';
@@ -7,7 +8,8 @@ import type { SceneBar, SceneChord } from './rollView.js';
  * with its degree, its notes and what it does in its key - the whole of
  * the music's harmony at once, to plan what comes next by, where the lane
  * under the notes shows only the stretch on the screen. Read off the lane's
- * own chords, so the two never disagree.
+ * own chords, so the two never disagree. Over it, the tension and the
+ * brightness of the chords along the whole piece (see `chordFeeling.ts`).
  */
 
 /** A chord in a bar of the chart. */
@@ -24,6 +26,8 @@ export interface ChartChord {
   readonly keyBegins: string | null;
   /** How much of its bar it takes, as a share of the chords there. */
   readonly share: number;
+  readonly tension: number;
+  readonly brightness: number;
 }
 
 /**
@@ -76,6 +80,8 @@ export function theChartOfTheChords(bars: readonly SceneBar[], chords: readonly 
           ofTheKey: standing.ofTheKey,
           keyBegins,
           share: shareOf(chord),
+          tension: theTensionOfTheChord(chord, chord.key),
+          brightness: theBrightnessOfTheChord(chord, chord.key),
         };
       }),
     };
@@ -89,8 +95,198 @@ const SAID: Readonly<Record<HarmonicFunction, { readonly letter: string; readonl
   dominant: { letter: 'D', called: 'dominant: pulling home' },
 };
 
-/** Draws the chart into its place, a bar a cell, each chord a button that puts the cursor where it begins. */
-export function drawTheChart(host: HTMLElement, chart: readonly ChartBar[]): void {
+/** A chord's tension and brightness for as long as it lasts: a step of the curves over the chart. */
+export interface ChartCurve {
+  readonly fromMs: number;
+  readonly untilMs: number;
+  readonly tension: number;
+  readonly brightness: number;
+}
+
+/** The tension and the brightness of the chords along the whole piece, a step a chord. */
+export function theCurvesOfTheChords(chords: readonly SceneChord[]): readonly ChartCurve[] {
+  return chords.map((chord) => ({
+    fromMs: chord.fromMs,
+    untilMs: chord.untilMs,
+    tension: theTensionOfTheChord(chord, chord.key),
+    brightness: theBrightnessOfTheChord(chord, chord.key),
+  }));
+}
+
+/** The curves are drawn in a box this wide and tall, stretched to the chart's width. */
+const CURVES_WIDE = 1000;
+const CURVES_TALL = 100;
+
+/**
+ * How far the scales of the curves reach at least: so a calm piece is drawn
+ * calm, low on its scale, rather than stretched to the top of it; the
+ * brightness either side of nought, which is the middle.
+ */
+const TENSION_DRAWN_TO = 3.5;
+const BRIGHTNESS_DRAWN_TO = 3;
+
+/**
+ * How wide a stretch the trend of a curve is the mean of, in rows of the
+ * chart: a chord at a time is too restless to read a piece's shape by, and
+ * a row - four bars, a phrase - is the stretch it is planned in.
+ */
+const TREND_OVER_ROWS = 1;
+
+/** How many points the trend is drawn through, across the whole piece. */
+const TREND_POINTS = 200;
+
+/**
+ * The trend of a curve: at each of evenly spaced moments, the mean of it
+ * over the stretch around that moment, each chord weighed by how long it
+ * sounds in the stretch; none where nothing sounds in it.
+ */
+export function theTrend(
+  curves: readonly ChartCurve[],
+  value: (curve: ChartCurve) => number,
+  fromMs: number,
+  untilMs: number,
+  overMs: number,
+): readonly ({ readonly atMs: number; readonly value: number } | null)[] {
+  return Array.from({ length: TREND_POINTS + 1 }, (_, at) => {
+    const atMs = fromMs + ((untilMs - fromMs) * at) / TREND_POINTS;
+    let weight = 0;
+    let sum = 0;
+    for (const curve of curves) {
+      const lasts = Math.min(curve.untilMs, atMs + overMs / 2) - Math.max(curve.fromMs, atMs - overMs / 2);
+      if (lasts > 0) {
+        weight += lasts;
+        sum += lasts * value(curve);
+      }
+    }
+    return weight > 0 ? { atMs, value: sum / weight } : null;
+  });
+}
+
+/** A trend as a line through its points, broken where it has none. */
+function theLine(
+  trend: readonly ({ readonly atMs: number; readonly value: number } | null)[],
+  x: (ms: number) => number,
+  y: (value: number) => number,
+): string {
+  let path = '';
+  let going = false;
+  for (const point of trend) {
+    if (point === null) {
+      going = false;
+      continue;
+    }
+    path += ` ${going ? 'L' : 'M'} ${x(point.atMs).toFixed(2)} ${y(point.value).toFixed(2)}`;
+    going = true;
+  }
+  return path.trim();
+}
+
+/** One curve as steps: level for each chord, joined where one follows another, broken where nothing sounds between. */
+function theSteps(curves: readonly ChartCurve[], x: (ms: number) => number, y: (curve: ChartCurve) => number): string {
+  let path = '';
+  let endedAt: number | null = null;
+  for (const curve of curves) {
+    const height = y(curve).toFixed(2);
+    path += endedAt === curve.fromMs ? ` V ${height}` : ` M ${x(curve.fromMs).toFixed(2)} ${height}`;
+    path += ` H ${x(curve.untilMs).toFixed(2)}`;
+    endedAt = curve.untilMs;
+  }
+  return path.trim();
+}
+
+/**
+ * The tension and the brightness along the whole piece, over the chart: a
+ * line for each, the brightness about a line of nought, a faint line where
+ * each row of the chart begins, and one where the cursor is. Pressed, it
+ * puts the cursor where it was pressed: see `theMomentOnTheCurves`.
+ */
+function drawTheCurves(doc: Document, curves: readonly ChartCurve[], chart: readonly ChartBar[]): HTMLElement {
+  // A row of the chart in time: the piece's bars on the whole, as many as a row holds.
+  const overMs = (theLengthOfTheCurves(curves) / Math.max(chart.length, 1)) * 4 * TREND_OVER_ROWS;
+  const SVG = 'http://www.w3.org/2000/svg';
+  const box = doc.createElement('div');
+  box.className = 'roll-chart__curves';
+  const legend = doc.createElement('div');
+  legend.className = 'roll-chart__legend';
+  const tensionSaid = doc.createElement('span');
+  tensionSaid.className = 'roll-chart__legend-tension';
+  tensionSaid.textContent = 'Tension';
+  const brightnessSaid = doc.createElement('span');
+  brightnessSaid.className = 'roll-chart__legend-brightness';
+  brightnessSaid.textContent = 'Brightness';
+  legend.append(tensionSaid, brightnessSaid);
+  const fromMs = Math.min(...curves.map((curve) => curve.fromMs));
+  const untilMs = Math.max(...curves.map((curve) => curve.untilMs));
+  const x = (ms: number): number => ((ms - fromMs) / Math.max(untilMs - fromMs, 1)) * CURVES_WIDE;
+  const tallest = Math.max(TENSION_DRAWN_TO, ...curves.map((curve) => curve.tension));
+  const furthest = Math.max(BRIGHTNESS_DRAWN_TO, ...curves.map((curve) => Math.abs(curve.brightness)));
+  const drawing = doc.createElementNS(SVG, 'svg');
+  drawing.setAttribute('viewBox', `0 0 ${String(CURVES_WIDE)} ${String(CURVES_TALL)}`);
+  drawing.setAttribute('preserveAspectRatio', 'none');
+  drawing.setAttribute('role', 'img');
+  drawing.setAttribute('aria-label', 'The tension and the brightness of the chords along the piece. Press to put the cursor there.');
+  drawing.dataset['from'] = String(fromMs);
+  drawing.dataset['until'] = String(untilMs);
+  const line = (className: string, x1: number, y1: number, x2: number, y2: number): SVGLineElement => {
+    const drawn = doc.createElementNS(SVG, 'line');
+    drawn.setAttribute('class', className);
+    drawn.setAttribute('x1', x1.toFixed(2));
+    drawn.setAttribute('y1', String(y1));
+    drawn.setAttribute('x2', x2.toFixed(2));
+    drawn.setAttribute('y2', String(y2));
+    drawn.setAttribute('vector-effect', 'non-scaling-stroke');
+    return drawn;
+  };
+  const rows = chart
+    .filter((_, at) => at > 0 && at % 4 === 0)
+    .map((bar) => line('roll-chart__row-line', x(bar.fromMs), 0, x(bar.fromMs), CURVES_TALL));
+  const nought = line('roll-chart__nought', 0, CURVES_TALL / 2, CURVES_WIDE, CURVES_TALL / 2);
+  const path = (className: string, d: string): SVGPathElement => {
+    const drawn = doc.createElementNS(SVG, 'path');
+    drawn.setAttribute('class', className);
+    drawn.setAttribute('d', d);
+    drawn.setAttribute('vector-effect', 'non-scaling-stroke');
+    return drawn;
+  };
+  const tensionY = (tension: number): number => CURVES_TALL - 4 - (tension / tallest) * (CURVES_TALL - 8);
+  const brightnessY = (brightness: number): number => CURVES_TALL / 2 - (brightness / furthest) * (CURVES_TALL / 2 - 4);
+  // Each chord's own, faint, and the trend of each over a phrase over it.
+  const tension = path('roll-chart__tension', theSteps(curves, x, (curve) => tensionY(curve.tension)));
+  const brightness = path('roll-chart__brightness', theSteps(curves, x, (curve) => brightnessY(curve.brightness)));
+  const tensionTrend = path(
+    'roll-chart__tension-trend',
+    theLine(theTrend(curves, (curve) => curve.tension, fromMs, untilMs, overMs), x, tensionY),
+  );
+  const brightnessTrend = path(
+    'roll-chart__brightness-trend',
+    theLine(theTrend(curves, (curve) => curve.brightness, fromMs, untilMs, overMs), x, brightnessY),
+  );
+  // Off the drawing until the cursor is placed: see `showWhereOnTheChart`.
+  const cursor = line('roll-chart__cursor', -1, 0, -1, CURVES_TALL);
+  drawing.append(...rows, nought, brightness, tension, brightnessTrend, tensionTrend, cursor);
+  box.append(legend, drawing);
+  return box;
+}
+
+/** How long the curves run, from the first chord to the end of the last. */
+function theLengthOfTheCurves(curves: readonly ChartCurve[]): number {
+  return Math.max(...curves.map((curve) => curve.untilMs)) - Math.min(...curves.map((curve) => curve.fromMs));
+}
+
+/** The moment of the piece a press on the curves is over, from where it is across them; none where they have no width. */
+export function theMomentOnTheCurves(drawing: Element, clientX: number): number | null {
+  const box = drawing.getBoundingClientRect();
+  if (!(drawing instanceof SVGSVGElement) || box.width <= 0) {
+    return null;
+  }
+  const fromMs = Number(drawing.dataset['from']);
+  const untilMs = Number(drawing.dataset['until']);
+  const across = Math.min(Math.max((clientX - box.left) / box.width, 0), 1);
+  return fromMs + across * (untilMs - fromMs);
+}
+
+/** Draws the chart into its place - the curves over it, a bar a cell - each chord a button that puts the cursor where it begins. */
+export function drawTheChart(host: HTMLElement, chart: readonly ChartBar[], curves: readonly ChartCurve[]): void {
   const doc = host.ownerDocument;
   if (chart.every((bar) => bar.chords.length === 0)) {
     const none = doc.createElement('p');
@@ -123,7 +319,7 @@ export function drawTheChart(host: HTMLElement, chart: readonly ChartBar[]): voi
     cell.append(number, chords);
     grid.append(cell);
   }
-  host.replaceChildren(grid);
+  host.replaceChildren(drawTheCurves(doc, curves, chart), grid);
 }
 
 /** A chord of the chart, as a button: its key where one begins, its name and degree, its notes, and what it does. */
@@ -161,12 +357,24 @@ function theChordOfTheChart(doc: Document, chord: ChartChord): HTMLButtonElement
     chord.function === null ? null : SAID[chord.function].called,
     chord.ofTheKey ? null : 'outside the key',
   ].filter((each) => each !== null);
-  button.title = `${chord.name} (${chord.numeral}, ${chord.notes})${standing.length === 0 ? '' : `: ${standing.join(', ')}`}. Press to put the cursor here.`;
+  button.title =
+    `${chord.name} (${chord.numeral}, ${chord.notes})${standing.length === 0 ? '' : `: ${standing.join(', ')}`}. ` +
+    `Tension ${chord.tension.toFixed(1)}, brightness ${chord.brightness.toFixed(1)}. Press to put the cursor here.`;
   return button;
 }
 
-/** Marks the chord of the chart the cursor is in, and no other. */
+/** Marks the chord of the chart the cursor is in, and no other, and the cursor's place along the curves. */
 export function showWhereOnTheChart(host: HTMLElement, atMs: number): void {
+  const drawing = host.querySelector<SVGSVGElement>('.roll-chart__curves svg');
+  const cursor = drawing?.querySelector('.roll-chart__cursor');
+  if (drawing !== null && drawing !== undefined && cursor !== null && cursor !== undefined) {
+    const fromMs = Number(drawing.dataset['from']);
+    const untilMs = Number(drawing.dataset['until']);
+    const across = ((atMs - fromMs) / Math.max(untilMs - fromMs, 1)) * CURVES_WIDE;
+    const at = (across < 0 || across > CURVES_WIDE ? -1 : across).toFixed(2);
+    cursor.setAttribute('x1', at);
+    cursor.setAttribute('x2', at);
+  }
   for (const chord of host.querySelectorAll<HTMLElement>('.roll-chart__chord')) {
     const here = Number(chord.dataset['from']) <= atMs && atMs < Number(chord.dataset['until']);
     if (here) {

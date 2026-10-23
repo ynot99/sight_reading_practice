@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { CHORD_KINDS, type ChordKind } from '../../src/domain/harmony/chordName.js';
+import { CHORD_KINDS, theNotesOfTheChordNamed, type ChordKind } from '../../src/domain/harmony/chordName.js';
 import { theChordsOfTheScale } from '../../src/domain/harmony/chordsOfTheKey.js';
-import { theChordInTheKey, theNotesOfTheChordNamed } from '../../src/domain/harmony/harmonicFunction.js';
+import { theChordInTheKey } from '../../src/domain/harmony/harmonicFunction.js';
 import { SCALE_NAMES, thePitchClassesOfTheScale } from '../../src/domain/harmony/scales.js';
 
 /** A kind of chord by its name after the root. */

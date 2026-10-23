@@ -41,6 +41,47 @@ export interface ChordAlong {
   readonly key: { readonly fifths: number; readonly scale: ScaleName };
 }
 
+/** The sustain pedal down from a moment until another, or on to the end where nobody let it up. */
+export interface PedalDown {
+  readonly downAtMs: number;
+  readonly upAtMs: number | null;
+}
+
+/**
+ * The notes as they sound with the pedal: one let go of while the pedal is
+ * down rings on until the pedal comes up or its key is struck again, as a
+ * string rings with its damper held off - but no further than the end of
+ * the bar it began in. The chords are read a bar at a time, and a score
+ * often marks the pedal once for a whole piece, to be changed with the
+ * harmony as the pianist hears it: a note carried on into the next bar by a
+ * pedal nobody changed would be heard in a chord it is no part of. Without
+ * it, a broken chord in the bass - its third a quaver at the start of the
+ * bar - is heard without its third.
+ */
+export function theNotesThePedalHolds(
+  notes: readonly NoteSounding[],
+  pedal: readonly PedalDown[],
+  bars: readonly BarOfBeats[],
+): readonly NoteSounding[] {
+  if (pedal.length === 0) {
+    return notes;
+  }
+  const strikesOfEachKey = new Map<number, number[]>();
+  for (const note of notes) {
+    strikesOfEachKey.set(note.midi, [...(strikesOfEachKey.get(note.midi) ?? []), note.fromMs]);
+  }
+  return notes.map((note) => {
+    const held = pedal.find((down) => down.downAtMs <= note.untilMs && (down.upAtMs ?? Number.POSITIVE_INFINITY) > note.untilMs);
+    const bar = bars.find((each) => (each.beatsMs[0] ?? each.untilMs) <= note.fromMs && note.fromMs < each.untilMs);
+    if (held === undefined || bar === undefined) {
+      return note;
+    }
+    const struckAgain = Math.min(...(strikesOfEachKey.get(note.midi) ?? []).filter((atMs) => atMs > note.fromMs));
+    const untilMs = Math.min(held.upAtMs ?? Number.POSITIVE_INFINITY, struckAgain, bar.untilMs);
+    return untilMs > note.untilMs ? { ...note, untilMs } : note;
+  });
+}
+
 /**
  * The notes sounding in each bar, a list for each: a note held across a
  * bar line is in both. The bars are in time order, as a piece's are.

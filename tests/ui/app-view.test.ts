@@ -61,7 +61,7 @@ import {
 import { beginThePlaybackTimings } from '../../src/shared/playbackTimings.js';
 import { theLatestPlayback } from '../support/playbackTimings.js';
 import { Duration } from '../../src/domain/model/Duration.js';
-import { DYNAMIC_VELOCITY } from '../../src/domain/model/Exercise.js';
+import { DYNAMIC_VELOCITY, noteEntry } from '../../src/domain/model/Exercise.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { theKeyChangesOf, type MidiFileEvent } from '../../src/domain/midi/MidiFile.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
@@ -148,6 +148,7 @@ import {
 } from '../../src/ui/AppView.js';
 import {
   MIDI,
+  bar,
   beamedSixteenths,
   chordsExercise,
   compoundBarExercise,
@@ -10039,6 +10040,34 @@ describe('AppView', () => {
         'A minor',
         'G major',
       ]);
+    });
+
+    it('reads the chords of a score as its pedal holds them, a broken chord in the bass heard with its third', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      // In A minor, the pedal down from the first bar: a quaver of G♯ and of B under E, B held above.
+      await runtime.controller.openScore({
+        ...twoBarExercise({ title: 'Pedalled', key: KeySignature.minor(0) }),
+        pedalMarks: [{ measureIndex: 0, offsetTicks: 0, type: 'start' as const, line: true }],
+        staves: [
+          { staffNumber: 1, voice: 1, clef: 'treble' as const, clefChanges: [], measures: [bar(noteEntry(p('B4'), Duration.WHOLE))] },
+          {
+            staffNumber: 2,
+            voice: 2,
+            clef: 'bass' as const,
+            clefChanges: [],
+            measures: [bar(noteEntry(p('G#3'), Duration.EIGHTH), noteEntry(p('B3'), Duration.EIGHTH), noteEntry(p('E4'), Duration.DOTTED_HALF))],
+          },
+        ],
+      });
+      element<HTMLButtonElement>('focus-roll').click();
+      element<HTMLButtonElement>('roll-chords-open').click();
+      element<HTMLButtonElement>('roll-chart-open').click();
+      expect(
+        [...element('roll-chart').querySelectorAll('.roll-chart__chord')].map(
+          (chord) => `${chord.querySelector('.roll-chart__name')?.textContent ?? ''} ${chord.querySelector('.roll-chart__numeral')?.textContent ?? ''}`,
+        ),
+      ).toEqual(['E/G♯ V']);
     });
 
     it('offers no chords beside a recording, whose keys nothing says, though a score is open, nor beside a sketch no longer kept', async () => {

@@ -1,5 +1,5 @@
 import { theKeysAlongTheBars } from '../domain/harmony/keysAlong.js';
-import type { KeyFrom } from '../domain/harmony/chordsAlong.js';
+import { theNotesThePedalHolds, type KeyFrom } from '../domain/harmony/chordsAlong.js';
 import type { ScaleName } from '../domain/harmony/scales.js';
 import { barLines, elapsedMsAt, type Exercise } from '../domain/model/Exercise.js';
 import type { KeySignature } from '../domain/model/KeySignature.js';
@@ -48,7 +48,12 @@ export function theKeysOfTheScore(exercise: Exercise, timeline: ExerciseTimeline
       scale: scaleOf(change.key),
     })),
   ];
-  const notes = roll.presses.map((press) => ({ midi: press.midi, fromMs: press.downAtMs, untilMs: press.upAtMs ?? press.downAtMs }));
+  // As they ring, the pedal holding them, as its chords are read.
+  const notes = theNotesThePedalHolds(
+    roll.presses.map((press) => ({ midi: press.midi, fromMs: press.downAtMs, untilMs: press.upAtMs ?? press.downAtMs })),
+    roll.pedal,
+    bars,
+  );
   const keys: KeyOfTheScore[] = [];
   theKeysAlongTheBars(notes, bars, written).forEach((key, measureIndex) => {
     const before = keys.at(-1);

@@ -15,7 +15,7 @@ import {
   type RunRoll,
 } from '../application/session/RunRoll.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
-import { theChordsAlongTheBars, type BarOfBeats, type KeyFrom } from '../domain/harmony/chordsAlong.js';
+import { theChordsAlongTheBars, theNotesThePedalHolds, type BarOfBeats, type KeyFrom } from '../domain/harmony/chordsAlong.js';
 import type { ScaleName } from '../domain/harmony/scales.js';
 import { HIGHEST_KEY, LOWEST_KEY } from './replayKeys.js';
 import { theHandThatPlays } from '../domain/midi/MidiFile.js';
@@ -1128,12 +1128,18 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
     }
   }
 
+  const barsOfTheRoll = drawing.chordsIn === undefined ? [] : theBarsOfTheRoll(roll);
   const chords =
     drawing.chordsIn === undefined
       ? []
       : theChordsAlongTheBars(
-          roll.presses.map((press) => ({ midi: press.midi, fromMs: press.downAtMs, untilMs: press.upAtMs ?? endMs })),
-          theBarsOfTheRoll(roll),
+          // As they ring, the pedal holding them.
+          theNotesThePedalHolds(
+            roll.presses.map((press) => ({ midi: press.midi, fromMs: press.downAtMs, untilMs: press.upAtMs ?? endMs })),
+            roll.pedal,
+            barsOfTheRoll,
+          ),
+          barsOfTheRoll,
           drawing.chordsIn,
         ).map((chord) => ({
           fromMs: chord.fromMs - origin,

@@ -5,6 +5,7 @@ import {
   nameTheChord,
   theChordTheKeysMake,
   theChordTheNotesMake,
+  theNotesOfTheChordNamed,
   theNumeralOfTheChord,
   type ChordHeard,
 } from '../../src/domain/harmony/chordName.js';
@@ -15,6 +16,13 @@ import { SCALE_NAMES, thePitchClassesOfTheScale } from '../../src/domain/harmony
 const C4 = 60;
 
 /** The notes of a kind on a root, the lowest of them the `inversion`th, raised an octave to stand on top. */
+/** The pitch class a name begins with: its letter and the sharps or flats after it, before any kind. */
+function thePitchClassNamed(name: string): number {
+  const note = /^[A-G][♯♭]*/.exec(name)?.[0] ?? '';
+  const letter = [0, 2, 4, 5, 7, 9, 11]['CDEFGAB'.indexOf(note.charAt(0))] ?? 0;
+  return (((letter + [...note].filter((sign) => sign === '♯').length - [...note].filter((sign) => sign === '♭').length) % 12) + 12) % 12;
+}
+
 function voiced(root: number, intervals: readonly number[], inversion = 0): number[] {
   const notes = intervals.map((step) => C4 + root + step);
   return notes.map((midi, at) => (at < inversion ? midi + 12 : midi));
@@ -41,7 +49,8 @@ describe('naming the chord held', () => {
         for (let inversion = 1; inversion < kind.intervals.length; inversion += 1) {
           const notes = voiced(root, kind.intervals, inversion);
           const said = nameTheChord(notes);
-          const bass = nameOfThePitchClass((root + (kind.intervals[inversion] ?? 0)) % 12, null);
+          // Its bass named as its notes are, a letter a step from the root.
+          const bass = theNotesOfTheChordNamed({ root, kind }, 0)[inversion] ?? '';
           const slash = `${nameOfThePitchClass(root, null)}${kind.suffix}/${bass}`;
           const label = `${slash} as ${notes.join(' ')}`;
           if (said === slash) {
@@ -49,8 +58,10 @@ describe('naming the chord held', () => {
           }
           // Otherwise it stood on its bass as some other kind, or was a
           // plainer kind over the same bass - never named over another.
-          const onTheBass = said?.startsWith(bass) === true && said.includes('/') === false;
-          expect(onTheBass || said?.endsWith(`/${bass}`) === true, `${label}: ${String(said)}`).toBe(true);
+          const bassPitch = (root + (kind.intervals[inversion] ?? 0)) % 12;
+          const [named, under] = (said ?? '').split('/');
+          const onTheBass = under === undefined && thePitchClassNamed(named ?? '') === bassPitch;
+          expect(onTheBass || (under !== undefined && thePitchClassNamed(under) === bassPitch), `${label}: ${String(said)}`).toBe(true);
           expect(said, label).not.toBeNull();
         }
       }
@@ -108,9 +119,13 @@ describe('naming the chord held', () => {
     expect(nameTheChord(fSharpMajor, 0)).toBe('F♯');
     expect(nameTheChord([63, 67, 70])).toBe('E♭');
     expect(nameTheChord([63, 67, 70], 4)).toBe('D♯');
-    // The bass is spelled the same way.
+    // The bass is a tone of the chord, and spelled as its notes are, whatever the key: C7's seventh is B♭, E's third G♯.
     expect(nameTheChord([58, 60, 64, 67], 0)).toBe('C7/B♭');
-    expect(nameTheChord([58, 60, 64, 67], 3)).toBe('C7/A♯');
+    expect(nameTheChord([58, 60, 64, 67], 3)).toBe('C7/B♭');
+    expect(nameTheChord([56, 64, 71], 0)).toBe('E/G♯');
+    expect(nameTheChord([56, 64, 71], -3)).toBe('E/G♯');
+    expect(nameTheChord([63, 68, 72], 0)).toBe('A♭/E♭');
+    expect(nameTheChord([55, 63, 70])).toBe('E♭/G');
     // White keys keep their letters.
     for (let fifths = -7; fifths <= 7; fifths += 1) {
       expect(nameOfThePitchClass(4, fifths)).toBe('E');

@@ -1,3 +1,6 @@
+import { floorMod } from '../../shared/asserts.js';
+import { STEPS, alterationSign, type Alteration } from '../model/Pitch.js';
+
 /**
  * What a chord is called, read off the keys held down.
  *
@@ -90,7 +93,7 @@ export function theChordTheKeysMake(midis: readonly number[], fifths: number | n
   }
   const name = `${nameOfThePitchClass(read.root, fifths)}${read.kind.suffix}`;
   return {
-    name: read.root === read.bass ? name : `${name}/${nameOfThePitchClass(read.bass, fifths)}`,
+    name: read.root === read.bass ? name : `${name}/${theNameOfTheBass({ root: read.root, kind: read.kind }, read.bass, fifths)}`,
     exactly: true,
     root: read.root,
     kind: read.kind,
@@ -220,7 +223,7 @@ export function theChordMostOfTheNotesMake(
   const name = `${nameOfThePitchClass(found.root, fifths)}${kind.suffix}`;
   const overTheBass = bass !== found.root && found.tones.includes(bass);
   return {
-    name: overTheBass ? `${name}/${nameOfThePitchClass(bass, fifths)}` : name,
+    name: overTheBass ? `${name}/${theNameOfTheBass({ root: found.root, kind }, bass, fifths)}` : name,
     exactly: found.tones.length === weight.size,
     root: found.root,
     kind,
@@ -247,6 +250,56 @@ export function theNumeralOfTheChord(
   const [sign, at] = on >= 0 ? ['', on] : above >= 0 ? ['♭', above] : ['♯', degree(chord.root - 1)];
   const numeral = NUMERALS[at] ?? '';
   return `${sign}${chord.kind.minor ? numeral.toLowerCase() : numeral}${chord.kind.afterTheNumeral}`;
+}
+
+/**
+ * The name of a chord's bass, said after the slash: always a tone of the
+ * chord, and named as its notes are, a letter a step from the root - E's
+ * third is G♯ under it in any key, not the A♭ a key without sharps would
+ * call the same key.
+ */
+function theNameOfTheBass(
+  chord: { readonly root: number; readonly kind: ChordKind },
+  bass: number,
+  fifths: number | null,
+): string {
+  const step = chord.kind.intervals.indexOf(floorMod(bass - chord.root, 12));
+  return theNotesOfTheChordNamed(chord, fifths ?? 0)[step] ?? nameOfThePitchClass(bass, fifths);
+}
+
+/** The pitch class of each letter unaltered. */
+const NATURAL: readonly number[] = [0, 2, 4, 5, 7, 9, 11];
+
+/**
+ * How many letters above its root a note of a kind of chord is written: a
+ * third two, whatever its size, a fifth four, a seventh six - the
+ * diminished seventh's too, though it sounds as a sixth does.
+ */
+function theLettersAbove(semitones: number, kind: ChordKind): number {
+  if (semitones === 9) {
+    return kind.intervals.includes(6) && !kind.intervals.includes(10) ? 6 : 5;
+  }
+  return [0, 1, 1, 2, 2, 3, 4, 4, 4, 5, 6, 6][floorMod(semitones, 12)] ?? 0;
+}
+
+/**
+ * The names of a chord's notes from its root up: the root as a key with so
+ * many sharps or flats spells it, and the rest stacked on it a letter for
+ * each step - so E major in A minor is E G♯ B, not E A♭ B. A root has one
+ * sharp or flat at most and no kind's step is more than one from the
+ * letters', so none needs more than two.
+ */
+export function theNotesOfTheChordNamed(
+  chord: { readonly root: number; readonly kind: ChordKind },
+  fifths: number,
+): readonly string[] {
+  const rootName = nameOfThePitchClass(chord.root, fifths);
+  const rootLetter = STEPS.findIndex((step) => rootName.startsWith(step));
+  return chord.kind.intervals.map((semitones) => {
+    const letter = floorMod(rootLetter + theLettersAbove(semitones, chord.kind), STEPS.length);
+    const off = floorMod(chord.root + semitones - (NATURAL[letter] ?? 0), 12);
+    return `${STEPS[letter] ?? ''}${alterationSign((off > 6 ? off - 12 : off) as Alteration)}`;
+  });
 }
 
 function sameNumbers(left: readonly number[], right: readonly number[]): boolean {

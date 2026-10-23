@@ -1,6 +1,7 @@
 import { STEPS } from '../model/Pitch.js';
 import type { ChordKind } from './chordName.js';
-import { theChordInTheKey, theNotesOfTheChordNamed, type HarmonicFunction } from './harmonicFunction.js';
+import { theNotesOfTheChordNamed } from './chordName.js';
+import { theChordInTheKey, type HarmonicFunction } from './harmonicFunction.js';
 import { theTonicOfTheScale, type ScaleName } from './scales.js';
 
 /**

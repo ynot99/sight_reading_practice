@@ -1,5 +1,6 @@
 import { theBrightnessOfTheChord, theTensionOfTheChord } from '../domain/harmony/chordFeeling.js';
-import { theChordInTheKey, theNotesOfTheChordNamed, type HarmonicFunction } from '../domain/harmony/harmonicFunction.js';
+import { theNotesOfTheChordNamed } from '../domain/harmony/chordName.js';
+import { theChordInTheKey, type HarmonicFunction } from '../domain/harmony/harmonicFunction.js';
 import { theNameOfTheKey } from '../domain/harmony/scales.js';
 import type { SceneBar, SceneChord } from './rollView.js';
 

@@ -1,6 +1,5 @@
 import { floorMod } from '../../shared/asserts.js';
-import { STEPS, alterationSign, type Alteration } from '../model/Pitch.js';
-import { nameOfThePitchClass, type ChordKind } from './chordName.js';
+import type { ChordKind } from './chordName.js';
 import { thePitchClassesOfTheScale, type ScaleName } from './scales.js';
 
 /**
@@ -52,39 +51,4 @@ export function theChordInTheKey(
       return scale.includes(tone) || raised.includes(tone);
     }),
   };
-}
-
-/** The pitch class of each letter unaltered. */
-const NATURAL: readonly number[] = [0, 2, 4, 5, 7, 9, 11];
-
-/**
- * How many letters above its root a note of a kind of chord is written: a
- * third two, whatever its size, a fifth four, a seventh six - the
- * diminished seventh's too, though it sounds as a sixth does.
- */
-function theLettersAbove(semitones: number, kind: ChordKind): number {
-  if (semitones === 9) {
-    return kind.intervals.includes(6) && !kind.intervals.includes(10) ? 6 : 5;
-  }
-  return [0, 1, 1, 2, 2, 3, 4, 4, 4, 5, 6, 6][floorMod(semitones, 12)] ?? 0;
-}
-
-/**
- * The names of a chord's notes from its root up: the root as a key with so
- * many sharps or flats spells it, and the rest stacked on it a letter for
- * each step - so E major in A minor is E G♯ B, not E A♭ B. A root has one
- * sharp or flat at most and no kind's step is more than one from the
- * letters', so none needs more than two.
- */
-export function theNotesOfTheChordNamed(
-  chord: { readonly root: number; readonly kind: ChordKind },
-  fifths: number,
-): readonly string[] {
-  const rootName = nameOfThePitchClass(chord.root, fifths);
-  const rootLetter = STEPS.findIndex((step) => rootName.startsWith(step));
-  return chord.kind.intervals.map((semitones) => {
-    const letter = floorMod(rootLetter + theLettersAbove(semitones, chord.kind), STEPS.length);
-    const off = floorMod(chord.root + semitones - (NATURAL[letter] ?? 0), 12);
-    return `${STEPS[letter] ?? ''}${alterationSign((off > 6 ? off - 12 : off) as Alteration)}`;
-  });
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { theChordsAlongTheBars, theNotesOfEachBar, type BarOfBeats, type NoteSounding } from '../../src/domain/harmony/chordsAlong.js';
+import { theChordsAlongTheBars, theNotesOfEachBar, theNotesThePedalHolds, type BarOfBeats, type NoteSounding } from '../../src/domain/harmony/chordsAlong.js';
 
 const C4 = 60;
 const BEAT_MS = 500;
@@ -163,5 +163,49 @@ describe('the notes of each bar', () => {
       { midi: 65, fromMs: 3_000, untilMs: 3_500 },
     ];
     expect(theNotesOfEachBar(notes, bars).map((bar) => bar.map((note) => note.midi))).toEqual([[60, 62], [62], [62, 64]]);
+  });
+});
+
+describe('the notes as the pedal holds them', () => {
+  const bars: BarOfBeats[] = [0, 3_000].map((fromMs) => ({ beatsMs: [fromMs, fromMs + 1_000, fromMs + 2_000], untilMs: fromMs + 3_000 }));
+  const until = (notes: readonly NoteSounding[]): number[] => notes.map((note) => note.untilMs);
+
+  it('rings a note let go of with the pedal down until the pedal comes up, its key is struck again, or its bar ends', () => {
+    const notes: NoteSounding[] = [
+      // Let go of before the pedal goes down: as it was.
+      { midi: 48, fromMs: 0, untilMs: 400 },
+      // Under the pedal, which comes up at 2 s.
+      { midi: 52, fromMs: 600, untilMs: 900 },
+      // Struck again at 1.5 s, before the pedal comes up.
+      { midi: 55, fromMs: 600, untilMs: 900 },
+      { midi: 55, fromMs: 1_500, untilMs: 1_800 },
+      // Held past the pedal coming up: as it was.
+      { midi: 60, fromMs: 600, untilMs: 2_500 },
+      // Held over the bar line into a pedal held on to the end: as it was, not cut back to its bar.
+      { midi: 67, fromMs: 2_500, untilMs: 3_500 },
+      // Under that pedal: to the end of its bar, and no further.
+      { midi: 64, fromMs: 3_200, untilMs: 3_400 },
+    ];
+    const pedal = [
+      { downAtMs: 500, upAtMs: 2_000 },
+      { downAtMs: 3_100, upAtMs: null },
+    ];
+    expect(until(theNotesThePedalHolds(notes, pedal, bars))).toEqual([400, 2_000, 1_500, 2_000, 2_500, 3_500, 6_000]);
+    // With no pedal, the notes themselves.
+    expect(theNotesThePedalHolds(notes, [], bars)).toBe(notes);
+  });
+
+  it('hears a broken chord in the bass with the pedal down as its chord, its third and all', () => {
+    // A quaver of G♯ and of B, under E and B held.
+    const broken: NoteSounding[] = [
+      { midi: 56, fromMs: 0, untilMs: 500 },
+      { midi: 59, fromMs: 500, untilMs: 1_000 },
+      { midi: 64, fromMs: 1_000, untilMs: 3_000 },
+      { midi: 71, fromMs: 0, untilMs: 3_000 },
+    ];
+    const inAMinor = [{ fromMs: Number.NEGATIVE_INFINITY, fifths: 0, scale: 'minor' as const }];
+    const heard = (notes: readonly NoteSounding[]): string[] => theChordsAlongTheBars(notes, bars.slice(0, 1), inAMinor).map((chord) => `${chord.name} ${chord.numeral}`);
+    expect(heard(broken)).toEqual(['E5 V5']);
+    expect(heard(theNotesThePedalHolds(broken, [{ downAtMs: 0, upAtMs: null }], bars))).toEqual(['E/G♯ V']);
   });
 });

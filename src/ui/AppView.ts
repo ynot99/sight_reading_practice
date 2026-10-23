@@ -565,6 +565,9 @@ const BAR_LINES_ONLY: GridChoice = { beats: false, parts: 1 };
 /** How often, at most, coming back to the page syncs it: see `syncOnComingBack`. */
 const SYNCED_ON_COMING_BACK_AT_MOST_EVERY_MS = 60_000;
 
+/** How long the Sync button says how a sync ended: a glance, the ring going out from it once. */
+const SYNC_ENDING_SHOWN_MS = 1_000;
+
 /** How near either end of a note the mouse or a finger takes hold of that end, in pixels. */
 const GRIP_PX = 10;
 
@@ -1998,6 +2001,11 @@ export class AppView {
    * the page is open. A new change, or a press, tries again.
    */
   private syncFailed: { readonly change: number; readonly why: string } | null = null;
+  /**
+   * How the sync the button stood for has just ended, shown on it for a
+   * moment, and the timer that takes it off; `null` the rest of the time.
+   */
+  private syncEnded: { readonly how: 'synced' | 'failed'; readonly timer: ReturnType<typeof setTimeout> } | null = null;
   private survivalTick: ReturnType<typeof setInterval> | null = null;
   /** When the stretch being counted began, or `null` while the page is away. */
   private timeCountedAtMs: number | null = null;
@@ -3483,6 +3491,10 @@ export class AppView {
     if (this.syncTimer !== null) {
       clearTimeout(this.syncTimer);
       this.syncTimer = null;
+    }
+    if (this.syncEnded !== null) {
+      clearTimeout(this.syncEnded.timer);
+      this.syncEnded = null;
     }
     if (this.survivalTick !== null) {
       clearInterval(this.survivalTick);
@@ -8442,6 +8454,10 @@ export class AppView {
   }
 
   private async syncWithTheDrive(): Promise<void> {
+    // Only a sync the button stood for says on it how it ended: one with
+    // nothing to send, as the page is come back to, has no button to say it on.
+    const stood = !this.el.scoreSync.hidden;
+    let ended: 'synced' | 'failed' = 'synced';
     this.syncing = true;
     const change = this.runtime.driveSync.latestChangeAtMs;
     this.el.driveSync.disabled = true;
@@ -8482,14 +8498,34 @@ export class AppView {
       const why = error instanceof Error ? error.message : 'Google Drive could not be reached.';
       this.el.driveStatus.textContent = why;
       this.syncFailed = { change, why };
+      ended = 'failed';
     } finally {
       this.syncing = false;
       this.sketchTakenUnderTheEditor = null;
       this.showHowFarTheSyncHasGot(null);
       this.el.driveSync.disabled = false;
       this.el.scoreSync.disabled = false;
+      if (stood) {
+        this.showHowTheSyncEnded(ended);
+      }
       this.offerToSync();
     }
+  }
+
+  /**
+   * Says on the Sync button for a moment how the sync ended: synced, and
+   * only then gone, since a button that vanishes leaves nothing to say
+   * whether it went; or failed, and then waiting on a press as before.
+   */
+  private showHowTheSyncEnded(how: 'synced' | 'failed'): void {
+    if (this.syncEnded !== null) {
+      clearTimeout(this.syncEnded.timer);
+    }
+    const timer = setTimeout(() => {
+      this.syncEnded = null;
+      this.standTheSyncButton();
+    }, SYNC_ENDING_SHOWN_MS);
+    this.syncEnded = { how, timer };
   }
 
   /**
@@ -8581,7 +8617,7 @@ export class AppView {
     this.el.scoreSync.hidden =
       !this.runtime.controller.settings.offerToSync ||
       !idle ||
-      !this.runtime.driveSync.hasSomethingToSync;
+      (!this.runtime.driveSync.hasSomethingToSync && this.syncEnded?.how !== 'synced');
     this.sayWhatTheSyncButtonDoes();
   }
 
@@ -8602,20 +8638,27 @@ export class AppView {
     const failed = this.failedOnThisChange();
     const [state, text, title] = this.syncing
       ? ['syncing', 'Syncing…', 'Syncing with Google Drive']
-      : failed !== null
-        ? ['by-hand', 'Sync failed', failed]
-        : !this.runtime.cloudDrive.signedIn
-          ? [
-              'by-hand',
-              'Tap to sync',
-              'Google asks for a press to let the trainer in, so this waits for one before it can sync on its own again.',
-            ]
-          : [
-              'on-its-own',
-              'Sync',
-              'Syncs on its own half a minute after the last change, or now if pressed.',
-            ];
+      : this.syncEnded?.how === 'synced'
+        ? ['synced', 'Synced', 'Synced with Google Drive']
+        : failed !== null
+          ? ['by-hand', 'Sync failed', failed]
+          : !this.runtime.cloudDrive.signedIn
+            ? [
+                'by-hand',
+                'Tap to sync',
+                'Google asks for a press to let the trainer in, so this waits for one before it can sync on its own again.',
+              ]
+            : [
+                'on-its-own',
+                'Sync',
+                'Syncs on its own half a minute after the last change, or now if pressed.',
+              ];
     button.dataset['sync'] = state;
+    if (this.syncEnded === null) {
+      delete button.dataset['syncEnded'];
+    } else {
+      button.dataset['syncEnded'] = this.syncEnded.how;
+    }
     this.el.scoreSyncText.textContent = text;
     button.title = title;
   }

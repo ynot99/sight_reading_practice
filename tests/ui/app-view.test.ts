@@ -22302,6 +22302,55 @@ describe('the Sync button pressing itself', () => {
     expect(tries).toBe(2);
   });
 
+  it('says on the button for a moment how a sync it stood for ended: synced and then gone, or failed and then waiting', async () => {
+    const rig = await signedInWithAScoreToSend();
+    const button = element<HTMLButtonElement>('score-sync');
+    const shows = (): [boolean, string | undefined, string | undefined, string | null] => [
+      button.hidden === true,
+      button.dataset['sync'],
+      button.dataset['syncEnded'],
+      element('score-sync-text').textContent,
+    ];
+
+    button.click();
+    await vi.waitFor(() => {
+      expect(rig.drive.files.has('Clair de Lune.musicxml')).toBe(true);
+    });
+    expect(shows()).toEqual([false, 'synced', 'synced', 'Synced']);
+    expect(button.title).toBe('Synced with Google Drive');
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(shows()).toEqual([true, 'on-its-own', undefined, 'Sync']);
+
+    // Failed: red for the moment, then waiting on a press as before.
+    rig.drive.connect = () => Promise.reject(new Error('Google could not be reached.'));
+    rig.runtime.controller.updateSettings({ previewSeconds: 3 });
+    expect(button.hidden).toBe(false);
+    button.click();
+    await vi.waitFor(() => {
+      expect(element('score-sync-text').textContent).toBe('Sync failed');
+    });
+    expect(shows()).toEqual([false, 'by-hand', 'failed', 'Sync failed']);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(shows()).toEqual([false, 'by-hand', undefined, 'Sync failed']);
+  });
+
+  it('says nothing on the button of a sync it did not stand for', async () => {
+    const rig = createRig();
+    rig.drive.signedIn = true;
+    await rig.view.initialize();
+    // Turning the button on is itself a change to send: let it go first.
+    rig.runtime.controller.updateSettings({ offerToSync: true });
+    await vi.advanceTimersByTimeAsync(35_000);
+    const button = element<HTMLButtonElement>('score-sync');
+    expect(button.hidden).toBe(true);
+    // Asked for in the settings, with nothing here to send.
+    element<HTMLButtonElement>('drive-sync').click();
+    await vi.waitFor(() => {
+      expect(element('drive-status').textContent).toMatch(/^Synced\./);
+    });
+    expect([button.hidden, button.dataset['syncEnded']]).toEqual([true, undefined]);
+  });
+
   it('does not press itself where the button was not asked for', async () => {
     const rig = await signedInWithAScoreToSend();
     rig.runtime.controller.updateSettings({ offerToSync: false });

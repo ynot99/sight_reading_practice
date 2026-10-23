@@ -75,6 +75,22 @@ describe('the stylesheet', () => {
     expect(CSS).toMatch(/@keyframes ring-breathes/);
   });
 
+  it('colours the Sync button for a moment by how a sync ended, a ring going out from it once where motion is welcome', () => {
+    const synced = rules().find((rule) => rule.selector === ".score__reading[data-sync-ended='synced']");
+    const failed = rules().find((rule) => rule.selector === ".score__reading[data-sync-ended='failed']");
+    const byHand = rules().find((rule) => rule.selector === ".score__reading[data-sync='by-hand']");
+    const ring = rules().find((rule) => rule.selector === '.score__reading[data-sync-ended]');
+
+    expect(synced?.body).toMatch(/border-color\s*:\s*var\(--good\)/);
+    expect(failed?.body).toMatch(/border-color\s*:\s*var\(--wrong\)/);
+    // Over the colour of a button waiting on a press, which a failed one is too.
+    expect(failed?.at ?? 0).toBeGreaterThan(byHand?.at ?? Infinity);
+    expect(inWhichMedia(ring?.at ?? 0)).toBe('@media (prefers-reduced-motion: no-preference)');
+    expect(ring?.body).toMatch(/animation\s*:\s*sync-ended 1s/);
+    // As a shadow, so the button keeps its size.
+    expect(CSS).toMatch(/@keyframes sync-ended\s*\{[^@]*box-shadow/);
+  });
+
   it('keeps the two icons of a row of what only the drive has together, at their own size', () => {
     const ways = rules().find((rule) => rule.selector === '.drive-only__ways')?.body ?? '';
     expect(ways).toMatch(/display\s*:\s*flex/);

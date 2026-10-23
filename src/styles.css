@@ -4591,6 +4591,37 @@ body[data-take-on-keys='true'] .focus-bar__row > #focus-speed {
 }
 
 /*
+ * How a sync the button stood for ended, for a moment: green and then gone,
+ * or red and then waiting on a press. Outside the music, by the clock, and
+ * only between runs, so not to be taken for a mark on a note. A ring goes
+ * out from it once, drawn as a shadow, so the button keeps its size.
+ */
+.score__reading[data-sync-ended='synced'] {
+  color: var(--good);
+  border-color: var(--good);
+}
+
+.score__reading[data-sync-ended='failed'] {
+  color: var(--wrong);
+  border-color: var(--wrong);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .score__reading[data-sync-ended] {
+    animation: sync-ended 1s ease-out;
+  }
+}
+
+@keyframes sync-ended {
+  from {
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentcolor 60%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 10px transparent;
+  }
+}
+
+/*
  * How far a sync has got, round the edge of its button as a clock's hand
  * goes round from twelve: the share of its requests to the drive answered,
  * in the accent, since nothing here is a verdict. Before it is known how

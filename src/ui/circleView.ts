@@ -259,6 +259,8 @@ export function showOnTheCircle(
     readonly sounding: { readonly name: string; readonly numeral: string } | null;
     /** Whether the middle names it: see `circleNamesTheChord`. */
     readonly named: boolean;
+    /** The chords offered next, each with what it would do: see `theChordsTowards`. */
+    readonly hints: readonly { readonly place: PlaceOnTheCircle; readonly says: string }[];
     /** The way the music came to where it is, oldest first: see `theWayRoundTheCircle`. */
     readonly way: readonly PlaceOnTheCircle[];
   },
@@ -272,7 +274,13 @@ export function showOnTheCircle(
     const ring = CIRCLE_RINGS.find((each) => each === slice.getAttribute('data-ring')) ?? 'major';
     const place = Number(slice.getAttribute('data-place'));
     const name = theNameAtThePlace({ ring, place }, shown.fifths);
-    const says = `Write ${name} where the cursor is`;
+    const hint = shown.hints.find((each) => each.place.ring === ring && each.place.place === place);
+    const says = `Write ${name} where the cursor is${hint === undefined ? '' : `. ${hint.says}`}`;
+    if (hint === undefined) {
+      slice.removeAttribute('data-hint');
+    } else {
+      slice.setAttribute('data-hint', 'true');
+    }
     slice.setAttribute('aria-label', says);
     const title = slice.querySelector('title');
     if (title !== null) {

@@ -312,6 +312,8 @@ import {
   type RollGhost,
   type RollHeads,
 } from './rollView.js';
+import { theBrightnessOfTheChord, theTensionOfTheChord } from '../domain/harmony/chordFeeling.js';
+import { GOALS_OF_THE_NEXT_CHORD, theChordsTowards, type GoalOfTheNextChord } from '../domain/harmony/nextChord.js';
 import { drawTheChart, showWhereOnTheChart, theChartOfTheChords, theCurvesOfTheChords, theMomentOnTheCurves } from './chordChart.js';
 import {
   drawTheCircle,
@@ -602,6 +604,13 @@ const THE_WAY_ROUND_SHOWN = 4;
 
 /** How long a chord tapped in the lane sounds at most: long enough to be heard as a chord, short of a bar of one. */
 const A_CHORD_TAPPED_SOUNDS_MS = 1_200;
+
+/** What each goal for the next chord makes the music, said where none of the circle does. */
+const GOAL_SAID: Readonly<Record<Exclude<GoalOfTheNextChord, 'release'>, string>> = {
+  tension: 'tenser',
+  brighter: 'brighter',
+  darker: 'darker',
+};
 
 /** The fewest notes a chord drafted on the keys under the circle is written with. */
 const A_DRAFT_HAS_AT_LEAST = 2;
@@ -2392,6 +2401,8 @@ export class AppView {
    * edited: kept from one sketch to the next, as a tool laid out on the desk.
    */
   private chordsOfTheKeyOpen = false;
+  /** What the next chord should do, asked of the circle; none while nothing is. */
+  private goalOfTheNextChord: GoalOfTheNextChord | null = null;
   /** Whether the chart of the chords is open over the drawing, while the chords are; and what it last drew. */
   private chartOpen = false;
   private chartShows = '';
@@ -2781,6 +2792,8 @@ export class AppView {
     rollRedo: HTMLButtonElement;
     rollChordsOpen: HTMLButtonElement;
     rollChartOpen: HTMLButtonElement;
+    rollGoals: readonly HTMLButtonElement[];
+    rollGoalsSays: HTMLElement;
     rollChart: HTMLElement;
     rollMark: HTMLButtonElement;
     sheetRollMark: HTMLElement;
@@ -3195,6 +3208,8 @@ export class AppView {
       rollRedo: requireElement(doc, 'roll-redo'),
       rollChordsOpen: requireElement(doc, 'roll-chords-open'),
       rollChartOpen: requireElement(doc, 'roll-chart-open'),
+      rollGoals: [...doc.querySelectorAll<HTMLButtonElement>('.roll-goals__goal')],
+      rollGoalsSays: requireElement(doc, 'roll-goals-says'),
       rollChart: requireElement(doc, 'roll-chart'),
       rollMark: requireElement(doc, 'roll-mark'),
       sheetRollMark: requireElement(doc, 'sheet-roll-mark'),
@@ -10227,6 +10242,14 @@ export class AppView {
       // The lane under the notes naming the chords they make comes and goes with them.
       this.drawTheRollInto();
     });
+    // A goal for the next chord asked, or asked again to let it go.
+    for (const button of this.el.rollGoals) {
+      this.listen(button, 'click', () => {
+        const goal = GOALS_OF_THE_NEXT_CHORD.find((each) => each === button.dataset['goal']) ?? null;
+        this.goalOfTheNextChord = goal === this.goalOfTheNextChord ? null : goal;
+        this.showTheCircle();
+      });
+    }
     this.listen(this.el.rollChartOpen, 'click', () => {
       this.chartOpen = !this.chartOpen;
       this.showTheChart();
@@ -14688,7 +14711,8 @@ export class AppView {
     // And the room they take given back to the circle: see `--circle-keys`.
     this.el.rollCircle.dataset['keys'] = String(onTheKeys);
     const way = scene === null ? [] : theWayRoundTheCircle(scene.chords, this.headIsAtMs(), THE_WAY_ROUND_SHOWN);
-    const shows = JSON.stringify([key.fifths, theScaleOfTheKey(key), here, sounding, chord?.keys, draft, named, way]);
+    const hints = this.theChordsOffered();
+    const shows = JSON.stringify([key.fifths, theScaleOfTheKey(key), here, sounding, chord?.keys, draft, named, way, hints]);
     if (shows === this.circleShows) {
       return;
     }
@@ -14705,7 +14729,50 @@ export class AppView {
       sounding,
       named,
       way,
+      hints,
     });
+  }
+
+  /**
+   * The chord the next one goes on from: the last of the lane begun before
+   * where it would be written - before the chord chosen, where one is, which
+   * it would be written over, and before the cursor otherwise.
+   */
+  private theChordBeforeTheNext(): SceneChord | null {
+    const scene = this.drawnScene;
+    const until = this.theChordChosenInTheLane()?.fromMs ?? this.headIsAtMs();
+    return scene?.chords.filter((chord) => chord.fromMs < until).at(-1) ?? null;
+  }
+
+  /**
+   * The chords of the circle offered as the next, with what each would do
+   * (see `theChordsTowards`), for the goal asked: after the chord before the
+   * next, in its own key. And says over the drawer what it was asked, and
+   * why there is nothing where there is nothing.
+   */
+  private theChordsOffered(): readonly { readonly place: PlaceOnTheCircle; readonly says: string }[] {
+    const goal = this.goalOfTheNextChord;
+    for (const button of this.el.rollGoals) {
+      button.setAttribute('aria-pressed', String(button.dataset['goal'] === goal));
+    }
+    const before = goal === null ? null : this.theChordBeforeTheNext();
+    const hints = goal === null || before === null ? [] : theChordsTowards(goal, before, before.key);
+    const was = before === null ? null : { tension: theTensionOfTheChord(before, before.key), brightness: theBrightnessOfTheChord(before, before.key) };
+    this.el.rollGoalsSays.hidden = goal === null;
+    this.el.rollGoalsSays.textContent =
+      goal === null
+        ? ''
+        : before === null
+          ? 'No chord before the cursor to go on from.'
+          : hints.length > 0
+            ? `After ${before.name}:`
+            : goal === 'release'
+              ? `Nothing to let go: ${before.name} is at rest already.`
+              : `No chord of the circle makes it ${GOAL_SAID[goal]} after ${before.name}.`;
+    return hints.map((hint) => ({
+      place: hint.place,
+      says: `Tension ${(was?.tension ?? 0).toFixed(1)} to ${hint.tension.toFixed(1)}, brightness ${(was?.brightness ?? 0).toFixed(1)} to ${hint.brightness.toFixed(1)}.`,
+    }));
   }
 
   /**

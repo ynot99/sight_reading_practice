@@ -1506,6 +1506,11 @@ describe('the stylesheet', () => {
     expect(
       ruleOf(".roll-circle-keys[data-draft='true'] .replay-keys__white[data-lit]::after, .roll-circle-keys[data-draft='true'] .replay-keys__black[data-lit]::after"),
     ).toMatch(/box-shadow\s*:\s*inset 0 0 0 3px var\(--accent\)/);
+    // The chords offered next ringed in dashes in the accent, and the goal asked for pressed in it.
+    expect(ruleOf('.roll-circle__chord[data-hint] path')).toMatch(/stroke\s*:\s*var\(--accent\)/);
+    expect(ruleOf('.roll-circle__chord[data-hint] path')).toMatch(/stroke-dasharray/);
+    expect(ruleOf(".roll-goals__goal[aria-pressed='true']")).toMatch(/background\s*:\s*var\(--accent\)/);
+    expect(ruleOf('.roll-goals')).toMatch(/grid-template-columns\s*:\s*repeat\(4, minmax\(0, 1fr\)\)/);
     expect(ruleOf('.roll-circle-draft')).toMatch(/position\s*:\s*absolute/);
     expect(ruleOf('.roll-circle-draft')).toMatch(/bottom\s*:\s*var\(--circle-keys\)/);
     expect(ruleOf('.roll-circle-keys')).toMatch(/align-self\s*:\s*stretch/);

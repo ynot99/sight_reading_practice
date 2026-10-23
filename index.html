@@ -817,6 +817,22 @@
             <div id="roll-circle-keys" class="roll-circle-keys"></div>
           </div>
           <div id="roll-chords" class="roll-chords" role="group" aria-label="The chords of the key">
+            <!--
+              What the next chord should do, after the chord before the
+              cursor: one pressed, the circle rings the chords that would do
+              it; pressed again, none.
+            -->
+            <div class="roll-goals" role="group" aria-label="What the next chord should do">
+              <button type="button" class="button roll-goals__goal" data-goal="tension" aria-pressed="false"
+                title="Chords that would raise the tension" aria-label="Chords that would raise the tension">Tension</button>
+              <button type="button" class="button roll-goals__goal" data-goal="release" aria-pressed="false"
+                title="Chords that would let the tension go" aria-label="Chords that would let the tension go">Release</button>
+              <button type="button" class="button roll-goals__goal" data-goal="brighter" aria-pressed="false"
+                title="Chords that would make it brighter" aria-label="Chords that would make it brighter">Brighter</button>
+              <button type="button" class="button roll-goals__goal" data-goal="darker" aria-pressed="false"
+                title="Chords that would make it darker" aria-label="Chords that would make it darker">Darker</button>
+            </div>
+            <p id="roll-goals-says" class="roll-goals__says" hidden></p>
             <!-- The key's chords, then the writer's own, each one press to write. -->
             <div id="roll-chords-list" class="roll-chords__list"></div>
             <!--

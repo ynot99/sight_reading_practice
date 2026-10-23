@@ -10030,6 +10030,97 @@ describe('AppView', () => {
       expect([open.hidden, chart.hidden]).toEqual([true, true]);
     });
 
+    it('rings on the circle the chords that would do what is asked of the next one, after the chord before it, and says why there are none', async () => {
+      const { view, sketches, clock } = createRig();
+      await view.initialize();
+      const held = (midis: readonly number[], atMs: number, upAtMs: number) =>
+        midis.flatMap((key) => [
+          { kind: 'noteOn' as const, atMs, midi: key, velocity: 0.5 },
+          { kind: 'noteOff' as const, atMs: upAtMs, midi: key },
+        ]);
+      // C for a bar, then G seventh, in C major; the third bar empty.
+      const sketch = sketches.begin(
+        {
+          events: [...held([60, 64, 67], 0, 2_000), ...held([55, 59, 62, 65], 2_000, 4_000)],
+          beats: Array.from({ length: 12 }, (_, beat) => ({ atMs: beat * 500, beat: beat % 4, beatsInBar: 4 })),
+        },
+        'Aimed',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      element<HTMLButtonElement>('roll-chords-open').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const cursorAt = (ms: number): void => {
+        clock.advance(1_000);
+        tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: (ms / 1000) * zoom, clientY: 20 });
+      };
+      const circle = element('roll-circle');
+      const goal = (name: string): HTMLButtonElement => {
+        const found = [...document.querySelectorAll<HTMLButtonElement>('.roll-goals__goal')].find((button) => button.dataset['goal'] === name);
+        if (found === undefined) {
+          throw new Error(`no goal ${name}`);
+        }
+        return found;
+      };
+      const says = element('roll-goals-says');
+      // The slices ringed, by the names drawn in the same turn as them.
+      const ringed = (): string[] => {
+        const slices = [...circle.querySelectorAll('[data-ring]')];
+        const labels = circle.querySelectorAll('.roll-circle__label');
+        return slices.flatMap((slice, turn) =>
+          slice.hasAttribute('data-hint') ? [labels[turn]?.querySelector('.roll-circle__name')?.textContent ?? ''] : [],
+        );
+      };
+      const slice = (ring: string, place: number): Element | null => circle.querySelector(`[data-ring="${ring}"][data-place="${String(place)}"]`);
+
+      // Nothing asked, nothing ringed or said.
+      cursorAt(4_500);
+      expect([ringed(), says.hidden]).toEqual([[], true]);
+      // After G seventh, home first: rung, each saying what it would do.
+      goal('release').click();
+      expect([goal('release').getAttribute('aria-pressed'), says.hidden, says.textContent]).toEqual(['true', false, 'After G7:']);
+      expect(ringed().sort()).toEqual(['C', 'Dm', 'Em']);
+      expect(slice('major', 0)?.getAttribute('aria-label')).toBe(
+        'Write C where the cursor is. Tension 2.8 to 0.0, brightness 1.3 to 1.7.',
+      );
+      expect(slice('major', 1)?.getAttribute('aria-label')).toBe('Write G where the cursor is');
+      // Pressed, a ringed chord is written as any is; after it, the next is offered from it.
+      slice('major', 0)?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect((sketches.find(sketch.id)?.events ?? []).filter((event) => event.kind === 'noteOn' && event.atMs === 4_500).map((event) => event.kind === 'noteOn' && event.midi).sort()).toEqual([60, 64, 67]);
+      expect([ringed(), says.textContent]).toEqual([[], 'Nothing to let go: C is at rest already.']);
+      // Another goal instead; the same again lets it go.
+      goal('darker').click();
+      expect([goal('release').getAttribute('aria-pressed'), goal('darker').getAttribute('aria-pressed')]).toEqual(['false', 'true']);
+      expect(ringed().sort()).toEqual(['Am', 'F', 'Fm']);
+      goal('darker').click();
+      expect([ringed(), says.hidden, goal('darker').getAttribute('aria-pressed')]).toEqual([[], true, 'false']);
+      // Nothing tenser than the dominant seventh: after it, said so.
+      cursorAt(4_000);
+      goal('tension').click();
+      expect([ringed(), says.textContent]).toEqual([[], 'No chord of the circle makes it tenser after G7.']);
+      // With the cursor before any chord, nothing to go on from.
+      cursorAt(0);
+      expect([ringed(), says.textContent]).toEqual([[], 'No chord before the cursor to go on from.']);
+      // A chord chosen in the lane is the one replaced: the next goes on from the chord before it.
+      goal('release').click();
+      element<HTMLButtonElement>('roll-chart-open').click();
+      clock.advance(1_000);
+      [...element('roll-chart').querySelectorAll<HTMLElement>('.roll-chart__chord')][1]?.click();
+      expect(says.textContent).toBe('Nothing to let go: C is at rest already.');
+      // And stays so with the cursor put elsewhere, the chord still chosen to be written over.
+      const curves = element('roll-chart').querySelector('.roll-chart__curves svg');
+      if (curves === null) {
+        throw new Error('expected the curves');
+      }
+      curves.getBoundingClientRect = () => ({ left: 0, width: 1_000, top: 0, height: 72, right: 1_000, bottom: 72, x: 0, y: 0, toJSON: () => ({}) });
+      clock.advance(1_000);
+      // Into the G seventh itself, three fifths of the way along the piece.
+      curves.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 600 }));
+      expect(says.textContent).toBe('Nothing to let go: C is at rest already.');
+    });
+
     it('drafts another chord over the one chosen on the keys under the circle, heard as it changes, written or left', async () => {
       const { view, sketches, clock, instrument } = createRig();
       await view.initialize();

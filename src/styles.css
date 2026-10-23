@@ -1585,6 +1585,40 @@ textarea {
   fill: currentcolor;
 }
 
+/* What the next chord should do: four to a row, the one asked for pressed in the accent. */
+.roll-goals {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.roll-goals__goal {
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 4px;
+  font-size: 12px;
+}
+
+.roll-goals__goal[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--surface);
+}
+
+.roll-goals__says {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* The chords that would do it, ringed in dashes on the circle: offered, nothing chosen. */
+.roll-circle__chord[data-hint] path {
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-dasharray: 6 3;
+}
+
 /* The chord sounding on the keys in the accent, its root the more: named, not judged. */
 .roll-circle-keys .replay-keys__white[data-lit]::after,
 .roll-circle-keys .replay-keys__black[data-lit]::after {

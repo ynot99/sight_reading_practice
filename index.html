@@ -680,11 +680,22 @@
             <!-- The box a mouse draws over a sketch being edited, to choose the notes inside it. -->
             <div id="roll-box" class="roll-box" hidden aria-hidden="true"></div>
             <!--
-              The chord the chosen notes make, over the top of the drawing and
-              nothing to press: a touch goes through to the notes under it.
+              The chord the keys held make, and the chord the chosen notes
+              make, side by side over the top of the drawing and nothing to
+              press: a touch goes through to the notes under them. The keys'
+              one carries a keyboard, since either may stand alone.
             -->
-            <output id="roll-chord" class="roll-chord" title="The chord the chosen notes make"
-              aria-live="polite" hidden></output>
+            <div class="roll-chord-names">
+              <output id="roll-chord-held" class="roll-chord" title="The chord the keys held make"
+                aria-live="polite" hidden>
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm-5.5 16h-3v-5.5h.5a1 1 0 0 0 1-1V5h1v7.5a1 1 0 0 0 1 1h.5V19zM5 5h1v7.5a1 1 0 0 0 1 1h.5V19H5V5zm14 14h-2.5v-5.5h.5a1 1 0 0 0 1-1V5h1v14z" />
+                </svg>
+                <span id="roll-chord-held-name"></span>
+              </output>
+              <output id="roll-chord" class="roll-chord" title="The chord the chosen notes make"
+                aria-live="polite" hidden></output>
+            </div>
             <!--
               The notes in view by pitch, and the rows of them on the screen.
 

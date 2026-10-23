@@ -4137,6 +4137,61 @@ describe('AppView', () => {
       expect(body.querySelectorAll(".roll__key[data-chosen='true']")).toHaveLength(0);
     });
 
+    it("names the chord the keys held make over the drawing, beside the chosen notes' chord, spelt in the sketch's key", async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.sketches.begin(
+        {
+          events: [60, 64, 67].flatMap((midi) => [
+            { kind: 'noteOn' as const, atMs: 0, midi, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: 500, midi },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Held',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const held = element<HTMLOutputElement>('roll-chord-held');
+      const chosen = element<HTMLOutputElement>('roll-chord');
+      const said = (pill: HTMLOutputElement): string | null => (pill.hidden ? null : (pill.textContent ?? '').trim());
+      const down = (...midis: number[]): void => {
+        for (const midi of midis) {
+          rig.midi.noteOn(midi, rig.clock.now());
+        }
+      };
+      const up = (...midis: number[]): void => {
+        for (const midi of midis) {
+          rig.midi.noteOff(midi, rig.clock.now());
+        }
+      };
+
+      // One key alone is no chord; three are, while they are held.
+      down(61);
+      expect(said(held)).toBeNull();
+      down(65, 68);
+      expect(said(held)).toBe('C♯');
+      expect(held.title).toBe('The chord the keys held make');
+      up(61, 65, 68);
+      expect(said(held)).toBeNull();
+      // In a flat key, its black keys as flats.
+      const keyOfTheSketch = element<HTMLSelectElement>('roll-key');
+      keyOfTheSketch.value = '10';
+      keyOfTheSketch.dispatchEvent(new Event('change'));
+      down(61, 65, 68);
+      expect(said(held)).toBe('D♭');
+      up(61, 65, 68);
+
+      // Beside the chord of the notes chosen, each saying its own.
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'a', code: 'KeyA', ctrlKey: true }));
+      down(62, 65, 69);
+      expect([said(held), said(chosen)]).toEqual(['Dm', 'C']);
+      up(62, 65, 69);
+      expect([said(held), said(chosen)]).toEqual([null, 'C']);
+    });
+
     it('lights the row of a key sounding - played, or struck by the playback at the head - on the keys and down the strip', async () => {
       const giveBack = lendTheDrawingASize({ wide: 100, tall: 0 });
       vi.useFakeTimers();

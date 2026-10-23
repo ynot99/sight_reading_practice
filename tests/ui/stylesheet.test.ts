@@ -1947,12 +1947,13 @@ describe('the rows of the drawing and the pitch map beside them', () => {
     expect(declared(body('.roll'), '--roll-ruler')).toBeUndefined();
   });
 
-  it('names the chosen chord under the ruler of the drawing, out of the way of a touch', () => {
-    const pill = body('.roll-chord');
+  it('names the chord held and the chosen chord under the ruler of the drawing, side by side, out of the way of a touch', () => {
+    const pills = body('.roll-chord-names');
 
-    expect(pill).toMatch(/position\s*:\s*absolute/);
-    expect(pill).toMatch(/top\s*:\s*calc\(var\(--roll-ruler\)/);
-    expect(pill).toMatch(/pointer-events\s*:\s*none/);
+    expect(pills).toMatch(/position\s*:\s*absolute/);
+    expect(pills).toMatch(/top\s*:\s*calc\(var\(--roll-ruler\)/);
+    expect(pills).toMatch(/pointer-events\s*:\s*none/);
+    expect(pills).toMatch(/display\s*:\s*flex/);
   });
 
   it('gives the lane of chords room only while the chords are open, between the notes and the pedal', () => {

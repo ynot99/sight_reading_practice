@@ -2718,6 +2718,8 @@ export class AppView {
     rollTitle: HTMLElement;
     rollBox: HTMLElement;
     rollChord: HTMLOutputElement;
+    rollChordHeld: HTMLOutputElement;
+    rollChordHeldName: HTMLElement;
     rollRename: HTMLInputElement;
     rollMap: HTMLElement;
     rollMapWindow: HTMLElement;
@@ -3117,6 +3119,8 @@ export class AppView {
       rollTitle: requireElement(doc, 'roll-title'),
       rollBox: requireElement(doc, 'roll-box'),
       rollChord: requireElement(doc, 'roll-chord'),
+      rollChordHeld: requireElement(doc, 'roll-chord-held'),
+      rollChordHeldName: requireElement(doc, 'roll-chord-held-name'),
       rollRename: requireElement(doc, 'roll-rename'),
       rollMap: requireElement(doc, 'roll-map'),
       rollMapWindow: requireElement(doc, 'roll-map-window'),
@@ -13457,8 +13461,6 @@ export class AppView {
    * edited.
    */
   private nameTheChosenChord(): void {
-    const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
     const roll = this.theRoll();
     const chosen = this.theNotesChosen();
     // How long each sounds, off the drawing: a key still down when the run ended, to its end.
@@ -13469,15 +13471,35 @@ export class AppView {
         lengthOf.set(`${String(press.midi)} ${String(press.downAtMs)}`, (press.upAtMs ?? ended) - press.downAtMs);
       }
     }
-    // Spelled in a sketch's key; anything else, as chord charts spell it.
     const chord = theChordTheNotesMake(
       chosen.map((key) => ({ midi: key.midi, lengthMs: lengthOf.get(`${String(key.midi)} ${String(key.downAtMs)}`) ?? 0 })),
-      stored === null ? null : this.theKeyAtTheHead(stored).fifths,
+      this.theSignatureTheDrawingSpellsIn(),
     );
     this.el.rollChord.textContent = chord === null ? '' : chord.exactly ? chord.name : `≈ ${chord.name}`;
     this.el.rollChord.title =
       chord?.exactly === false ? 'The chord most of the chosen notes make, by how long they sound' : 'The chord the chosen notes make';
     this.el.rollChord.hidden = chord === null;
+  }
+
+  /**
+   * Names the chord the keys held make, on any input and on the strip beside
+   * the drawing. Not there while they make none with a name.
+   */
+  private nameTheChordHeld(held: readonly number[]): void {
+    const chord = nameTheChord(held, this.theSignatureTheDrawingSpellsIn());
+    this.el.rollChordHeldName.textContent = chord ?? '';
+    this.el.rollChordHeld.hidden = chord === null;
+  }
+
+  /**
+   * The key signature a chord named over the drawing is spelled in: a
+   * sketch's where the cursor is; anything else's none, so as chord charts
+   * spell it.
+   */
+  private theSignatureTheDrawingSpellsIn(): number | null {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    return stored === null ? null : this.theKeyAtTheHead(stored).fifths;
   }
 
   /**
@@ -17677,15 +17699,17 @@ export class AppView {
   /**
    * Lights the rows of the keys sounding now - held down on any input, or
    * struck by the drawing's own playback where the head is - across the
-   * drawing, on its keys and down the map beside it. Only when they change:
-   * it is asked on every frame of a playback.
+   * drawing, on its keys and down the map beside it, and names the chord the
+   * keys held make. The rows only when they change: it is asked on every
+   * frame of a playback.
    */
   private lightTheSoundingRows(): void {
     const scene = this.drawnScene;
     const rows = new Set<number>();
+    const held = [...this.runtime.recorder.keysDown, ...(this.keyHeldOnTheStrip === null ? [] : [this.keyHeldOnTheStrip.midi])];
+    this.nameTheChordHeld(held);
     if (scene !== null && !this.el.sheetRoll.hidden) {
-      const held = this.keyHeldOnTheStrip === null ? [] : [this.keyHeldOnTheStrip.midi];
-      for (const midi of [...this.runtime.recorder.keysDown, ...held]) {
+      for (const midi of held) {
         const row = scene.highest - midi;
         if (row >= 0 && row < scene.rows) {
           rows.add(row);

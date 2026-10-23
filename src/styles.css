@@ -1564,16 +1564,28 @@ textarea {
 }
 
 /*
- * The chord the chosen notes make, under the ruler at the middle of the
- * drawing: the same pill as the chord held in free play, smaller, since it
- * stands over notes rather than over an empty lane.
+ * The chord the keys held make and the chord the chosen notes make, under the
+ * ruler at the middle of the drawing, side by side when both are there.
  */
-.roll-chord {
+.roll-chord-names {
   position: absolute;
   top: calc(var(--roll-ruler) + 8px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 3;
+  display: flex;
+  gap: 8px;
+  pointer-events: none;
+}
+
+/*
+ * Each the same pill as the chord held in free play, smaller, since it
+ * stands over notes rather than over an empty lane.
+ */
+.roll-chord {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 3px 12px;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -1582,8 +1594,13 @@ textarea {
   font-size: 18px;
   font-weight: 700;
   white-space: nowrap;
-  pointer-events: none;
   box-shadow: 0 2px 8px rgb(16 24 40 / 22%);
+}
+
+.roll-chord svg {
+  width: 16px;
+  height: 16px;
+  fill: var(--text-muted);
 }
 
 /* A sketch being edited has its pedal drawn on, so its lane is tall enough for a finger. */

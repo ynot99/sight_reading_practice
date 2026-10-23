@@ -16,6 +16,7 @@ import {
 } from '../application/session/RunRoll.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
 import { theChordsAlongTheBars, type BarOfBeats, type KeyFrom } from '../domain/harmony/chordsAlong.js';
+import type { ScaleName } from '../domain/harmony/scales.js';
 import { HIGHEST_KEY, LOWEST_KEY } from './replayKeys.js';
 import { theHandThatPlays } from '../domain/midi/MidiFile.js';
 import type { ChordKind } from '../domain/harmony/chordName.js';
@@ -327,6 +328,8 @@ export interface SceneChord extends SceneStretch {
   /** Its root, as a pitch class, and its kind: which pitches are its tones. */
   readonly root: number;
   readonly kind: ChordKind;
+  /** The key it is read in: see {@link ChordAlong.key}. */
+  readonly key: { readonly fifths: number; readonly scale: ScaleName };
 }
 
 /** An instant of the run, and what it says to a pointer resting on it, if anything. */
@@ -1140,6 +1143,7 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
           exactly: chord.exactly,
           root: chord.root,
           kind: chord.kind,
+          key: chord.key,
           chosen: isEveryNoteChosen(theNotesOfTheChord(roll, chord.fromMs - origin, chord.untilMs - origin), drawing.chosen),
           says: chord.exactly
             ? `${chord.name} (${chord.numeral}): the chord the notes here make`

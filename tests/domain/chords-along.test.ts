@@ -132,6 +132,13 @@ describe('the chords along the bars', () => {
     ];
     expect(said(struck(G, 0, 4), barsOfFour(1), fromTheSecondBeat)).toEqual(['0-4 G I']);
     expect(said(struck(G, 0, 4), barsOfFour(1))).toEqual(['0-4 G V']);
+    // Each carries the key it is read in, which its degree is in.
+    expect(theChordsAlongTheBars([...struck(G, 0, 4), ...struck(G, 4, 4), ...struck([C4 + 2, C4 + 6, C4 + 9], 8, 4)], barsOfFour(3), keys).map((chord) => chord.key)).toEqual([
+      { fifths: 0, scale: 'major' },
+      { fifths: 1, scale: 'major' },
+      { fifths: 1, scale: 'major' },
+    ]);
+    expect(theChordsAlongTheBars(struck(G, 0, 4), barsOfFour(1), []).map((chord) => chord.key)).toEqual([{ fifths: 0, scale: 'major' }]);
   });
 
   it('says a stretch is exactly a chord only where every part of it is', () => {

@@ -1434,6 +1434,31 @@ describe('the stylesheet', () => {
     expect(HTML).toMatch(/<div class="roll-stage">\s*<div id="roll-body"[^>]*><\/div>[\s\S]*?<div id="roll-box"/);
   });
 
+  it('lays the chart of the chords over the drawing, four bars to a row and two on a phone, each chord tinted with what it does', () => {
+    const ruleOf = (selector: string, media = ''): string =>
+      rules().find((rule) => rule.selector === selector && inWhichMedia(rule.at) === media)?.body ?? '';
+    expect(HTML).toMatch(/<div class="roll-frame">\s*(?:<!--[\s\S]*?-->\s*)?<div id="roll-chart" class="roll-chart" hidden><\/div>/);
+    expect(ruleOf('.roll-frame')).toMatch(/position\s*:\s*relative/);
+    expect(ruleOf('.roll-chart')).toMatch(/position\s*:\s*absolute/);
+    expect(ruleOf('.roll-chart')).toMatch(/inset\s*:\s*0/);
+    expect(ruleOf('.roll-chart')).toMatch(/overflow-y\s*:\s*auto/);
+    expect(ruleOf('.roll-chart')).toMatch(/background\s*:\s*var\(--surface\)/);
+    expect(ruleOf('.roll-chart__grid')).toMatch(/grid-template-columns\s*:\s*repeat\(4, minmax\(0, 1fr\)\)/);
+    expect(ruleOf('.roll-chart__grid', '@media (max-width: 600px)')).toMatch(/grid-template-columns\s*:\s*repeat\(2, minmax\(0, 1fr\)\)/);
+    // A chord as wide as its share of the bar, which the page sets on it.
+    expect(ruleOf('.roll-chart__chord')).toMatch(/flex\s*:\s*1 1 0/);
+    expect(ruleOf('.roll-chart__goes-on')).toMatch(/flex\s*:\s*1 1 0/);
+    // What each does, in none of the verdicts' inks.
+    const inks = ['tonic', 'subdominant', 'dominant'].map((does) => ruleOf(`.roll-chart__chord[data-function='${does}']`));
+    expect(inks.map((rule) => /--chord-function\s*:\s*var\(--star-\d\)/.test(rule))).toEqual([true, true, true]);
+    expect(new Set(inks).size).toBe(3);
+    for (const rule of inks) {
+      expect(rule).not.toMatch(/perfect|good|wrong|aside|--star-2|--star-3|--star-7/);
+    }
+    expect(ruleOf(".roll-chart__chord[data-of-the-key='false']")).toMatch(/border-style\s*:\s*dashed/);
+    expect(ruleOf(".roll-chart__chord[data-here='true']")).toMatch(/outline\s*:\s*2px solid var\(--accent\)/);
+  });
+
   it('puts the circle of fifths and the chords under it beside the drawing where the screen is wide, and under it side by side where it is tall', () => {
     const ruleOf = (selector: string, media = ''): string =>
       rules().find((rule) => rule.selector === selector && inWhichMedia(rule.at) === media)?.body ?? '';

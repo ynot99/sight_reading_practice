@@ -652,6 +652,17 @@
                 <path d="M4 4h10v4H4zM4 10h16v4H4zM4 16h12v4H4z" />
               </svg>
             </button>
+            <!--
+              The chords as a chart, bar by bar, over the drawing while the
+              chords are open: the whole of the harmony at once, to plan by.
+            -->
+            <button id="roll-chart-open" type="button" class="button" title="The chart of the chords"
+              aria-label="The chart of the chords" aria-pressed="false" aria-controls="roll-chart" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
+                class="take-transport__icon">
+                <path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" />
+              </svg>
+            </button>
             <button id="roll-options" type="button" class="button button--ghost roll__gear"
               title="Options" aria-label="Options">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
@@ -686,6 +697,8 @@
           <div class="roll-harmony">
           <div class="roll-room">
           <div class="roll-frame">
+          <!-- The chart of the chords, over the drawing while it is open: see `chordChart.ts`. -->
+          <div id="roll-chart" class="roll-chart" hidden></div>
           <div class="roll-stage">
             <div id="roll-body" class="roll-body"></div>
             <!--

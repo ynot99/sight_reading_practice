@@ -9926,6 +9926,78 @@ describe('AppView', () => {
       expect([middle(), numeral(), here(), onTheKeys()]).toEqual(['', '', [], []]);
     });
 
+    it('opens the chords as a chart over the drawing, bar by bar, a chord pressed there putting the cursor on it', async () => {
+      const { view, sketches, clock } = createRig();
+      await view.initialize();
+      const held = (midis: readonly number[], atMs: number, upAtMs: number) =>
+        midis.flatMap((key) => [
+          { kind: 'noteOn' as const, atMs, midi: key, velocity: 0.5 },
+          { kind: 'noteOff' as const, atMs: upAtMs, midi: key },
+        ]);
+      // C for a bar, then F minor and G7 a half each, in C major.
+      sketches.begin(
+        {
+          events: [...held([60, 64, 67], 0, 2_000), ...held([65, 68, 72], 2_000, 3_000), ...held([55, 59, 62, 65], 3_000, 4_000)],
+          beats: Array.from({ length: 12 }, (_, beat) => ({ atMs: beat * 500, beat: beat % 4, beatsInBar: 4 })),
+        },
+        'Charted',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const open = element<HTMLButtonElement>('roll-chart-open');
+      const chart = element('roll-chart');
+      const bars = (): string[] =>
+        [...chart.querySelectorAll('.roll-chart__bar')].map(
+          (bar) =>
+            `${bar.querySelector('.roll-chart__number')?.textContent ?? ''}: ${[...bar.querySelectorAll<HTMLElement>('.roll-chart__chord')]
+              .map((chord) => `${chord.querySelector('.roll-chart__name')?.textContent ?? ''} ${chord.dataset['function'] ?? ''}`)
+              .join(', ')}`,
+        );
+      const here = (): string[] =>
+        [...chart.querySelectorAll<HTMLElement>('.roll-chart__chord[data-here]')].map((chord) => chord.querySelector('.roll-chart__name')?.textContent ?? '');
+
+      // Only with the chords open.
+      expect(open.hidden).toBe(true);
+      element<HTMLButtonElement>('roll-chords-open').click();
+      expect([open.hidden, chart.hidden, open.getAttribute('aria-pressed')]).toEqual([false, true, 'false']);
+      open.click();
+      expect([chart.hidden, open.getAttribute('aria-pressed'), open.title]).toEqual([false, 'true', 'Back to the notes']);
+      expect(bars().slice(0, 2)).toEqual(['1: C tonic', '2: Fm subdominant, G7 dominant']);
+      expect(here()).toEqual(['C']);
+      // Pressed, a chord takes the cursor, and the circle shows it.
+      clock.advance(1_000);
+      [...chart.querySelectorAll<HTMLElement>('.roll-chart__chord')][2]?.click();
+      expect(here()).toEqual(['G7']);
+      expect(element('roll-circle').querySelector('.roll-circle__sounding-name')?.textContent).toBe('G7');
+      // Back to the notes, the cursor put in the third bar and a chord written from the circle there.
+      open.click();
+      expect([chart.hidden, open.getAttribute('aria-pressed'), open.title]).toEqual([true, 'false', 'The chart of the chords']);
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      clock.advance(1_000);
+      tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: 4.6 * zoom, clientY: 20 });
+      element('roll-circle').querySelector('[data-ring="minor"][data-place="3"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      open.click();
+      // F sharp minor's root is no degree of C major: it does nothing there by this reading.
+      expect(bars()[2]).toBe('3: F♯m none');
+      // Written while the chart is open, on it at once - D, outside C major, edged so.
+      element('roll-circle').querySelector('[data-ring="major"][data-place="2"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(bars()[2]).toBe('3: F♯m none, D subdominant');
+      expect([...chart.querySelectorAll<HTMLElement>('.roll-chart__chord')].map((chord) => chord.dataset['ofTheKey'])).toEqual([
+        'true',
+        'false',
+        'true',
+        'false',
+        'false',
+      ]);
+      // The cursor gone on past it is still in the stretch the lane names D.
+      expect(here()).toEqual(['D']);
+      // And away with the chords.
+      element<HTMLButtonElement>('roll-chords-open').click();
+      expect([open.hidden, chart.hidden]).toEqual([true, true]);
+    });
+
     it('strikes a chord of the circle as a pointer goes down on it and writes the one it is let go of on, the middle the chord sounding', async () => {
       const { view, sketches, clock, instrument, midi } = createRig();
       await view.initialize();

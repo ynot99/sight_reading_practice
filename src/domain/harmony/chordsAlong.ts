@@ -37,6 +37,8 @@ export interface ChordAlong {
   /** Its root, as a pitch class, and its kind: which pitches are its tones. */
   readonly root: number;
   readonly kind: ChordKind;
+  /** The key it is read in, which its numeral is the degree of. */
+  readonly key: { readonly fifths: number; readonly scale: ScaleName };
 }
 
 /**
@@ -86,7 +88,16 @@ export function theChordsAlongTheBars(
     if (before !== undefined && before.untilMs === fromMs && before.name === chord.name && before.numeral === numeral) {
       along[along.length - 1] = { ...before, untilMs, exactly: before.exactly && chord.exactly };
     } else {
-      along.push({ fromMs, untilMs, name: chord.name, numeral, exactly: chord.exactly, root: chord.root, kind: chord.kind });
+      along.push({
+        fromMs,
+        untilMs,
+        name: chord.name,
+        numeral,
+        exactly: chord.exactly,
+        root: chord.root,
+        kind: chord.kind,
+        key: { fifths: key.fifths, scale: key.scale },
+      });
     }
   };
   const readTheBar = (moments: readonly number[]): void => {

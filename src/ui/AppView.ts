@@ -312,6 +312,7 @@ import {
   type RollGhost,
   type RollHeads,
 } from './rollView.js';
+import { drawTheChart, showWhereOnTheChart, theChartOfTheChords } from './chordChart.js';
 import {
   drawTheCircle,
   drawTheKeysUnderTheCircle,
@@ -2381,6 +2382,9 @@ export class AppView {
    * edited: kept from one sketch to the next, as a tool laid out on the desk.
    */
   private chordsOfTheKeyOpen = false;
+  /** Whether the chart of the chords is open over the drawing, while the chords are; and what it last drew. */
+  private chartOpen = false;
+  private chartShows = '';
 
   /** The beat a change is being asked about, while the sheet asking is open. */
   private beatAskedAbout: ReturnType<typeof theBeatOfTheClickAt> = null;
@@ -2766,6 +2770,8 @@ export class AppView {
     rollUndo: HTMLButtonElement;
     rollRedo: HTMLButtonElement;
     rollChordsOpen: HTMLButtonElement;
+    rollChartOpen: HTMLButtonElement;
+    rollChart: HTMLElement;
     rollMark: HTMLButtonElement;
     sheetRollMark: HTMLElement;
     rollMarkTitle: HTMLElement;
@@ -3175,6 +3181,8 @@ export class AppView {
       rollUndo: requireElement(doc, 'roll-undo'),
       rollRedo: requireElement(doc, 'roll-redo'),
       rollChordsOpen: requireElement(doc, 'roll-chords-open'),
+      rollChartOpen: requireElement(doc, 'roll-chart-open'),
+      rollChart: requireElement(doc, 'roll-chart'),
       rollMark: requireElement(doc, 'roll-mark'),
       sheetRollMark: requireElement(doc, 'sheet-roll-mark'),
       rollMarkTitle: requireElement(doc, 'roll-mark-title'),
@@ -10203,6 +10211,21 @@ export class AppView {
       // The lane under the notes naming the chords they make comes and goes with them.
       this.drawTheRollInto();
     });
+    this.listen(this.el.rollChartOpen, 'click', () => {
+      this.chartOpen = !this.chartOpen;
+      this.showTheChart();
+      // Back on the notes where the chart left the cursor.
+      if (!this.chartOpen) {
+        this.bringTheHeadIntoView();
+      }
+    });
+    // A chord of the chart puts the cursor where it begins, and the circle and the keys show it.
+    this.listen(this.el.rollChart, 'click', (event) => {
+      const chord = (event.target as Element | null)?.closest<HTMLElement>('.roll-chart__chord');
+      if (chord !== null && chord !== undefined) {
+        this.putTheHeadAt(Number(chord.dataset['from']));
+      }
+    });
     this.listen(this.el.rollChordsList, 'click', (event) => {
       const chord = (event.target as Element | null)?.closest<HTMLElement>('[data-chord]');
       if (chord === null || chord === undefined) {
@@ -14543,6 +14566,32 @@ export class AppView {
     });
   }
 
+  /**
+   * The chart of the chords, over the drawing while it is open with the
+   * chords: drawn again only when the chords or the bars have changed, and
+   * the chord the cursor is in marked on every step of a playback.
+   */
+  private showTheChart(): void {
+    const withTheChords = this.theChordsOfTheKeyAreOpen();
+    this.el.rollChartOpen.hidden = !withTheChords;
+    this.el.rollChartOpen.setAttribute('aria-pressed', String(this.chartOpen));
+    this.el.rollChartOpen.title = this.chartOpen ? 'Back to the notes' : 'The chart of the chords';
+    this.el.rollChartOpen.setAttribute('aria-label', this.el.rollChartOpen.title);
+    const scene = this.drawnScene;
+    const open = withTheChords && this.chartOpen && scene !== null;
+    this.el.rollChart.hidden = !open;
+    if (!open) {
+      return;
+    }
+    const chart = theChartOfTheChords(scene.bars, scene.chords);
+    const shows = JSON.stringify(chart);
+    if (shows !== this.chartShows) {
+      this.chartShows = shows;
+      drawTheChart(this.el.rollChart, chart);
+    }
+    showWhereOnTheChart(this.el.rollChart, this.headIsAtMs());
+  }
+
   /** Points at a chord, or at none, and shows its notes where it would write them. */
   private pointAtTheChord(at: ChordAskedFor | null): void {
     this.chordPointedAt = at;
@@ -18206,8 +18255,9 @@ export class AppView {
     }
     this.sayWhereBackGoes(sounding);
     this.followTheKeyWhereTheHeadGoes();
-    // The chord the music is on, round the circle with it.
+    // The chord the music is on, round the circle with it, and on the chart.
     this.showTheCircle();
+    this.showTheChart();
 
     const drawn = this.el.rollBody.firstElementChild;
     if (!(drawn instanceof HTMLElement)) {

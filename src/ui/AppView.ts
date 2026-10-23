@@ -8,7 +8,13 @@ import {
   type PlayedWith,
 } from '../application/modes/challengeModes.js';
 import { barCells } from '../domain/scoring/barCells.js';
-import { nameOfThePitchClass, nameTheChord, theChordTheKeysMake, theChordTheNotesMake } from '../domain/harmony/chordName.js';
+import {
+  nameOfThePitchClass,
+  nameTheChord,
+  theChordTheKeysMake,
+  theChordTheNotesMake,
+  theNumeralOfTheChord,
+} from '../domain/harmony/chordName.js';
 import { DYNAMIC_LEVELS, DYNAMIC_VELOCITY, type DynamicLevel } from '../domain/model/Exercise.js';
 import { eachKeyOnce, sameKeys, theChordsOfTheScale } from '../domain/harmony/chordsOfTheKey.js';
 import type { KeyFrom } from '../domain/harmony/chordsAlong.js';
@@ -14372,7 +14378,7 @@ export class AppView {
   /**
    * The circle of fifths, open with the chords beside a sketch being edited:
    * the key the cursor is in lit, with its numerals, and the chord sounding
-   * named in the middle and lit more - the keys held where they make one,
+   * named in the middle with its numeral, and lit more - the keys held where they make one,
    * otherwise the chord the music makes where the cursor is, the one the
    * lane under the notes names there - with the way the music came to it
    * drawn fading behind, so a playback is watched going round it. The keys
@@ -14389,9 +14395,16 @@ export class AppView {
     }
     const key = this.theKeyAtTheHead(stored);
     const scene = this.drawnScene;
-    const chord = theChordTheKeysMake(this.theKeysHeld(), key.fifths) ?? (scene === null ? null : theChordAt(scene, this.headIsAtMs()));
+    const held = theChordTheKeysMake(this.theKeysHeld(), key.fifths);
+    // The keys held numbered in the key the cursor is in, as the lane numbers the music there.
+    const chord =
+      held === null
+        ? scene === null
+          ? null
+          : theChordAt(scene, this.headIsAtMs())
+        : { ...held, numeral: theNumeralOfTheChord(held, thePitchClassesOfTheScale(key.fifths, theScaleOfTheKey(key))) };
     const here = chord === null ? null : whereOnTheCircle(chord.root, chord.kind);
-    const sounding = chord?.name ?? null;
+    const sounding = chord === null ? null : { name: chord.name, numeral: chord.numeral };
     const way = scene === null ? [] : theWayRoundTheCircle(scene.chords, this.headIsAtMs(), THE_WAY_ROUND_SHOWN);
     const shows = JSON.stringify([key.fifths, theScaleOfTheKey(key), here, sounding, way]);
     if (shows === this.circleShows) {

@@ -30,13 +30,17 @@ const NUMERAL_SIZE: Readonly<Record<CircleRing, number>> = { major: 7, minor: 6,
 const REACH = 102;
 
 /**
- * The chord sounding, written in the hole in the middle: as large as the
- * majors' names, and smaller where a long one would reach the ring round
- * it - a letter being about this much of its size across.
+ * The chord sounding, written in the hole in the middle with its numeral
+ * under it: each as large as these, and smaller where a long one would
+ * reach the ring round it - a letter being about this much of its size
+ * across. The name sits above the middle and the numeral below, by these.
  */
 const SOUNDING_SIZE = 16;
-const SOUNDING_ROOM = 46;
+const SOUNDING_NUMERAL_SIZE = 9;
+const SOUNDING_ROOM = 44;
 const A_LETTER_IS = 0.62;
+const SOUNDING_NAME_AT = -5;
+const SOUNDING_NUMERAL_AT = 11;
 
 /** How strongly the newest step of the way round is drawn, and how much less each older one. */
 const NEWEST_STEP = 0.9;
@@ -122,22 +126,37 @@ export function drawTheCircle(doc: Document): SVGSVGElement {
   const way = doc.createElementNS(SVG, 'g');
   way.setAttribute('class', 'roll-circle__way');
   way.setAttribute('aria-hidden', 'true');
-  const sounding = doc.createElementNS(SVG, 'text');
+  const sounding = doc.createElementNS(SVG, 'g');
   sounding.setAttribute('class', 'roll-circle__sounding');
   sounding.setAttribute('aria-live', 'polite');
+  const soundingName = doc.createElementNS(SVG, 'text');
+  soundingName.setAttribute('class', 'roll-circle__sounding-name');
+  soundingName.setAttribute('y', String(SOUNDING_NAME_AT));
+  const soundingNumeral = doc.createElementNS(SVG, 'text');
+  soundingNumeral.setAttribute('class', 'roll-circle__sounding-numeral');
+  soundingNumeral.setAttribute('y', String(SOUNDING_NUMERAL_AT));
+  sounding.append(soundingName, soundingNumeral);
   drawing.append(way, names, sounding);
   return drawing;
 }
 
-/** Writes the chord sounding in the middle, at a size its name fits the hole at; nothing there for none. */
-function nameTheChordSounding(drawing: SVGSVGElement, name: string | null): void {
-  const written = drawing.querySelector('.roll-circle__sounding');
+/** Writes some words in the middle, at the size given or smaller, as the hole fits them. */
+function writeInTheMiddle(written: Element | null, words: string, size: number): void {
   if (written === null) {
     return;
   }
-  written.textContent = name ?? '';
-  const letters = [...(name ?? '')].length;
-  written.setAttribute('font-size', Math.min(SOUNDING_SIZE, SOUNDING_ROOM / (Math.max(letters, 1) * A_LETTER_IS)).toFixed(2));
+  written.textContent = words;
+  const letters = [...words].length;
+  written.setAttribute('font-size', Math.min(size, SOUNDING_ROOM / (Math.max(letters, 1) * A_LETTER_IS)).toFixed(2));
+}
+
+/** Writes the chord sounding in the middle, its numeral under it; nothing there for none. */
+function nameTheChordSounding(
+  drawing: SVGSVGElement,
+  sounding: { readonly name: string; readonly numeral: string } | null,
+): void {
+  writeInTheMiddle(drawing.querySelector('.roll-circle__sounding-name'), sounding?.name ?? '', SOUNDING_SIZE);
+  writeInTheMiddle(drawing.querySelector('.roll-circle__sounding-numeral'), sounding?.numeral ?? '', SOUNDING_NUMERAL_SIZE);
 }
 
 /**
@@ -190,8 +209,8 @@ export function showOnTheCircle(
     readonly fifths: number;
     readonly ofTheKey: readonly (PlaceOnTheCircle & { readonly numeral: string })[];
     readonly here: PlaceOnTheCircle | null;
-    /** The name of the chord sounding, which `here` is the place of where it has one. */
-    readonly sounding: string | null;
+    /** The chord sounding, its name and its degree in the key, which `here` is the place of where it has one. */
+    readonly sounding: { readonly name: string; readonly numeral: string } | null;
     /** The way the music came to where it is, oldest first: see `theWayRoundTheCircle`. */
     readonly way: readonly PlaceOnTheCircle[];
   },

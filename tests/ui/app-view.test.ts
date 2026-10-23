@@ -9713,7 +9713,7 @@ describe('AppView', () => {
       expect(element('roll-side').hidden).toBe(true);
     });
 
-    it('names the chord sounding in the middle of the circle - the keys held where they make one, the cursor\'s otherwise - and lights its slice', async () => {
+    it('names the chord sounding in the middle of the circle with its numeral - the keys held where they make one, the cursor\'s otherwise - and lights its slice', async () => {
       const { view, sketches, clock, midi } = createRig();
       await view.initialize();
       const held = (midis: readonly number[], atMs: number, upAtMs: number) =>
@@ -9739,8 +9739,10 @@ describe('AppView', () => {
         tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: (ms / 1000) * zoom, clientY: 20 });
       };
       const circle = element('roll-circle');
-      const middle = (): string => circle.querySelector('.roll-circle__sounding')?.textContent ?? '';
-      const sizeInTheMiddle = (): number => Number(circle.querySelector('.roll-circle__sounding')?.getAttribute('font-size'));
+      const middle = (): string => circle.querySelector('.roll-circle__sounding-name')?.textContent ?? '';
+      const numeral = (): string => circle.querySelector('.roll-circle__sounding-numeral')?.textContent ?? '';
+      const sizeInTheMiddle = (): number => Number(circle.querySelector('.roll-circle__sounding-name')?.getAttribute('font-size'));
+      const numeralSize = (): number => Number(circle.querySelector('.roll-circle__sounding-numeral')?.getAttribute('font-size'));
       const here = (): string[] =>
         [...circle.querySelectorAll('[data-ring][data-here]')].map((slice) => `${slice.getAttribute('data-ring') ?? ''} ${slice.getAttribute('data-place') ?? ''}`);
       const steps = (): number => circle.querySelectorAll('.roll-circle__step').length;
@@ -9759,41 +9761,56 @@ describe('AppView', () => {
       element<HTMLButtonElement>('roll-chords-open').click();
       cursorAt(2_600);
       // The cursor's chord, with nothing held.
-      expect([middle(), here()]).toEqual(['Am', ['minor 0']]);
+      expect([middle(), numeral(), here()]).toEqual(['Am', 'vi', ['minor 0']]);
+      // The numeral under the name, smaller.
+      expect(numeralSize()).toBeLessThan(sizeInTheMiddle());
       const wayBefore = steps();
       // Held, the keys' chord instead, spelt in the key, its slice lit, the way as it was; and not over the drawing too.
       down(62, 66, 69);
-      expect([middle(), here(), steps()]).toEqual(['D', ['major 2'], wayBefore]);
+      expect([middle(), numeral(), here(), steps()]).toEqual(['D', 'II', ['major 2'], wayBefore]);
       expect(pill.hidden).toBe(true);
       // A suspended one on its root's slice; an augmented one, which has no place, named in the middle and no slice lit.
       up(66);
       down(67);
-      expect([middle(), here()]).toEqual(['Dsus4', ['major 2']]);
+      expect([middle(), numeral(), here()]).toEqual(['Dsus4', 'IIsus4', ['major 2']]);
       up(67, 69);
       down(66, 70);
-      expect([middle(), here()]).toEqual(['D+', []]);
+      expect([middle(), numeral(), here()]).toEqual(['D+', 'II+', []]);
       // Keys that make none leave the cursor's.
       up(62, 66, 70);
       down(61);
-      expect([middle(), here()]).toEqual(['Am', ['minor 0']]);
+      expect([middle(), numeral(), here()]).toEqual(['Am', 'vi', ['minor 0']]);
       up(61);
-      // A long name smaller, to fit the hole.
-      const short = sizeInTheMiddle();
+      // A long name smaller, to fit the hole, and a long numeral.
+      const [short, shortNumeral] = [sizeInTheMiddle(), numeralSize()];
       down(61, 64, 67, 70);
-      expect(middle()).toBe('C♯dim7');
+      expect([middle(), numeral()]).toEqual(['C♯dim7', '♭ii°7']);
       expect(sizeInTheMiddle()).toBeLessThan(short);
       up(61, 64, 67, 70);
-      // Spelt as the key the sketch is in spells it: in D major, with sharps.
+      down(59, 62, 66, 69);
+      expect([middle(), numeral()]).toEqual(['Bm7', 'vii7']);
+      expect(numeralSize()).toBe(shortNumeral);
+      up(59, 62, 66, 69);
+      down(56, 59, 63, 67);
+      expect([middle(), numeral()]).toEqual(['A♭m(maj7)', '♭vi(maj7)']);
+      expect(numeralSize()).toBeLessThan(shortNumeral);
+      up(56, 59, 63, 67);
+      // Spelt and numbered as the key the sketch is in: in D major, with sharps.
       sketches.changeTheKey(sketch.id, aKeyInTheScale(2, 'major'));
       down(63, 66, 70);
-      expect(middle()).toBe('D♯m');
+      expect([middle(), numeral()]).toEqual(['D♯m', '♭ii']);
+      up(63, 66, 70);
+      down(62, 66, 69);
+      expect([middle(), numeral()]).toEqual(['D', 'I']);
+      up(62, 66, 69);
+      down(63, 66, 70);
       // Put away with the chords, the pill names the keys held again; nowhere, nothing.
       element<HTMLButtonElement>('roll-chords-open').click();
       expect([pill.hidden, (pill.textContent ?? '').trim()]).toEqual([false, 'D♯m']);
       up(63, 66, 70);
       cursorAt(5_000);
       element<HTMLButtonElement>('roll-chords-open').click();
-      expect([middle(), here()]).toEqual(['', []]);
+      expect([middle(), numeral(), here()]).toEqual(['', '', []]);
     });
 
     it('shows the notes a slice of the circle would write while the pointer rests on it, and writes those', async () => {

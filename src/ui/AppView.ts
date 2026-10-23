@@ -2734,11 +2734,11 @@ export class AppView {
     rollMarkYes: HTMLButtonElement;
     rollMarkNo: HTMLButtonElement;
     rollChords: HTMLElement;
+    rollSide: HTMLElement;
     rollCircle: HTMLElement;
     rollChordsList: HTMLElement;
     rollChordsKeep: HTMLButtonElement;
     rollChordsForget: HTMLButtonElement;
-    rollCopy: HTMLButtonElement;
     rollCopyChosen: HTMLButtonElement;
     rollArpeggioUp: HTMLButtonElement;
     rollArpeggioDown: HTMLButtonElement;
@@ -3136,11 +3136,11 @@ export class AppView {
       rollMarkYes: requireElement(doc, 'roll-mark-yes'),
       rollMarkNo: requireElement(doc, 'roll-mark-no'),
       rollChords: requireElement(doc, 'roll-chords'),
+      rollSide: requireElement(doc, 'roll-side'),
       rollCircle: requireElement(doc, 'roll-circle'),
       rollChordsList: requireElement(doc, 'roll-chords-list'),
       rollChordsKeep: requireElement(doc, 'roll-chords-keep'),
       rollChordsForget: requireElement(doc, 'roll-chords-forget'),
-      rollCopy: requireElement(doc, 'roll-copy'),
       rollCopyChosen: requireElement(doc, 'roll-copy-chosen'),
       rollArpeggioUp: requireElement(doc, 'roll-arpeggio-up'),
       rollArpeggioDown: requireElement(doc, 'roll-arpeggio-down'),
@@ -10208,9 +10208,6 @@ export class AppView {
     this.listen(this.el.rollChordsKeep, 'click', () => {
       this.keepOrLetGoOfTheChosenChord();
     });
-    this.listen(this.el.rollCopy, 'click', () => {
-      this.copyTheChosenKeys(false);
-    });
     this.listen(this.el.rollCopyChosen, 'click', () => {
       this.copyTheChosenKeys(false);
     });
@@ -13522,7 +13519,15 @@ export class AppView {
     this.el.rollEdit.setAttribute('aria-label', this.el.rollEdit.title);
     this.el.rollSelect.setAttribute('aria-pressed', String(sketch === undefined ? this.boxOnTheViewer : sketch.tool === 'selection'));
     // Only a sketch has them, and they are there only while it is edited.
-    for (const button of [this.el.rollDelete, this.el.rollUndo, this.el.rollRedo, this.el.rollMark, this.el.rollChordsOpen, this.el.rollRecord]) {
+    for (const button of [
+      this.el.rollDelete,
+      this.el.rollPaste,
+      this.el.rollUndo,
+      this.el.rollRedo,
+      this.el.rollMark,
+      this.el.rollChordsOpen,
+      this.el.rollRecord,
+    ]) {
       button.hidden = sketch === undefined;
       if (editing) {
         delete button.dataset['away'];
@@ -13539,16 +13544,32 @@ export class AppView {
     } else {
       this.el.rollSelect.dataset['away'] = 'true';
     }
-    // A sketch is copied from its drawer, with the rest of what a finger does to its notes.
-    this.el.rollCopyChosen.hidden = sketch !== undefined;
+    // Copied out of any drawing; a sketch's notes are chosen only while it is edited.
+    if (editing || sketch === undefined) {
+      delete this.el.rollCopyChosen.dataset['away'];
+    } else {
+      this.el.rollCopyChosen.dataset['away'] = 'true';
+    }
     const toCopy = this.theNotesChosen().length > 0;
+    const copies = sketch === undefined ? 'Copy the chosen notes, to paste into a sketch' : 'Copy the chosen notes';
     sayWhetherIdle(
       this.el.rollCopyChosen,
       toCopy
-        ? 'Copy the chosen notes, to paste into a sketch'
-        : 'Copy the chosen notes, to paste into a sketch. Choose some first: draw a box around them.',
+        ? copies
+        : sketch === undefined
+          ? `${copies}. Choose some first: draw a box around them.`
+          : `${copies}. Choose one first.`,
       !toCopy,
     );
+    this.sayWhetherThereIsAnythingToPaste();
+    // A chord is two keys or more chosen that go down together.
+    const struckTogether = (sketch?.chosen ?? []).some((key) =>
+      (sketch?.chosen ?? []).some((other) => other.downAtMs === key.downAtMs && other.midi !== key.midi),
+    );
+    for (const [button, way] of this.theArpeggioButtons()) {
+      const breaks = `Break the chosen chords ${ARPEGGIO_WAYS[way]}, a key a step of the grid`;
+      sayWhetherIdle(button, struckTogether ? breaks : `${breaks}. Choose a chord first: notes struck together.`, !struckTogether);
+    }
 
     const chosen = sketch?.chosen ?? [];
     const [only] = chosen;
@@ -13673,9 +13694,9 @@ export class AppView {
     this.el.rollChordsOpen.setAttribute('aria-pressed', String(this.chordsOfTheKeyOpen));
     this.el.rollChordsOpen.title = this.chordsOfTheKeyOpen
       ? 'Put the chords away'
-      : 'Chords, to write where the cursor is, and copy and paste';
+      : 'Chords, to write where the cursor is';
     this.el.rollChordsOpen.setAttribute('aria-label', this.el.rollChordsOpen.title);
-    this.el.rollChords.hidden = !open;
+    this.el.rollSide.hidden = !open;
     if (!open || stored === null || sketch === undefined) {
       this.pointAtTheChord(null);
       return;
@@ -13727,25 +13748,6 @@ export class AppView {
       );
     }
 
-    const chosen = sketch.chosen.length > 0;
-    sayWhetherIdle(this.el.rollCopy, chosen ? 'Copy the chosen notes' : 'Copy the chosen notes. Choose one first.', !chosen);
-    const canRead = typeof this.doc.defaultView?.navigator?.clipboard?.readText === 'function';
-    const toPaste = canRead || this.notesCopiedHere !== null || this.changeCopiedHere !== null;
-    sayWhetherIdle(
-      this.el.rollPaste,
-      toPaste ? 'Paste where the cursor is' : 'Paste where the cursor is. Copy notes or a change first.',
-      !toPaste,
-    );
-
-    // A chord is two keys or more chosen that go down together.
-    const struckTogether = sketch.chosen.some((key) =>
-      sketch.chosen.some((other) => other.downAtMs === key.downAtMs && other.midi !== key.midi),
-    );
-    for (const [button, way] of this.theArpeggioButtons()) {
-      const breaks = `Break the chosen chords ${ARPEGGIO_WAYS[way]}, a key a step of the grid`;
-      sayWhetherIdle(button, struckTogether ? breaks : `${breaks}. Choose a chord first: notes struck together.`, !struckTogether);
-    }
-
     const keeping = this.whatKeepingWouldDo();
     this.el.rollChordsKeep.textContent = keeping.lettingGo ? '\u2212' : '+';
     sayWhetherIdle(this.el.rollChordsKeep, keeping.says, keeping.idle);
@@ -13753,6 +13755,17 @@ export class AppView {
     if (this.chordPointedAt !== null) {
       this.showTheChordAhead();
     }
+  }
+
+  /** Dims the paste where there is nothing to paste: no clipboard to read, and nothing copied here. */
+  private sayWhetherThereIsAnythingToPaste(): void {
+    const canRead = typeof this.doc.defaultView?.navigator?.clipboard?.readText === 'function';
+    const toPaste = canRead || this.notesCopiedHere !== null || this.changeCopiedHere !== null;
+    sayWhetherIdle(
+      this.el.rollPaste,
+      toPaste ? 'Paste where the cursor is' : 'Paste where the cursor is. Copy notes or a change first.',
+      !toPaste,
+    );
   }
 
   /**
@@ -14317,7 +14330,6 @@ export class AppView {
    */
   private showTheCircle(): void {
     const open = this.theChordsOfTheKeyAreOpen();
-    this.el.rollCircle.hidden = !open;
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
     if (!open || stored === null) {
@@ -14837,8 +14849,7 @@ export class AppView {
     };
     this.changeCopiedHere = change;
     this.notesCopiedHere = null;
-    // The paste button, which says whether there is anything to paste.
-    this.showTheChordsOfTheKey();
+    this.sayWhetherThereIsAnythingToPaste();
     // A page not served securely has no clipboard, and a cut there would only take away, as a cut of notes would.
     const clipboard = this.doc.defaultView?.navigator?.clipboard;
     if (clipboard === undefined) {
@@ -16480,7 +16491,7 @@ export class AppView {
     const notes = theNotesCopied(events, this.theNotesChosen());
     if (notes.length > 0) {
       this.notesCopiedHere = notes;
-      this.showTheChordsOfTheKey();
+      this.sayWhetherThereIsAnythingToPaste();
     }
     // A page not served securely has no clipboard, and a cut there would only delete.
     if (clipboard === undefined) {

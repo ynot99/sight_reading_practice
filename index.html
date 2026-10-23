@@ -587,14 +587,23 @@
               </svg>
             </button>
             <!--
-              On a drawing that is not a sketch - a score, a recording, a run -
-              the notes chosen copied, to be pasted into one.
+              The notes chosen copied, and pasted where the cursor is: what
+              Ctrl+C and Ctrl+V do, for a finger with no keyboard to hold Ctrl
+              on. Copied from any drawing - a score, a recording, a run - and
+              pasted only into a sketch being edited.
             -->
             <button id="roll-copy-chosen" type="button" class="button" title="Copy the chosen notes, to paste into a sketch"
-              aria-label="Copy the chosen notes, to paste into a sketch" hidden>
+              aria-label="Copy the chosen notes, to paste into a sketch">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
                 class="take-transport__icon">
                 <path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z" />
+              </svg>
+            </button>
+            <button id="roll-paste" type="button" class="button" title="Paste where the cursor is"
+              aria-label="Paste where the cursor is" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
+                class="take-transport__icon">
+                <path d="M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zm-7 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm7 18H5V4h2v3h10V4h2v16z" />
               </svg>
             </button>
             <button id="roll-delete" type="button" class="button" title="Delete a note"
@@ -668,9 +677,11 @@
             over it, so no note goes under the drawer while it is open.
           -->
           <!--
-            The drawing with its drawer of chords, and the circle of fifths
-            beside them while the chords are open: at their right where the
-            screen is wider than tall, under them where it is taller.
+            The drawing, and beside it while the chords are open the circle of
+            fifths with the chords to write under it: at the drawing's right
+            where the screen is wider than tall, under it where it is taller.
+            The circle and the buttons write the same chords, so they stand
+            together.
           -->
           <div class="roll-harmony">
           <div class="roll-room">
@@ -731,39 +742,11 @@
             <div id="roll-map-head" class="roll-map__head"></div>
           </div>
           </div>
-          <div id="roll-chords" class="roll-chords" role="group" aria-label="The chords of the key" hidden>
-            <!--
-              Copying and pasting with a finger, which has no keyboard to hold
-              Ctrl on: what Ctrl+C and Ctrl+V do.
-            -->
-            <div class="roll-chords__row">
-              <button id="roll-copy" type="button" class="button roll-chords__tool" title="Copy the chosen notes"
-                aria-label="Copy the chosen notes">
-                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
-                  class="take-transport__icon">
-                  <path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z" />
-                </svg>
-              </button>
-              <button id="roll-paste" type="button" class="button roll-chords__tool" title="Paste where the cursor is"
-                aria-label="Paste where the cursor is">
-                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
-                  class="take-transport__icon">
-                  <path d="M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zm-7 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm7 18H5V4h2v3h10V4h2v16z" />
-                </svg>
-              </button>
-            </div>
-            <!--
-              The chosen chords broken into one key a step of the grid, over
-              each chord's length: up, down, and up and back down.
-            -->
-            <div class="roll-chords__row">
-              <button id="roll-arpeggio-up" type="button" class="button roll-chords__tool"
-                title="Break the chosen chords up, a key a step of the grid" aria-label="Break the chosen chords up, a key a step of the grid">&uarr;</button>
-              <button id="roll-arpeggio-down" type="button" class="button roll-chords__tool"
-                title="Break the chosen chords down, a key a step of the grid" aria-label="Break the chosen chords down, a key a step of the grid">&darr;</button>
-              <button id="roll-arpeggio-up-and-down" type="button" class="button roll-chords__tool"
-                title="Break the chosen chords up and back down, a key a step of the grid" aria-label="Break the chosen chords up and back down, a key a step of the grid">&varr;</button>
-            </div>
+          </div>
+          <div id="roll-side" class="roll-side" hidden>
+          <!-- Drawn by the page, a slice for each chord: see `circleView.ts`. -->
+          <div id="roll-circle" class="roll-circle"></div>
+          <div id="roll-chords" class="roll-chords" role="group" aria-label="The chords of the key">
             <!-- The key's chords, then the writer's own, each one press to write. -->
             <div id="roll-chords-list" class="roll-chords__list"></div>
             <!--
@@ -785,8 +768,6 @@
             </div>
           </div>
           </div>
-          <!-- Drawn by the page, a slice for each chord: see `circleView.ts`. -->
-          <div id="roll-circle" class="roll-circle" hidden></div>
           </div>
           <!--
             Choosing what to practise out of the picture of what happened.
@@ -850,6 +831,19 @@
             <!-- The chosen notes each struck a little harder or softer, as a hand would. -->
             <button id="roll-humanize" type="button" class="button roll-humanize"
               title="Humanize" aria-label="Humanize">H</button>
+            <!--
+              The chosen chords broken into one key a step of the grid, over
+              each chord's length: up, down, and up and back down. With the
+              other changes to the chosen notes.
+            -->
+            <span class="roll-arpeggio" role="group" aria-label="Break the chosen chords">
+              <button id="roll-arpeggio-up" type="button" class="button"
+                title="Break the chosen chords up, a key a step of the grid" aria-label="Break the chosen chords up, a key a step of the grid">&uarr;</button>
+              <button id="roll-arpeggio-down" type="button" class="button"
+                title="Break the chosen chords down, a key a step of the grid" aria-label="Break the chosen chords down, a key a step of the grid">&darr;</button>
+              <button id="roll-arpeggio-up-and-down" type="button" class="button"
+                title="Break the chosen chords up and back down, a key a step of the grid" aria-label="Break the chosen chords up and back down, a key a step of the grid">&varr;</button>
+            </span>
           </div>
           <div id="roll-passage" class="roll-passage">
             <button id="roll-from" type="button" class="button">Start here</button>

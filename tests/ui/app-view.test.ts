@@ -5592,9 +5592,9 @@ describe('AppView', () => {
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
       rowButton('sketches-list', 'Edit this sketch').click();
-      // On a sketch, the copy is its drawer's.
-      expect(copy.hidden).toBe(true);
-      element<HTMLButtonElement>('roll-chords-open').click();
+      // On a sketch, the same copy, and the paste beside it, with the chords put away.
+      expect(copy.hidden).toBe(false);
+      expect(element('roll-side').hidden).toBe(true);
       element<HTMLButtonElement>('roll-paste').click();
       await Promise.resolve();
       await Promise.resolve();
@@ -9092,10 +9092,10 @@ describe('AppView', () => {
       // Shut until asked for, its button there while the sketch is edited.
       expect(open.hidden).toBe(false);
       expect(open.dataset['away']).toBeUndefined();
-      expect(drawer.hidden).toBe(true);
+      expect(element('roll-side').hidden).toBe(true);
       open.click();
       expect(open.getAttribute('aria-pressed')).toBe('true');
-      expect(drawer.hidden).toBe(false);
+      expect(element('roll-side').hidden).toBe(false);
       expect(chords()).toEqual(['CI', 'Dmii', 'Emiii', 'FIV', 'GV', 'Amvi', 'Bdimvii°']);
 
       // Written from the cursor to the next line of the grid, as loud as the
@@ -9178,14 +9178,14 @@ describe('AppView', () => {
 
       // Listening, it is put away, and back with the editing.
       element<HTMLButtonElement>('roll-edit').click();
-      expect(drawer.hidden).toBe(true);
+      expect(element('roll-side').hidden).toBe(true);
       expect(open.dataset['away']).toBe('true');
       element<HTMLButtonElement>('roll-edit').click();
-      expect(drawer.hidden).toBe(false);
+      expect(element('roll-side').hidden).toBe(false);
       // Put away by its button.
       open.click();
       expect(open.getAttribute('aria-pressed')).toBe('false');
-      expect(drawer.hidden).toBe(true);
+      expect(element('roll-side').hidden).toBe(true);
       expect(notes()).toEqual(original);
 
       function key(init: KeyboardEventInit): void {
@@ -9429,9 +9429,9 @@ describe('AppView', () => {
         (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'noteOn' ? [String(event.midi)] : []));
 
       // Away until the chords are open, then every chord round it, the key's own lit.
-      expect(circle.hidden).toBe(true);
+      expect(element('roll-side').hidden).toBe(true);
       element<HTMLButtonElement>('roll-chords-open').click();
-      expect(circle.hidden).toBe(false);
+      expect(element('roll-side').hidden).toBe(false);
       expect(circle.querySelectorAll('[data-ring]')).toHaveLength(36);
       expect(lit()).toEqual(['B° vii°', 'C I', 'Dm ii', 'Em iii', 'F IV', 'G V', 'Am vi'].sort());
       expect([litNames(), hereNames()]).toEqual([7, 1]);
@@ -9466,7 +9466,7 @@ describe('AppView', () => {
       expect(slice('minor', 3)?.getAttribute('aria-label')).toBe('Write G♭m where the cursor is');
       // Put away with the chords.
       element<HTMLButtonElement>('roll-chords-open').click();
-      expect(circle.hidden).toBe(true);
+      expect(element('roll-side').hidden).toBe(true);
     });
 
     it('shows the notes a slice of the circle would write while the pointer rests on it, and writes those', async () => {
@@ -10109,7 +10109,7 @@ describe('AppView', () => {
       expect(noteCount()).toBe(1);
     });
 
-    it('copies and pastes the chosen notes by the drawer\'s buttons, from the notes copied here where the clipboard cannot say', async () => {
+    it('copies and pastes the chosen notes by the buttons over the drawing, from the notes copied here where the clipboard cannot say', async () => {
       const { view, sketches } = createRig();
       await view.initialize();
       const sketch = sketches.begin(
@@ -10157,8 +10157,14 @@ describe('AppView', () => {
           [0, 60, 400],
           [500, 64, 1_000],
         ];
-        const copy = element<HTMLButtonElement>('roll-copy');
+        const copy = element<HTMLButtonElement>('roll-copy-chosen');
         const paste = element<HTMLButtonElement>('roll-paste');
+        // Over the drawing, whether or not the chords are open; put by while listening.
+        expect(element('roll-side').hidden).toBe(true);
+        expect([copy.hidden, paste.hidden, copy.dataset['away'], paste.dataset['away']]).toEqual([false, false, undefined, undefined]);
+        element<HTMLButtonElement>('roll-edit').click();
+        expect([copy.dataset['away'], paste.dataset['away']]).toEqual(['true', 'true']);
+        element<HTMLButtonElement>('roll-edit').click();
         const pasted = async (): Promise<void> => {
           paste.click();
           await Promise.resolve();
@@ -10170,7 +10176,6 @@ describe('AppView', () => {
         const undo = (): void => {
           document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'z', code: 'KeyZ', ctrlKey: true }));
         };
-        element<HTMLButtonElement>('roll-chords-open').click();
 
         // Nothing chosen, nothing to copy; nothing copied and no clipboard, nothing to paste.
         expect(copy.dataset['idle']).toBe('true');
@@ -10210,7 +10215,7 @@ describe('AppView', () => {
       }
     });
 
-    it('breaks the chosen chords by the drawer\'s arrows, a key a step of the grid as it is drawn', async () => {
+    it('breaks the chosen chords by the arrows beside Quantize, a key a step of the grid as it is drawn', async () => {
       const { view, sketches } = createRig();
       await view.initialize();
       const sketch = sketches.begin(

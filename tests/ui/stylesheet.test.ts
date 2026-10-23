@@ -1434,25 +1434,42 @@ describe('the stylesheet', () => {
     expect(HTML).toMatch(/<div class="roll-stage">\s*<div id="roll-body"[^>]*><\/div>[\s\S]*?<div id="roll-box"/);
   });
 
-  it('puts the circle of fifths beside the drawing and its chords where the screen is wide, and under them where it is tall', () => {
+  it('puts the circle of fifths and the chords under it beside the drawing where the screen is wide, and under it side by side where it is tall', () => {
     const ruleOf = (selector: string, media = ''): string =>
       rules().find((rule) => rule.selector === selector && inWhichMedia(rule.at) === media)?.body ?? '';
     const portrait = '@media (orientation: portrait)';
+    // The drawing, then a column of the circle over the chords, the keep and the delete at its foot.
     expect(HTML).toMatch(
-      /<div class="roll-harmony">\s*<div class="roll-room">[\s\S]*?id="roll-chords-forget"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>\s*(?:<!--[\s\S]*?-->\s*)?<div id="roll-circle" class="roll-circle" hidden><\/div>\s*<\/div>/,
+      /<div class="roll-harmony">\s*<div class="roll-room">\s*<div class="roll-frame">[\s\S]*?id="roll-map"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>\s*<div id="roll-side" class="roll-side" hidden>\s*(?:<!--[\s\S]*?-->\s*)?<div id="roll-circle" class="roll-circle"><\/div>\s*<div id="roll-chords"[^>]*>[\s\S]*?id="roll-chords-keep"[^>]*>\+<\/button>\s*<button id="roll-chords-forget"[\s\S]*?<\/button>\s*<\/div>\s*<\/div>\s*<\/div>\s*<\/div>/,
     );
     expect(ruleOf('.roll-harmony')).toMatch(/display\s*:\s*flex/);
     expect(ruleOf('.roll-harmony')).not.toMatch(/flex-direction/);
     expect(ruleOf('.roll-harmony')).toMatch(/flex\s*:\s*1 1 auto/);
     expect(ruleOf('.roll-harmony')).toMatch(/min-height\s*:\s*0/);
     expect(ruleOf('.roll-room')).toMatch(/min-width\s*:\s*0/);
+    expect(ruleOf('.roll-side')).toMatch(/flex-direction\s*:\s*column/);
+    expect(ruleOf('.roll-side')).toMatch(/flex\s*:\s*none/);
+    expect(ruleOf('.roll-side')).toMatch(/width\s*:\s*min\(300px, 32vw\)/);
+    expect(ruleOf('.roll-side')).toMatch(/min-height\s*:\s*0/);
     expect(ruleOf('.roll-circle')).toMatch(/flex\s*:\s*none/);
-    expect(ruleOf('.roll-circle')).toMatch(/width\s*:\s*min\(300px, 32vw\)/);
     expect(ruleOf('.roll-circle__drawing')).toMatch(/aspect-ratio\s*:\s*1/);
     expect(ruleOf('.roll-circle__drawing')).toMatch(/max-height\s*:\s*100%/);
+    // Under the chords' column the rest of its height, scrolled where there are more.
+    expect(ruleOf('.roll-chords')).toMatch(/flex\s*:\s*1 1 auto/);
+    expect(ruleOf('.roll-chords')).toMatch(/min-height\s*:\s*0/);
+    expect(ruleOf('.roll-chords')).toMatch(/overflow-y\s*:\s*auto/);
+    expect(ruleOf('.roll-chords')).toMatch(/overflow-x\s*:\s*hidden/);
+    expect(ruleOf('.roll-chords__list')).toMatch(/display\s*:\s*grid/);
+    expect(ruleOf('.roll-chords__list')).toMatch(/grid-template-columns\s*:\s*repeat\(auto-fill, minmax\(64px, 1fr\)\)/);
+    expect(ruleOf('.roll-chords__chord')).toMatch(/min-height\s*:\s*44px/);
+    // Tall: under the drawing, the circle as high as the room and the chords beside it.
     expect(ruleOf('.roll-harmony', portrait)).toMatch(/flex-direction\s*:\s*column/);
-    expect(ruleOf('.roll-circle', portrait)).toMatch(/height\s*:\s*min\(32vh, calc\(100vw - 32px\)\)/);
-    expect(ruleOf('.roll-circle', portrait)).toMatch(/width\s*:\s*auto/);
+    expect(ruleOf('.roll-side', portrait)).toMatch(/flex-direction\s*:\s*row/);
+    expect(ruleOf('.roll-side', portrait)).toMatch(/height\s*:\s*min\(32vh, calc\(100vw - 32px\)\)/);
+    expect(ruleOf('.roll-side', portrait)).toMatch(/width\s*:\s*auto/);
+    expect(ruleOf('.roll-circle', portrait)).toMatch(/height\s*:\s*100%/);
+    expect(ruleOf('.roll-chords', portrait)).toMatch(/flex\s*:\s*1 1 0/);
+    expect(ruleOf('.roll-chords', portrait)).toMatch(/min-width\s*:\s*0/);
     expect(ruleOf('.roll-circle__drawing', portrait)).toMatch(/height\s*:\s*100%/);
     // Lit with the accent, never a verdict's colour; the music's chord more than the key's.
     expect(ruleOf(".roll-circle__chord[data-in-the-key='true'] path")).toMatch(/var\(--accent\) 18%/);
@@ -1470,29 +1487,19 @@ describe('the stylesheet', () => {
     expect(ruleOf('.roll-circle__step')).toMatch(/stroke\s*:\s*var\(--accent\)/);
   });
 
-  it('opens the drawer of chords at the right of the drawing, beside it rather than over it', () => {
-    // In one row with the drawing, after it, and the drawing gives up its
-    // width: a drawer laid over it would hide the notes at its right edge.
+  it('gives the drawing the room the chords leave it, never laying them over its notes', () => {
     const ruleOf = (selector: string): string => rules().find((rule) => rule.selector === selector)?.body ?? '';
-    expect(HTML).toMatch(
-      /<div class="roll-room">\s*<div class="roll-frame">[\s\S]*?id="roll-map"[\s\S]*?<\/div>\s*<\/div>\s*<div id="roll-chords"[^>]*>[\s\S]*?id="roll-chords-keep"[^>]*>\+<\/button>\s*<button id="roll-chords-forget"[\s\S]*?<\/button>\s*<\/div>\s*<\/div>\s*<\/div>/,
-    );
     expect(ruleOf('.roll-room')).toMatch(/display\s*:\s*flex/);
     expect(ruleOf('.roll-room')).not.toMatch(/flex-direction/);
     expect(ruleOf('.roll-room')).toMatch(/flex\s*:\s*1 1 auto/);
     expect(ruleOf('.roll-room')).toMatch(/min-height\s*:\s*0/);
     expect(ruleOf('.roll-frame')).toMatch(/min-width\s*:\s*0/);
-    expect(ruleOf('.roll-chords')).toMatch(/flex\s*:\s*none/);
     expect(ruleOf('.roll-chords')).not.toMatch(/position\s*:\s*absolute/);
-    expect(ruleOf('.roll-chords')).toMatch(/overflow-y\s*:\s*auto/);
-    expect(ruleOf('.roll-chords')).toMatch(/overflow-x\s*:\s*hidden/);
     // Its buttons' padding outweighs the button's own, which is written later
-    // in the sheet: two of them side by side were wider than the column.
+    // in the sheet: a name in a narrow cell would run out of it.
     expect(ruleOf('.roll-chords .button')).toMatch(/padding\s*:\s*4px\s*;/);
     expect(ruleOf('.roll-chords .button')).toMatch(/min-width\s*:\s*0/);
     expect(ruleOf('.button')).toMatch(/padding\s*:\s*8px 14px/);
-    // The chords stand in the column itself, sharing its height with the keep button.
-    expect(ruleOf('.roll-chords__list')).toMatch(/display\s*:\s*contents/);
     // A finger on the chords is followed by the page, which tells a slide over them from a scroll.
     expect(ruleOf('.roll-chords__chord')).toMatch(/touch-action\s*:\s*none/);
   });
@@ -2399,10 +2406,16 @@ describe('searching the settings', () => {
     // The hand the chosen notes are in, pressed in the accent; all three
     // dimmed with none chosen, and Quantize and Humanize with them.
     expect(body(".roll-hands .button[aria-pressed='true']")).toMatch(/background\s*:\s*var\(--accent\)/);
-    expect(body(".roll-hands[data-idle='true'], .roll-quantize[data-idle='true'], .roll-humanize[data-idle='true']")).toMatch(
-      /opacity\s*:\s*0?\.\d+/,
-    );
+    expect(
+      body(
+        ".roll-hands[data-idle='true'], .roll-quantize[data-idle='true'], .roll-humanize[data-idle='true'], .roll-arpeggio .button[data-idle='true']",
+      ),
+    ).toMatch(/opacity\s*:\s*0?\.\d+/);
     expect(body('.roll-quantize, .roll-humanize')).toMatch(/flex\s*:\s*none/);
+    // The ways to break a chord with them, together, at their own size.
+    expect(body('.roll-arpeggio')).toMatch(/display\s*:\s*flex/);
+    expect(body('.roll-arpeggio')).toMatch(/flex\s*:\s*none/);
+    expect(HTML).toMatch(/id="roll-humanize"[\s\S]*?<span class="roll-arpeggio"[^>]*>\s*<button id="roll-arpeggio-up"/);
     // The key, the metre and the pace asked for from a beat, side by side,
     // and wrapping on a phone; the metre dimmed inside a bar.
     expect(body('.roll-mark__fields')).toMatch(/display\s*:\s*flex/);
@@ -2498,10 +2511,11 @@ describe('searching the settings', () => {
     expect(head?.body).toMatch(/flex-wrap\s*:\s*wrap/);
   });
 
-  it("puts a drawing's buttons in a row of their own under the title on a phone", () => {
-    // Six beside the title left it a few letters wide and pushed the close
-    // button onto a line of its own; the close button stays by the title.
-    const phone = '@media (max-width: 620px)';
+  it("puts a drawing's buttons in a row of their own under the title short of a wide screen", () => {
+    // Six beside the title on a phone, and a sketch's fourteen on a tablet
+    // held upright, left it a few letters wide and pushed the close button
+    // onto a line of its own; the close button stays by the title.
+    const phone = '@media (max-width: 960px)';
     const tools = rules().filter((rule) => rule.selector === '.sheet__tools');
     const narrow = tools.find((rule) => inWhichMedia(rule.at) === phone);
     const wide = tools.find((rule) => inWhichMedia(rule.at) === '');
@@ -2512,6 +2526,9 @@ describe('searching the settings', () => {
     expect(wide?.body).toMatch(/display\s*:\s*flex/);
     expect(narrow?.body).toMatch(/order\s*:\s*1/);
     expect(narrow?.body).toMatch(/flex\s*:\s*1 0 100%/);
+    // A row of its own only if the head lets it go under the title there.
+    const head = rules().find((rule) => rule.selector === '.sheet__head' && inWhichMedia(rule.at) === phone);
+    expect(head?.body).toMatch(/flex-wrap\s*:\s*wrap/);
     // Eight of them in the row at 390 pixels with the selection tool and the
     // redo: thirty-six each, gaps of four; and on a narrower phone the last
     // goes to a line of its own rather than off the sheet.

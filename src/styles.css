@@ -1281,12 +1281,21 @@ textarea {
   min-height: 0;
 }
 
+/* The circle, and the chords to write under it: one column beside the drawing. */
+.roll-side {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 8px;
+  width: min(300px, 32vw);
+  min-height: 0;
+}
+
 .roll-circle {
   display: flex;
   flex: none;
   align-items: flex-start;
   justify-content: center;
-  width: min(300px, 32vw);
   min-height: 0;
 }
 
@@ -1302,10 +1311,21 @@ textarea {
     flex-direction: column;
   }
 
-  .roll-circle {
-    align-items: center;
+  /* Under the drawing, the circle and the chords side by side, as tall as the circle. */
+  .roll-side {
+    flex-direction: row;
     width: auto;
     height: min(32vh, calc(100vw - 32px));
+  }
+
+  .roll-circle {
+    align-items: center;
+    height: 100%;
+  }
+
+  .roll-chords {
+    flex: 1 1 0;
+    min-width: 0;
   }
 
   .roll-circle__drawing {
@@ -1397,16 +1417,16 @@ textarea {
 }
 
 /*
- * The seven chords of the key, from the tonic down the column: each as tall
- * as the drawing lets them share, never shorter than a finger, and the column
- * scrolls where the drawing is too short for seven.
+ * The chords of the key under the circle, the tonic first, as many to a row as
+ * the column holds, each a finger high; the column scrolls where there are
+ * more than the room under the circle shows.
  */
 .roll-chords {
   display: flex;
-  flex: none;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 6px;
-  width: 96px;
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1430,7 +1450,7 @@ textarea {
  */
 .roll-chords__chord {
   display: flex;
-  flex: 1 0 44px;
+  min-height: 44px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -1452,10 +1472,12 @@ textarea {
 
 /* The chords are the column's own, as if the list around them were not there. */
 .roll-chords__list {
-  display: contents;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
 }
 
-/* Copy and paste, and the ways to break a chord, side by side over the chords, as the editor's tools are. */
+/* The keep and the delete side by side under the chords. */
 .roll-chords__row {
   display: flex;
   flex: none;
@@ -2004,13 +2026,20 @@ textarea {
 
 .roll-hands[data-idle='true'],
 .roll-quantize[data-idle='true'],
-.roll-humanize[data-idle='true'] {
+.roll-humanize[data-idle='true'],
+.roll-arpeggio .button[data-idle='true'] {
   opacity: 0.45;
 }
 
 .roll-quantize,
 .roll-humanize {
   flex: none;
+}
+
+.roll-arpeggio {
+  display: flex;
+  flex: none;
+  gap: 4px;
 }
 
 /* The metre and the pace asked for from a bar, side by side, wrapping on a phone. */
@@ -5250,9 +5279,10 @@ body[data-take-on-keys='true'] #take-off-the-keys {
 }
 
 /*
- * A drawing's buttons, together. On a phone a row of their own under the
- * title: six beside it left the title a few letters wide and pushed the
- * close button onto a line of its own.
+ * A drawing's buttons, together. Short of a wide screen a row of their own
+ * under the title: beside it they left the title a few letters wide and
+ * pushed the close button onto a line of its own - six on a phone, and the
+ * fourteen of a sketch being edited on a tablet held upright.
  */
 .sheet__tools {
   display: flex;
@@ -5260,7 +5290,12 @@ body[data-take-on-keys='true'] #take-off-the-keys {
   gap: 8px;
 }
 
-@media (max-width: 620px) {
+@media (max-width: 960px) {
+  /* Which the head lets go under the title, and anything else wider than the row. */
+  .sheet__head {
+    flex-wrap: wrap;
+  }
+
   .sheet__tools {
     order: 1;
     flex: 1 0 100%;

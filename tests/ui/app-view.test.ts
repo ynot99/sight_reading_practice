@@ -13023,6 +13023,39 @@ describe('AppView', () => {
       expect(view.rollScene?.notes.length).toBeGreaterThan(0);
     });
 
+    it('puts the way into the MIDI viewer in the place of the pencil: the viewer on a page of a score, the pencil on one of a sketch', async () => {
+      const { view, runtime, sketches } = createRig();
+      await view.initialize();
+      const viewer = element<HTMLButtonElement>('focus-roll');
+      const pencil = element<HTMLButtonElement>('focus-sketch');
+      // Beside the pencil, out of the row of the passage.
+      expect([viewer.parentElement?.id, pencil.parentElement?.id]).toEqual(['focus-aside', 'focus-aside']);
+      expect(viewer.closest('.focus-bar__passage')).toBeNull();
+      expect([viewer.hidden, pencil.hidden]).toEqual([false, true]);
+      // A sketch written down: its page has the pencil, and no viewer beside it.
+      sketches.begin(
+        {
+          events: [
+            { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: 400, midi: 60 },
+          ],
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Penned',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Write this sketch down as a score').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise?.title).toBe('Penned');
+      });
+      expect([viewer.hidden, pencil.hidden]).toEqual([true, false]);
+      // Another score: the viewer back.
+      await runtime.controller.openScore(twoBarExercise({ title: 'Scored' }));
+      expect([viewer.hidden, pencil.hidden]).toEqual([false, true]);
+    });
+
     it('opens the score itself in the MIDI viewer when focus-roll is pressed', async () => {
       const { view, runtime } = createRig();
       await view.initialize();

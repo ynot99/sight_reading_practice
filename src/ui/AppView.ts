@@ -11496,7 +11496,10 @@ export class AppView {
    */
   private showThePencilBesideThePills(): void {
     const ofASketch = this.theSketchOfThePage() !== null;
-    this.el.focusSketch.hidden = !ofASketch && this.theTakeOfThePage() === null;
+    const pencil = ofASketch || this.theTakeOfThePage() !== null;
+    this.el.focusSketch.hidden = !pencil;
+    // And in its place on a score's page, the score in the viewer.
+    this.el.focusRoll.hidden = pencil;
     this.el.focusSketch.title = ofASketch ? 'Edit this sketch' : BEGIN_A_SKETCH_OF_A_TAKE;
     this.el.focusSketch.setAttribute('aria-label', this.el.focusSketch.title);
   }

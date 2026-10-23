@@ -8151,6 +8151,60 @@ describe('AppView', () => {
       expect(runtime.controller.barARunBeginsAt).toBe(1);
     });
 
+    it('keeps the page of a sketch where it began when a change in the drawing writes it again, the marker left alone', async () => {
+      const { view, sketches, clock, runtime } = createRig();
+      await view.initialize();
+      const notes = (lastLengthMs: number) =>
+        Array.from({ length: 16 }, (_, at) => [
+          { kind: 'noteOn' as const, atMs: at * 500, midi: 60, velocity: 0.5 },
+          { kind: 'noteOff' as const, atMs: at * 500 + (at === 15 ? lastLengthMs : 400), midi: 60 },
+        ]).flat();
+      const sketch = sketches.begin({ events: notes(400), beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })) }, 'Kept', 1);
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Write this sketch down as a score').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise?.title).toBe('Kept');
+      });
+      const body = element('roll-body');
+      const ruler = (ms: number, init: MouseEventInit = {}): void => {
+        clock.advance(1_000);
+        const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+        const scrolled = Number.parseFloat(body.querySelector<HTMLElement>('.roll__head')?.style.getPropertyValue('--roll-x') ?? '0') || 0;
+        body.querySelector('.roll__ruler')?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: (ms / 1000) * zoom - scrolled, clientY: 5, ...init }));
+      };
+      element<HTMLButtonElement>('focus-sketch').click();
+      ruler(4_200);
+      element<HTMLButtonElement>('roll-close').click();
+      expect(runtime.controller.barARunBeginsAt).toBe(2);
+
+      // Opened again at the third bar, a note made longer and nothing else, and shut: written again, still there.
+      element<HTMLButtonElement>('focus-sketch').click();
+      sketches.changeTheNotes(sketch.id, notes(250));
+      const before = runtime.controller.openedExercise;
+      element<HTMLButtonElement>('roll-close').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise).not.toBe(before);
+      });
+      await vi.waitFor(() => {
+        expect(runtime.controller.barARunBeginsAt).toBe(2);
+      });
+
+      // Changed and a passage chosen round it to be practised: written again, at the passage's beginning.
+      element<HTMLButtonElement>('focus-sketch').click();
+      sketches.changeTheNotes(sketch.id, notes(300));
+      ruler(2_200, { ctrlKey: true });
+      ruler(7_200, { altKey: true });
+      const unchanged = runtime.controller.openedExercise;
+      element<HTMLButtonElement>('roll-practise').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise).not.toBe(unchanged);
+      });
+      await vi.waitFor(() => {
+        expect(runtime.controller.barARunBeginsAt).toBe(1);
+      });
+    });
+
     it("asks about the beat under two taps on the ruler of a sketch being edited, as the flag's button does", async () => {
       const { view, sketches, clock } = createRig();
       await view.initialize();

@@ -13248,25 +13248,33 @@ export class AppView {
     // the piece would otherwise move the page's beginning to the run's.
     const placed = this.rollPlacedAtMs;
     const bar = carryTheMarker && placed !== this.headWhereShown ? this.theBarOnThePageAt(placed) : null;
+    // And the bar the page begins at now, for a page written again with the
+    // marker left alone: the writing is a new score, which would begin at its
+    // first bar. Asked before the playback stops, as the marker is.
+    const controller = this.runtime.controller;
+    const pageBegan = carryTheMarker ? (controller.currentTimeline?.steps[controller.beginsAt]?.measureIndex ?? null) : null;
     this.stopTheRoll();
     // And shown there: put in the drawing, it may be on a page not showing.
-    const beginThere = (): void => {
-      if (bar !== null) {
-        this.beginAt(bar);
+    const beginAtThe = (at: number | null): void => {
+      if (at !== null) {
+        this.beginAt(at);
         this.runtime.renderer.showTheMarker();
       }
     };
     this.el.sheetRollOptions.hidden = true;
     this.el.sheetRoll.hidden = true;
     // The page written from a sketch changed in it is written again, so the
-    // page and the sketch never disagree - and begins at the marker once it is.
+    // page and the sketch never disagree - and begins at the marker once it
+    // is, or where it began before.
     const onThePage = this.theSketchOfThePage();
     const now = onThePage === null ? null : this.runtime.sketches.find(onThePage.sketch.id);
     if (onThePage !== null && now !== null && now !== onThePage.sketch) {
-      void this.writeDownTheSketch(now.id, this.el.sheetRoll).then(beginThere);
+      void this.writeDownTheSketch(now.id, this.el.sheetRoll).then(() => {
+        beginAtThe(bar ?? pageBegan);
+      });
       return;
     }
-    beginThere();
+    beginAtThe(bar);
   }
 
   /**

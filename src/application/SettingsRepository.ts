@@ -228,6 +228,11 @@ function readBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
 
+/** A name as it was written, its ends trimmed; nothing that is not a name. */
+function readName(value: unknown): string | undefined {
+  return typeof value === 'string' ? value.trim() : undefined;
+}
+
 function readNumber(value: unknown, min: number, max: number): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
     ? value
@@ -475,6 +480,7 @@ export function decodePracticeSettings(
     survival: readBoolean(value['survival']),
     playingAhead: value['playingAhead'] === 'moves-on' ? 'moves-on' : undefined,
     offerToSync: readBoolean(value['offerToSync']),
+    yourName: readName(value['yourName']),
     readAheadSteps: readReadAhead(value['readAheadSteps'], value['fadePassedNotes']),
     zoom: readNumber(value['zoom'], 0.3, 3),
     immediateStart: readBoolean(value['immediateStart']),
@@ -548,6 +554,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     survival: settings.survival,
     playingAhead: settings.playingAhead,
     offerToSync: settings.offerToSync,
+    yourName: settings.yourName,
     readAheadSteps: settings.readAheadSteps,
     zoom: settings.zoom,
     immediateStart: settings.immediateStart,

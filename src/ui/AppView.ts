@@ -2609,6 +2609,7 @@ export class AppView {
     driveSketches: HTMLUListElement;
     driveSketchesSaid: HTMLElement;
     offerToSync: HTMLInputElement;
+    yourName: HTMLInputElement;
     settingsSearch: HTMLInputElement;
     settingsSearchCount: HTMLOutputElement;
     settingsSearchPrevious: HTMLButtonElement;
@@ -2706,6 +2707,8 @@ export class AppView {
     rollVelocitySaid: HTMLOutputElement;
     rollHands: HTMLElement;
     rollSketchStart: HTMLElement;
+    rollAuthorGroup: HTMLElement;
+    rollAuthor: HTMLInputElement;
     rollKey: HTMLSelectElement;
     rollScale: HTMLSelectElement;
     rollMetre: HTMLSelectElement;
@@ -3012,6 +3015,7 @@ export class AppView {
       driveSketches: requireElement(doc, 'drive-sketches'),
       driveSketchesSaid: requireElement(doc, 'drive-sketches-said'),
       offerToSync: requireElement(doc, 'offer-to-sync'),
+      yourName: requireElement(doc, 'your-name'),
       settingsSearch: requireElement(doc, 'settings-search'),
       settingsSearchCount: requireElement(doc, 'settings-search-count'),
       settingsSearchPrevious: requireElement(doc, 'settings-search-previous'),
@@ -3109,6 +3113,8 @@ export class AppView {
       rollVelocitySaid: requireElement(doc, 'roll-velocity-said'),
       rollHands: requireElement(doc, 'roll-hands'),
       rollSketchStart: requireElement(doc, 'roll-sketch-start'),
+      rollAuthorGroup: requireElement(doc, 'roll-author-group'),
+      rollAuthor: requireElement(doc, 'roll-author'),
       rollKey: requireElement(doc, 'roll-key'),
       rollScale: requireElement(doc, 'roll-scale'),
       rollMetre: requireElement(doc, 'roll-metre'),
@@ -6033,6 +6039,11 @@ export class AppView {
 
     this.listen(this.el.scoreSync, 'click', () => {
       void this.syncWithTheDrive();
+    });
+
+    this.listen(this.el.yourName, 'change', () => {
+      controller.updateSettings({ yourName: this.el.yourName.value.trim() });
+      this.syncControlsFromSettings();
     });
 
     this.listen(this.el.offerToSync, 'change', () => {
@@ -9076,6 +9087,7 @@ export class AppView {
     this.el.pitchClass.checked = settings.pitchClassOnly;
     this.el.playingAhead.value = settings.playingAhead;
     this.el.offerToSync.checked = settings.offerToSync;
+    this.el.yourName.value = settings.yourName;
     this.el.immediateStart.checked = settings.immediateStart;
     this.el.dimUnplayed.checked = settings.dimUnplayed;
     this.renderPassages();
@@ -9970,6 +9982,13 @@ export class AppView {
     this.listen(this.el.rollHumanize, 'click', () => {
       this.humanizeTheChosen();
     });
+    this.listen(this.el.rollAuthor, 'change', () => {
+      const sketch = this.theOtherRollShowing?.sketch;
+      if (sketch !== undefined) {
+        this.runtime.sketches.changeTheAuthor(sketch.id, this.el.rollAuthor.value);
+      }
+      this.sayHowLoudTheChosenAre();
+    });
     this.listen(this.el.scoresShowScores, 'click', () => {
       this.showTheList('scores');
     });
@@ -9978,7 +9997,13 @@ export class AppView {
     });
     this.listen(this.el.sketchesNew, 'click', () => {
       const now = Date.now();
-      const sketch = this.runtime.sketches.begin({ events: [], beats: [] }, `Sketch, ${theDayItWas(now)}`, now);
+      const sketch = this.runtime.sketches.begin(
+        { events: [], beats: [] },
+        `Sketch, ${theDayItWas(now)}`,
+        now,
+        undefined,
+        this.runtime.controller.settings.yourName,
+      );
       this.renderSketches();
       this.showTheSketch(sketch.id);
     });
@@ -11198,15 +11223,18 @@ export class AppView {
    * The score some playing is written down as: the file it would be saved
    * as, read the way a chosen MIDI file is.
    */
-  private theScoreOfThePlaying(
+  private async theScoreOfThePlaying(
     playing: {
       readonly events: readonly MidiFileEvent[];
       readonly beats: readonly HeardBeat[];
       readonly key?: SketchKey;
+      readonly author?: string;
     },
     title: string,
   ): Promise<ImportedScore> {
-    return this.runtime.importer.readFile(thePlayingAsAFile(playing, title).slice().buffer, `${title}.mid`);
+    const read = await this.runtime.importer.readFile(thePlayingAsAFile(playing, title).slice().buffer, `${title}.mid`);
+    // Who wrote it, which a MIDI file has no place for.
+    return playing.author === undefined ? read : { ...read, exercise: { ...read.exercise, composer: playing.author } };
   }
 
   private exportTake(id: string): void {
@@ -11248,6 +11276,7 @@ export class AppView {
       readonly events: readonly MidiFileEvent[];
       readonly beats: readonly HeardBeat[];
       readonly key?: SketchKey;
+      readonly author?: string;
     },
     title: string,
     from: HTMLElement,
@@ -14406,8 +14435,10 @@ export class AppView {
     const sketch = this.theOtherRollShowing?.sketch;
     this.el.rollPassage.hidden = sketch !== undefined;
     this.el.rollVelocity.hidden = sketch?.editing !== true;
-    // Where it begins, in the options, while it is edited as well.
+    // Where it begins, and who wrote it, in the options, while it is edited as well.
     this.el.rollSketchStart.hidden = sketch?.editing !== true;
+    this.el.rollAuthorGroup.hidden = sketch?.editing !== true;
+    this.el.rollAuthor.value = (sketch === undefined ? null : this.runtime.sketches.find(sketch.id))?.author ?? '';
     const key = sketch === undefined ? null : this.runtime.sketches.find(sketch.id)?.key;
     if (key !== undefined && key !== null) {
       this.sayTheKeyOfTheSketch(key);
@@ -15238,7 +15269,13 @@ export class AppView {
     if (take === null) {
       return null;
     }
-    const sketch = this.runtime.sketches.begin(take, `Sketch of a take, ${theDayItWas(take.savedAtMs)}`, Date.now());
+    const sketch = this.runtime.sketches.begin(
+      take,
+      `Sketch of a take, ${theDayItWas(take.savedAtMs)}`,
+      Date.now(),
+      undefined,
+      this.runtime.controller.settings.yourName,
+    );
     this.renderSketches();
     this.showTheSketch(sketch.id);
     return sketch;
@@ -15256,6 +15293,8 @@ export class AppView {
       `Sketch of ${exercise.title || 'the score'}`,
       Date.now(),
       { fifths: exercise.key.fifths, mode: exercise.key.mode },
+      // Whoever wrote the score, and not whoever is sketching it.
+      exercise.composer,
     );
     this.renderSketches();
     this.showTheSketch(sketch.id);

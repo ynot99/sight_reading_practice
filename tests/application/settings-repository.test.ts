@@ -69,6 +69,7 @@ const SETTINGS: PracticeSettings = {
   rollScrollPlayback: true,
   rollHeadAtPercent: 35,
   rollSounds: false,
+  yourName: 'A. Writer',
   velocityAsDynamics: true,
   rhythmRuler: 'eighth',
   rulerCursor: true,

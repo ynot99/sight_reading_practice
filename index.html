@@ -977,6 +977,13 @@
                 a flag further on changes them from its bar.</p>
             </div>
 
+            <!-- Who wrote the sketch being edited, with what else it says of itself. -->
+            <div id="roll-author-group" class="control-group" hidden>
+              <label for="roll-author">Author</label>
+              <input id="roll-author" class="sheet__input" type="text" />
+              <p class="hint">Written as the composer of the score this sketch is written down as.</p>
+            </div>
+
             <div class="control-group">
               <label for="roll-grid">Grid</label>
               <select id="roll-grid">
@@ -1989,6 +1996,14 @@
               -->
               <button id="settings-metronome" type="button" class="button">Metronome…</button>
             </div>
+          </div>
+
+          <!-- Who writes the sketches begun here, which say so in the scores they are written down as. -->
+          <div class="control-group" data-pane="library">
+            <label for="your-name">Your name</label>
+            <input id="your-name" class="sheet__input" type="text" autocomplete="name" />
+            <p class="hint">Said to be who wrote a sketch begun here, and written as the
+              composer of its score. A sketch of a score says the score's own.</p>
           </div>
 
           <div class="control-group" data-pane="library">

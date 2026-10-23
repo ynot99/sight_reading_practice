@@ -502,6 +502,29 @@ describe('the sketches being written', () => {
     expect(next.find(sketch.id)?.title).toBe('Waltz in A');
   });
 
+  it('says who wrote one, keeps it through a change of its notes and across visits, and nobody for an empty name', () => {
+    const store = new InMemorySettingsStore();
+    const library = new SketchLibrary(store, () => 0);
+    const sketch = library.begin({ events: PLAYED, beats: THREE }, 'Waltz', 1, C_MAJOR, '  Clara  ');
+    const nobody = library.begin({ events: PLAYED, beats: THREE }, 'Nobody\'s', 2, C_MAJOR, '   ');
+
+    expect(sketch.author).toBe('Clara');
+    expect('author' in nobody).toBe(false);
+    expect(sketchAsKept(nobody)).not.toHaveProperty('author');
+    expect(library.changeTheNotes(sketch.id, PLAYED.slice(0, 2))?.author).toBe('Clara');
+    expect(library.changeTheAuthor(nobody.id, ' Robert ')?.author).toBe('Robert');
+    const next = new SketchLibrary(store, () => 0);
+    next.load();
+    expect([next.find(sketch.id)?.author, next.find(nobody.id)?.author]).toEqual(['Clara', 'Robert']);
+    // Emptied, nobody again, and to be sent; and nothing of one there is not.
+    next.sentAt(sketch.id, 1);
+    const emptied = next.changeTheAuthor(sketch.id, '');
+    expect(emptied === null ? null : 'author' in emptied).toBe(false);
+    expect(next.changeTheAuthor('sketch-nobody', 'Nobody')).toBeNull();
+    // Unsent once changed.
+    expect(next.forTheDrive().find((each) => each.sketch.id === sketch.id)?.unsent).toBe(true);
+  });
+
   it('deletes one, and keeps that across visits', () => {
     const store = new InMemorySettingsStore();
     const library = new SketchLibrary(store, () => 0);
@@ -614,7 +637,8 @@ describe('what a sync of the sketches needs kept beside them', () => {
     library.takeFromTheDrive({ ...mine, title: 'Theirs', events: PLAYED.slice(0, 2), noteCount: 99 }, 4);
     const over = library.find(mine.id);
     expect([over?.title, over?.noteCount]).toEqual(['Theirs', 1]);
-    library.takeFromTheDrive({ ...mine, id: 'brought', title: 'Brought' }, 2);
+    library.takeFromTheDrive({ ...mine, id: 'brought', title: 'Brought', author: 'Them' }, 2);
+    expect(library.find('brought')?.author).toBe('Them');
     expect(state(again()).sort()).toEqual([
       ['brought', 2, false],
       [mine.id, 4, false],

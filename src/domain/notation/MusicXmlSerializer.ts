@@ -349,6 +349,9 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         writer.leaf('work-title', exercise.title);
       });
       writer.element('identification', undefined, () => {
+        if (exercise.composer !== undefined) {
+          writer.leaf('creator', exercise.composer, { type: 'composer' });
+        }
         writer.element('encoding', undefined, () => {
           writer.leaf('software', this.options.software);
           if (this.options.encodingDate !== undefined) {

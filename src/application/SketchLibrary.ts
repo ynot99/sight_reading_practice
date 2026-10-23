@@ -27,6 +27,12 @@ export interface StoredSketch {
   readonly noteCount: number;
   /** The key it is written in: C major unless it was begun from a score in another. */
   readonly key: SketchKey;
+  /**
+   * Who wrote it, written as the composer of the score it is written down as:
+   * the writer's own name, or a score's composer for a sketch of the score.
+   * Absent where nobody is said.
+   */
+  readonly author?: string;
 }
 
 /** A key as a sketch keeps it: its sharps or flats, and whether it is minor. */
@@ -172,6 +178,7 @@ export function sketchAsKept(sketch: StoredSketch): Record<string, unknown> {
       sketch.key.mode === 'minor' ? 1 : 0,
       ...(sketch.key.scale === undefined ? [] : [sketch.key.scale]),
     ],
+    ...(sketch.author === undefined ? {} : { author: sketch.author }),
   };
 }
 
@@ -190,7 +197,13 @@ function readSketch(value: unknown): StoredSketch | null {
   }
   const unpacked = events.map(unpack).filter((event): event is MidiFileEvent => event !== null);
   const written = value['loudness'] === 1 ? unpacked : unpacked.map(theLevelItWasStruckAt);
-  return sketchOf(id, title, begunAtMs, written, theBeatsIfWhole(beats), readKey(key));
+  return sketchOf(id, title, begunAtMs, written, theBeatsIfWhole(beats), readKey(key), anAuthor(value['author']));
+}
+
+/** An author as a sketch keeps one: some name, or none. */
+function anAuthor(value: unknown): string | undefined {
+  const name = typeof value === 'string' ? value.trim() : '';
+  return name === '' ? undefined : name;
 }
 
 /**
@@ -214,6 +227,7 @@ function sketchOf(
   events: readonly MidiFileEvent[],
   beats: readonly HeardBeat[],
   key: SketchKey,
+  author: string | undefined,
 ): StoredSketch {
   // Each note written at a level struck as hard as it says, wherever the
   // events came from: the one place its velocity is worked out.
@@ -226,6 +240,7 @@ function sketchOf(
     beats,
     noteCount: written.filter((event) => event.kind === 'noteOn').length,
     key,
+    ...(author === undefined ? {} : { author }),
   };
 }
 
@@ -376,6 +391,7 @@ export class SketchLibrary {
     title: string,
     begunAtMs: number,
     key: SketchKey = C_MAJOR,
+    author = '',
   ): StoredSketch {
     const sketch = sketchOf(
       this.unusedId(`sketch-${begunAtMs.toString(36)}`),
@@ -384,6 +400,7 @@ export class SketchLibrary {
       playing.events,
       theBeatsToBeginIn(playing.events, playing.beats),
       key,
+      anAuthor(author),
     );
     this.sketches = [...this.sketches, sketch];
     this.changedHere(sketch.id);
@@ -399,7 +416,7 @@ export class SketchLibrary {
     if (found === null) {
       return null;
     }
-    const changed = sketchOf(found.id, found.title, found.begunAtMs, events, beats ?? found.beats, found.key);
+    const changed = sketchOf(found.id, found.title, found.begunAtMs, events, beats ?? found.beats, found.key, found.author);
     this.sketches = this.sketches.map((sketch) => (sketch.id === id ? changed : sketch));
     this.changedHere(id);
     return changed;
@@ -424,6 +441,20 @@ export class SketchLibrary {
       return null;
     }
     const changed = { ...found, title };
+    this.sketches = this.sketches.map((sketch) => (sketch.id === id ? changed : sketch));
+    this.changedHere(id);
+    return changed;
+  }
+
+  /** Says who wrote a sketch, or that nobody is said where the name is empty; its music as it was. */
+  changeTheAuthor(id: string, author: string): StoredSketch | null {
+    const found = this.find(id);
+    if (found === null) {
+      return null;
+    }
+    const { author: _was, ...rest } = found;
+    const name = anAuthor(author);
+    const changed: StoredSketch = name === undefined ? rest : { ...rest, author: name };
     this.sketches = this.sketches.map((sketch) => (sketch.id === id ? changed : sketch));
     this.changedHere(id);
     return changed;
@@ -475,7 +506,7 @@ export class SketchLibrary {
 
   /** A sketch as the drive has it, at its revision, over or beside what is here. */
   takeFromTheDrive(sketch: StoredSketch, revision: number): void {
-    const there = sketchOf(sketch.id, sketch.title, sketch.begunAtMs, sketch.events, sketch.beats, sketch.key);
+    const there = sketchOf(sketch.id, sketch.title, sketch.begunAtMs, sketch.events, sketch.beats, sketch.key, sketch.author);
     const here = this.find(sketch.id) !== null;
     this.sketches = here
       ? this.sketches.map((each) => (each.id === sketch.id ? there : each))

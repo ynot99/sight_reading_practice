@@ -473,6 +473,11 @@ export interface PracticeSettings {
    */
   readonly offerToSync: boolean;
   /**
+   * The writer's name, said to be who wrote a sketch begun here; empty where
+   * none is given.
+   */
+  readonly yourName: string;
+  /**
    * Seconds to look at the music before it begins. `0` is off.
    *
    * Real sight-reading starts with a scan - key, metre, range, where the hard
@@ -1129,6 +1134,7 @@ export class PracticeController {
       pitchClassOnly: false,
       rhythmOnly: false,
       offerToSync: false,
+      yourName: '',
       previewSeconds: 0,
       cursorWhileRunning: true,
       cursorWhileListening: true,

@@ -749,6 +749,81 @@ describe('what to call a piece', () => {
   });
 });
 
+describe('who wrote a piece', () => {
+  /** A score with whatever header and credits are given. */
+  function credited(credits: string, header = ''): string {
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  ${header}
+  ${credits}
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>24</divisions><key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef></attributes>
+      <note><rest/><duration>96</duration><type>whole</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+  }
+  const right = (words: string, page = '1'): string =>
+    `<credit page="${page}"><credit-words justify="right">${words}</credit-words></credit>`;
+
+  it('is the creator the header names the composer, over any credit', () => {
+    const { exercise } = importer.read(
+      credited(
+        right('Typeset by hand'),
+        '<identification><creator type="lyricist">Someone Else</creator><creator type="composer"> Joe Hisaishi </creator></identification>',
+      ),
+    );
+
+    expect(exercise.composer).toBe('Joe Hisaishi');
+  });
+
+  it('is otherwise the credit marked the composer, on the first page', () => {
+    const { exercise } = importer.read(
+      credited(
+        '<credit page="1"><credit-words>The Sixth Station</credit-words></credit>' +
+          right('Arranged by someone') +
+          '<credit page="1"><credit-type>composer</credit-type><credit-words>Joe Hisaishi</credit-words></credit>',
+        '<identification><creator type="composer">   </creator></identification>',
+      ),
+    );
+
+    expect(exercise.composer).toBe('Joe Hisaishi');
+  });
+
+  it('is otherwise the first credit set at the right of the first page, where the composer is printed', () => {
+    // As an older engraving program writes it, with no mark: the title in
+    // the middle, the composer at the right.
+    const { exercise } = importer.read(
+      credited(
+        '<credit page="1"><credit-words justify="center">Those Who Fight</credit-words></credit>' +
+          '<credit page="1"><credit-words justify="left">Lyrics: nobody</credit-words></credit>' +
+          right('Nobuo Uematsu') +
+          right('Arr. somebody'),
+      ),
+    );
+
+    expect(exercise.title).toBe('Those Who Fight');
+    expect(exercise.composer).toBe('Nobuo Uematsu');
+  });
+
+  it('is nobody where nothing says, and not what a later page prints at the right', () => {
+    expect(importer.read(credited('')).exercise.composer).toBeUndefined();
+    expect(importer.read(credited(right('Page 4', '4'))).exercise.composer).toBeUndefined();
+  });
+
+  it('is written as the composer and read back so', () => {
+    const written = serializer.serialize({ ...twoBarExercise(), composer: 'Clara Schumann' });
+
+    expect(written).toMatch(/<identification>\s*<creator type="composer">Clara Schumann<\/creator>\s*<encoding>/);
+    expect(importer.read(written).exercise.composer).toBe('Clara Schumann');
+    expect(serializer.serialize(twoBarExercise())).not.toContain('<creator');
+  });
+});
+
 /** A one-part score in the shape other programs actually write. */
 function scoreXml(body: string, divisions = 24): string {
   return `<?xml version="1.0" encoding="UTF-8"?>

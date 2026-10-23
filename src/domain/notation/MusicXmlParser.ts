@@ -177,9 +177,11 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
     (mark) => mark.measureIndex === 0 && mark.offsetTicks === 0,
   );
 
+  const composer = readComposer(score);
   const exercise: Exercise = {
     id: `import-${Date.now().toString(36)}`,
     title: readTitle(score),
+    ...(composer === null ? {} : { composer }),
     key: header.key,
     keyChanges: header.keyChanges,
     timeChanges: header.timeChanges,
@@ -412,6 +414,31 @@ function creditTitle(score: XmlNode): string | null {
     (credit) => childText(credit, 'credit-type')?.toLowerCase() === 'title',
   );
   const chosen = marked ?? credits[0];
+  return chosen === undefined ? null : creditWords(chosen);
+}
+
+/**
+ * Who wrote the piece, as the file says: the creator it names the composer;
+ * else the credit on the first page it marks so; else the first there set at
+ * the right, which is where an engraver puts the composer, as some programs
+ * write it with no mark. `null` where it says nobody.
+ */
+function readComposer(score: XmlNode): string | null {
+  const creator = childrenNamed(child(score, 'identification'), 'creator').find(
+    (each) => attribute(each, 'type') === 'composer' && each.text.trim() !== '',
+  );
+  if (creator !== undefined) {
+    return creator.text.trim();
+  }
+  const credits = childrenNamed(score, 'credit').filter((credit) => {
+    const page = attribute(credit, 'page');
+    return page === null || page === '1';
+  });
+  const marked = credits.find((credit) => childText(credit, 'credit-type')?.toLowerCase() === 'composer');
+  const atTheRight = credits.find((credit) =>
+    childrenNamed(credit, 'credit-words').some((words) => attribute(words, 'justify') === 'right'),
+  );
+  const chosen = marked ?? atTheRight;
   return chosen === undefined ? null : creditWords(chosen);
 }
 

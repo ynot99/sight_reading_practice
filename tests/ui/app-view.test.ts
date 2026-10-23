@@ -5025,6 +5025,61 @@ describe('AppView', () => {
     // The metres offered for a sketch, simple and compound.
     const SKETCH_METRE_CHOICES = ['2/4', '3/4', '4/4', '5/4', '6/4', '2/2', '3/2', '3/8', '5/8', '6/8', '7/8', '9/8', '12/8'];
 
+    it('says the writer wrote a sketch begun here, a score\'s composer a sketch of it, changed in the options and written as the composer', async () => {
+      const { view, runtime, sketches, files } = createRig();
+      await view.initialize();
+      const name = element<HTMLInputElement>('your-name');
+      const author = element<HTMLInputElement>('roll-author');
+      const group = element('roll-author-group');
+      const typed = (into: HTMLInputElement, text: string): void => {
+        into.value = text;
+        into.dispatchEvent(new Event('change'));
+      };
+
+      // The writer's name, as typed less its ends.
+      typed(name, '  Clara  ');
+      expect([runtime.controller.settings.yourName, name.value]).toEqual(['Clara', 'Clara']);
+
+      // A sketch begun here is theirs, and says so in its options while it is edited.
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      element<HTMLButtonElement>('sketches-new').click();
+      const begun = sketches.list()[0];
+      expect(begun?.author).toBe('Clara');
+      expect([group.hidden, author.value]).toEqual([false, 'Clara']);
+      element<HTMLButtonElement>('roll-edit').click();
+      expect(group.hidden).toBe(true);
+      element<HTMLButtonElement>('roll-edit').click();
+      typed(author, ' Robert ');
+      expect([sketches.find(begun?.id ?? '')?.author, author.value]).toEqual(['Robert', 'Robert']);
+
+      // Written as the composer of the score it is saved as, once there is a note to write.
+      element<HTMLButtonElement>('roll-close').click();
+      sketches.changeTheNotes(begun?.id ?? '', [
+        { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.5 },
+        { kind: 'noteOff', atMs: 500, midi: 60 },
+      ]);
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Save this sketch as a MusicXML file, as its score is written').click();
+      await waitFor(() => files.saved.length > 0);
+      expect(new TextDecoder().decode(files.saved[0]?.bytes)).toContain('<creator type="composer">Robert</creator>');
+
+      // A sketch of a score is its composer's, and nobody's where the score says nobody.
+      element<HTMLButtonElement>('scores-close').click();
+      await runtime.controller.openScore({ ...twoBarExercise({ title: 'Borrowed' }), composer: 'Joe Hisaishi' });
+      element<HTMLButtonElement>('focus-roll').click();
+      element<HTMLButtonElement>('roll-edit').click();
+      expect(sketches.list()[0]?.author).toBe('Joe Hisaishi');
+      element<HTMLButtonElement>('roll-close').click();
+      await runtime.controller.openScore(twoBarExercise({ title: 'Unsigned' }));
+      element<HTMLButtonElement>('focus-roll').click();
+      element<HTMLButtonElement>('roll-edit').click();
+      const unsigned = sketches.list()[0];
+      expect([unsigned?.title, unsigned === undefined ? null : 'author' in unsigned]).toEqual(['Sketch of Unsigned', false]);
+      expect(author.value).toBe('');
+    });
+
     it('begins a sketch of the score open, in its own bars, and leaves the score as it is written', async () => {
       const { view, runtime, sketches, files } = createRig();
       await view.initialize();
@@ -14806,7 +14861,7 @@ describe('AppView', () => {
         'mark-listening',
       ]);
       expect(inPane('practice')).toEqual(['what-opens', 'rest-every-settings']);
-      expect(inPane('library')).toEqual(['offer-to-sync']);
+      expect(inPane('library')).toEqual(['your-name', 'offer-to-sync']);
       expect(element('storage-legend').closest('[data-pane]')?.getAttribute('data-pane')).toBe('library');
       expect(inPane('developers')).toEqual(['trace-the-start']);
 

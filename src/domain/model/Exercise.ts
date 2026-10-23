@@ -1027,6 +1027,8 @@ export interface TempoChange {
 export interface Exercise {
   readonly id: string;
   readonly title: string;
+  /** Who wrote it, where that is said: a file's composer, a sketch's author. */
+  readonly composer?: string;
   readonly key: KeySignature;
   /**
    * Keys the score changes to partway through.

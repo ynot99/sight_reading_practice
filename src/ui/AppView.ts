@@ -239,6 +239,9 @@ import {
   type RunRoll,
   theBeatNearest,
   theNextLineOfTheGrid,
+  theEndNearest,
+  theGridForANote,
+  theStartNearest,
   theLineOfTheGridUnder,
   theEndAKeyFitsTo,
   aKeyIsOverAnotherOfItsPitch,
@@ -16249,7 +16252,9 @@ export class AppView {
       return;
     }
     const wanted = drag.key.downAtMs - origin + (acrossPx / Number(this.el.rollZoom.value)) * 1000;
-    const at = snapping ? theBeatNearest(showing.roll, wanted, this.theRollsGrid()) : wanted;
+    // On a grid fine enough for the note: a quaver goes before a beat as well as on it.
+    const grid = theGridForANote(showing.roll, this.theRollsGrid(), drag.key.downAtMs - origin, drag.upAtMs - drag.key.downAtMs);
+    const at = snapping ? theBeatNearest(showing.roll, wanted, grid) : wanted;
     const byMs = Math.round(at + origin) - drag.key.downAtMs;
     const lowest = drag.scene.highest - drag.scene.rows + 1;
     const pitches = keys.map((key) => key.midi);
@@ -16296,12 +16301,14 @@ export class AppView {
       return;
     }
     const wanted = drag.upAtMs - origin + (acrossPx / Number(this.el.rollZoom.value)) * 1000;
-    const at = snapping ? theBeatNearest(showing.roll, wanted, this.theRollsGrid()) : wanted;
+    const grid = this.theRollsGrid();
+    const at = snapping ? theEndNearest(showing.roll, grid, drag.key.downAtMs - origin, wanted) : wanted;
     const byMs = Math.round(at + origin) - drag.upAtMs;
     const end = rollEndedAtMs(showing.roll);
     const shortest = (key: KeyOfTheTake): number => {
-      const line = snapping ? theNextLineOfTheGrid(showing.roll, key.downAtMs - origin, this.theRollsGrid(), 1) : null;
-      return line === null ? key.downAtMs + SHORTEST_NOTE_MS : Math.round(line + origin);
+      const from = key.downAtMs - origin;
+      const line = snapping ? theEndNearest(showing.roll, grid, from, from) : from;
+      return line > from + 0.5 ? Math.round(line + origin) : key.downAtMs + SHORTEST_NOTE_MS;
     };
     this.showTheDrag(
       drag,
@@ -16336,13 +16343,14 @@ export class AppView {
       return;
     }
     const wanted = drag.key.downAtMs - origin + (acrossPx / Number(this.el.rollZoom.value)) * 1000;
-    const at = snapping ? theBeatNearest(showing.roll, wanted, this.theRollsGrid()) : wanted;
+    const grid = this.theRollsGrid();
+    const at = snapping ? theStartNearest(showing.roll, grid, drag.upAtMs - origin, wanted) : wanted;
     const byMs = Math.round(at + origin) - drag.key.downAtMs;
     const end = rollEndedAtMs(showing.roll);
     const latest = (key: KeyOfTheTake): number => {
-      const until = key.upAtMs ?? end;
-      const line = snapping ? theNextLineOfTheGrid(showing.roll, until - origin, this.theRollsGrid(), -1) : null;
-      return line === null ? until - SHORTEST_NOTE_MS : Math.round(line + origin);
+      const until = (key.upAtMs ?? end) - origin;
+      const line = snapping ? theStartNearest(showing.roll, grid, until, until) : until;
+      return line < until - 0.5 ? Math.round(line + origin) : until + origin - SHORTEST_NOTE_MS;
     };
     this.showTheDrag(
       drag,
@@ -16784,8 +16792,16 @@ export class AppView {
           placed = fits(byMs, 0);
         }
       } else {
+        // Stepped on a grid fine enough for the first of them, as one is dragged.
+        const first = keys.find((key) => key.downAtMs === earliest);
+        const grid = theGridForANote(
+          showing.roll,
+          this.theRollsGrid(),
+          earliest - origin,
+          (first?.upAtMs ?? rollEndedAtMs(showing.roll)) - earliest,
+        );
         for (let from = earliest - origin; placed === null; ) {
-          const line = theNextLineOfTheGrid(showing.roll, from, this.theRollsGrid(), towards);
+          const line = theNextLineOfTheGrid(showing.roll, from, grid, towards);
           if (line === null) {
             return;
           }

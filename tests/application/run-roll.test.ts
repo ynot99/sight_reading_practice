@@ -12,6 +12,9 @@ import {
   takeWithThePlayingRecorded,
   theNotesRecorded,
   theNextLineOfTheGrid,
+  theEndNearest,
+  theGridForANote,
+  theStartNearest,
   theLineOfTheGridUnder,
   theEndAKeyFitsTo,
   aKeyIsOverAnotherOfItsPitch,
@@ -691,6 +694,83 @@ describe('the beat a run was measured against', () => {
     expect(theNextLineOfTheGrid(run, 500.4, PLAIN_GRID, -1)).toBe(0);
     // Cut finer, it steps by the parts.
     expect(theNextLineOfTheGrid(run, 500, { beats: true, parts: 2 }, 1)).toBe(750);
+  });
+
+  describe('a grid fine enough for a note', () => {
+    // A bar of 4/4 at 120: beats every 500 ms, the bar line at 2000.
+    const run = rollOfTheTake({
+      events: [
+        { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.5 },
+        { kind: 'noteOff', atMs: 1_900, midi: 60 },
+      ],
+      beats: [0, 500, 1_000, 1_500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+    });
+    const BARS = { beats: false, parts: 1 };
+    const HALVES = { beats: true, parts: 2 };
+
+    it('moves a note shorter than a step on the coarsest finer grid its length is a whole number of steps of', () => {
+      const moved = (choice: typeof PLAIN_GRID, lengthMs: number): string => {
+        const grid = theGridForANote(run, choice, 600, lengthMs);
+        return `${String(grid.beats)} ${String(grid.parts)}`;
+      };
+      // A step long or longer, or nearly - as a note played rather than written is - on the grid chosen.
+      expect([500, 1_000, 450, 430].map((length) => moved(PLAIN_GRID, length))).toEqual(['true 1', 'true 1', 'true 1', 'true 1']);
+      // Shorter: a quaver by halves, a triplet's by thirds, a semiquaver and a dotted quaver by quarters.
+      expect([250, 167, 333, 125, 375, 240].map((length) => moved(PLAIN_GRID, length))).toEqual([
+        'true 2',
+        'true 3',
+        'true 3',
+        'true 4',
+        'true 4',
+        'true 2',
+      ]);
+      // One that is no whole number of any of them, on the grid chosen.
+      expect([300, 100, 60].map((length) => moved(PLAIN_GRID, length))).toEqual(['true 1', 'true 1', 'true 1']);
+      // Finer grids cut finer again; bars alone, the beats first.
+      expect(moved(HALVES, 250)).toBe('true 2');
+      expect(moved(HALVES, 125)).toBe('true 4');
+      expect(moved(HALVES, 83)).toBe('true 6');
+      expect(moved(BARS, 2_000)).toBe('false 1');
+      expect(moved(BARS, 500)).toBe('true 1');
+      expect(moved(BARS, 1_500)).toBe('true 1');
+      expect(moved(BARS, 250)).toBe('true 2');
+      // Where the grid has no step, as chosen.
+      expect(moved(PLAIN_GRID, 0)).toBe('true 1');
+      expect(theGridForANote(run, PLAIN_GRID, 5_000, 250)).toBe(PLAIN_GRID);
+    });
+
+    it('takes an end to the lines after its start, and in the first step its halves, thirds and quarters, across the step', () => {
+      const firstStep = [125, 500 / 3, 250, 1_000 / 3, 375];
+      const lines = [500, 1_000, 1_500, 2_000];
+      const nearest = (among: readonly number[], wanted: number): number =>
+        [...among].sort((one, other) => one - other).reduce((best, at) => (Math.abs(at - wanted) < Math.abs(best - wanted) ? at : best));
+      for (let wanted = -100; wanted <= 2_200; wanted += 10) {
+        expect(theEndNearest(run, PLAIN_GRID, 0, wanted), String(wanted)).toBeCloseTo(nearest([...firstStep, ...lines], wanted), 6);
+      }
+      // The shortest is the first of them.
+      expect(theEndNearest(run, PLAIN_GRID, 0, 0)).toBe(125);
+      // From a start off the grid, the rest of its step cut so too, and nothing before it.
+      expect(theEndNearest(run, PLAIN_GRID, 250, 300)).toBeCloseTo(1_000 / 3, 6);
+      expect(theEndNearest(run, PLAIN_GRID, 250, 0)).toBeCloseTo(1_000 / 3, 6);
+      // Past the step, only the grid's own lines.
+      expect(theEndNearest(run, PLAIN_GRID, 0, 640)).toBe(500);
+      // With nothing after it, where it was pulled.
+      expect(theEndNearest(run, PLAIN_GRID, 2_000, 2_300)).toBe(2_300);
+    });
+
+    it('takes a start to the lines before its end, and in the last step its halves, thirds and quarters, across the step', () => {
+      const lastStep = [1_625, 1_500 + 500 / 3, 1_750, 1_500 + 1_000 / 3, 1_875];
+      const lines = [0, 500, 1_000, 1_500];
+      const nearest = (among: readonly number[], wanted: number): number =>
+        [...among].sort((one, other) => one - other).reduce((best, at) => (Math.abs(at - wanted) < Math.abs(best - wanted) ? at : best));
+      for (let wanted = -100; wanted <= 2_200; wanted += 10) {
+        expect(theStartNearest(run, PLAIN_GRID, 2_000, wanted), String(wanted)).toBeCloseTo(nearest([...lines, ...lastStep], wanted), 6);
+      }
+      // The latest is the last of them.
+      expect(theStartNearest(run, PLAIN_GRID, 2_000, 2_000)).toBe(1_875);
+      // With nothing before it, where it was pulled.
+      expect(theStartNearest(run, PLAIN_GRID, 0, -50)).toBe(-50);
+    });
   });
 
   it('finds the cell of the grid a moment is in: the line at or before it, across the whole run', () => {

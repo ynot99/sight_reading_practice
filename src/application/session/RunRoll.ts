@@ -1198,6 +1198,111 @@ export function aKeyIsOverAnotherOfItsPitch(events: readonly MidiFileEvent[], na
 }
 
 /**
+ * How near a length has to come to a whole number of a grid's steps to be
+ * taken for one, as a share of a step: a note played rather than written
+ * is never exactly a quaver long, and one this far off is not meant as one.
+ */
+const A_STEP_FITS_WITHIN = 0.15;
+
+/**
+ * The grids finer than one, coarsest first: each step of it halved, cut in
+ * three and cut in four - the beat cut so where the one chosen draws only
+ * the bars.
+ */
+function theGridsFinerThan(choice: GridChoice): readonly GridChoice[] {
+  const parts = Math.max(1, Math.round(choice.parts));
+  return choice.beats
+    ? [2, 3, 4].map((cut) => ({ beats: true, parts: parts * cut }))
+    : [1, 2, 3, 4].map((cut) => ({ beats: true, parts: cut }));
+}
+
+/** The step of a grid a moment is in: from the line at or before it to the next; `null` where there is no next. */
+function theStepOfTheGridAt(roll: RunRoll, atMs: number, choice: GridChoice): number | null {
+  const next = theNextLineOfTheGrid(roll, atMs, choice, 1);
+  return next === null ? null : next - theLineOfTheGridUnder(roll, atMs, choice);
+}
+
+/**
+ * The grid a note is moved on: the one chosen, or where the note is shorter
+ * than a step of it, the coarsest finer one its length is a whole number of
+ * steps of - a quaver under a grid of beats moves by half beats, so it goes
+ * before a beat as well as on one, and a triplet's note by thirds. One
+ * shorter than a step that fits none, as a note played rather than written
+ * often is, moves on the grid chosen.
+ */
+export function theGridForANote(roll: RunRoll, choice: GridChoice, atMs: number, lengthMs: number): GridChoice {
+  const step = theStepOfTheGridAt(roll, atMs, choice);
+  if (step === null || lengthMs >= step * (1 - A_STEP_FITS_WITHIN)) {
+    return choice;
+  }
+  return (
+    theGridsFinerThan(choice).find((finer) => {
+      const finerStep = theStepOfTheGridAt(roll, atMs, finer);
+      const steps = finerStep === null ? 0 : lengthMs / finerStep;
+      return steps >= 1 - A_STEP_FITS_WITHIN && Math.abs(steps - Math.round(steps)) <= A_STEP_FITS_WITHIN;
+    }) ?? choice
+  );
+}
+
+/**
+ * The lines a note's end may go to, from where it begins: those of the grid
+ * after it, and inside the first step, the halves, thirds and quarters of
+ * that step as well - so a note is made shorter than a step without a finer
+ * grid being asked for. Moments from the run's start.
+ */
+function theLinesAnEndGoesTo(roll: RunRoll, choice: GridChoice, fromMs: number): readonly number[] {
+  const began = rollBeganAtMs(roll);
+  const next = theNextLineOfTheGrid(roll, fromMs, choice, 1);
+  const lines = theMusicsBeats(roll, choice).map((line) => line.atMs - began);
+  const finer = theGridsFinerThan(choice).flatMap((grid) => theMusicsBeats(roll, grid).map((line) => line.atMs - began));
+  return [
+    ...lines.filter((at) => at > fromMs + 0.5),
+    ...(next === null ? [] : finer.filter((at) => at > fromMs + 0.5 && at < next - 0.5)),
+  ];
+}
+
+/**
+ * Where the end of a note begun at a moment goes, pulled to near another:
+ * the nearest of `theLinesAnEndGoesTo`, or the moment itself where there
+ * are none.
+ */
+export function theEndNearest(roll: RunRoll, choice: GridChoice, fromMs: number, wantedMs: number): number {
+  return nearestOf(theLinesAnEndGoesTo(roll, choice, fromMs), wantedMs) ?? wantedMs;
+}
+
+/**
+ * Where the start of a note let go of at a moment goes, pulled to near
+ * another: the lines of the grid before its end, and inside the last step
+ * before it, the halves, thirds and quarters of that step as well.
+ */
+export function theStartNearest(roll: RunRoll, choice: GridChoice, untilMs: number, wantedMs: number): number {
+  const began = rollBeganAtMs(roll);
+  const previous = theNextLineOfTheGrid(roll, untilMs, choice, -1);
+  const lines = theMusicsBeats(roll, choice).map((line) => line.atMs - began);
+  const finer = theGridsFinerThan(choice).flatMap((grid) => theMusicsBeats(roll, grid).map((line) => line.atMs - began));
+  return (
+    nearestOf(
+      [
+        ...lines.filter((at) => at < untilMs - 0.5),
+        ...(previous === null ? [] : finer.filter((at) => at < untilMs - 0.5 && at > previous + 0.5)),
+      ],
+      wantedMs,
+    ) ?? wantedMs
+  );
+}
+
+/** The one of some moments nearest another, the earlier on a tie; `null` of none. */
+function nearestOf(moments: readonly number[], wantedMs: number): number | null {
+  let nearest: number | null = null;
+  for (const at of [...moments].sort((one, other) => one - other)) {
+    if (nearest === null || Math.abs(at - wantedMs) < Math.abs(nearest - wantedMs)) {
+      nearest = at;
+    }
+  }
+  return nearest;
+}
+
+/**
  * The line of the grid a moment is in the cell after: the last at or before
  * it - half a millisecond either side counting as on it - or the moment
  * itself where the grid has none so early. Where a note written there

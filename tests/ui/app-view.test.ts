@@ -5025,6 +5025,71 @@ describe('AppView', () => {
     // The metres offered for a sketch, simple and compound.
     const SKETCH_METRE_CHOICES = ['2/4', '3/4', '4/4', '5/4', '6/4', '2/2', '3/2', '3/8', '5/8', '6/8', '7/8', '9/8', '12/8'];
 
+    it('moves a note shorter than a beat on the grid its length fits, by a drag and by an arrow, and pulls either end into a step by its parts', async () => {
+      const { view, sketches, clock } = createRig();
+      await view.initialize();
+      // A quaver at 120, a beat of 500 ms, and a crotchet after it.
+      const sketch = sketches.begin(
+        {
+          events: [
+            { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: 250, midi: 60 },
+            { kind: 'noteOn' as const, atMs: 1_000, midi: 64, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: 1_500, midi: 64 },
+          ],
+          beats: [0, 500, 1_000, 1_500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Quavers',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const body = element('roll-body');
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const highest = view.rollScene?.highest ?? 0;
+      const scrolledDown =
+        Number.parseFloat(body.querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0') || 0;
+      const at = (ms: number, midi: number): { clientX: number; clientY: number } => ({
+        clientX: (ms / 1000) * zoom,
+        clientY: (highest - midi + 0.5) * 13 - scrolledDown,
+      });
+      const drag = (from: { clientX: number; clientY: number }, to: { clientX: number; clientY: number }): void => {
+        clock.advance(1_000);
+        for (const [type, where] of [['pointerdown', from], ['pointermove', to], ['pointerup', to]] as const) {
+          body.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 93, pointerType: 'mouse', button: 0, ...where }));
+        }
+        body.dispatchEvent(new MouseEvent('click', { bubbles: true, ...to }));
+      };
+      const begun = (midi: number): number[] =>
+        (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'noteOn' && event.midi === midi ? [event.atMs] : []));
+      const arrow = (key: string): void => {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key }));
+      };
+
+      // The quaver dragged three tenths of a beat on: to the half beat, before the beat.
+      drag(at(125, 60), at(275, 60));
+      expect(begun(60)).toEqual([250]);
+      // By an arrow, a half beat at a time either way.
+      arrow('ArrowRight');
+      expect(begun(60)).toEqual([500]);
+      arrow('ArrowLeft');
+      expect(begun(60)).toEqual([250]);
+      arrow('ArrowLeft');
+      expect(begun(60)).toEqual([0]);
+      // Its end pulled into the next beat: to the third of it nearest, short of the beat.
+      const ended = (midi: number): number[] =>
+        (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'noteOff' && event.midi === midi ? [event.atMs] : []));
+      drag({ ...at(250, 60), clientX: at(250, 60).clientX - 2 }, { ...at(330, 60), clientX: at(330, 60).clientX - 2 });
+      expect(ended(60)).toEqual([333]);
+      // The crotchet, dragged as far, stays on the beat; by an arrow, a beat at a time.
+      drag(at(1_250, 64), at(1_400, 64));
+      expect(begun(64)).toEqual([1_000]);
+      // Its start pulled into its last beat: to the third of it nearest.
+      drag({ ...at(1_000, 64), clientX: at(1_000, 64).clientX + 2 }, { ...at(1_300, 64), clientX: at(1_300, 64).clientX + 2 });
+      expect([begun(64), ended(64)]).toEqual([[1_333], [1_500]]);
+    });
+
     it('says the writer wrote a sketch begun here, a score\'s composer a sketch of it, changed in the options and written as the composer', async () => {
       const { view, runtime, sketches, files } = createRig();
       await view.initialize();
@@ -6904,12 +6969,12 @@ describe('AppView', () => {
       expect(notes()).toHaveLength(5);
       expect(notes().at(-1)).toEqual([64, 2_000, 3_000]);
 
-      // Pulled back past where it begins, it ends on the next line of the
-      // grid after that, and is never a sliver off it; with Shift, which puts
-      // an end anywhere, as short as a note can be heard.
+      // Pulled back past where it begins, it ends on the first quarter of the
+      // step of the grid after that, and is never a sliver off it; with Shift,
+      // which puts an end anywhere, as short as a note can be heard.
       drag(at(2_990, 64), at(1_500, 64));
-      expect(notes().at(-1)).toEqual([64, 2_000, 2_500]);
-      drag(at(2_490, 64), at(1_500, 64), { shiftKey: true });
+      expect(notes().at(-1)).toEqual([64, 2_000, 2_125]);
+      drag(at(2_115, 64), at(1_500, 64), { shiftKey: true });
       expect(notes().at(-1)).toEqual([64, 2_000, 2_030]);
     });
 
@@ -20236,8 +20301,9 @@ describe('AppView', () => {
       const chosen = (): number[][] =>
         (view.rollScene?.notes ?? []).filter((note) => note.chosen === true).map((note) => [highest - note.row, note.fromMs]);
       const second = onNote(600, 62);
-      // Seven tenths of a beat on, and a row up.
-      const dragged = { x: second.x + 0.7 * 0.6 * zoom, y: second.y - 13 };
+      // Nine tenths of a beat on, and a row up: the half-beat note goes on
+      // half beats, and the nearest of them is the next beat.
+      const dragged = { x: second.x + 0.9 * 0.6 * zoom, y: second.y - 13 };
 
       tap(second);
       expect(chosen()).toEqual([[62, 600]]);
@@ -20428,7 +20494,9 @@ describe('AppView', () => {
       mouse('pointerup', { x: start.x + 3 * zoom, y: start.y });
       expect(begun()).toEqual([600 - 30, 1_350 - 30]);
       element<HTMLButtonElement>('roll-undo').click();
-      // On the grid, earlier to the beat nearest, and never later than the last line before it ends.
+      // On the grid, earlier to the beat nearest, and never later than the
+      // last line before it ends - in the last step, its quarters, thirds and
+      // half lines too, so the C a beat long can be left a quarter of one.
       element<HTMLInputElement>('roll-snap').click();
       const second62 = { x: (753 / 1_000) * zoom, y: onNote(750, 62).y };
       mouse('pointerdown', second62);
@@ -20439,7 +20507,7 @@ describe('AppView', () => {
       mouse('pointerdown', second62);
       mouse('pointermove', { x: second62.x + 3 * zoom, y: second62.y });
       mouse('pointerup', { x: second62.x + 3 * zoom, y: second62.y });
-      expect(begun()).toEqual([0, 1_200]);
+      expect(begun()).toEqual([450, 1_200]);
     });
 
     it('says so in the middle of the page when a take played to the click cannot be written down', async () => {

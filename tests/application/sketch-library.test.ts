@@ -385,6 +385,25 @@ describe('the sketches being written', () => {
     expect(next.find(sketch.id)?.events).toEqual(PLAYED);
   });
 
+  it('keeps a section begun among the notes of a sketch across visits, by its name, and leaves out one with none', () => {
+    const store = new InMemorySettingsStore();
+    const library = new SketchLibrary(store, () => 0);
+    const events: MidiFileEvent[] = [...PLAYED, { kind: 'section', atMs: 2_000, name: 'Verse' }];
+    const sketch = library.begin({ events, beats: THREE }, 'Parts', 1);
+    const next = new SketchLibrary(store, () => 0);
+    next.load();
+    expect(next.find(sketch.id)?.events).toEqual(events);
+    // Its name where a note's hand is.
+    const kept = sketchAsKept(sketch)['events'] as unknown[];
+    expect(kept.slice(-1)).toEqual([[5, 2_000, 0, 0, 'Verse']]);
+    store.write({
+      version: 1,
+      sketches: [{ ...sketchAsKept(sketch), events: [...kept.slice(0, -1), [5, 2_000, 0, 0, '  '], [5, 2_000, 0, 0, 7], [5, 2_000, 0, 0], [5, 3_000, 0, 0, ' B ']] }],
+    });
+    next.load();
+    expect(next.find(sketch.id)?.events).toEqual([...PLAYED, { kind: 'section', atMs: 3_000, name: 'B' }]);
+  });
+
   it('keeps a dynamic marked among the notes of a sketch across visits, and leaves out one no level is', () => {
     const store = new InMemorySettingsStore();
     const library = new SketchLibrary(store, () => 0);

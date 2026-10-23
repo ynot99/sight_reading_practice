@@ -83,6 +83,9 @@ import {
   thePlayingWithABarInserted,
   theDynamicAt,
   theDynamicsOf,
+  theSectionAt,
+  theSectionsOf,
+  takeWithTheSectionAt,
   theVelocityOfTheLevel,
   LOUDNESS_UNMARKED,
   type NoteLoudness,
@@ -2416,6 +2419,8 @@ export class AppView {
   /** And the key that beat is in, and the one the beat before it is in - none before the first. */
   private keyAskedAbout: { readonly here: KeyOfTheMusic; readonly before: KeyOfTheMusic | null } | null = null;
   /** And the dynamic that beat is marked in, and the one the beat before it is: none where none is marked yet. */
+  /** The name of the section beginning on the beat asked about in the sheet, or nothing. */
+  private sectionAskedAbout = '';
   private dynamicAskedAbout: {
     readonly here: DynamicLevel | null;
     readonly before: DynamicLevel | null;
@@ -2804,6 +2809,7 @@ export class AppView {
     rollMarkTempo: HTMLInputElement;
     rollMarkTap: HTMLButtonElement;
     rollMarkDynamic: HTMLSelectElement;
+    rollMarkSection: HTMLInputElement;
     rollMarkReached: HTMLSelectElement;
     rollMarkRemove: HTMLButtonElement;
     rollMarkInsert: HTMLButtonElement;
@@ -3220,6 +3226,7 @@ export class AppView {
       rollMarkTempo: requireElement(doc, 'roll-mark-tempo'),
       rollMarkTap: requireElement(doc, 'roll-mark-tap'),
       rollMarkDynamic: requireElement(doc, 'roll-mark-dynamic'),
+      rollMarkSection: requireElement(doc, 'roll-mark-section'),
       rollMarkReached: requireElement(doc, 'roll-mark-reached'),
       rollMarkRemove: requireElement(doc, 'roll-mark-remove'),
       rollMarkInsert: requireElement(doc, 'roll-mark-insert'),
@@ -10191,7 +10198,14 @@ export class AppView {
         this.theKeyAskedFor(),
         this.theDynamicAskedFor(),
         this.el.rollMarkReached.value === 'gradually',
+        this.el.rollMarkSection.value,
       );
+    });
+    // A section named and Enter pressed is the sheet's change, as the pace's is.
+    this.listen(this.el.rollMarkSection, 'keydown', (event) => {
+      if (event.key === 'Enter') {
+        this.el.rollMarkYes.click();
+      }
     });
     // On the finger going down, which is the moment the beat is meant: a
     // click arrives on letting go. A click with no pointer behind it is the
@@ -10221,6 +10235,7 @@ export class AppView {
           this.theKeyAskedFor(),
           this.theDynamicAskedFor(),
           this.el.rollMarkReached.value === 'gradually',
+          this.el.rollMarkSection.value,
         );
       }
     });
@@ -14047,8 +14062,14 @@ export class AppView {
       ...theKeyChangesOf(stored.events),
     ];
     const dynamics = theDynamicsOf(stored.events);
+    const sections = theSectionsOf(stored.events);
     const moments = [
-      ...new Set([...clicked.map((change) => change.atMs), ...keys.map((key) => key.atMs), ...dynamics.map((dynamic) => dynamic.atMs)]),
+      ...new Set([
+        ...clicked.map((change) => change.atMs),
+        ...keys.map((key) => key.atMs),
+        ...dynamics.map((dynamic) => dynamic.atMs),
+        ...sections.map((section) => section.atMs),
+      ]),
     ].sort((one, other) => one - other);
     const near = (one: number, other: number): boolean => Math.abs(one - other) < 1;
     const marks: { atMs: number; says: string }[] = [];
@@ -14059,9 +14080,12 @@ export class AppView {
       const key = keys.find((each) => near(each.atMs, atMs));
       const change = clicked.find((each) => near(each.atMs, atMs));
       const dynamic = dynamics.find((each) => near(each.atMs, atMs));
+      const section = sections.find((each) => near(each.atMs, atMs));
       marks.push({
         atMs,
         says: [
+          // A section first, boxed as a score boxes a rehearsal mark.
+          ...(section === undefined ? [] : [`[${section.name}]`]),
           ...(key === undefined ? [] : [theNameOfTheKey(key)]),
           ...(change?.metre === undefined ? [] : [`${String(change.metre.beatsInBar)}/${String(change.metre.beatType)}`]),
           ...(change?.crotchetsPerMinute === undefined ? [] : [`\u2669=${String(change.crotchetsPerMinute)}`]),
@@ -14792,7 +14816,15 @@ export class AppView {
     if (!open) {
       return;
     }
-    const chart = theChartOfTheChords(scene.bars, scene.chords);
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const roll = this.theRoll();
+    // On the drawing's clock, as its bars and chords are.
+    const sections =
+      stored === null || roll === null
+        ? []
+        : theSectionsOf(stored.events).map((section) => ({ atMs: section.atMs - rollBeganAtMs(roll), name: section.name }));
+    const chart = theChartOfTheChords(scene.bars, scene.chords, sections);
     const shows = JSON.stringify(chart);
     if (shows !== this.chartShows) {
       this.chartShows = shows;
@@ -15001,6 +15033,8 @@ export class AppView {
     this.dynamicAskedAbout = { here: dynamicHere, before: dynamicBefore, graduallyHere };
     this.el.rollMarkDynamic.value = dynamicHere ?? '';
     this.el.rollMarkReached.value = graduallyHere ? 'gradually' : '';
+    this.sectionAskedAbout = theSectionAt(stored.events, bar.atMs);
+    this.el.rollMarkSection.value = this.sectionAskedAbout;
     this.sayWhetherTheDynamicIsReachedGradually();
     const metre = `${String(bar.metre.beatsInBar)}/${String(bar.metre.beatType)}`;
     // A metre the list does not offer, as a score may be in, is offered as it is.
@@ -15028,7 +15062,7 @@ export class AppView {
       ? `From ${thePlaceOfTheBeat(bar)}, until the next change. The score shows a key changed here from the next bar.`
       : `From ${thePlaceOfTheBeat(bar)}, until the next change`;
     // A dynamic is marked on any beat, the first too, which has nothing else to give back.
-    this.el.rollMarkRemove.hidden = !changesHere && dynamicHere === dynamicBefore;
+    this.el.rollMarkRemove.hidden = !changesHere && dynamicHere === dynamicBefore && this.sectionAskedAbout === '';
     // A sketch begins at the bar its first note is in, so a bar put before that one is not kept.
     sayWhetherIdle(
       this.el.rollMarkInsert,
@@ -15099,6 +15133,7 @@ export class AppView {
     // The dynamic of the beat before, or none - the first beat has nothing
     // else to give back, and keeps its own key, metre and pace.
     const dynamicBefore = this.dynamicAskedAbout?.before ?? null;
+    // And no section begun here any more.
     if (before !== null && before !== undefined && keyBefore !== null && keyBefore !== undefined) {
       this.changeFromTheBeatAsked(
         `${String(before.metre.beatsInBar)}/${String(before.metre.beatType)}`,
@@ -15106,6 +15141,7 @@ export class AppView {
         keyBefore,
         dynamicBefore,
         false,
+        '',
       );
     } else {
       this.changeFromTheBeatAsked(
@@ -15114,6 +15150,7 @@ export class AppView {
         keyHere,
         dynamicBefore,
         false,
+        '',
       );
     }
   }
@@ -15320,6 +15357,8 @@ export class AppView {
       change.key ?? keyHere,
       change.dynamic ?? this.dynamicAskedAbout?.here ?? null,
       change.dynamic === undefined ? this.dynamicAskedAbout?.graduallyHere === true : change.gradually === true,
+      // A change copied says nothing of sections: the one here stays.
+      this.sectionAskedAbout,
     );
     this.chooseTheMark(beat.atMs);
   }
@@ -15345,8 +15384,11 @@ export class AppView {
     key: KeyOfTheMusic,
     dynamic: DynamicLevel | null,
     gradually: boolean,
+    section: string,
   ): void {
     const bar = this.beatAskedAbout;
+    const sectionHere = this.sectionAskedAbout;
+    this.sectionAskedAbout = '';
     const keyHere = this.keyAskedAbout?.here ?? null;
     const dynamicHere = this.dynamicAskedAbout?.here ?? null;
     const dynamicBefore = this.dynamicAskedAbout?.before ?? null;
@@ -15370,7 +15412,8 @@ export class AppView {
     const keyChanges = key.fifths !== keyHere.fifths || key.scale !== keyHere.scale;
     const reachedGradually = gradually && dynamic !== null && dynamicBefore !== null && dynamic !== dynamicBefore;
     const dynamicChanges = dynamic !== dynamicHere || reachedGradually !== graduallyHere;
-    if (!metreChanges && !paceChanges && !keyChanges && !dynamicChanges) {
+    const sectionChanges = section.trim() !== sectionHere;
+    if (!metreChanges && !paceChanges && !keyChanges && !dynamicChanges && !sectionChanges) {
       return;
     }
     // The first beat's key is the sketch's own, which the drawer's lists say;
@@ -15384,6 +15427,9 @@ export class AppView {
     }
     if (dynamicChanges) {
       events = takeWithTheDynamicFrom(events, bar.atMs, dynamic, reachedGradually);
+    }
+    if (sectionChanges) {
+      events = takeWithTheSectionAt(events, bar.atMs, section);
     }
     // The bar keeps its first beat whatever its metre, and its later beats where they fall, so the pace changes from the same place.
     const counted = metreChanges

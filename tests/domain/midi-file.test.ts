@@ -10,6 +10,9 @@ import {
   theDynamicAt,
   theDynamicsOf,
   theDynamicsOfEachHand,
+  takeWithTheSectionAt,
+  theSectionAt,
+  theSectionsOf,
   theChangesOfTheClick,
   theKeyChangesOf,
   theKeyOfTheMusicAt,
@@ -850,6 +853,44 @@ describe('the dynamic music is marked in, from a moment', () => {
     expect(document.title).toBe('Marked');
     const untitled = readMidiFile(writeMidiFile(changed, { beats: click(0, 500, 4) }));
     expect(untitled.title).toBeNull();
+  });
+});
+
+describe('the sections of the music', () => {
+  const notes = struck(0, 2_000, 4_000, 6_000);
+  const named = (events: readonly MidiFileEvent[]): string[] => theSectionsOf(events).map((section) => `${String(section.atMs)} ${section.name}`);
+
+  it('begins one at a moment by a name, renames one there, and takes one away by no name', () => {
+    const two = takeWithTheSectionAt(takeWithTheSectionAt(notes, 4_000, 'Chorus'), 0, '  Verse ');
+    // Trimmed, in time order, before the notes at its moment.
+    expect(named(two)).toEqual(['0 Verse', '4000 Chorus']);
+    expect(two.findIndex((event) => event.kind === 'section')).toBe(0);
+    expect(two.findIndex((event) => event.kind === 'section' && event.name === 'Chorus')).toBe(5);
+    // A moment a hair from it is the same moment.
+    expect(named(takeWithTheSectionAt(two, 4_000.5, 'B'))).toEqual(['0 Verse', '4000.5 B']);
+    expect(named(takeWithTheSectionAt(two, 4_002, 'B'))).toEqual(['0 Verse', '4000 Chorus', '4002 B']);
+    expect(named(takeWithTheSectionAt(two, 4_000, ''))).toEqual(['0 Verse']);
+    expect(named(takeWithTheSectionAt(two, 0, '   '))).toEqual(['4000 Chorus']);
+    expect(takeWithTheSectionAt(notes, 2_000, '')).toEqual(notes);
+  });
+
+  it('names the section beginning at a moment, and none between', () => {
+    const one = takeWithTheSectionAt(notes, 2_000, 'A');
+    expect([1_000, 1_999.6, 2_000, 2_000.4, 3_000].map((atMs) => theSectionAt(one, atMs))).toEqual(['', 'A', 'A', 'A', '']);
+  });
+
+  it('is written to a file as a marker, which the reader passes over', () => {
+    const marked = takeWithTheSectionAt(notes, 2_000, 'Bridge');
+    const bytes = writeMidiFile(marked, { beats: click(0, 500, 16) });
+    const name = [...new TextEncoder().encode('Bridge')];
+    const track = [...bytes];
+    const at = track.findIndex((byte, index) => byte === 0xff && track[index + 1] === 0x06);
+    expect(track.slice(at, at + 3 + name.length)).toEqual([0xff, 0x06, name.length, ...name]);
+    // Four beats in, as the note there is.
+    expect(written(bytes).find((each) => each.bytes[0] === 0xff && each.bytes[1] === 0x06)?.tick).toBe(4 * BEAT);
+    const document = readMidiFile(bytes);
+    expect(document.dynamics).toEqual([]);
+    expect(readMidiFile(writeMidiFile(notes, { beats: click(0, 500, 16) })).notes).toEqual(document.notes);
   });
 });
 

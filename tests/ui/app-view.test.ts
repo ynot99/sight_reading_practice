@@ -7877,6 +7877,80 @@ describe('AppView', () => {
       expect(marks()).toEqual(['1: C major 4/4 \u2669=120', '3: G major 3/4']);
     });
 
+    it('begins a section from a beat in the sheet of a flag, flagged over the ruler and named on the chart, and takes it away', async () => {
+      const { view, sketches, clock } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          // Begun two seconds into the run, click and all: the drawing begins at its first bar.
+          events: Array.from({ length: 16 }, (_, at) => [
+            { kind: 'noteOn' as const, atMs: 2_000 + at * 500, midi: 60 + (at % 3) * 4, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: 2_000 + at * 500 + 400, midi: 60 + (at % 3) * 4 },
+          ]).flat(),
+          beats: [2_000, 2_500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Parts',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const section = element<HTMLInputElement>('roll-mark-section');
+      const remove = element<HTMLButtonElement>('roll-mark-remove');
+      const marks = (): string[] => (view.rollScene?.marks ?? []).map((each) => each.says);
+      const kept = (): string[] =>
+        (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'section' ? [`${String(event.atMs)} ${event.name}`] : []));
+      const ask = (ms: number): void => {
+        clock.advance(1_000);
+        tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: (ms / 1000) * zoom, clientY: 20 });
+        element<HTMLButtonElement>('roll-mark').click();
+      };
+
+      // None yet: the field empty, nothing to take away.
+      ask(4_200);
+      expect([section.value, remove.hidden]).toEqual(['', true]);
+      // Named and Enter pressed: begun on that beat, kept, flagged boxed.
+      section.value = ' Chorus ';
+      section.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(element('sheet-roll-mark').hidden).toBe(true);
+      // On the run's own clock, two seconds on from where it is in the drawing.
+      expect(kept()).toEqual(['6000 Chorus']);
+      expect(marks()).toContain('[Chorus]');
+      // On the chart, over the bar it begins in.
+      element<HTMLButtonElement>('roll-chords-open').click();
+      element<HTMLButtonElement>('roll-chart-open').click();
+      expect(
+        [...element('roll-chart').querySelectorAll<HTMLElement>('.roll-chart__bar[data-section]')].map(
+          (bar) => `${bar.querySelector('.roll-chart__number')?.textContent ?? ''} ${bar.querySelector('.roll-chart__section')?.textContent ?? ''}`,
+        ),
+      ).toEqual(['3 Chorus']);
+      element<HTMLButtonElement>('roll-chart-open').click();
+      element<HTMLButtonElement>('roll-chords-open').click();
+      // Asked again: the field says it, and it may be renamed by the button.
+      ask(4_200);
+      expect([section.value, remove.hidden]).toEqual(['Chorus', false]);
+      section.value = 'B';
+      element<HTMLButtonElement>('roll-mark-yes').click();
+      expect(kept()).toEqual(['6000 B']);
+      // Nothing changed is no change: the same name again keeps the undo where it was.
+      const undoBefore = element<HTMLButtonElement>('roll-undo').dataset['idle'];
+      ask(4_200);
+      element<HTMLButtonElement>('roll-mark-yes').click();
+      expect(element<HTMLButtonElement>('roll-undo').dataset['idle']).toBe(undoBefore);
+      // Taken away with the change; and put back by undo.
+      ask(4_200);
+      remove.click();
+      expect([kept(), marks().some((mark) => mark.includes('['))]).toEqual([[], false]);
+      element<HTMLButtonElement>('roll-undo').click();
+      expect(kept()).toEqual(['6000 B']);
+      // Emptied in the field, it is taken away too.
+      ask(4_200);
+      section.value = '  ';
+      element<HTMLButtonElement>('roll-mark-yes').click();
+      expect(kept()).toEqual([]);
+    });
+
     it('marks a dynamic from a beat in the sheet of a flag, prints it in the sketch written down, and copies it with the flag', async () => {
       const { view, sketches, clock, runtime } = createRig();
       await view.initialize();

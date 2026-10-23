@@ -47,7 +47,14 @@ export type MidiFileEvent =
        * with a dynamic before it.
        */
       readonly gradually?: true;
-    };
+    }
+  /**
+   * A part of the piece beginning here, by the name the writer gave it - a
+   * letter, A or B, or a word, Verse or Chorus - as far as the next. Nothing
+   * a hand plays, kept among the events as a key is, to move with the music
+   * it is in.
+   */
+  | { readonly kind: 'section'; readonly atMs: number; readonly name: string };
 
 /** The two hands, as the two staves of a piano score are theirs. */
 export type Hand = 'left' | 'right';
@@ -499,6 +506,32 @@ export function takeWithTheDynamicFrom(
   return inTheOrderPlayed([...joined, { kind: 'dynamic', atMs, level, ...(gradually && before !== null ? { gradually: true } : {}) }]);
 }
 
+/** The name of the section beginning at a moment, or nothing where none does. */
+export function theSectionAt(events: readonly MidiFileEvent[], atMs: number): string {
+  for (const event of events) {
+    if (event.kind === 'section' && Math.abs(event.atMs - atMs) <= SAME_MOMENT_MS) {
+      return event.name;
+    }
+  }
+  return '';
+}
+
+/**
+ * The music with a section beginning at a moment, by a name: one already
+ * beginning there renamed, and with no name - nothing but spaces - taken
+ * away, the music there in the section before it.
+ */
+export function takeWithTheSectionAt(events: readonly MidiFileEvent[], atMs: number, name: string): readonly MidiFileEvent[] {
+  const kept = events.filter((event) => event.kind !== 'section' || Math.abs(event.atMs - atMs) > SAME_MOMENT_MS);
+  const named = name.trim();
+  return inTheOrderPlayed(named === '' ? kept : [...kept, { kind: 'section', atMs, name: named }]);
+}
+
+/** Where each section of the music begins, and its name, in time order. */
+export function theSectionsOf(events: readonly MidiFileEvent[]): readonly { readonly atMs: number; readonly name: string }[] {
+  return events.flatMap((event) => (event.kind === 'section' ? [{ atMs: event.atMs, name: event.name }] : []));
+}
+
 /** Where music is marked with a dynamic, and which, and whether reached gradually, in time order. */
 export function theDynamicsOf(
   events: readonly MidiFileEvent[],
@@ -888,6 +921,7 @@ function orderAt(event: MidiFileEvent): number {
   switch (event.kind) {
     case 'key':
     case 'dynamic':
+    case 'section':
       return -1;
     case 'noteOff':
       return 0;
@@ -1144,6 +1178,12 @@ function theTrack(
           ),
         ];
         track.push(0xff, 0x01, ...variableLength(text.length), ...text);
+        break;
+      }
+      case 'section': {
+        // A marker, which is what a sequencer names a part of the piece with.
+        const text = [...new TextEncoder().encode(event.name)];
+        track.push(0xff, 0x06, ...variableLength(text.length), ...text);
         break;
       }
     }

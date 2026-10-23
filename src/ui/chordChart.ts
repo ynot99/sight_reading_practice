@@ -40,16 +40,29 @@ export interface ChartBar {
   readonly fromMs: number;
   readonly chords: readonly ChartChord[];
   readonly goesOn: { readonly name: string; readonly share: number } | null;
+  /** The section beginning in it, by its name; none where none does. */
+  readonly section: string | null;
+  /** Whether it begins a row of the chart: four bars to a row, and each section on a row of its own from its first. */
+  readonly beginsARow: boolean;
 }
+
+/** How many bars a row of the chart holds. */
+const BARS_TO_A_ROW = 4;
 
 /**
  * The chart of the chords along the bars of a drawing: each chord in the
  * bar it begins in, taking as much of the bar as it lasts in it; a bar a
  * chord goes on into from the one before says so, as much of it as it
  * takes. Chords before the first bar line are the first bar's, and the
- * last bar is as long as its chords.
+ * last bar is as long as its chords. A section begins in the bar it falls
+ * in, and that bar begins a row.
  */
-export function theChartOfTheChords(bars: readonly SceneBar[], chords: readonly SceneChord[]): readonly ChartBar[] {
+export function theChartOfTheChords(
+  bars: readonly SceneBar[],
+  chords: readonly SceneChord[],
+  sections: readonly { readonly atMs: number; readonly name: string }[] = [],
+): readonly ChartBar[] {
+  let column = 0;
   return bars.map((bar, at) => {
     const untilMs = bars[at + 1]?.atMs ?? Number.POSITIVE_INFINITY;
     const inIt = chords.filter((chord) => (at === 0 || chord.fromMs >= bar.atMs) && chord.fromMs < untilMs);
@@ -59,9 +72,15 @@ export function theChartOfTheChords(bars: readonly SceneBar[], chords: readonly 
     const endedMs = Number.isFinite(untilMs) ? untilMs : Math.max(beganMs, ...inIt.map((chord) => chord.untilMs));
     const all = endedMs - beganMs;
     const shareOf = (chord: SceneChord): number => (all > 0 ? lasts(chord) / all : 1);
+    const section = sections.find((each) => (at === 0 || each.atMs >= bar.atMs) && each.atMs < untilMs)?.name ?? null;
+    column = section === null ? column : 0;
+    const beginsARow = column === 0;
+    column = (column + 1) % BARS_TO_A_ROW;
     return {
       name: bar.name,
       fromMs: bar.atMs,
+      section,
+      beginsARow,
       goesOn: goesOn === undefined ? null : { name: goesOn.name, share: shareOf(goesOn) },
       chords: inIt.map((chord): ChartChord => {
         const before = chords[chords.indexOf(chord) - 1];
@@ -202,7 +221,7 @@ function theSteps(curves: readonly ChartCurve[], x: (ms: number) => number, y: (
  */
 function drawTheCurves(doc: Document, curves: readonly ChartCurve[], chart: readonly ChartBar[]): HTMLElement {
   // A row of the chart in time: the piece's bars on the whole, as many as a row holds.
-  const overMs = (theLengthOfTheCurves(curves) / Math.max(chart.length, 1)) * 4 * TREND_OVER_ROWS;
+  const overMs = (theLengthOfTheCurves(curves) / Math.max(chart.length, 1)) * BARS_TO_A_ROW * TREND_OVER_ROWS;
   const SVG = 'http://www.w3.org/2000/svg';
   const box = doc.createElement('div');
   box.className = 'roll-chart__curves';
@@ -237,9 +256,12 @@ function drawTheCurves(doc: Document, curves: readonly ChartCurve[], chart: read
     drawn.setAttribute('vector-effect', 'non-scaling-stroke');
     return drawn;
   };
+  // Where each row after the first begins, and more strongly where a section does.
   const rows = chart
-    .filter((_, at) => at > 0 && at % 4 === 0)
-    .map((bar) => line('roll-chart__row-line', x(bar.fromMs), 0, x(bar.fromMs), CURVES_TALL));
+    .filter((bar, at) => at > 0 && bar.beginsARow)
+    .map((bar) =>
+      line(bar.section === null ? 'roll-chart__row-line' : 'roll-chart__section-line', x(bar.fromMs), 0, x(bar.fromMs), CURVES_TALL),
+    );
   const nought = line('roll-chart__nought', 0, CURVES_TALL / 2, CURVES_WIDE, CURVES_TALL / 2);
   const path = (className: string, d: string): SVGPathElement => {
     const drawn = doc.createElementNS(SVG, 'path');
@@ -303,6 +325,13 @@ export function drawTheChart(host: HTMLElement, chart: readonly ChartBar[], curv
     const number = doc.createElement('span');
     number.className = 'roll-chart__number';
     number.textContent = bar.name;
+    if (bar.section !== null) {
+      cell.dataset['section'] = bar.section;
+      const section = doc.createElement('span');
+      section.className = 'roll-chart__section';
+      section.textContent = bar.section;
+      cell.append(section);
+    }
     const chords = doc.createElement('div');
     chords.className = 'roll-chart__chords';
     if (bar.goesOn !== null) {

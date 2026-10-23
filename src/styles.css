@@ -1397,6 +1397,25 @@ textarea {
   border-left: 2px solid var(--border);
 }
 
+/* A section begins a row of its own, its name over its first bar, as a lead sheet starts one on a new line. */
+.roll-chart__bar[data-section] {
+  grid-column-start: 1;
+}
+
+.roll-chart__section {
+  align-self: flex-start;
+  padding: 0 6px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.roll-chart__section-line {
+  stroke: var(--accent);
+}
+
 .roll-chart__number {
   font-size: 11px;
   color: var(--text-muted);

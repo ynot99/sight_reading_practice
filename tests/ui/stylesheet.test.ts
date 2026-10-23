@@ -1457,6 +1457,8 @@ describe('the stylesheet', () => {
     }
     expect(ruleOf(".roll-chart__chord[data-of-the-key='false']")).toMatch(/border-style\s*:\s*dashed/);
     expect(ruleOf(".roll-chart__chord[data-here='true']")).toMatch(/outline\s*:\s*2px solid var\(--accent\)/);
+    // A section begins a row of its own.
+    expect(ruleOf('.roll-chart__bar[data-section]')).toMatch(/grid-column-start\s*:\s*1/);
     // The curves over it, kept in view as it scrolls, as wide as it, in none of the verdicts' inks either.
     expect(ruleOf('.roll-chart__curves')).toMatch(/position\s*:\s*sticky/);
     expect(ruleOf('.roll-chart__curves')).toMatch(/background\s*:\s*var\(--surface\)/);

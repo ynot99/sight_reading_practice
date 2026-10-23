@@ -250,6 +250,32 @@ describe('the chart of the chords', () => {
     expect(theMomentOnTheCurves(drawing, 10)).toBeNull();
   });
 
+  it('names a section over the bar it begins in, and begins a row there, the rows after it counted from it', () => {
+    const nine = Array.from({ length: 9 }, (_, bar) => ({ atMs: bar * 1_000, name: String(bar + 1) }));
+    const along = [chord(0, 9_000, 'C', 'I', 0, '')];
+    const sections = [
+      { atMs: 0, name: 'A' },
+      { atMs: 2_500, name: 'B' },
+    ];
+    const sectioned = theChartOfTheChords(nine, along, sections);
+    expect(sectioned.map((bar) => bar.section)).toEqual(['A', null, 'B', null, null, null, null, null, null]);
+    // A from the first bar; B in the third, which begins a row; four to a row from there.
+    expect(sectioned.map((bar) => bar.beginsARow)).toEqual([true, false, true, false, false, false, true, false, false]);
+    expect(theChartOfTheChords(nine, along).map((bar) => bar.beginsARow)).toEqual([true, false, false, false, true, false, false, false, true]);
+    // One before the first bar line is the first bar's.
+    expect(theChartOfTheChords(nine, along, [{ atMs: -300, name: 'Intro' }])[0]?.section).toBe('Intro');
+
+    const host = document.createElement('div');
+    drawTheChart(host, sectioned, theCurvesOfTheChords(along));
+    const bars = [...host.querySelectorAll<HTMLElement>('.roll-chart__bar')];
+    expect(bars.map((bar) => bar.dataset['section'] ?? null)).toEqual(['A', null, 'B', null, null, null, null, null, null]);
+    expect(bars[2]?.querySelector('.roll-chart__section')?.textContent).toBe('B');
+    expect(bars[1]?.querySelector('.roll-chart__section')).toBeNull();
+    // On the curves, a line where B begins, and a fainter one where the row after it does.
+    expect([...host.querySelectorAll('.roll-chart__section-line')].map((line) => line.getAttribute('x1'))).toEqual(['222.22']);
+    expect([...host.querySelectorAll('.roll-chart__row-line')].map((line) => line.getAttribute('x1'))).toEqual(['666.67']);
+  });
+
   it('says there are no chords yet where there are none', () => {
     const host = document.createElement('div');
     drawTheChart(host, theChartOfTheChords(BARS, []), []);

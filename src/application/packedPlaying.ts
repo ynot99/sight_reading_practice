@@ -16,7 +16,7 @@ import { DYNAMIC_LEVELS } from '../domain/model/Exercise.js';
  * derived from them on export, never the other way round, for the same
  * reason an `Exercise` and not its MusicXML is what this project keeps.
  */
-type Packed = readonly number[];
+type Packed = readonly (number | string)[];
 
 /** A hand as a number after a press's four, where one is said: 1 the right, 2 the left. */
 const HAND_CODES: Readonly<Record<Hand, number>> = { right: 1, left: 2 };
@@ -47,6 +47,9 @@ export function pack(event: MidiFileEvent): Packed {
     case 'dynamic':
       // Reached gradually, one; at once, nought.
       return [4, Math.round(event.atMs), DYNAMIC_LEVELS.indexOf(event.level), event.gradually === true ? 1 : 0];
+    case 'section':
+      // Its name where a note's hand is, the one place a tuple has room for words.
+      return [5, Math.round(event.atMs), 0, 0, event.name];
   }
 }
 
@@ -91,6 +94,8 @@ export function unpack(value: unknown): MidiFileEvent | null {
       const level = DYNAMIC_LEVELS[a];
       return level === undefined ? null : { kind: 'dynamic', atMs, level, ...(b === 1 ? { gradually: true } : {}) };
     }
+    case 5:
+      return typeof hand === 'string' && hand.trim() !== '' ? { kind: 'section', atMs, name: hand.trim() } : null;
     default:
       return null;
   }

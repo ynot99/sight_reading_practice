@@ -760,9 +760,10 @@
           <div id="roll-side" class="roll-side" hidden>
           <!--
             Drawn by the page, a slice for each chord: see `circleView.ts`.
-            In its corner, beside the round drawing where nothing is, whether
-            its middle names the chord sounding: the middle itself is a chord
-            to press, held to be heard.
+            In its corners, beside the round drawing where nothing is, whether
+            its middle names the chord sounding - the middle itself is a chord
+            to press, held to be heard - and whether the octave of keys under
+            it shows that chord.
           -->
           <div id="roll-circle" class="roll-circle">
             <button id="roll-circle-names" type="button" class="roll-circle-names" aria-pressed="true"
@@ -774,6 +775,15 @@
                 <path d="M12 7a5 5 0 0 1 5 5c0 .65-.13 1.26-.36 1.83l2.92 2.92A11.8 11.8 0 0 0 23 12c-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46A11.8 11.8 0 0 0 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55A2.8 2.8 0 0 0 9 12a3 3 0 0 0 3 3c.22 0 .44-.03.65-.08l1.55 1.55A5 5 0 0 1 7.53 9.8zm4.31-.78 3.15 3.15.02-.16a3 3 0 0 0-3-3l-.17.01z" />
               </svg>
             </button>
+            <button id="roll-circle-keys-shown" type="button" class="roll-circle-keys-shown" aria-pressed="true"
+              title="The chord sounding is shown on the keys under the circle"
+              aria-label="The chord sounding is shown on the keys under the circle">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm-5.5 16h-3v-5.5h.5a1 1 0 0 0 1-1V5h1v7.5a1 1 0 0 0 1 1h.5V19zM5 5h1v7.5a1 1 0 0 0 1 1h.5V19H5V5zm14 14h-2.5v-5.5h.5a1 1 0 0 0 1-1V5h1v14z" />
+              </svg>
+            </button>
+            <!-- An octave of keys, drawn by the page: see `drawTheKeysUnderTheCircle`. -->
+            <div id="roll-circle-keys" class="roll-circle-keys" aria-hidden="true"></div>
           </div>
           <div id="roll-chords" class="roll-chords" role="group" aria-label="The chords of the key">
             <!-- The key's chords, then the writer's own, each one press to write. -->

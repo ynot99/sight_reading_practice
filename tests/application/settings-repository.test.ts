@@ -70,6 +70,7 @@ const SETTINGS: PracticeSettings = {
   rollHeadAtPercent: 35,
   rollSounds: false,
   circleNamesTheChord: false,
+  circleShowsTheKeys: false,
   yourName: 'A. Writer',
   velocityAsDynamics: true,
   rhythmRuler: 'eighth',

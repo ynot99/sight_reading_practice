@@ -382,6 +382,8 @@ export interface PracticeSettings {
    * slice of the chord is lit either way.
    */
   readonly circleNamesTheChord: boolean;
+  /** Whether the octave of keys under the circle of fifths shows the chord sounding, or is hidden. */
+  readonly circleShowsTheKeys: boolean;
   /**
    * Whether how hard the chosen notes of a sketch are struck is set by the
    * marks a score writes - pp to ff - rather than by a slider of 127 steps:
@@ -1126,6 +1128,7 @@ export class PracticeController {
       rollHeadAtPercent: 15,
       rollSounds: true,
       circleNamesTheChord: true,
+      circleShowsTheKeys: true,
       velocityAsDynamics: false,
       rangeFromBar: null,
       rangeToBar: null,

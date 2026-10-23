@@ -5,6 +5,7 @@ import {
   type CircleRing,
   type PlaceOnTheCircle,
 } from '../domain/harmony/circleOfFifths.js';
+import { MIDDLE_C, drawTheKeys, lightTheKeysOf, type KeyLight } from './replayKeys.js';
 
 /**
  * The circle of fifths as a drawing: a slice of a ring for each chord, its
@@ -170,6 +171,33 @@ function nameTheChordSounding(
   const shown = named ? sounding : null;
   writeInTheMiddle(drawing.querySelector('.roll-circle__sounding-name'), shown?.name ?? '', SOUNDING_SIZE);
   writeInTheMiddle(drawing.querySelector('.roll-circle__sounding-numeral'), shown?.numeral ?? '', SOUNDING_NUMERAL_SIZE);
+}
+
+/** Draws the octave of keys under the circle, from middle C, the chord sounding to be shown on. */
+export function drawTheKeysUnderTheCircle(row: HTMLElement): ReadonlyMap<number, HTMLElement> {
+  return drawTheKeys(row, MIDDLE_C, MIDDLE_C + 11);
+}
+
+/**
+ * Shows a chord on the octave of keys under the circle: each of its notes
+ * lit on the key of its name, wherever it is played, and its root the more;
+ * none lit for none.
+ */
+export function showTheChordOnTheKeys(
+  keys: ReadonlyMap<number, HTMLElement>,
+  chord: { readonly root: number; readonly keys: readonly number[] } | null,
+): void {
+  const onTheOctave = (midi: number): number => MIDDLE_C + (((midi % 12) + 12) % 12);
+  const lit = new Map<number, KeyLight>((chord?.keys ?? []).map((midi) => [onTheOctave(midi), 'heard']));
+  lightTheKeysOf(keys, lit);
+  const root = chord === null ? null : onTheOctave(chord.root);
+  for (const [midi, key] of keys) {
+    if (midi === root) {
+      key.dataset['root'] = 'true';
+    } else {
+      delete key.dataset['root'];
+    }
+  }
 }
 
 /** Whether a pointer or a key is on the middle of the circle. */

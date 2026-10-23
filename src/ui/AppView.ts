@@ -312,7 +312,14 @@ import {
   type RollGhost,
   type RollHeads,
 } from './rollView.js';
-import { drawTheCircle, isTheMiddleOfTheCircle, showOnTheCircle, thePlaceOnTheCircle } from './circleView.js';
+import {
+  drawTheCircle,
+  drawTheKeysUnderTheCircle,
+  isTheMiddleOfTheCircle,
+  showOnTheCircle,
+  showTheChordOnTheKeys,
+  thePlaceOnTheCircle,
+} from './circleView.js';
 
 /**
  * A chord pressed or pointed at: one of the drawer, by its place there; one
@@ -2084,6 +2091,8 @@ export class AppView {
   private readonly replayKeyboard: ReplayKeyboard;
   /** The circle of fifths beside a sketch's chords. See `showTheCircle`. */
   private readonly circleDrawing: SVGSVGElement;
+  /** The octave of keys under it, by their pitch. */
+  private readonly circleKeys: ReadonlyMap<number, HTMLElement>;
   /** What the circle was last written to show, so a step of a playback that changes nothing writes nothing. */
   private circleShows = '';
   /** The frame the notes over the keys are painted on next, while any fall. */
@@ -2775,6 +2784,8 @@ export class AppView {
     rollSide: HTMLElement;
     rollCircle: HTMLElement;
     rollCircleNames: HTMLButtonElement;
+    rollCircleKeysShown: HTMLButtonElement;
+    rollCircleKeys: HTMLElement;
     rollChordsList: HTMLElement;
     rollChordsKeep: HTMLButtonElement;
     rollChordsForget: HTMLButtonElement;
@@ -3182,6 +3193,8 @@ export class AppView {
       rollSide: requireElement(doc, 'roll-side'),
       rollCircle: requireElement(doc, 'roll-circle'),
       rollCircleNames: requireElement(doc, 'roll-circle-names'),
+      rollCircleKeysShown: requireElement(doc, 'roll-circle-keys-shown'),
+      rollCircleKeys: requireElement(doc, 'roll-circle-keys'),
       rollChordsList: requireElement(doc, 'roll-chords-list'),
       rollChordsKeep: requireElement(doc, 'roll-chords-keep'),
       rollChordsForget: requireElement(doc, 'roll-chords-forget'),
@@ -3395,7 +3408,9 @@ export class AppView {
     };
     this.replayKeyboard = drawTheKeyboard(this.el.replayKeys);
     this.circleDrawing = drawTheCircle(doc);
-    this.el.rollCircle.append(this.circleDrawing);
+    // Over the keys, which stand under it.
+    this.el.rollCircleKeys.before(this.circleDrawing);
+    this.circleKeys = drawTheKeysUnderTheCircle(this.el.rollCircleKeys);
   }
 
   async initialize(): Promise<void> {
@@ -10224,6 +10239,10 @@ export class AppView {
       this.runtime.controller.updateSettings({ circleNamesTheChord: !this.runtime.controller.settings.circleNamesTheChord });
       this.showTheCircle();
     });
+    this.listen(this.el.rollCircleKeysShown, 'click', () => {
+      this.runtime.controller.updateSettings({ circleShowsTheKeys: !this.runtime.controller.settings.circleShowsTheKeys });
+      this.showTheCircle();
+    });
     // Over a slice or the middle, its notes are shown where it would write them, as a chord of the drawer's are.
     this.listen(this.el.rollCircle, 'pointerover', (event) => {
       this.pointAtTheChord(theChordAskedForOnTheCircle(event.target));
@@ -14498,12 +14517,22 @@ export class AppView {
       ? 'The chord sounding is named in the middle: press to hide it'
       : 'The chord sounding is not named in the middle: press to name it';
     this.el.rollCircleNames.setAttribute('aria-label', this.el.rollCircleNames.title);
+    const onTheKeys = this.runtime.controller.settings.circleShowsTheKeys;
+    this.el.rollCircleKeysShown.setAttribute('aria-pressed', String(onTheKeys));
+    this.el.rollCircleKeysShown.title = onTheKeys
+      ? 'The chord sounding is shown on the keys under the circle: press to hide them'
+      : 'The keys under the circle are hidden: press to show the chord sounding on them';
+    this.el.rollCircleKeysShown.setAttribute('aria-label', this.el.rollCircleKeysShown.title);
+    this.el.rollCircleKeys.hidden = !onTheKeys;
+    // And the room they take given back to the circle: see `--circle-keys`.
+    this.el.rollCircle.dataset['keys'] = String(onTheKeys);
     const way = scene === null ? [] : theWayRoundTheCircle(scene.chords, this.headIsAtMs(), THE_WAY_ROUND_SHOWN);
-    const shows = JSON.stringify([key.fifths, theScaleOfTheKey(key), here, sounding, named, way]);
+    const shows = JSON.stringify([key.fifths, theScaleOfTheKey(key), here, sounding, chord?.keys, named, way]);
     if (shows === this.circleShows) {
       return;
     }
     this.circleShows = shows;
+    showTheChordOnTheKeys(this.circleKeys, chord);
     showOnTheCircle(this.circleDrawing, {
       fifths: key.fifths,
       ofTheKey: theKeysOwnPlaces(key.fifths, theScaleOfTheKey(key)),

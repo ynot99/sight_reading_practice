@@ -9800,6 +9800,11 @@ describe('AppView', () => {
       const here = (): string[] =>
         [...circle.querySelectorAll('[data-ring][data-here]')].map((slice) => `${slice.getAttribute('data-ring') ?? ''} ${slice.getAttribute('data-place') ?? ''}`);
       const steps = (): number => circle.querySelectorAll('.roll-circle__step').length;
+      // The octave under the circle: the keys lit, the root marked.
+      const onTheKeys = (): string[] =>
+        [...element('roll-circle-keys').querySelectorAll<HTMLElement>('[data-shade]')].map(
+          (key) => `${key.dataset['midi'] ?? ''}${key.dataset['root'] === 'true' ? ' root' : ''}`,
+        );
       const pill = element<HTMLOutputElement>('roll-chord-held');
       const down = (...keys: number[]): void => {
         for (const key of keys) {
@@ -9816,12 +9821,16 @@ describe('AppView', () => {
       cursorAt(2_600);
       // The cursor's chord, with nothing held.
       expect([middle(), numeral(), here()]).toEqual(['Am', 'vi', ['minor 0']]);
+      expect(onTheKeys()).toEqual(['60', '64', '69 root']);
+      expect(element('roll-circle-keys').querySelectorAll('[data-midi]')).toHaveLength(12);
       // The numeral under the name, smaller.
       expect(numeralSize()).toBeLessThan(sizeInTheMiddle());
       const wayBefore = steps();
       // Held, the keys' chord instead, spelt in the key, its slice lit, the way as it was; and not over the drawing too.
       down(62, 66, 69);
       expect([middle(), numeral(), here(), steps()]).toEqual(['D', 'II', ['major 2'], wayBefore]);
+      // On the keys of their names, wherever they are played.
+      expect(onTheKeys()).toEqual(['62 root', '66', '69']);
       expect(pill.hidden).toBe(true);
       // A suspended one on its root's slice; an augmented one, which has no place, named in the middle and no slice lit.
       up(66);
@@ -9841,6 +9850,12 @@ describe('AppView', () => {
       expect([middle(), numeral()]).toEqual(['C♯dim7', '♭ii°7']);
       expect(sizeInTheMiddle()).toBeLessThan(short);
       up(61, 64, 67, 70);
+      // The same chord with its fifth let go of: the same name, one key fewer.
+      down(60, 64, 67, 71);
+      expect(onTheKeys()).toEqual(['60 root', '64', '67', '71']);
+      up(67);
+      expect([middle(), onTheKeys()]).toEqual(['Cmaj7', ['60 root', '64', '71']]);
+      up(60, 64, 71);
       down(59, 62, 66, 69);
       expect([middle(), numeral()]).toEqual(['Bm7', 'vii7']);
       expect(numeralSize()).toBe(shortNumeral);
@@ -9883,12 +9898,32 @@ describe('AppView', () => {
       down(63, 66, 70);
       switched.click();
       expect([middle(), numeral(), runtime.controller.settings.circleNamesTheChord]).toEqual(['D♯m', '♭ii', true]);
+      // The keys are hidden by a switch of their own, the name left as it is; shown again, on the chord sounding then.
+      const keysSwitched = element<HTMLButtonElement>('roll-circle-keys-shown');
+      expect([keysSwitched.getAttribute('aria-pressed'), keysSwitched.title, element('roll-circle-keys').hidden]).toEqual([
+        'true',
+        'The chord sounding is shown on the keys under the circle: press to hide them',
+        false,
+      ]);
+      keysSwitched.click();
+      expect([element('roll-circle-keys').hidden, runtime.controller.settings.circleShowsTheKeys, middle()]).toEqual([true, false, 'D♯m']);
+      expect(circle.dataset['keys']).toBe('false');
+      expect([keysSwitched.getAttribute('aria-pressed'), keysSwitched.getAttribute('aria-label')]).toEqual([
+        'false',
+        'The keys under the circle are hidden: press to show the chord sounding on them',
+      ]);
+      up(63, 66, 70);
+      down(62, 66, 69);
+      keysSwitched.click();
+      expect([element('roll-circle-keys').hidden, onTheKeys(), circle.dataset['keys']]).toEqual([false, ['62 root', '66', '69'], 'true']);
+      up(62, 66, 69);
+      down(63, 66, 70);
       element<HTMLButtonElement>('roll-chords-open').click();
       expect([pill.hidden, (pill.textContent ?? '').trim()]).toEqual([false, 'D♯m']);
       up(63, 66, 70);
       cursorAt(5_000);
       element<HTMLButtonElement>('roll-chords-open').click();
-      expect([middle(), numeral(), here()]).toEqual(['', '', []]);
+      expect([middle(), numeral(), here(), onTheKeys()]).toEqual(['', '', [], []]);
     });
 
     it('strikes a chord of the circle as a pointer goes down on it and writes the one it is let go of on, the middle the chord sounding', async () => {

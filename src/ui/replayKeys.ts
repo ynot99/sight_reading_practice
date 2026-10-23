@@ -109,7 +109,23 @@ export function drawTheKeyboard(host: HTMLElement): ReplayKeyboard {
   row.className = 'replay-keys__row';
   track.append(laneBox, row);
   scroller.append(track);
-  for (let midi = LOWEST_KEY; midi <= HIGHEST_KEY; midi += 1) {
+  for (const [midi, key] of drawTheKeys(row, LOWEST_KEY, HIGHEST_KEY)) {
+    keys.set(midi, key);
+  }
+
+  host.replaceChildren(side, scroller);
+  return { keys, pedal, scroller, row, lane, pedalLane, pedalToggle: foot, sliderToggle };
+}
+
+/**
+ * Draws the keys from one to another into a row, white keys from the left,
+ * each holding the black key above it: see `drawTheKeyboard`. The keys,
+ * by their pitch.
+ */
+export function drawTheKeys(row: HTMLElement, lowest: number, highest: number): ReadonlyMap<number, HTMLElement> {
+  const doc = row.ownerDocument;
+  const keys = new Map<number, HTMLElement>();
+  for (let midi = lowest; midi <= highest; midi += 1) {
     if (isBlackKey(midi)) {
       continue;
     }
@@ -118,7 +134,7 @@ export function drawTheKeyboard(host: HTMLElement): ReplayKeyboard {
     white.dataset['midi'] = String(midi);
     keys.set(midi, white);
     const above = midi + 1;
-    if (above <= HIGHEST_KEY && isBlackKey(above)) {
+    if (above <= highest && isBlackKey(above)) {
       const black = doc.createElement('span');
       black.className = 'replay-keys__black';
       black.dataset['midi'] = String(above);
@@ -127,9 +143,7 @@ export function drawTheKeyboard(host: HTMLElement): ReplayKeyboard {
     }
     row.append(white);
   }
-
-  host.replaceChildren(side, scroller);
-  return { keys, pedal, scroller, row, lane, pedalLane, pedalToggle: foot, sliderToggle };
+  return keys;
 }
 
 /** Where a key stands along the row, and how wide it is drawn, in page pixels. */
@@ -172,7 +186,16 @@ export function lightTheKeys(
   down: ReadonlyMap<number, KeyLight>,
   pedalDown: boolean,
 ): void {
-  for (const [midi, key] of keyboard.keys) {
+  lightTheKeysOf(keyboard.keys, down);
+  const pedal = String(pedalDown);
+  if (keyboard.pedal.dataset['down'] !== pedal) {
+    keyboard.pedal.dataset['down'] = pedal;
+  }
+}
+
+/** Lights some keys down now and puts the rest out, as `lightTheKeys` does a keyboard's. */
+export function lightTheKeysOf(keys: ReadonlyMap<number, HTMLElement>, down: ReadonlyMap<number, KeyLight>): void {
+  for (const [midi, key] of keys) {
     const shade = down.get(midi);
     const now = key.dataset['shade'];
     if (shade === undefined) {
@@ -187,10 +210,6 @@ export function lightTheKeys(
     if (key.dataset['lit'] !== shade) {
       key.dataset['lit'] = shade;
     }
-  }
-  const pedal = String(pedalDown);
-  if (keyboard.pedal.dataset['down'] !== pedal) {
-    keyboard.pedal.dataset['down'] = pedal;
   }
 }
 

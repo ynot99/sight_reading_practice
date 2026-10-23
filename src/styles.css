@@ -1292,12 +1292,40 @@ textarea {
 }
 
 .roll-circle {
+  /* The height of the octave of keys under the circle, with the gap over it; none while they are hidden. */
+  --circle-keys: 34px;
+
   position: relative;
   display: flex;
   flex: none;
-  align-items: flex-start;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
   min-height: 0;
+}
+
+.roll-circle[data-keys='false'] {
+  --circle-keys: 0px;
+}
+
+/* The octave of keys under the circle, as wide as it: nothing to press. */
+.roll-circle-keys {
+  display: flex;
+  flex: none;
+  align-self: stretch;
+  height: calc(var(--circle-keys) - 4px);
+  margin-top: 4px;
+  pointer-events: none;
+}
+
+/* The chord sounding on the keys in the accent, its root the more: named, not judged. */
+.roll-circle-keys .replay-keys__white[data-lit]::after,
+.roll-circle-keys .replay-keys__black[data-lit]::after {
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.roll-circle-keys .replay-keys__white[data-root='true']::after,
+.roll-circle-keys .replay-keys__black[data-root='true']::after {
+  background: var(--accent);
 }
 
 /* Square, as wide as its column and never taller than the room: the circle is drawn inside it either way. */
@@ -1331,7 +1359,7 @@ textarea {
 
   .roll-circle__drawing {
     width: auto;
-    height: 100%;
+    height: calc(100% - var(--circle-keys));
   }
 }
 
@@ -1433,7 +1461,30 @@ textarea {
   cursor: pointer;
 }
 
-.roll-circle-names svg {
+/* And in the other corner, whether the keys under the circle show it. */
+.roll-circle-keys-shown {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.roll-circle-keys-shown[aria-pressed='false'] {
+  opacity: 0.45;
+}
+
+.roll-circle-names svg,
+.roll-circle-keys-shown svg {
   width: 16px;
   height: 16px;
   fill: currentcolor;

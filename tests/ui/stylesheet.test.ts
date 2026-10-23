@@ -1440,7 +1440,7 @@ describe('the stylesheet', () => {
     const portrait = '@media (orientation: portrait)';
     // The drawing, then a column of the circle over the chords, the keep and the delete at its foot.
     expect(HTML).toMatch(
-      /<div class="roll-harmony">\s*<div class="roll-room">\s*<div class="roll-frame">[\s\S]*?id="roll-map"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>\s*<div id="roll-side" class="roll-side" hidden>\s*(?:<!--[\s\S]*?-->\s*)?<div id="roll-circle" class="roll-circle">\s*<button id="roll-circle-names"[\s\S]*?<\/button>\s*<\/div>\s*<div id="roll-chords"[^>]*>[\s\S]*?id="roll-chords-keep"[^>]*>\+<\/button>\s*<button id="roll-chords-forget"[\s\S]*?<\/button>\s*<\/div>\s*<\/div>\s*<\/div>\s*<\/div>/,
+      /<div class="roll-harmony">\s*<div class="roll-room">\s*<div class="roll-frame">[\s\S]*?id="roll-map"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>\s*<div id="roll-side" class="roll-side" hidden>\s*(?:<!--[\s\S]*?-->\s*)?<div id="roll-circle" class="roll-circle">\s*<button id="roll-circle-names"[\s\S]*?<\/button>\s*<button id="roll-circle-keys-shown"[\s\S]*?<\/button>\s*(?:<!--[\s\S]*?-->\s*)?<div id="roll-circle-keys" class="roll-circle-keys"[^>]*><\/div>\s*<\/div>\s*<div id="roll-chords"[^>]*>[\s\S]*?id="roll-chords-keep"[^>]*>\+<\/button>\s*<button id="roll-chords-forget"[\s\S]*?<\/button>\s*<\/div>\s*<\/div>\s*<\/div>\s*<\/div>/,
     );
     expect(ruleOf('.roll-harmony')).toMatch(/display\s*:\s*flex/);
     expect(ruleOf('.roll-harmony')).not.toMatch(/flex-direction/);
@@ -1457,6 +1457,18 @@ describe('the stylesheet', () => {
     expect(ruleOf('.roll-circle-names')).toMatch(/position\s*:\s*absolute/);
     expect(ruleOf('.roll-circle-names')).toMatch(/top\s*:\s*0/);
     expect(ruleOf('.roll-circle-names')).toMatch(/left\s*:\s*0/);
+    expect(ruleOf('.roll-circle-keys-shown')).toMatch(/position\s*:\s*absolute/);
+    expect(ruleOf('.roll-circle-keys-shown')).toMatch(/right\s*:\s*0/);
+    // Under it, the octave of keys, as wide as the circle, and the room it takes given back while it is hidden.
+    expect(ruleOf('.roll-circle')).toMatch(/flex-direction\s*:\s*column/);
+    expect(ruleOf('.roll-circle')).toMatch(/--circle-keys\s*:\s*34px/);
+    expect(ruleOf(".roll-circle[data-keys='false']")).toMatch(/--circle-keys\s*:\s*0px/);
+    expect(ruleOf('.roll-circle-keys')).toMatch(/align-self\s*:\s*stretch/);
+    expect(ruleOf('.roll-circle-keys')).toMatch(/height\s*:\s*calc\(var\(--circle-keys\) - 4px\)/);
+    expect(ruleOf('.roll-circle__drawing', portrait)).toMatch(/height\s*:\s*calc\(100% - var\(--circle-keys\)\)/);
+    // Lit in the accent, never a verdict's colour, the root the more.
+    expect(ruleOf('.roll-circle-keys .replay-keys__white[data-lit]::after, .roll-circle-keys .replay-keys__black[data-lit]::after')).toMatch(/var\(--accent\) 55%/);
+    expect(ruleOf(".roll-circle-keys .replay-keys__white[data-root='true']::after, .roll-circle-keys .replay-keys__black[data-root='true']::after")).toMatch(/background\s*:\s*var\(--accent\)/);
     expect(ruleOf('.roll-circle__drawing')).toMatch(/aspect-ratio\s*:\s*1/);
     expect(ruleOf('.roll-circle__drawing')).toMatch(/max-height\s*:\s*100%/);
     // Under the chords' column the rest of its height, scrolled where there are more.
@@ -1475,7 +1487,6 @@ describe('the stylesheet', () => {
     expect(ruleOf('.roll-circle', portrait)).toMatch(/height\s*:\s*100%/);
     expect(ruleOf('.roll-chords', portrait)).toMatch(/flex\s*:\s*1 1 0/);
     expect(ruleOf('.roll-chords', portrait)).toMatch(/min-width\s*:\s*0/);
-    expect(ruleOf('.roll-circle__drawing', portrait)).toMatch(/height\s*:\s*100%/);
     // Lit with the accent, never a verdict's colour; the music's chord more than the key's.
     expect(ruleOf(".roll-circle__chord[data-in-the-key='true'] path")).toMatch(/var\(--accent\) 18%/);
     expect(ruleOf(".roll-circle__chord[data-here='true'] path")).toMatch(/var\(--accent\) 60%/);

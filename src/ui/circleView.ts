@@ -29,6 +29,15 @@ const NUMERAL_SIZE: Readonly<Record<CircleRing, number>> = { major: 7, minor: 6,
 /** The drawing reaches a little past the outer ring, so its edge is not cut. */
 const REACH = 102;
 
+/**
+ * The chord sounding, written in the hole in the middle: as large as the
+ * majors' names, and smaller where a long one would reach the ring round
+ * it - a letter being about this much of its size across.
+ */
+const SOUNDING_SIZE = 16;
+const SOUNDING_ROOM = 46;
+const A_LETTER_IS = 0.62;
+
 /** How strongly the newest step of the way round is drawn, and how much less each older one. */
 const NEWEST_STEP = 0.9;
 const EACH_STEP_OLDER = 0.25;
@@ -113,8 +122,22 @@ export function drawTheCircle(doc: Document): SVGSVGElement {
   const way = doc.createElementNS(SVG, 'g');
   way.setAttribute('class', 'roll-circle__way');
   way.setAttribute('aria-hidden', 'true');
-  drawing.append(way, names);
+  const sounding = doc.createElementNS(SVG, 'text');
+  sounding.setAttribute('class', 'roll-circle__sounding');
+  sounding.setAttribute('aria-live', 'polite');
+  drawing.append(way, names, sounding);
   return drawing;
+}
+
+/** Writes the chord sounding in the middle, at a size its name fits the hole at; nothing there for none. */
+function nameTheChordSounding(drawing: SVGSVGElement, name: string | null): void {
+  const written = drawing.querySelector('.roll-circle__sounding');
+  if (written === null) {
+    return;
+  }
+  written.textContent = name ?? '';
+  const letters = [...(name ?? '')].length;
+  written.setAttribute('font-size', Math.min(SOUNDING_SIZE, SOUNDING_ROOM / (Math.max(letters, 1) * A_LETTER_IS)).toFixed(2));
 }
 
 /**
@@ -158,8 +181,8 @@ export function thePlaceOnTheCircle(target: EventTarget | null): PlaceOnTheCircl
 /**
  * Writes onto the circle what it shows: every chord named as the key the
  * music is in spells it, and named with what pressing it does; the key's
- * own lit, each with its numeral, the others without; and the chord the
- * music is on, where it has a place, lit more.
+ * own lit, each with its numeral, the others without; and the chord
+ * sounding named in the middle and, where it has a place, lit more.
  */
 export function showOnTheCircle(
   drawing: SVGSVGElement,
@@ -167,11 +190,14 @@ export function showOnTheCircle(
     readonly fifths: number;
     readonly ofTheKey: readonly (PlaceOnTheCircle & { readonly numeral: string })[];
     readonly here: PlaceOnTheCircle | null;
+    /** The name of the chord sounding, which `here` is the place of where it has one. */
+    readonly sounding: string | null;
     /** The way the music came to where it is, oldest first: see `theWayRoundTheCircle`. */
     readonly way: readonly PlaceOnTheCircle[];
   },
 ): void {
   showTheWayRound(drawing, shown.way);
+  nameTheChordSounding(drawing, shown.sounding);
   // A slice's name is the one drawn in the same turn as it.
   const labels = [...drawing.querySelectorAll('.roll-circle__label')];
   for (const [turn, slice] of [...drawing.querySelectorAll<SVGGElement>('[data-ring]')].entries()) {

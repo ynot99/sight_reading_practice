@@ -8,7 +8,7 @@ import {
   type PlayedWith,
 } from '../application/modes/challengeModes.js';
 import { barCells } from '../domain/scoring/barCells.js';
-import { nameOfThePitchClass, nameTheChord, theChordTheNotesMake } from '../domain/harmony/chordName.js';
+import { nameOfThePitchClass, nameTheChord, theChordTheKeysMake, theChordTheNotesMake } from '../domain/harmony/chordName.js';
 import { DYNAMIC_LEVELS, DYNAMIC_VELOCITY, type DynamicLevel } from '../domain/model/Exercise.js';
 import { eachKeyOnce, sameKeys, theChordsOfTheScale } from '../domain/harmony/chordsOfTheKey.js';
 import type { KeyFrom } from '../domain/harmony/chordsAlong.js';
@@ -13680,12 +13680,21 @@ export class AppView {
 
   /**
    * Names the chord the keys held make, on any input and on the strip beside
-   * the drawing. Not there while they make none with a name.
+   * the drawing. Not there while they make none with a name, nor while the
+   * circle is open, which names it in its middle.
    */
-  private nameTheChordHeld(held: readonly number[]): void {
-    const chord = nameTheChord(held, this.theSignatureTheDrawingSpellsIn());
+  private nameTheChordHeld(): void {
+    const chord = nameTheChord(this.theKeysHeld(), this.theSignatureTheDrawingSpellsIn());
     this.el.rollChordHeldName.textContent = chord ?? '';
-    this.el.rollChordHeld.hidden = chord === null;
+    this.el.rollChordHeld.hidden = chord === null || this.theChordsOfTheKeyAreOpen();
+  }
+
+  /** The keys held down now: on any input, on the strip beside the drawing, and on a row of it. */
+  private theKeysHeld(): readonly number[] {
+    return [
+      ...this.runtime.recorder.keysDown,
+      ...[this.keyHeldOnTheStrip, this.rowHeld].flatMap((key) => (key === null ? [] : [key.midi])),
+    ];
   }
 
   /**
@@ -14362,11 +14371,14 @@ export class AppView {
 
   /**
    * The circle of fifths, open with the chords beside a sketch being edited:
-   * the key the cursor is in lit, with its numerals, and the chord the music
-   * makes where the cursor is - the one the lane under the notes names
-   * there - lit more, with the way the music came to it drawn fading
-   * behind, so a playback is watched going round it. Asked on every
-   * step of a playback, and written only when what it shows has changed.
+   * the key the cursor is in lit, with its numerals, and the chord sounding
+   * named in the middle and lit more - the keys held where they make one,
+   * otherwise the chord the music makes where the cursor is, the one the
+   * lane under the notes names there - with the way the music came to it
+   * drawn fading behind, so a playback is watched going round it. The keys
+   * held take no step of the way: they are not the music. Asked on every
+   * step of a playback and every key, and written only when what it shows
+   * has changed.
    */
   private showTheCircle(): void {
     const open = this.theChordsOfTheKeyAreOpen();
@@ -14377,10 +14389,11 @@ export class AppView {
     }
     const key = this.theKeyAtTheHead(stored);
     const scene = this.drawnScene;
-    const chord = scene === null ? null : theChordAt(scene, this.headIsAtMs());
+    const chord = theChordTheKeysMake(this.theKeysHeld(), key.fifths) ?? (scene === null ? null : theChordAt(scene, this.headIsAtMs()));
     const here = chord === null ? null : whereOnTheCircle(chord.root, chord.kind);
+    const sounding = chord?.name ?? null;
     const way = scene === null ? [] : theWayRoundTheCircle(scene.chords, this.headIsAtMs(), THE_WAY_ROUND_SHOWN);
-    const shows = JSON.stringify([key.fifths, theScaleOfTheKey(key), here, way]);
+    const shows = JSON.stringify([key.fifths, theScaleOfTheKey(key), here, sounding, way]);
     if (shows === this.circleShows) {
       return;
     }
@@ -14389,6 +14402,7 @@ export class AppView {
       fifths: key.fifths,
       ofTheKey: theKeysOwnPlaces(key.fifths, theScaleOfTheKey(key)),
       here,
+      sounding,
       way,
     });
   }
@@ -18006,17 +18020,15 @@ export class AppView {
    * Lights the rows of the keys sounding now - held down on any input, or
    * struck by the drawing's own playback where the head is - across the
    * drawing, on its keys and down the map beside it, and names the chord the
-   * keys held make. The rows only when they change: it is asked on every
-   * frame of a playback.
+   * keys held make, over the drawing or round the circle. The rows only when
+   * they change: it is asked on every frame of a playback.
    */
   private lightTheSoundingRows(): void {
     const scene = this.drawnScene;
     const rows = new Set<number>();
-    const held = [
-      ...this.runtime.recorder.keysDown,
-      ...[this.keyHeldOnTheStrip, this.rowHeld].flatMap((key) => (key === null ? [] : [key.midi])),
-    ];
-    this.nameTheChordHeld(held);
+    const held = this.theKeysHeld();
+    this.nameTheChordHeld();
+    this.showTheCircle();
     if (scene !== null && !this.el.sheetRoll.hidden) {
       for (const midi of held) {
         const row = scene.highest - midi;

@@ -3,6 +3,7 @@ import {
   CHORD_KINDS,
   nameOfThePitchClass,
   nameTheChord,
+  theChordTheKeysMake,
   theChordTheNotesMake,
   theNumeralOfTheChord,
   type ChordHeard,
@@ -114,6 +115,36 @@ describe('naming the chord held', () => {
     for (let fifths = -7; fifths <= 7; fifths += 1) {
       expect(nameOfThePitchClass(4, fifths)).toBe('E');
     }
+  });
+});
+
+describe('the chord the keys held make', () => {
+  it('is the chord named, with its root and kind, on every root, every kind and every inversion', () => {
+    for (let root = 0; root < 12; root += 1) {
+      for (const kind of CHORD_KINDS) {
+        // Standing on its root, it is that root and that kind.
+        const chord = theChordTheKeysMake(voiced(root, kind.intervals), 3);
+        expect([chord?.name, chord?.root, chord?.kind, chord?.exactly]).toEqual([
+          `${nameOfThePitchClass(root, 3)}${kind.suffix}`,
+          root,
+          kind,
+          true,
+        ]);
+        // Over another bass, named as the chord is named.
+        for (let inversion = 1; inversion < kind.intervals.length; inversion += 1) {
+          const keys = voiced(root, kind.intervals, inversion);
+          expect(theChordTheKeysMake(keys, 3)?.name ?? null).toBe(nameTheChord(keys, 3));
+        }
+      }
+    }
+    expect(theChordTheKeysMake([64, 67, 72])).toMatchObject({ name: 'C/E', root: 0, kind: CHORD_KINDS[0] });
+    expect(theChordTheKeysMake([57, 60, 64, 67])).toMatchObject({ name: 'Am7', root: 9 });
+  });
+
+  it('is none where the keys make no chord with a name', () => {
+    expect(theChordTheKeysMake([])).toBeNull();
+    expect(theChordTheKeysMake([60])).toBeNull();
+    expect(theChordTheKeysMake([60, 61, 62])).toBeNull();
   });
 });
 

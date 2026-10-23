@@ -1410,6 +1410,15 @@ textarea {
   stroke-linecap: round;
 }
 
+/* The chord sounding, in the hole in the middle, in the text's own ink: named, not judged. */
+.roll-circle__sounding {
+  fill: var(--text);
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
 .roll-circle__label[data-in-the-key='true'] .roll-circle__name,
 .roll-circle__label[data-here='true'] .roll-circle__name {
   fill: var(--text);

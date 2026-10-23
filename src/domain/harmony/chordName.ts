@@ -79,12 +79,22 @@ export function nameOfThePitchClass(pitchClass: number, fifths: number | null): 
  * fifth and another without it, on the same footing with the bass.
  */
 export function nameTheChord(midis: readonly number[], fifths: number | null = null): string | null {
+  return theChordTheKeysMake(midis, fifths)?.name ?? null;
+}
+
+/** The chord the keys held make, named as `nameTheChord` names it, with its root and kind: `null` where it names none. */
+export function theChordTheKeysMake(midis: readonly number[], fifths: number | null = null): ChordHeard | null {
   const read = readTheChord(midis);
   if (read === null) {
     return null;
   }
   const name = `${nameOfThePitchClass(read.root, fifths)}${read.kind.suffix}`;
-  return read.root === read.bass ? name : `${name}/${nameOfThePitchClass(read.bass, fifths)}`;
+  return {
+    name: read.root === read.bass ? name : `${name}/${nameOfThePitchClass(read.bass, fifths)}`,
+    exactly: true,
+    root: read.root,
+    kind: read.kind,
+  };
 }
 
 /** The root and the kind of the chord some keys make exactly, and their bass: see `nameTheChord`. */
@@ -139,11 +149,12 @@ export function theChordTheNotesMake(
   notes: readonly { readonly midi: number; readonly lengthMs: number }[],
   fifths: number | null = null,
 ): ChordHeard | null {
-  const midis = notes.map((note) => note.midi);
-  const exactly = readTheChord(midis);
-  return exactly === null
-    ? theChordMostOfTheNotesMake(notes, fifths)
-    : { name: nameTheChord(midis, fifths) ?? '', exactly: true, root: exactly.root, kind: exactly.kind };
+  return (
+    theChordTheKeysMake(
+      notes.map((note) => note.midi),
+      fifths,
+    ) ?? theChordMostOfTheNotesMake(notes, fifths)
+  );
 }
 
 /** A chord most of the sounding of some notes is, and what that reading is worth. */

@@ -107,6 +107,7 @@ import {
 import { ExercisePresetRegistry } from '../domain/generation/ExercisePresetRegistry.js';
 import { BUILT_IN_PRESETS } from '../domain/generation/presets.js';
 import type { IScoreImporter } from '../application/ports/IScoreImporter.js';
+import type { IMusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.js';
 import { ScoreFileImporter } from '../infrastructure/notation/ScoreFileImporter.js';
 import { BUILT_IN_RHYTHM_PROFILES } from '../domain/generation/rhythmProfiles.js';
 import { RhythmProfileRegistry } from '../domain/generation/RhythmProfile.js';
@@ -248,6 +249,8 @@ export interface AppRuntime {
   readonly scores: ScoreLibrary;
   readonly files: IFileSink;
   readonly importer: IScoreImporter;
+  /** Writes a score as MusicXML: as the library keeps one, and as one is saved to the disk. */
+  readonly serializer: IMusicXmlSerializer;
   readonly scorings: ScoringStrategyRegistry;
   readonly modes: PracticeModeRegistry;
   readonly webMidi: IMidiSource & IMidiConnection & IMidiDeviceDirectory;
@@ -607,6 +610,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     scores,
     files: options.fileSink ?? new DownloadFileSink(document),
     importer,
+    serializer,
     scorings,
     modes,
     webMidi,

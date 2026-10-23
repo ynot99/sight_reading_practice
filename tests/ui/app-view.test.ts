@@ -514,6 +514,7 @@ function createRig(
     scores,
     files,
     importer,
+    serializer,
     scorings,
     modes,
     webMidi: webMidiOverride ?? midi,
@@ -4965,6 +4966,64 @@ describe('AppView', () => {
       expect([saved.fifths, saved.minor]).toEqual([-3, true]);
       // And in the metre it was last counted in.
       expect([saved.beats, saved.beatType]).toEqual([2, 4]);
+    });
+
+    it('saves a sketch as a MusicXML file of the score it is written down as', async () => {
+      const { view, sketches, files, runtime } = createRig();
+      await view.initialize();
+      sketches.begin(
+        {
+          events: [60, 64, 67].flatMap((midi, at) => [
+            { kind: 'noteOn' as const, atMs: at * 500, midi, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: at * 500 + 500, midi },
+          ]),
+          beats: [0, 500, 1_000].map((atMs, beat) => ({ atMs, beat, beatsInBar: 3 })),
+        },
+        'Waltz',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Write this sketch down as a score').click();
+      await waitFor(() => runtime.controller.openedExercise !== null);
+      const written = runtime.controller.openedExercise;
+
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Save this sketch as a MusicXML file, as its score is written').click();
+      await waitFor(() => files.saved.length > 0);
+
+      const saved = files.saved[0];
+      expect([saved?.fileName, saved?.mimeType]).toEqual(['Waltz.musicxml', 'application/vnd.recordare.musicxml+xml']);
+      const text = new TextDecoder().decode(saved?.bytes);
+      // The score the page shows, note for note, and read back as one.
+      expect(written).not.toBeNull();
+      expect(text).toBe(runtime.serializer.serialize(written ?? twoBarExercise()));
+      const read = new ScoreFileImporter().read(text).exercise;
+      expect([read.timeSignature.beats, read.timeSignature.beatType]).toEqual([3, 4]);
+      expect(read.staves.flatMap((staff) => staff.measures.flatMap((measure) => measure.entries)).filter((entry) => entry.kind === 'note')).toHaveLength(3);
+
+      // One that cannot be written down says why, and saves nothing.
+      sketches.begin(
+        {
+          events: [60, 62].flatMap((midi, at) => [
+            { kind: 'noteOn' as const, atMs: at * 500, midi, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: at * 500 + 1, midi },
+          ]),
+          beats: [0, 500, 1_000].map((atMs, beat) => ({ atMs, beat, beatsInBar: 3 })),
+        },
+        'Grains',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      [...element('sketches-list').querySelectorAll('li')]
+        .find((row) => row.textContent.startsWith('Grains'))
+        ?.querySelector<HTMLButtonElement>('button[title="Save this sketch as a MusicXML file, as its score is written"]')
+        ?.click();
+      await waitFor(() => element('result').textContent.startsWith('Could not save Grains as MusicXML.'));
+      expect(element('result').textContent).toContain('too short to write down');
+      expect(files.saved).toHaveLength(1);
     });
 
     it('sets the pace of a sketch, its notes keeping their beats, and puts a pace or a metre back as one change', async () => {

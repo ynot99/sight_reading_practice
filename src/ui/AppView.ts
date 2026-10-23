@@ -178,7 +178,7 @@ import { replayFits } from '../application/runReplay.js';
 import type { NoteCounts } from '../domain/scoring/PerformanceReport.js';
 import type { ClosingCue, DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
 import { barLines, barNumberOf, measureCount, measureIndexAt, pedalHeldUntil, type Exercise } from '../domain/model/Exercise.js';
-import type { ImportWarning } from '../domain/notation/MusicXmlParser.js';
+import type { ImportedScore, ImportWarning } from '../domain/notation/MusicXmlParser.js';
 import { theHitErrors } from '../domain/scoring/theHitErrors.js';
 import { theProfile } from '../domain/scoring/theProfile.js';
 import { drawTheHitErrors } from './hitErrorBar.js';
@@ -11121,6 +11121,12 @@ export class AppView {
         this.runtime.files.save(`${sketch.title}.mid`, thePlayingAsAFile(sketch, sketch.title), 'audio/midi');
       });
 
+      const saveTheScore = this.doc.createElement('button');
+      saveTheScore.type = 'button';
+      saveTheScore.textContent = 'MusicXML';
+      saveTheScore.title = 'Save this sketch as a MusicXML file, as its score is written';
+      this.listen(saveTheScore, 'click', () => void this.saveTheSketchAsMusicXml(sketch.id));
+
       const remove = this.doc.createElement('button');
       remove.type = 'button';
       remove.textContent = '×';
@@ -11136,11 +11142,49 @@ export class AppView {
         });
       });
 
-      row.append(name, edit, write, save, remove);
+      row.append(name, edit, write, save, saveTheScore, remove);
       this.el.sketchesList.append(row);
     }
     // The drive's list says which of its sketches are here.
     this.showTheSketchesOnTheDrive();
+  }
+
+  /**
+   * Saves a sketch as a MusicXML file: the score the Score button writes it
+   * down as, so any program that reads notation opens the bars, the key and
+   * the notes that page shows.
+   */
+  private async saveTheSketchAsMusicXml(id: string): Promise<void> {
+    const sketch = this.runtime.sketches.find(id);
+    if (sketch === null) {
+      return;
+    }
+    try {
+      const { exercise } = await this.theScoreOfThePlaying(sketch, sketch.title);
+      this.runtime.files.save(
+        `${sketch.title}.musicxml`,
+        new TextEncoder().encode(this.runtime.serializer.serialize(exercise)),
+        'application/vnd.recordare.musicxml+xml',
+      );
+    } catch (error) {
+      reportToTheConsole(`Could not save ${sketch.title} as MusicXML.`, error);
+      this.sayInTheMiddle(`Could not save ${sketch.title} as MusicXML. ${whyAScoreWasRefused(error)}`);
+    }
+  }
+
+  /**
+   * The score some playing is written down as: the file it would be saved
+   * as, read the way a chosen MIDI file is.
+   */
+  private theScoreOfThePlaying(
+    playing: {
+      readonly events: readonly MidiFileEvent[];
+      readonly beats: readonly HeardBeat[];
+      readonly key?: SketchKey;
+    },
+    title: string,
+  ): Promise<ImportedScore> {
+    return this.runtime.importer.readFile(thePlayingAsAFile(playing, title).slice().buffer, `${title}.mid`);
   }
 
   private exportTake(id: string): void {
@@ -11189,10 +11233,7 @@ export class AppView {
     from.hidden = true;
     timeTheStart('score asked for', () => title);
     try {
-      const { exercise, warnings } = await this.runtime.importer.readFile(
-        thePlayingAsAFile(playing, title).slice().buffer,
-        `${title}.mid`,
-      );
+      const { exercise, warnings } = await this.theScoreOfThePlaying(playing, title);
       await this.pickUpTheFile(exercise);
       this.sayWhatTheFileLeftOut(exercise, warnings);
       this.runtime.controller.playOnlyTheScoreOpen();

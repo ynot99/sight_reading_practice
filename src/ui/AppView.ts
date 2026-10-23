@@ -662,8 +662,16 @@ function theSketchesSynced(sketches: SketchSyncOutcome): string {
   return `${said.join('; ')}.`;
 }
 
+/** How loud a note written at a moment of a sketch is: as the flag over it says, and following it. */
+function theLoudnessWrittenAt(events: readonly MidiFileEvent[], atMs: number): number {
+  return theVelocityOfTheLevel(theDynamicAt(events, atMs) ?? LOUDNESS_UNMARKED, 0);
+}
+
 /** How long a note moved up or down by an arrow key is heard for, at its new pitch. */
 const HEARD_ON_A_STEP_MS = 300;
+
+/** How long the key of a row is heard for when a tap finds the row empty: a moment, not the note a second tap would write. */
+const HEARD_ON_A_TAP_MS = 300;
 
 /**
  * The keys to strike for notes heard together: one for each pitch among them,
@@ -14130,8 +14138,7 @@ export class AppView {
     const head = this.headIsAtMs();
     const fromMs = this.el.rollSnap.checked ? theLineOfTheGridUnder(roll, head, grid) : head;
     const untilMs = theNextLineOfTheGrid(roll, fromMs, grid, 1) ?? fromMs + theBeatAt(roll, fromMs + origin);
-    // As loud as the flag over them says, and following it.
-    const velocity = theVelocityOfTheLevel(theDynamicAt(stored.events, fromMs + origin) ?? LOUDNESS_UNMARKED, 0);
+    const velocity = theLoudnessWrittenAt(stored.events, fromMs + origin);
     const { events, pasted } = takeWithTheNotesPasted(
       stored.events,
       keys.map((midi) => ({ afterMs: 0, lengthMs: untilMs - fromMs, midi, velocity, loudness: { level: null, shade: 0 } })),
@@ -15267,8 +15274,45 @@ export class AppView {
     if (!keyHeld && (this.theOtherRollShowing?.sketch?.chosen.length ?? 0) > 0) {
       this.choose([]);
     }
+    this.soundTheRowTapped(event);
     this.placedBeforeTheTap = this.rollPlacedAtMs;
     this.putTheHeadWhereItWasTapped(event);
+  }
+
+  /**
+   * Sounds the key of the row a tap found empty, for a moment, as loud as a
+   * note written there would be: which key a row is, heard before a second
+   * tap writes it. Both ends handed to the instrument at once, so no timer
+   * outlives the drawing.
+   */
+  private soundTheRowTapped(event: MouseEvent): void {
+    const tapped = this.theRowTapped(event);
+    if (tapped === null) {
+      return;
+    }
+    const now = this.runtime.clock.now();
+    const atMs = tapped.atMs + rollBeganAtMs(tapped.roll);
+    this.runtime.pitchPlayer.play(tapped.midi, theLoudnessWrittenAt(tapped.stored.events, atMs), now);
+    this.runtime.pitchPlayer.stop(tapped.midi, now + HEARD_ON_A_TAP_MS);
+  }
+
+  /**
+   * The key of the row a tap on the sketch being edited is in, and the
+   * moment on the drawing it is at; `null` off the keys there are.
+   */
+  private theRowTapped(
+    event: MouseEvent,
+  ): { readonly midi: number; readonly atMs: number; readonly stored: StoredSketch; readonly roll: RunRoll } | null {
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const at = this.thePointOnTheDrawing(event);
+    const scene = this.drawnScene;
+    if (showing === null || stored === null || at === null || scene === null) {
+      return null;
+    }
+    const midi = scene.highest - at.row;
+    return midi < LOWEST_KEY || midi > HIGHEST_KEY ? null : { midi, atMs: at.atMs, stored, roll: showing.roll };
   }
 
   /**
@@ -15454,20 +15498,14 @@ export class AppView {
   private addAKeyWhereTapped(event: MouseEvent): void {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
-    const at = this.thePointOnTheDrawing(event);
-    const scene = this.drawnScene;
-    if (showing === null || sketch === undefined || stored === null || at === null || scene === null) {
+    const tapped = this.theRowTapped(event);
+    if (showing === null || sketch === undefined || tapped === null) {
       return;
     }
-    const midi = scene.highest - at.row;
-    if (midi < LOWEST_KEY || midi > HIGHEST_KEY) {
-      return;
-    }
-    const roll = showing.roll;
+    const { midi, stored, roll } = tapped;
     const origin = rollBeganAtMs(roll);
     // In the cell of the grid tapped in, from the line it begins on.
-    const snapped = this.el.rollSnap.checked ? theLineOfTheGridUnder(roll, at.atMs, this.theRollsGrid()) : at.atMs;
+    const snapped = this.el.rollSnap.checked ? theLineOfTheGridUnder(roll, tapped.atMs, this.theRollsGrid()) : tapped.atMs;
     const downAtMs = Math.round(snapped + origin);
     // Never on or over another of its pitch: cut short where the next begins,
     // and not written where it would begin on or inside one.
@@ -15475,12 +15513,11 @@ export class AppView {
     if (upAtMs === null) {
       return;
     }
-    // As loud as the flag over it says, and following it.
     const key = {
       midi,
       downAtMs,
       upAtMs,
-      velocity: theVelocityOfTheLevel(theDynamicAt(stored.events, downAtMs) ?? LOUDNESS_UNMARKED, 0),
+      velocity: theLoudnessWrittenAt(stored.events, downAtMs),
       loudness: { level: null, shade: 0 },
     };
     // Heard as it is written, for as long as it is: both ends handed to the

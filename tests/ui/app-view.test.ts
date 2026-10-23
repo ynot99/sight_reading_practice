@@ -5640,6 +5640,71 @@ describe('AppView', () => {
       expect(notes()).toBe(5);
     });
 
+    it('sounds the key of an empty row tapped, a moment, as loud as the note a second tap writes there', async () => {
+      const { view, sketches, instrument, clock } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          // Begun a second into the clock, and quiet from the fifth beat of the drawing.
+          events: [
+            { kind: 'noteOn' as const, atMs: 1_000, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: 1_400, midi: 60 },
+            { kind: 'dynamic' as const, atMs: 3_500, level: 'pp' as const },
+          ],
+          beats: [1_000, 1_500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Heard',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const highest = view.rollScene?.highest ?? 0;
+      const scrolledDown =
+        Number.parseFloat(element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0') ||
+        0;
+      const at = (ms: number, midi: number): { clientX: number; clientY: number } => ({
+        clientX: (ms / 1000) * zoom,
+        clientY: (highest - midi + 0.5) * 13 - scrolledDown,
+      });
+      const heard = (): (number | undefined)[][] => instrument.played.map((note) => [note.midi, note.atMs]);
+      const ended = (): (number | undefined)[][] => instrument.stopped.map((note) => [note.midi, note.atMs]);
+      const notes = (): number => (sketches.find(sketch.id)?.events ?? []).filter((event) => event.kind === 'noteOn').length;
+      const forget = (): void => {
+        instrument.played.length = 0;
+        instrument.stopped.length = 0;
+      };
+
+      // A finger on an empty row: its key, for a moment, and nothing written.
+      clock.advance(1_000);
+      const tappedAt = clock.now();
+      tapTheDrawing({ pointerType: 'touch', ...at(1_800, 62) });
+      expect(heard()).toEqual([[62, tappedAt]]);
+      expect(ended()).toEqual([[62, tappedAt + 300]]);
+      expect(notes()).toBe(1);
+      const loudness = instrument.played[0]?.velocity;
+      expect(loudness).toBe(DYNAMIC_VELOCITY.mf);
+      // The second tap writes it, as loud as it was heard.
+      forget();
+      tapTheDrawing({ pointerType: 'touch', ...at(1_800, 62) });
+      expect(notes()).toBe(2);
+      expect(instrument.played.map((note) => [note.midi, note.velocity])).toEqual([[62, loudness]]);
+
+      // A mouse on another row, the same; under the flag, as quiet as it says.
+      forget();
+      clock.advance(1_000);
+      tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(2_800, 69) });
+      expect(instrument.played.map((note) => [note.midi, note.velocity])).toEqual([[69, DYNAMIC_VELOCITY.pp]]);
+
+      // Listening, a tap only puts the marker.
+      forget();
+      clock.advance(1_000);
+      element<HTMLButtonElement>('roll-edit').click();
+      tapTheDrawing({ pointerType: 'touch', ...at(2_800, 65) });
+      expect(heard()).toEqual([]);
+    });
+
     it('makes a pinch of a second finger, whatever the first held, and forgets a finger never heard lifted', async () => {
       const { view, sketches } = createRig();
       await view.initialize();
@@ -5858,12 +5923,17 @@ describe('AppView', () => {
         [64, undefined],
       ]);
 
-      // A note written where there was none: heard now, as loud as the flag over it says, for the beat it is long.
+      // A note written where there was none: its key heard for a moment at the
+      // first tap, and at the second the note, as loud as the flag over it
+      // says, for the beat it is long.
       instrument.played.length = 0;
       instrument.stopped.length = 0;
       const now = clock.now();
       tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(1_600, 67) });
-      expect(heard()).toEqual([]);
+      expect(heard()).toEqual([[67, DYNAMIC_VELOCITY.mf, now]]);
+      expect(ended()).toEqual([[67, now + 300]]);
+      instrument.played.length = 0;
+      instrument.stopped.length = 0;
       tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(1_600, 67) });
       expect(heard()).toEqual([[67, DYNAMIC_VELOCITY.mf, now]]);
       expect(ended()).toEqual([[67, now + 500]]);

@@ -7083,6 +7083,82 @@ describe('AppView', () => {
       expect([tonic.value, scale.value]).toEqual(['5', 'mixolydian']);
     });
 
+    it('takes the pace of a bar from the beat tapped in the sheet, in the beat the bar is felt in, as far as the field goes', async () => {
+      const { view, sketches, clock } = createRig();
+      await view.initialize();
+      sketches.begin(
+        {
+          events: [
+            { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: 400, midi: 60 },
+          ],
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Tapped',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      element<HTMLButtonElement>('roll-mark').click();
+      const tap = element<HTMLButtonElement>('roll-mark-tap');
+      const tempo = element<HTMLInputElement>('roll-mark-tempo');
+      const metre = element<HTMLSelectElement>('roll-mark-metre');
+      // A finger: down, then the click its letting go makes, which is not a second tap.
+      const tapped = (afterMs: number): void => {
+        clock.advance(afterMs);
+        tap.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
+        tap.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+      };
+
+      expect(tempo.value).toBe('120');
+      expect(tap.title).toBe(tap.getAttribute('aria-label'));
+      // One tap is no pace yet; a second is.
+      tapped(0);
+      expect(tempo.value).toBe('120');
+      tapped(750);
+      expect(tempo.value).toBe('80');
+      // Read from the gaps together, one late tap moving it less.
+      tapped(750);
+      tapped(850);
+      expect(tempo.value).toBe(String(Math.round(60_000 / ((750 + 750 + 850) / 3))));
+      // After a pause, counted again.
+      tapped(3_000);
+      tapped(500);
+      expect(tempo.value).toBe('120');
+      // In 6/8 the beat tapped is a dotted crotchet: a second each is 90 crotchets.
+      metre.value = '6/8';
+      metre.dispatchEvent(new Event('change'));
+      tapped(3_000);
+      tapped(1_000);
+      expect(tempo.value).toBe('90');
+      metre.value = '4/4';
+      metre.dispatchEvent(new Event('change'));
+      // From the keyboard, a click with no pointer behind it.
+      clock.advance(3_000);
+      tap.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
+      clock.advance(1_000);
+      tap.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
+      expect(tempo.value).toBe('60');
+      // No faster or slower than the field takes.
+      tapped(3_000);
+      tapped(100);
+      expect(tempo.value).toBe(tempo.max);
+      // In 3/8 the beat tapped is a quaver: two seconds each would be 15 crotchets.
+      metre.value = '3/8';
+      metre.dispatchEvent(new Event('change'));
+      tapped(3_000);
+      tapped(1_990);
+      expect(tempo.value).toBe(tempo.min);
+      metre.value = '4/4';
+      metre.dispatchEvent(new Event('change'));
+      // Asked for, the bar takes it.
+      tapped(3_000);
+      tapped(1_000);
+      element<HTMLButtonElement>('roll-mark-yes').click();
+      expect((view.rollScene?.marks ?? []).map((each) => each.says)).toEqual(['C major 4/4 \u2669=60']);
+    });
+
     it('changes the metre and the pace from the bar the cursor is in, asked in a sheet, and marks it over the bar', async () => {
       const { view, sketches, clock } = createRig();
       await view.initialize();

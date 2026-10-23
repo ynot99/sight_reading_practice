@@ -59,6 +59,8 @@ import {
 import type { PerformanceReport } from '../domain/scoring/PerformanceReport.js';
 import { COMMON_KEYS, KeySignature } from '../domain/model/KeySignature.js';
 import { TimeSignature } from '../domain/model/TimeSignature.js';
+import { Duration } from '../domain/model/Duration.js';
+import { tapsWith, tempoOfTaps } from '../application/tapTempo.js';
 import { alterationSign, midiToLabel } from '../domain/model/Pitch.js';
 import {
   barsAreHeardIn,
@@ -2264,6 +2266,9 @@ export class AppView {
   private keyHeldOnTheStrip: { readonly pointerId: number; readonly midi: number; readonly velocity: number } | null = null;
   /** The rows of the keys sounding now: see `lightTheSoundingRows`. */
   private soundingRows: readonly number[] = [];
+  /** The moments the pace of a bar was tapped at in the sheet that asks for it, the latest few. */
+  private paceTapped: readonly number[] = [];
+
   /**
    * The chord the pointer is on - of the drawer, by its place there, or of
    * the circle, by its slice - whose notes are shown where it would write
@@ -2698,6 +2703,7 @@ export class AppView {
     rollMarkKey: HTMLSelectElement;
     rollMarkScale: HTMLSelectElement;
     rollMarkTempo: HTMLInputElement;
+    rollMarkTap: HTMLButtonElement;
     rollMarkDynamic: HTMLSelectElement;
     rollMarkReached: HTMLSelectElement;
     rollMarkRemove: HTMLButtonElement;
@@ -3099,6 +3105,7 @@ export class AppView {
       rollMarkKey: requireElement(doc, 'roll-mark-key'),
       rollMarkScale: requireElement(doc, 'roll-mark-scale'),
       rollMarkTempo: requireElement(doc, 'roll-mark-tempo'),
+      rollMarkTap: requireElement(doc, 'roll-mark-tap'),
       rollMarkDynamic: requireElement(doc, 'roll-mark-dynamic'),
       rollMarkReached: requireElement(doc, 'roll-mark-reached'),
       rollMarkRemove: requireElement(doc, 'roll-mark-remove'),
@@ -10003,6 +10010,26 @@ export class AppView {
         this.theDynamicAskedFor(),
         this.el.rollMarkReached.value === 'gradually',
       );
+    });
+    // On the finger going down, which is the moment the beat is meant: a
+    // click arrives on letting go. A click with no pointer behind it is the
+    // keyboard's, and counts.
+    const tapThePace = (): void => {
+      this.paceTapped = tapsWith(this.paceTapped, this.runtime.clock.now());
+      const tapped = tempoOfTaps(this.paceTapped);
+      if (tapped === null) {
+        return;
+      }
+      // Tapped in the beat the bar is felt in - a dotted crotchet in 6/8 - and written in crotchets.
+      const felt = TimeSignature.parse(this.el.rollMarkMetre.value).ticksPerPulse / Duration.QUARTER.ticks;
+      const field = this.el.rollMarkTempo;
+      field.value = String(Math.min(Number(field.max), Math.max(Number(field.min), Math.round(tapped * felt))));
+    };
+    this.listen(this.el.rollMarkTap, 'pointerdown', tapThePace);
+    this.listen(this.el.rollMarkTap, 'click', (event) => {
+      if (event.detail === 0) {
+        tapThePace();
+      }
     });
     this.listen(this.el.rollMarkTempo, 'keydown', (event) => {
       if (event.key === 'Enter') {

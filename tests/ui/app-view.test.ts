@@ -5699,7 +5699,7 @@ describe('AppView', () => {
       expect(notes()).toBe(5);
     });
 
-    it('sounds the key of an empty row tapped, a moment, as loud as the note a second tap writes there', async () => {
+    it('sounds the key of an empty row tapped, for a moment at a finger and while a mouse is held, as loud as the note a second tap writes', async () => {
       const { view, sketches, instrument, clock } = createRig();
       await view.initialize();
       const sketch = sketches.begin(
@@ -5756,11 +5756,41 @@ describe('AppView', () => {
       tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(2_800, 69) });
       expect(instrument.played.map((note) => [note.midi, note.velocity])).toEqual([[69, DYNAMIC_VELOCITY.pp]]);
 
+      // A mouse held down on a row: its key sounding and lit until let go of.
+      forget();
+      const body = element('roll-body');
+      const mouse = (type: string, where: { clientX: number; clientY: number }, button = 0): void => {
+        body.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 81, pointerType: 'mouse', button, ...where }));
+      };
+      const lit = (midi: number): string | undefined =>
+        body.querySelector<HTMLElement>(`.roll__key[data-midi='${String(midi)}']`)?.dataset['sounding'];
+      clock.advance(1_000);
+      mouse('pointerdown', at(2_200, 65));
+      expect([heard().map(([midi]) => midi), ended(), lit(65)]).toEqual([[65], [], 'true']);
+      mouse('pointerup', at(2_200, 65));
+      expect([ended().map(([midi]) => midi), lit(65)]).toEqual([[65], undefined]);
+      // Not the middle button, which moves the drawing, nor on the ruler.
+      forget();
+      mouse('pointerdown', at(2_200, 65), 1);
+      mouse('pointerup', at(2_200, 65), 1);
+      const ruler = body.querySelector('.roll__ruler');
+      ruler?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 82, pointerType: 'mouse', button: 0, ...at(2_200, 65), clientY: 5 }));
+      ruler?.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 82, pointerType: 'mouse', button: 0, ...at(2_200, 65), clientY: 5 }));
+      expect(ruler).not.toBeNull();
+      // Nor on the pedal's lane under the notes.
+      const pedal = body.querySelector('.roll__pedal');
+      expect(pedal).not.toBeNull();
+      for (const type of ['pointerdown', 'pointerup']) {
+        pedal?.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 83, pointerType: 'mouse', button: 0, clientX: at(2_200, 65).clientX, clientY: pedal.getBoundingClientRect().top + 2 }));
+      }
+      expect(heard()).toEqual([]);
+
       // Listening, a tap only puts the marker.
       forget();
       clock.advance(1_000);
       element<HTMLButtonElement>('roll-edit').click();
       tapTheDrawing({ pointerType: 'touch', ...at(2_800, 65) });
+      tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(2_800, 65) });
       expect(heard()).toEqual([]);
     });
 
@@ -5982,27 +6012,43 @@ describe('AppView', () => {
         [64, undefined],
       ]);
 
-      // A note written where there was none: its key heard for a moment at the
-      // first tap, and at the second the note, as loud as the flag over it
-      // says, for the beat it is long.
+      // A note written where there was none: its key heard while the mouse is
+      // down on the row, and at the second click the note, as loud as the
+      // flag over it says, for the beat it is long.
       instrument.played.length = 0;
       instrument.stopped.length = 0;
       const now = clock.now();
-      tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(1_600, 67) });
-      expect(heard()).toEqual([[67, DYNAMIC_VELOCITY.mf, now]]);
-      expect(ended()).toEqual([[67, now + 300]]);
+      press('pointerdown', at(1_600, 67));
+      expect(heard()).toEqual([[67, DYNAMIC_VELOCITY.mf, undefined]]);
+      expect(ended()).toEqual([]);
+      press('pointerup', at(1_600, 67));
+      element('roll-body').dispatchEvent(new MouseEvent('click', { bubbles: true, ...at(1_600, 67) }));
+      expect(heard()).toEqual([[67, DYNAMIC_VELOCITY.mf, undefined]]);
+      expect(ended()).toEqual([[67, undefined]]);
       instrument.played.length = 0;
       instrument.stopped.length = 0;
-      tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(1_600, 67) });
-      expect(heard()).toEqual([[67, DYNAMIC_VELOCITY.mf, now]]);
-      expect(ended()).toEqual([[67, now + 500]]);
+      press('pointerdown', at(1_600, 67));
+      press('pointerup', at(1_600, 67));
+      element('roll-body').dispatchEvent(new MouseEvent('click', { bubbles: true, ...at(1_600, 67) }));
+      expect(heard()).toEqual([
+        [67, DYNAMIC_VELOCITY.mf, undefined],
+        [67, DYNAMIC_VELOCITY.mf, now],
+      ]);
+      expect(ended()).toEqual([
+        [67, undefined],
+        [67, now + 500],
+      ]);
 
-      // A drag over empty space sounds nothing.
+      // A drag over empty space moves the drawing, and lets go of the key as it begins to.
       instrument.played.length = 0;
+      instrument.stopped.length = 0;
       press('pointerdown', at(2_500, 70));
+      expect(heard()).toEqual([[70, DYNAMIC_VELOCITY.mf, undefined]]);
       press('pointermove', at(2_000, 72));
+      expect(ended()).toEqual([[70, undefined]]);
       press('pointerup', at(2_000, 72));
-      expect(heard()).toEqual([]);
+      expect(heard()).toHaveLength(1);
+      expect(ended()).toHaveLength(1);
     });
 
     it('strikes each pitch once among the chosen notes heard together, as hard as the hardest of it', async () => {

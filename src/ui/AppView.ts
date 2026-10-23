@@ -2280,6 +2280,11 @@ export class AppView {
   } | null = null;
   /** A key of the strip beside the drawing held down by a pointer, and sounding till it is let go of. */
   private keyHeldOnTheStrip: { readonly pointerId: number; readonly midi: number; readonly velocity: number } | null = null;
+  /**
+   * The key of an empty row of a sketch being edited that a mouse is held
+   * down on, sounding till it is let go of or the drawing moves under it.
+   */
+  private rowHeld: { readonly pointerId: number; readonly midi: number } | null = null;
   /** The rows of the keys sounding now: see `lightTheSoundingRows`. */
   private soundingRows: readonly number[] = [];
   /** The moments the pace of a bar was tapped at in the sheet that asks for it, the latest few. */
@@ -2372,6 +2377,8 @@ export class AppView {
    * grid, and over a note was taken for one on the note.
    */
   private pressedOn: EventTarget | null = null;
+  /** What the last press on the drawing was made with, which is what its click was. */
+  private pressedWith: string | null = null;
 
   /** Where the marker was before a tap on nothing moved it, to go back to if it was the first of two. */
   private placedBeforeTheTap: number | null = null;
@@ -9817,6 +9824,7 @@ export class AppView {
       // Asked of where the press went down, where there was one; a key's
       // click, with none, is on its own target.
       const on = this.pressedOn ?? event.target;
+      const pressedWith = this.pressedWith;
       this.pressedOn = null;
       if (this.pinched || this.panned) {
         return;
@@ -9859,7 +9867,7 @@ export class AppView {
       // The lane of chords is not the notes: a tap there puts the marker, as
       // the ruler's does.
       if (!onTheRuler && !onTheChords && this.theOtherRollShowing?.sketch?.editing === true) {
-        this.chooseTheKeyTapped(event);
+        this.chooseTheKeyTapped(event, pressedWith);
         return;
       }
       this.putTheHeadWhereItWasTapped(event);
@@ -10219,6 +10227,7 @@ export class AppView {
     });
     this.listen(this.el.rollBody, 'pointerdown', (event) => {
       this.pressedOn = event.target;
+      this.pressedWith = event.pointerType;
       this.pinched = false;
       this.panned = false;
       this.stopTheFling();
@@ -10259,6 +10268,7 @@ export class AppView {
         // Or the browser starts scrolling the page by it.
         event.preventDefault();
       }
+      this.holdTheRowPressed(event);
       this.rollFingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
       this.beginAPinch();
       // One finger, or a pen, moves the drawing, and so does a mouse over a
@@ -10312,6 +10322,10 @@ export class AppView {
       this.rollFingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
       this.pinchTheRoll();
       this.panTheRoll(event);
+      // A press that moves the drawing was not on a key.
+      if (this.panned) {
+        this.letGoOfTheRowHeld();
+      }
     });
     for (const ending of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
       this.listen(this.el.rollBody, ending, (event) => {
@@ -10334,6 +10348,9 @@ export class AppView {
         if (this.rollBoxDrawn?.pointerId === event.pointerId) {
           this.chooseWhatTheBoxHolds(event, ending === 'pointerup');
           return;
+        }
+        if (this.rowHeld?.pointerId === event.pointerId) {
+          this.letGoOfTheRowHeld();
         }
         if (!this.rollFingers.has(event.pointerId)) {
           return;
@@ -15296,7 +15313,7 @@ export class AppView {
    * let go of: see `letGoOfTheHeldKey`. A click alone puts the marker
    * there; two, writing a note, leave it where it was before the first.
    */
-  private chooseTheKeyTapped(event: MouseEvent): void {
+  private chooseTheKeyTapped(event: MouseEvent, pressedWith: string | null): void {
     if (this.theKeyUnder(event) !== null) {
       return;
     }
@@ -15315,7 +15332,10 @@ export class AppView {
     if (!keyHeld && (this.theOtherRollShowing?.sketch?.chosen.length ?? 0) > 0) {
       this.choose([]);
     }
-    this.soundTheRowTapped(event);
+    // A mouse sounded it as it went down.
+    if (pressedWith !== 'mouse') {
+      this.soundTheRowTapped(event);
+    }
     this.placedBeforeTheTap = this.rollPlacedAtMs;
     this.putTheHeadWhereItWasTapped(event);
   }
@@ -15335,6 +15355,45 @@ export class AppView {
     const atMs = tapped.atMs + rollBeganAtMs(tapped.roll);
     this.runtime.pitchPlayer.play(tapped.midi, theLoudnessWrittenAt(tapped.stored.events, atMs), now);
     this.runtime.pitchPlayer.stop(tapped.midi, now + HEARD_ON_A_TAP_MS);
+  }
+
+  /**
+   * Sounds the key of an empty row of a sketch being edited a mouse goes
+   * down on, as loud as a note written there would be, until it is let go
+   * of: as a key of the strip is held. A finger sounds it on the tap
+   * instead, since a finger going down on the drawing is as often the
+   * start of moving it.
+   */
+  private holdTheRowPressed(event: PointerEvent): void {
+    if (
+      event.pointerType !== 'mouse' ||
+      event.button !== 0 ||
+      this.theOtherRollShowing?.sketch?.editing !== true ||
+      this.isOnTheRuler(event) ||
+      this.isOnTheChords(event)
+    ) {
+      return;
+    }
+    const pressed = this.theRowTapped(event);
+    if (pressed === null) {
+      return;
+    }
+    this.letGoOfTheRowHeld();
+    const atMs = pressed.atMs + rollBeganAtMs(pressed.roll);
+    this.runtime.pitchPlayer.play(pressed.midi, theLoudnessWrittenAt(pressed.stored.events, atMs));
+    this.rowHeld = { pointerId: event.pointerId, midi: pressed.midi };
+    this.lightTheSoundingRows();
+  }
+
+  /** Lets go of the key of the row a mouse held down, if one is. */
+  private letGoOfTheRowHeld(): void {
+    const held = this.rowHeld;
+    if (held === null) {
+      return;
+    }
+    this.rowHeld = null;
+    this.runtime.pitchPlayer.stop(held.midi);
+    this.lightTheSoundingRows();
   }
 
   /**
@@ -17854,7 +17913,10 @@ export class AppView {
   private lightTheSoundingRows(): void {
     const scene = this.drawnScene;
     const rows = new Set<number>();
-    const held = [...this.runtime.recorder.keysDown, ...(this.keyHeldOnTheStrip === null ? [] : [this.keyHeldOnTheStrip.midi])];
+    const held = [
+      ...this.runtime.recorder.keysDown,
+      ...[this.keyHeldOnTheStrip, this.rowHeld].flatMap((key) => (key === null ? [] : [key.midi])),
+    ];
     this.nameTheChordHeld(held);
     if (scene !== null && !this.el.sheetRoll.hidden) {
       for (const midi of held) {

@@ -9926,8 +9926,8 @@ describe('AppView', () => {
       expect([middle(), numeral(), here(), onTheKeys()]).toEqual(['', '', [], []]);
     });
 
-    it('opens the chords as a chart over the drawing, bar by bar, a chord pressed there putting the cursor on it', async () => {
-      const { view, sketches, clock } = createRig();
+    it('opens the chords as a chart over the drawing, bar by bar, a chord pressed there chosen, heard and the cursor on it', async () => {
+      const { view, sketches, clock, instrument } = createRig();
       await view.initialize();
       const held = (midis: readonly number[], atMs: number, upAtMs: number) =>
         midis.flatMap((key) => [
@@ -9966,11 +9966,22 @@ describe('AppView', () => {
       expect([chart.hidden, open.getAttribute('aria-pressed'), open.title]).toEqual([false, 'true', 'Back to the notes']);
       expect(bars().slice(0, 2)).toEqual(['1: C tonic', '2: Fm subdominant, G7 dominant']);
       expect(here()).toEqual(['C']);
-      // Pressed, a chord takes the cursor, and the circle shows it.
+      // Pressed, a chord takes the cursor, and the circle shows it; its notes
+      // are chosen, as one tapped in the lane is, and it is heard.
       clock.advance(1_000);
+      instrument.played.length = 0;
       [...chart.querySelectorAll<HTMLElement>('.roll-chart__chord')][2]?.click();
       expect(here()).toEqual(['G7']);
       expect(element('roll-circle').querySelector('.roll-circle__sounding-name')?.textContent).toBe('G7');
+      expect(instrument.played.map((note) => note.midi).sort((a, b) => a - b)).toEqual([55, 59, 62, 65]);
+      const drawerSays = [...element('roll-chords-list').querySelectorAll<HTMLButtonElement>('[data-chord]')].find(
+        (button) => button.querySelector('.roll-chords__name')?.textContent === 'F',
+      )?.title;
+      expect(drawerSays).toBe('Make the chosen G7 F (IV), moving its notes as little as they can');
+      // So a chord of the circle is written over it, and the chart says so at once.
+      element('roll-circle').querySelector('[data-ring="major"][data-place="11"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      // Its notes moved as little as they can, as the lane's are: the seventh's four make D minor over F.
+      expect(bars()[1]).toBe('2: Fm subdominant, Dm7/F subdominant');
       // Pressed on the curves over the chart, the cursor goes where it was pressed along the piece: a fifth of it, in the C.
       const curves = chart.querySelector('.roll-chart__curves svg');
       if (curves === null) {
@@ -10003,6 +10014,17 @@ describe('AppView', () => {
       ]);
       // The cursor gone on past it is still in the stretch the lane names D.
       expect(here()).toEqual(['D']);
+      // With a key held, a chord pressed is added to those chosen, as in the lane.
+      const pressedOnTheChart = (at: number, init: MouseEventInit = {}): void => {
+        clock.advance(1_000);
+        [...chart.querySelectorAll<HTMLElement>('.roll-chart__chord')][at]?.dispatchEvent(new MouseEvent('click', { bubbles: true, ...init }));
+      };
+      pressedOnTheChart(0);
+      expect(element('roll-chord').textContent).toBe('C');
+      pressedOnTheChart(3, { ctrlKey: true });
+      expect(element('roll-chord').textContent).not.toMatch(/^(C|F♯m)$/);
+      pressedOnTheChart(3);
+      expect(element('roll-chord').textContent).toBe('F♯m');
       // And away with the chords.
       element<HTMLButtonElement>('roll-chords-open').click();
       expect([open.hidden, chart.hidden]).toEqual([true, true]);

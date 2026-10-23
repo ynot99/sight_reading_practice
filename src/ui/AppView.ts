@@ -10219,19 +10219,23 @@ export class AppView {
         this.bringTheHeadIntoView();
       }
     });
-    // A chord of the chart puts the cursor where it begins, and the circle and the keys show it.
-    // And a press on the curves over it, where it was pressed.
+    // A chord of the chart is chosen as one tapped in the lane is - its
+    // notes, to write another over, the cursor where it begins and the
+    // chord heard - and the circle and the keys show it. A press on the
+    // curves over it puts the cursor where it was pressed.
     this.listen(this.el.rollChart, 'click', (event) => {
       const target = event.target as Element | null;
-      const chord = target?.closest<HTMLElement>('.roll-chart__chord');
+      const pressed = target?.closest<HTMLElement>('.roll-chart__chord');
       const curves = target?.closest('.roll-chart__curves svg');
-      const at =
-        chord !== null && chord !== undefined
-          ? Number(chord.dataset['from'])
-          : curves === null || curves === undefined
-            ? null
-            : theMomentOnTheCurves(curves, (event as MouseEvent).clientX);
-      if (at !== null) {
+      const mouse = event as MouseEvent;
+      const chord =
+        pressed === null || pressed === undefined
+          ? undefined
+          : this.drawnScene?.chords.find((each) => each.fromMs === Number(pressed.dataset['from']));
+      const at = curves === null || curves === undefined ? null : theMomentOnTheCurves(curves, mouse.clientX);
+      if (chord !== undefined) {
+        this.chooseTheChordOfTheLane(chord, mouse.ctrlKey || mouse.metaKey || mouse.shiftKey);
+      } else if (at !== null) {
         this.putTheHeadAt(at);
       }
     });
@@ -16020,18 +16024,27 @@ export class AppView {
    */
   private chooseTheChordTapped(event: MouseEvent): boolean {
     const scene = this.drawnScene;
-    const roll = this.theRoll();
     const at = this.thePointOnTheDrawing(event);
     const chord = scene === null || at === null ? null : theChordAt(scene, at.atMs);
+    return chord !== null && this.chooseTheChordOfTheLane(chord, event.ctrlKey || event.metaKey || event.shiftKey);
+  }
+
+  /**
+   * Chooses the notes of a chord of the lane - tapped there, or pressed on
+   * the chart of the chords - added to those chosen where asked, puts the
+   * marker where it begins, and sounds it: chosen so, a chord of the drawer
+   * or of the circle is written over it. Says whether it could.
+   */
+  private chooseTheChordOfTheLane(chord: SceneChord, adds: boolean): boolean {
+    const roll = this.theRoll();
     const sketch = this.theOtherRollShowing?.sketch;
-    if (chord === null || roll === null || sketch?.editing !== true) {
+    if (roll === null || sketch?.editing !== true) {
       return false;
     }
     const presses = theNotesOfTheChord(roll, chord.fromMs, chord.untilMs);
     const notes = presses.map((press) => ({ midi: press.midi, downAtMs: press.downAtMs }));
     // Heard whole, the notes held into it from before as well: chosen, it is only its own.
     const heard = [...presses, ...theNotesHeldIntoTheChord(roll, chord.fromMs, chord.untilMs)];
-    const adds = event.ctrlKey || event.metaKey || event.shiftKey;
     this.choose(adds ? [...sketch.chosen.filter((key) => !notes.some((note) => sameKey(note, key))), ...notes] : notes);
     this.chordTappedAt = chord.fromMs;
     this.showTheChordsOfTheKey();

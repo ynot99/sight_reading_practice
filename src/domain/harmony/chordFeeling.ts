@@ -2,7 +2,7 @@ import { STEPS } from '../model/Pitch.js';
 import type { ChordKind } from './chordName.js';
 import { theNotesOfTheChordNamed } from './chordName.js';
 import { theChordInTheKey, type HarmonicFunction } from './harmonicFunction.js';
-import { theTonicOfTheScale, type ScaleName } from './scales.js';
+import { thePitchClassesOfTheScale, theTonicOfTheScale, type ScaleName } from './scales.js';
 
 /**
  * Two things a chord makes a listener feel that can be worked out from its
@@ -39,9 +39,20 @@ const TENSION_OF_A_NOTE_OUTSIDE = 0.5;
 const TENSION_OF_A_CLASH: Readonly<Record<number, number>> = { 1: 0.5, 2: 0.25, 6: 0.5 };
 
 /**
+ * What each of its notes adds that leans on the key's tonic triad: a
+ * semitone from one of its notes, and so wanting to move there - the leading note up to the tonic, the fourth down to the third,
+ * a minor key's sixth down to the fifth. As much as a semitone's clash,
+ * with the home it is heard against. So the sixth chord of a minor key,
+ * whose sixth leans on the fifth, is no rest, though it shares two notes
+ * with the tonic; the sixth chord of a major key leans on nothing.
+ */
+const TENSION_OF_A_LEANING_NOTE = 0.5;
+
+/**
  * How much a chord wants to move on, in the key it is in: by what it does
- * there, by its clashes, and by whether it keeps to the key. The tonic
- * triad is nought; a dominant seventh nearly three.
+ * there, by its clashes, by the notes of it that lean on home, and by
+ * whether it keeps to the key. The tonic triad is nought; a dominant
+ * seventh nearly four.
  */
 export function theTensionOfTheChord(chord: Chord, key: Key): number {
   const standing = theChordInTheKey(chord, key);
@@ -54,7 +65,13 @@ export function theTensionOfTheChord(chord: Chord, key: Key): number {
       clashes += TENSION_OF_A_CLASH[Math.min(apart, 12 - apart)] ?? 0;
     }
   }
-  return ofTheFunction + clashes + (standing.ofTheKey ? 0 : TENSION_OF_A_NOTE_OUTSIDE);
+  const scale = thePitchClassesOfTheScale(key.fifths, key.scale);
+  const home = [scale[0], scale[2], scale[4]].filter((tone) => tone !== undefined);
+  // No note of the triad is a semitone from another, so none of them leans.
+  const leaning = [...new Set(chord.kind.intervals.map((step) => (chord.root + step) % 12))].filter(
+    (tone) => home.includes((tone + 1) % 12) || home.includes((tone + 11) % 12),
+  ).length;
+  return ofTheFunction + clashes + TENSION_OF_A_LEANING_NOTE * leaning + (standing.ofTheKey ? 0 : TENSION_OF_A_NOTE_OUTSIDE);
 }
 
 /** Where each letter stands on the line of fifths, C being nought: F one flat-ward, B five sharp-ward. */

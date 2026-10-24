@@ -10386,7 +10386,7 @@ describe('AppView', () => {
       expect([goal('release').getAttribute('aria-pressed'), says.hidden, says.textContent]).toEqual(['true', false, 'After G7:']);
       expect(ringed().sort()).toEqual(['C', 'Dm', 'Em']);
       expect(slice('major', 0)?.getAttribute('aria-label')).toBe(
-        'Write C where the cursor is. Tension 2.8 to 0.0, brightness 1.3 to 1.7.',
+        'Write C where the cursor is. Tension 3.8 to 0.0, brightness 1.3 to 1.7.',
       );
       expect(slice('major', 1)?.getAttribute('aria-label')).toBe('Write G where the cursor is');
       // Pressed, a ringed chord is written as any is; after it, the next is offered from it.

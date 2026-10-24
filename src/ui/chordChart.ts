@@ -142,7 +142,7 @@ const CURVES_TALL = 100;
  * calm, low on its scale, rather than stretched to the top of it; the
  * brightness either side of nought, which is the middle.
  */
-const TENSION_DRAWN_TO = 3.5;
+const TENSION_DRAWN_TO = 4.5;
 const BRIGHTNESS_DRAWN_TO = 3;
 
 /**

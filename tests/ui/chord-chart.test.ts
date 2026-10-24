@@ -105,7 +105,7 @@ describe('the chart of the chords', () => {
     expect(fm?.querySelector('.roll-chart__function')?.textContent).toBe('S');
     expect(fm?.querySelector('.roll-chart__notes')?.textContent).toBe('F A♭ C');
     expect(fm?.title).toBe(
-      'Fm (iv, F A♭ C): subdominant: moving away, outside the key. Tension 1.5, brightness -1.2. Press to put the cursor here.',
+      'Fm (iv, F A♭ C): subdominant: moving away, outside the key. Tension 2.5, brightness -1.2. Press to put the cursor here.',
     );
     expect(buttons[0]?.querySelector('.roll-chart__key')?.textContent).toBe('C major');
     expect(buttons[1]?.querySelector('.roll-chart__key')).toBeNull();
@@ -125,35 +125,35 @@ describe('the chart of the chords', () => {
   it('draws the tension and the brightness along the piece over it, a step a chord, the cursor on them', () => {
     const curves = theCurvesOfTheChords(CHORDS);
     expect(curves.map((curve) => [curve.fromMs, curve.untilMs, curve.tension, Number(curve.brightness.toFixed(3))])).toEqual([
-      [-500, 0, 2, 2.167],
+      [-500, 0, 2.5, 2.167],
       [0, 1_000, 0, 1.667],
-      [1_000, 3_000, 1.5, -1.167],
-      [3_000, 4_000, 2.75, 1.25],
-      [4_000, 6_000, 2, 2.167],
+      [1_000, 3_000, 2.5, -1.167],
+      [3_000, 4_000, 3.75, 1.25],
+      [4_000, 6_000, 3, 2.167],
     ]);
     const host = document.createElement('div');
     drawTheChart(host, chart, curves);
     const drawing = host.querySelector<SVGSVGElement>('.roll-chart__curves svg');
     expect([drawing?.dataset['from'], drawing?.dataset['until']]).toEqual(['-500', '6000']);
     expect([...host.querySelectorAll('.roll-chart__legend span')].map((each) => each.textContent)).toEqual(['Tension', 'Brightness']);
-    // Across a thousand for six and a half seconds; the tension from the foot up to its highest, three and a half;
+    // Across a thousand for six and a half seconds; the tension from the foot up to its highest, four and a half;
     // the brightness about the middle, as far as three either way.
     const x = (ms: number): string => (((ms + 500) / 6_500) * 1000).toFixed(2);
-    const tensionY = (tension: number): string => (96 - (tension / 3.5) * 92).toFixed(2);
+    const tensionY = (tension: number): string => (96 - (tension / 4.5) * 92).toFixed(2);
     const brightnessY = (brightness: number): string => (50 - (brightness / 3) * 46).toFixed(2);
     expect(host.querySelector('.roll-chart__tension')?.getAttribute('d')).toBe(
       [
-        `M ${x(-500)} ${tensionY(2)} H ${x(0)}`,
+        `M ${x(-500)} ${tensionY(2.5)} H ${x(0)}`,
         `V ${tensionY(0)} H ${x(1_000)}`,
-        `V ${tensionY(1.5)} H ${x(3_000)}`,
-        `V ${tensionY(2.75)} H ${x(4_000)}`,
-        `V ${tensionY(2)} H ${x(6_000)}`,
+        `V ${tensionY(2.5)} H ${x(3_000)}`,
+        `V ${tensionY(3.75)} H ${x(4_000)}`,
+        `V ${tensionY(3)} H ${x(6_000)}`,
       ].join(' '),
     );
     expect(host.querySelector('.roll-chart__brightness')?.getAttribute('d')).toMatch(
       new RegExp(`^M ${x(-500)} ${brightnessY(curves[0]?.brightness ?? 0)} H ${x(0)} V ${brightnessY(curves[1]?.brightness ?? 0)} `),
     );
-    // A gap where nothing sounds breaks the curve; a tension past three and a half raises the scale to it.
+    // A gap where nothing sounds breaks the curve; a tension past four and a half raises the scale to it.
     const apart = theCurvesOfTheChords([
       chord(0, 1_000, 'C', 'I', 0, ''),
       chord(2_000, 3_000, 'B9', 'VII9', 11, '9'),
@@ -163,7 +163,7 @@ describe('the chart of the chords', () => {
     expect(another.querySelector('.roll-chart__curves')).toBeNull();
     drawTheChart(another, theChartOfTheChords(BARS, [chord(0, 1_000, 'C', 'I', 0, '')]), apart);
     const highest = apart[1]?.tension ?? 0;
-    expect(highest).toBeGreaterThan(3.5);
+    expect(highest).toBeGreaterThan(4.5);
     expect(another.querySelector('.roll-chart__tension')?.getAttribute('d')).toBe(
       `M 0.00 96.00 H 333.33 M 666.67 ${(96 - 92).toFixed(2)} H 1000.00`,
     );

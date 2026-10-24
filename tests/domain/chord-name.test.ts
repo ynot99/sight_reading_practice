@@ -8,9 +8,10 @@ import {
   theNotesOfTheChordNamed,
   theNumeralOfTheChord,
   type ChordHeard,
+  type KeyOfTheChord,
 } from '../../src/domain/harmony/chordName.js';
 import { theChordsOfTheScale } from '../../src/domain/harmony/chordsOfTheKey.js';
-import { SCALE_NAMES, thePitchClassesOfTheScale } from '../../src/domain/harmony/scales.js';
+import { SCALE_NAMES } from '../../src/domain/harmony/scales.js';
 
 /** Middle C's octave, so a chord built on a root lies where a hand would play it. */
 const C4 = 60;
@@ -233,17 +234,15 @@ describe('the degree of a chord in a scale', () => {
   it('writes each chord of every scale as the drawer of chords does', () => {
     for (const scale of SCALE_NAMES) {
       for (let fifths = -7; fifths <= 7; fifths += 1) {
-        const pitchClasses = thePitchClassesOfTheScale(fifths, scale);
         for (const chord of theChordsOfTheScale(fifths, scale)) {
-          expect(theNumeralOfTheChord(readOf(chord.midis), pitchClasses), `${chord.name} in ${String(fifths)} ${scale}`).toBe(chord.numeral);
+          expect(theNumeralOfTheChord(readOf(chord.midis), { fifths, scale }), `${chord.name} in ${String(fifths)} ${scale}`).toBe(chord.numeral);
         }
       }
     }
   });
 
   it('writes what a kind adds after the numeral, and a root the scale has not from the degree beside it', () => {
-    const cMajor = thePitchClassesOfTheScale(0, 'major');
-    const said = (midis: readonly number[], scale: readonly number[] = cMajor): string => theNumeralOfTheChord(readOf(midis), scale);
+    const said = (midis: readonly number[], key: KeyOfTheChord = { fifths: 0, scale: 'major' }): string => theNumeralOfTheChord(readOf(midis), key);
     expect(said([C4 + 7, C4 + 11, C4 + 14, C4 + 17])).toBe('V7');
     expect(said([C4 - 3, C4, C4 + 4, C4 + 7])).toBe('vi7');
     expect(said([C4, C4 + 4, C4 + 7, C4 + 11])).toBe('Imaj7');
@@ -254,6 +253,37 @@ describe('the degree of a chord in a scale', () => {
     expect(said([C4 + 3, C4 + 7, C4 + 10])).toBe('♭III');
     // F sharp in A harmonic minor, which has neither G nor F sharp: a
     // semitone over F, its sixth degree.
-    expect(said([C4 + 6, C4 + 10, C4 + 13], thePitchClassesOfTheScale(0, 'harmonicMinor'))).toBe('♯VI');
+    expect(said([C4 + 6, C4 + 10, C4 + 13], { fifths: 0, scale: 'harmonicMinor' })).toBe('♯VI');
+  });
+
+  it('names and numbers a root off the scale one way, as leaves its chord the fewer notes off the key', () => {
+    const inThe = (fifths: number, scale: KeyOfTheChord['scale'], midis: readonly number[]): string => {
+      const made = theChordTheKeysMake(midis, fifths, scale);
+      return made === null ? '-' : `${made.name} ${theNumeralOfTheChord(made, { fifths, scale })}`;
+    };
+    // A minor: its leading note's chord raised, its dominant major, its own seventh's chord as it is.
+    expect(inThe(0, 'minor', [68, 71, 74])).toBe('G♯dim ♯vii°');
+    expect(inThe(0, 'minor', [66, 69, 72])).toBe('F♯dim ♯vi°');
+    expect(inThe(0, 'minor', [64, 68, 71])).toBe('E V');
+    expect(inThe(0, 'minor', [67, 71, 74])).toBe('G VII');
+    // C major: F♯ A C♯, not G♭ B𝄫 D♭; B♭ D F, not A♯ C𝄪 E♯; D♭ F A♭, not C♯ E♯ G♯.
+    expect(inThe(0, 'major', [66, 69, 73])).toBe('F♯m ♯iv');
+    expect(inThe(0, 'major', [70, 74, 77])).toBe('B♭ ♭VII');
+    expect(inThe(0, 'major', [61, 65, 68])).toBe('D♭ ♭II');
+    expect(inThe(0, 'major', [61, 64, 67, 70])).toBe('C♯dim7 ♯i°7');
+    // G major: B♭, where its signature alone would say A♯.
+    expect(inThe(1, 'major', [70, 74, 77])).toBe('B♭ ♭III');
+    // Counted from the key's own notes, not C major's: in B major, F A♭ C is E♯ G♯ B♯, two off where it is four.
+    expect(inThe(5, 'major', [65, 68, 72])).toBe('E♯m ♯iv');
+    // As many either way, F♯ A♯ C♯ against G♭ B♭ D♭: as the signature spells it - and in F, with its B♭, G♭.
+    expect(inThe(0, 'major', [66, 70, 73])).toBe('F♯ ♯IV');
+    expect(inThe(-1, 'major', [66, 70, 73])).toBe('G♭ ♭II');
+    // Its notes stacked on the root so named, and its bass.
+    const leading = theChordTheKeysMake([68, 71, 74], 0, 'minor');
+    if (leading === null) {
+      throw new Error('G♯ B D is no chord.');
+    }
+    expect(theNotesOfTheChordNamed(leading, 0, 'minor')).toEqual(['G♯', 'B', 'D']);
+    expect(inThe(0, 'minor', [62, 68, 71])).toBe('G♯dim/D ♯vii°');
   });
 });

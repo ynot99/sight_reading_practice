@@ -13856,9 +13856,11 @@ export class AppView {
         lengthOf.set(`${String(press.midi)} ${String(press.downAtMs)}`, (press.upAtMs ?? ended) - press.downAtMs);
       }
     }
+    const spelling = this.theKeyTheDrawingSpellsIn();
     const chord = theChordTheNotesMake(
       chosen.map((key) => ({ midi: key.midi, lengthMs: lengthOf.get(`${String(key.midi)} ${String(key.downAtMs)}`) ?? 0 })),
-      this.theSignatureTheDrawingSpellsIn(),
+      spelling?.fifths ?? null,
+      spelling?.scale,
     );
     this.el.rollChord.textContent = chord === null ? '' : chord.exactly ? chord.name : `≈ ${chord.name}`;
     this.el.rollChord.title =
@@ -13872,7 +13874,8 @@ export class AppView {
    * circle is open, which names it in its middle.
    */
   private nameTheChordHeld(): void {
-    const chord = nameTheChord(this.theKeysHeld(), this.theSignatureTheDrawingSpellsIn());
+    const spelling = this.theKeyTheDrawingSpellsIn();
+    const chord = nameTheChord(this.theKeysHeld(), spelling?.fifths ?? null, spelling?.scale);
     this.el.rollChordHeldName.textContent = chord ?? '';
     this.el.rollChordHeld.hidden = chord === null || this.theChordsOfTheKeyAreOpen();
   }
@@ -13890,10 +13893,14 @@ export class AppView {
    * sketch's where the cursor is; anything else's none, so as chord charts
    * spell it.
    */
-  private theSignatureTheDrawingSpellsIn(): number | null {
+  private theKeyTheDrawingSpellsIn(): { readonly fifths: number; readonly scale: ScaleName } | null {
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
-    return stored === null ? null : this.theKeyAtTheHead(stored).fifths;
+    if (stored === null) {
+      return null;
+    }
+    const key = this.theKeyAtTheHead(stored);
+    return { fifths: key.fifths, scale: theScaleOfTheKey(key) };
   }
 
   /**
@@ -14607,11 +14614,11 @@ export class AppView {
     readonly keys: readonly number[];
   } | null {
     const key = this.theKeyAtTheCursor();
-    const made = key === null ? null : theChordTheKeysMake(keys, key.fifths);
+    const made = key === null ? null : theChordTheKeysMake(keys, key.fifths, key.scale);
     if (key === null || made === null) {
       return null;
     }
-    const numeral = theNumeralOfTheChord(made, thePitchClassesOfTheScale(key.fifths, key.scale));
+    const numeral = theNumeralOfTheChord(made, key);
     return { name: made.name, numeral, root: made.root, kind: made.kind, keys };
   }
 

@@ -61,7 +61,7 @@ import {
 import { beginThePlaybackTimings } from '../../src/shared/playbackTimings.js';
 import { theLatestPlayback } from '../support/playbackTimings.js';
 import { Duration } from '../../src/domain/model/Duration.js';
-import { DYNAMIC_VELOCITY, noteEntry } from '../../src/domain/model/Exercise.js';
+import { DYNAMIC_VELOCITY, noteEntry, restEntry } from '../../src/domain/model/Exercise.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { theKeyChangesOf, type MidiFileEvent } from '../../src/domain/midi/MidiFile.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
@@ -4171,11 +4171,11 @@ describe('AppView', () => {
         }
       };
 
-      // One key alone is no chord; three are, while they are held.
+      // One key alone is no chord; three are, while they are held: in C, D♭ F A♭, as few notes off the key as it can be.
       down(61);
       expect(said(held)).toBeNull();
       down(65, 68);
-      expect(said(held)).toBe('C♯');
+      expect(said(held)).toBe('D♭');
       expect(held.title).toBe('The chord the keys held make');
       up(61, 65, 68);
       expect(said(held)).toBeNull();
@@ -7401,11 +7401,11 @@ describe('AppView', () => {
       key({ key: 'Escape' });
       expect(said()).toBeNull();
 
-      // In C, a black key is spelled as chord charts do; in a flat key, as a flat.
+      // A root off the key is spelt as leaves its chord the fewer notes off it: in C, D♭ F A♭; in a flat key, a flat as well.
       tap(2_600, 61, false);
       tap(2_600, 65);
       tap(2_600, 68);
-      expect(said()).toBe('C♯');
+      expect(said()).toBe('D♭');
       const keyOfTheSketch = element<HTMLSelectElement>('roll-key');
       keyOfTheSketch.value = '10';
       keyOfTheSketch.dispatchEvent(new Event('change'));
@@ -9928,7 +9928,7 @@ describe('AppView', () => {
       // A long name smaller, to fit the hole, and a long numeral.
       const [short, shortNumeral] = [sizeInTheMiddle(), numeralSize()];
       down(61, 64, 67, 70);
-      expect([middle(), numeral()]).toEqual(['C♯dim7', '♭ii°7']);
+      expect([middle(), numeral()]).toEqual(['C♯dim7', '♯i°7']);
       expect(sizeInTheMiddle()).toBeLessThan(short);
       up(61, 64, 67, 70);
       // The same chord with its fifth let go of: the same name, one key fewer.
@@ -9949,7 +9949,7 @@ describe('AppView', () => {
       sketches.changeTheKey(sketch.id, aKeyInTheScale(2, 'major'));
       const notesBefore = sketches.find(sketch.id)?.events.length;
       down(63, 66, 70);
-      expect([middle(), numeral()]).toEqual(['D♯m', '♭ii']);
+      expect([middle(), numeral()]).toEqual(['D♯m', '♯i']);
       up(63, 66, 70);
       down(62, 66, 69);
       expect([middle(), numeral()]).toEqual(['D', 'I']);
@@ -9978,7 +9978,7 @@ describe('AppView', () => {
       up(62, 66, 69);
       down(63, 66, 70);
       switched.click();
-      expect([middle(), numeral(), runtime.controller.settings.circleNamesTheChord]).toEqual(['D♯m', '♭ii', true]);
+      expect([middle(), numeral(), runtime.controller.settings.circleNamesTheChord]).toEqual(['D♯m', '♯i', true]);
       // The keys are hidden by a switch of their own, the name left as it is; shown again, on the chord sounding then.
       const keysSwitched = element<HTMLButtonElement>('roll-circle-keys-shown');
       expect([keysSwitched.getAttribute('aria-pressed'), keysSwitched.title, element('roll-circle-keys').hidden]).toEqual([
@@ -10050,13 +10050,19 @@ describe('AppView', () => {
         ...twoBarExercise({ title: 'Pedalled', key: KeySignature.minor(0) }),
         pedalMarks: [{ measureIndex: 0, offsetTicks: 0, type: 'start' as const, line: true }],
         staves: [
-          { staffNumber: 1, voice: 1, clef: 'treble' as const, clefChanges: [], measures: [bar(noteEntry(p('B4'), Duration.WHOLE))] },
+          {
+            staffNumber: 1,
+            voice: 1,
+            clef: 'treble' as const,
+            clefChanges: [],
+            measures: [bar(noteEntry(p('B4'), Duration.WHOLE)), bar(noteEntry([p('G#4'), p('B4'), p('D5')], Duration.WHOLE))],
+          },
           {
             staffNumber: 2,
             voice: 2,
             clef: 'bass' as const,
             clefChanges: [],
-            measures: [bar(noteEntry(p('G#3'), Duration.EIGHTH), noteEntry(p('B3'), Duration.EIGHTH), noteEntry(p('E4'), Duration.DOTTED_HALF))],
+            measures: [bar(noteEntry(p('G#3'), Duration.EIGHTH), noteEntry(p('B3'), Duration.EIGHTH), noteEntry(p('E4'), Duration.DOTTED_HALF)), bar(restEntry(Duration.WHOLE))],
           },
         ],
       });
@@ -10067,7 +10073,38 @@ describe('AppView', () => {
         [...element('roll-chart').querySelectorAll('.roll-chart__chord')].map(
           (chord) => `${chord.querySelector('.roll-chart__name')?.textContent ?? ''} ${chord.querySelector('.roll-chart__numeral')?.textContent ?? ''}`,
         ),
-      ).toEqual(['E/G♯ V']);
+      ).toEqual(['E/G♯ V', 'G♯dim ♯vii°']);
+    });
+
+    it('names and numbers the chord of the keys held in the scale of the sketch, beside it and in the middle of the circle', async () => {
+      const { view, sketches, midi, clock } = createRig();
+      await view.initialize();
+      sketches.begin(
+        {
+          events: [
+            { kind: 'noteOn' as const, atMs: 0, midi: 57, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: 1_500, midi: 57 },
+          ],
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'In A minor',
+        1,
+        { fifths: 0, mode: 'minor' },
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      // Its leading note's chord: G♯, not the A♭ a key without sharps would spell.
+      for (const key of [68, 71, 74]) {
+        midi.noteOn(key, clock.now());
+      }
+      expect(element('roll-chord-held').textContent?.trim()).toBe('G♯dim');
+      element<HTMLButtonElement>('roll-chords-open').click();
+      const circle = element('roll-circle');
+      expect([
+        circle.querySelector('.roll-circle__sounding-name')?.textContent,
+        circle.querySelector('.roll-circle__sounding-numeral')?.textContent,
+      ]).toEqual(['G♯dim', '♯vii°']);
     });
 
     it('offers no chords beside a recording, whose keys nothing says, though a score is open, nor beside a sketch no longer kept', async () => {

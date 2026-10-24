@@ -83,7 +83,7 @@ const BRIGHT_IN_THE_KEY = 0.5;
  * than nought.
  */
 export function theBrightnessOfTheChord(chord: Chord, key: Key): number {
-  const notes = theNotesOfTheChordNamed(chord, key.fifths);
+  const notes = theNotesOfTheChordNamed(chord, key.fifths, key.scale);
   const root = onTheLineOfFifths(notes[0] ?? 'C');
   const { step, alter } = theTonicOfTheScale(key.fifths, key.scale);
   const tonic = ON_THE_LINE[step] + 7 * alter;

@@ -1,5 +1,6 @@
 import { floorMod } from '../../shared/asserts.js';
 import { STEPS, alterationSign, type Alteration } from '../model/Pitch.js';
+import { theTonicOfTheScale, thePitchClassesOfTheScale, type ScaleName } from './scales.js';
 
 /**
  * What a chord is called, read off the keys held down.
@@ -81,19 +82,24 @@ export function nameOfThePitchClass(pitchClass: number, fifths: number | null): 
  * Nothing else is needed to choose: no set of notes is one kind with its
  * fifth and another without it, on the same footing with the bass.
  */
-export function nameTheChord(midis: readonly number[], fifths: number | null = null): string | null {
-  return theChordTheKeysMake(midis, fifths)?.name ?? null;
+export function nameTheChord(midis: readonly number[], fifths: number | null = null, scale?: ScaleName): string | null {
+  return theChordTheKeysMake(midis, fifths, scale)?.name ?? null;
 }
 
-/** The chord the keys held make, named as `nameTheChord` names it, with its root and kind: `null` where it names none. */
-export function theChordTheKeysMake(midis: readonly number[], fifths: number | null = null): ChordHeard | null {
+/**
+ * The chord the keys held make, named as `nameTheChord` names it, with its
+ * root and kind: `null` where it names none. In the scale of the key where
+ * that is known, its root named as the key has it (see `theNameOfTheRoot`).
+ */
+export function theChordTheKeysMake(midis: readonly number[], fifths: number | null = null, scale?: ScaleName): ChordHeard | null {
   const read = readTheChord(midis);
   if (read === null) {
     return null;
   }
-  const name = `${nameOfThePitchClass(read.root, fifths)}${read.kind.suffix}`;
+  const chord = { root: read.root, kind: read.kind };
+  const name = `${theNameOfTheRootIn(chord, fifths, scale)}${read.kind.suffix}`;
   return {
-    name: read.root === read.bass ? name : `${name}/${theNameOfTheBass({ root: read.root, kind: read.kind }, read.bass, fifths)}`,
+    name: read.root === read.bass ? name : `${name}/${theNameOfTheBass(chord, read.bass, fifths, scale)}`,
     exactly: true,
     root: read.root,
     kind: read.kind,
@@ -151,12 +157,14 @@ const MOSTLY = 0.5;
 export function theChordTheNotesMake(
   notes: readonly { readonly midi: number; readonly lengthMs: number }[],
   fifths: number | null = null,
+  scale?: ScaleName,
 ): ChordHeard | null {
   return (
     theChordTheKeysMake(
       notes.map((note) => note.midi),
       fifths,
-    ) ?? theChordMostOfTheNotesMake(notes, fifths)
+      scale,
+    ) ?? theChordMostOfTheNotesMake(notes, fifths, scale)
   );
 }
 
@@ -187,6 +195,7 @@ export interface ChordMostlyHeard extends ChordHeard {
 export function theChordMostOfTheNotesMake(
   notes: readonly { readonly midi: number; readonly lengthMs: number }[],
   fifths: number | null = null,
+  scale?: ScaleName,
 ): ChordMostlyHeard | null {
   const weight = new Map<number, number>();
   for (const note of notes) {
@@ -220,10 +229,11 @@ export function theChordMostOfTheNotesMake(
   if (found === undefined || kind === undefined) {
     return null;
   }
-  const name = `${nameOfThePitchClass(found.root, fifths)}${kind.suffix}`;
+  const chord = { root: found.root, kind };
+  const name = `${theNameOfTheRootIn(chord, fifths, scale)}${kind.suffix}`;
   const overTheBass = bass !== found.root && found.tones.includes(bass);
   return {
-    name: overTheBass ? `${name}/${theNameOfTheBass({ root: found.root, kind }, bass, fifths)}` : name,
+    name: overTheBass ? `${name}/${theNameOfTheBass(chord, bass, fifths, scale)}` : name,
     exactly: found.tones.length === weight.size,
     root: found.root,
     kind,
@@ -233,22 +243,85 @@ export function theChordMostOfTheNotesMake(
 
 const NUMERALS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'] as const;
 
+/** A key a chord is named and numbered in: its signature, and the scale of it the music is in. */
+export interface KeyOfTheChord {
+  readonly fifths: number;
+  readonly scale: ScaleName;
+}
+
 /**
- * A chord's degree in a scale, in roman numerals: upper case where its third
- * is major, lower where minor, and what its kind adds after (see
- * `afterTheNumeral`). A root the scale does not have is written from the
- * degree a semitone above it, flattened - B flat in C major is ♭VII - or,
- * where the scale has none there, from the one below, sharpened.
+ * Where a chord's root stands in a key: the degree it is, by its letter
+ * counted from the tonic's, and whether it is raised or lowered from the
+ * scale's own note there - one answer for its name and its numeral.
+ *
+ * A note of the scale is its degree. A root off it is the degree under it
+ * raised or the one over it lowered, whichever leaves the chord's notes the
+ * fewer the key does not have, each counted by how far it is from the
+ * key's note of its letter: F♯ minor in C, not G♭ minor, whose B𝄫 is two
+ * off; B♭ in C, not A♯ with its C𝄪; G♯ diminished in A minor, its leading
+ * note raised, ♯vii°. Where the two leave as many, as the signature spells
+ * the root.
  */
-export function theNumeralOfTheChord(
+export function theDegreeOfTheRoot(
   chord: { readonly root: number; readonly kind: ChordKind },
-  pitchClassesOfTheScale: readonly number[],
+  key: KeyOfTheChord,
+): { readonly degree: number; readonly alter: -1 | 0 | 1 } {
+  const scale = thePitchClassesOfTheScale(key.fifths, key.scale);
+  const degreeOf = (pitchClass: number): number => scale.indexOf(floorMod(pitchClass, 12));
+  const on = degreeOf(chord.root);
+  if (on >= 0) {
+    return { degree: on, alter: 0 };
+  }
+  const tonicLetter = STEPS.indexOf(theTonicOfTheScale(key.fifths, key.scale).step);
+  const offTheKey = (degree: number): number =>
+    theNotesStackedOn(chord, floorMod(tonicLetter + degree, STEPS.length)).reduce((sum, { letter, pitchClass }) => {
+      const ours = scale[floorMod(letter - tonicLetter, STEPS.length)] ?? 0;
+      const off = floorMod(pitchClass - ours, 12);
+      return sum + Math.min(off, 12 - off);
+    }, 0);
+  const ways = [
+    { degree: degreeOf(chord.root + 1), alter: -1 as const },
+    { degree: degreeOf(chord.root - 1), alter: 1 as const },
+  ]
+    .filter((way) => way.degree >= 0)
+    .map((way) => ({ ...way, off: offTheKey(way.degree) }));
+  const asSigned = nameOfThePitchClass(chord.root, key.fifths).charAt(0);
+  const best = ways.sort(
+    (one, other) =>
+      one.off - other.off ||
+      Number(STEPS[floorMod(tonicLetter + other.degree, STEPS.length)] === asSigned) -
+        Number(STEPS[floorMod(tonicLetter + one.degree, STEPS.length)] === asSigned),
+  )[0];
+  return best === undefined ? { degree: 0, alter: 0 } : { degree: best.degree, alter: best.alter };
+}
+
+/** The name of a chord's root in a key: the letter of its degree, raised or lowered as it is (see `theDegreeOfTheRoot`). */
+export function theNameOfTheRoot(chord: { readonly root: number; readonly kind: ChordKind }, key: KeyOfTheChord): string {
+  const { degree } = theDegreeOfTheRoot(chord, key);
+  const letter = floorMod(STEPS.indexOf(theTonicOfTheScale(key.fifths, key.scale).step) + degree, STEPS.length);
+  const off = floorMod(chord.root - (NATURAL[letter] ?? 0), 12);
+  return `${STEPS[letter] ?? ''}${alterationSign((off > 6 ? off - 12 : off) as Alteration)}`;
+}
+
+/** A root's name in the scale of a key where that is known, and as the signature alone spells it where not. */
+function theNameOfTheRootIn(
+  chord: { readonly root: number; readonly kind: ChordKind },
+  fifths: number | null,
+  scale: ScaleName | undefined,
 ): string {
-  const degree = (pitchClass: number): number => pitchClassesOfTheScale.indexOf(((pitchClass % 12) + 12) % 12);
-  const on = degree(chord.root);
-  const above = degree(chord.root + 1);
-  const [sign, at] = on >= 0 ? ['', on] : above >= 0 ? ['♭', above] : ['♯', degree(chord.root - 1)];
-  const numeral = NUMERALS[at] ?? '';
+  return fifths === null || scale === undefined ? nameOfThePitchClass(chord.root, fifths) : theNameOfTheRoot(chord, { fifths, scale });
+}
+
+/**
+ * A chord's degree in a key, in roman numerals: upper case where its third
+ * is major, lower where minor, and what its kind adds after (see
+ * `afterTheNumeral`), raised or lowered as its root is (see
+ * `theDegreeOfTheRoot`).
+ */
+export function theNumeralOfTheChord(chord: { readonly root: number; readonly kind: ChordKind }, key: KeyOfTheChord): string {
+  const { degree, alter } = theDegreeOfTheRoot(chord, key);
+  const numeral = NUMERALS[degree] ?? '';
+  const sign = alter < 0 ? '♭' : alter > 0 ? '♯' : '';
   return `${sign}${chord.kind.minor ? numeral.toLowerCase() : numeral}${chord.kind.afterTheNumeral}`;
 }
 
@@ -262,9 +335,10 @@ function theNameOfTheBass(
   chord: { readonly root: number; readonly kind: ChordKind },
   bass: number,
   fifths: number | null,
+  scale: ScaleName | undefined,
 ): string {
   const step = chord.kind.intervals.indexOf(floorMod(bass - chord.root, 12));
-  return theNotesOfTheChordNamed(chord, fifths ?? 0)[step] ?? nameOfThePitchClass(bass, fifths);
+  return theNotesOfTheChordNamed(chord, fifths ?? 0, fifths === null ? undefined : scale)[step] ?? nameOfThePitchClass(bass, fifths);
 }
 
 /** The pitch class of each letter unaltered. */
@@ -283,23 +357,35 @@ function theLettersAbove(semitones: number, kind: ChordKind): number {
 }
 
 /**
- * The names of a chord's notes from its root up: the root as a key with so
- * many sharps or flats spells it, and the rest stacked on it a letter for
- * each step - so E major in A minor is E G♯ B, not E A♭ B. A root has one
- * sharp or flat at most and no kind's step is more than one from the
- * letters', so none needs more than two.
+ * The names of a chord's notes from its root up: the root as the key names
+ * it (see `theNameOfTheRoot`) - or as a key with so many sharps or flats
+ * spells it, where its scale is not known - and the rest stacked on it a
+ * letter for each step - so E major in A minor is E G♯ B, not E A♭ B. A
+ * root has one sharp or flat at most and no kind's step is more than one
+ * from the letters', so none needs more than two.
  */
 export function theNotesOfTheChordNamed(
   chord: { readonly root: number; readonly kind: ChordKind },
   fifths: number,
+  scale?: ScaleName,
 ): readonly string[] {
-  const rootName = nameOfThePitchClass(chord.root, fifths);
+  const rootName = theNameOfTheRootIn(chord, fifths, scale);
   const rootLetter = STEPS.findIndex((step) => rootName.startsWith(step));
-  return chord.kind.intervals.map((semitones) => {
-    const letter = floorMod(rootLetter + theLettersAbove(semitones, chord.kind), STEPS.length);
-    const off = floorMod(chord.root + semitones - (NATURAL[letter] ?? 0), 12);
+  return theNotesStackedOn(chord, rootLetter).map(({ letter, pitchClass }) => {
+    const off = floorMod(pitchClass - (NATURAL[letter] ?? 0), 12);
     return `${STEPS[letter] ?? ''}${alterationSign((off > 6 ? off - 12 : off) as Alteration)}`;
   });
+}
+
+/** A chord's notes from its root up, each by its letter - the root's on a letter given, the rest a letter a step - and its pitch class. */
+function theNotesStackedOn(
+  chord: { readonly root: number; readonly kind: ChordKind },
+  rootLetter: number,
+): readonly { readonly letter: number; readonly pitchClass: number }[] {
+  return chord.kind.intervals.map((semitones) => ({
+    letter: floorMod(rootLetter + theLettersAbove(semitones, chord.kind), STEPS.length),
+    pitchClass: floorMod(chord.root + semitones, 12),
+  }));
 }
 
 function sameNumbers(left: readonly number[], right: readonly number[]): boolean {

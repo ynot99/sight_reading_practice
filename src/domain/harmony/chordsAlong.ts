@@ -5,7 +5,7 @@ import {
   type ChordKind,
   type ChordMostlyHeard,
 } from './chordName.js';
-import { thePitchClassesOfTheScale, type ScaleName } from './scales.js';
+import type { ScaleName } from './scales.js';
 
 /** A note sounding from one moment until another. */
 export interface NoteSounding {
@@ -155,12 +155,13 @@ export function theChordsAlongTheBars(
       .filter((note) => note.lengthMs > 0);
   const read = (among: readonly NoteSounding[], fromMs: number, untilMs: number): ChordMostlyHeard | null => {
     const sounding = soundingIn(among, fromMs, untilMs);
-    return sounding.length === 0 ? null : theChordMostOfTheNotesMake(sounding, keyAt(fromMs).fifths);
+    const key = keyAt(fromMs);
+    return sounding.length === 0 ? null : theChordMostOfTheNotesMake(sounding, key.fifths, key.scale);
   };
   const along: ChordAlong[] = [];
   const write = (fromMs: number, untilMs: number, chord: ChordHeard): void => {
     const key = keyAt(fromMs);
-    const numeral = theNumeralOfTheChord(chord, thePitchClassesOfTheScale(key.fifths, key.scale));
+    const numeral = theNumeralOfTheChord(chord, key);
     const before = along.at(-1);
     if (before !== undefined && before.untilMs === fromMs && before.name === chord.name && before.numeral === numeral) {
       along[along.length - 1] = { ...before, untilMs, exactly: before.exactly && chord.exactly };

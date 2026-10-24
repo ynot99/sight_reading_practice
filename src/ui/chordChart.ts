@@ -95,7 +95,7 @@ export function theChartOfTheChords(
           untilMs: chord.untilMs,
           name: chord.name,
           numeral: chord.numeral,
-          notes: theNotesOfTheChordNamed(chord, chord.key.fifths).join(' '),
+          notes: theNotesOfTheChordNamed(chord, chord.key.fifths, chord.key.scale).join(' '),
           function: standing.function,
           ofTheKey: standing.ofTheKey,
           keyBegins,

@@ -50,13 +50,15 @@ export interface PedalDown {
 /**
  * The notes as they sound with the pedal: one let go of while the pedal is
  * down rings on until the pedal comes up or its key is struck again, as a
- * string rings with its damper held off - but no further than the end of
- * the bar it began in. The chords are read a bar at a time, and a score
- * often marks the pedal once for a whole piece, to be changed with the
- * harmony as the pianist hears it: a note carried on into the next bar by a
- * pedal nobody changed would be heard in a chord it is no part of. Without
- * it, a broken chord in the bass - its third a quaver at the start of the
- * bar - is heard without its third.
+ * string rings with its damper held off, over a bar line as much as within
+ * a bar. Without it, a broken chord in the bass - its third a quaver at the
+ * start of the bar - is heard without its third.
+ *
+ * But a pedal never let up before the music ends is no pedalling: a score
+ * marks it once so for a whole piece, to be changed with the harmony as the
+ * pianist hears it. Under that, a note rings to the end of the bar it began
+ * in and no further, the chords being read a bar at a time - carried on, it
+ * would be heard in every chord after it.
  */
 export function theNotesThePedalHolds(
   notes: readonly NoteSounding[],
@@ -66,6 +68,7 @@ export function theNotesThePedalHolds(
   if (pedal.length === 0) {
     return notes;
   }
+  const theMusicEnds = Math.max(...notes.map((note) => note.untilMs));
   const strikesOfEachKey = new Map<number, number[]>();
   for (const note of notes) {
     strikesOfEachKey.set(note.midi, [...(strikesOfEachKey.get(note.midi) ?? []), note.fromMs]);
@@ -77,7 +80,8 @@ export function theNotesThePedalHolds(
       return note;
     }
     const struckAgain = Math.min(...(strikesOfEachKey.get(note.midi) ?? []).filter((atMs) => atMs > note.fromMs));
-    const untilMs = Math.min(held.upAtMs ?? Number.POSITIVE_INFINITY, struckAgain, bar.untilMs);
+    const neverLetUp = held.upAtMs === null || held.upAtMs >= theMusicEnds;
+    const untilMs = Math.min(held.upAtMs ?? Number.POSITIVE_INFINITY, struckAgain, neverLetUp ? bar.untilMs : Number.POSITIVE_INFINITY);
     return untilMs > note.untilMs ? { ...note, untilMs } : note;
   });
 }

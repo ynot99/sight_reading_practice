@@ -167,10 +167,10 @@ describe('the notes of each bar', () => {
 });
 
 describe('the notes as the pedal holds them', () => {
-  const bars: BarOfBeats[] = [0, 3_000].map((fromMs) => ({ beatsMs: [fromMs, fromMs + 1_000, fromMs + 2_000], untilMs: fromMs + 3_000 }));
+  const bars: BarOfBeats[] = [0, 3_000, 6_000].map((fromMs) => ({ beatsMs: [fromMs, fromMs + 1_000, fromMs + 2_000], untilMs: fromMs + 3_000 }));
   const until = (notes: readonly NoteSounding[]): number[] => notes.map((note) => note.untilMs);
 
-  it('rings a note let go of with the pedal down until the pedal comes up, its key is struck again, or its bar ends', () => {
+  it('rings a note let go of with the pedal down until the pedal comes up or its key is struck again, and under a pedal never let up to its bar end', () => {
     const notes: NoteSounding[] = [
       // Let go of before the pedal goes down: as it was.
       { midi: 48, fromMs: 0, untilMs: 400 },
@@ -181,16 +181,21 @@ describe('the notes as the pedal holds them', () => {
       { midi: 55, fromMs: 1_500, untilMs: 1_800 },
       // Held past the pedal coming up: as it was.
       { midi: 60, fromMs: 600, untilMs: 2_500 },
-      // Held over the bar line into a pedal held on to the end: as it was, not cut back to its bar.
-      { midi: 67, fromMs: 2_500, untilMs: 3_500 },
+      // Under a pedal let up in the next bar: over the bar line, to where it comes up.
+      { midi: 62, fromMs: 2_700, untilMs: 2_900 },
+      // Held over the bar line into a pedal never let up: as it was, not cut back to its bar.
+      { midi: 67, fromMs: 5_500, untilMs: 6_500 },
       // Under that pedal: to the end of its bar, and no further.
-      { midi: 64, fromMs: 3_200, untilMs: 3_400 },
+      { midi: 64, fromMs: 6_200, untilMs: 6_400 },
     ];
     const pedal = [
       { downAtMs: 500, upAtMs: 2_000 },
-      { downAtMs: 3_100, upAtMs: null },
+      { downAtMs: 2_600, upAtMs: 4_500 },
+      { downAtMs: 6_100, upAtMs: null },
     ];
-    expect(until(theNotesThePedalHolds(notes, pedal, bars))).toEqual([400, 2_000, 1_500, 2_000, 2_500, 3_500, 6_000]);
+    expect(until(theNotesThePedalHolds(notes, pedal, bars))).toEqual([400, 2_000, 1_500, 2_000, 2_500, 4_500, 6_500, 9_000]);
+    // Let up only as the music ends, it was never let up: the note under it in the second bar rings to that bar's end.
+    expect(until(theNotesThePedalHolds(notes, [pedal[0] ?? { downAtMs: 500, upAtMs: 2_000 }, { downAtMs: 2_600, upAtMs: 6_500 }], bars))[5]).toBe(3_000);
     // With no pedal, the notes themselves.
     expect(theNotesThePedalHolds(notes, [], bars)).toBe(notes);
   });

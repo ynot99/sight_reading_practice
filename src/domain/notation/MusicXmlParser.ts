@@ -532,7 +532,7 @@ function measuredBarTicks(measure: XmlNode, divisions: number): number {
 }
 
 /**
- * The metre of a file that never states one, read off its first bar.
+ * The metre of a bar of a file that never states one, read off the bar.
  *
  * Not a guess: a bar is as long as the music in it, and that length is in
  * the file. What cannot be read is how the writer would have *spelled* it -
@@ -582,7 +582,7 @@ function readHeader(measures: readonly XmlNode[], warnings: ImportWarning[]): Sc
     warnings.push({
       kind: 'measured-metre',
       detail:
-        `The file gives no time signature, so the first bar was measured instead: ` +
+        `The file gives no time signature, so its bars were measured instead, the first ` +
         `${measured.beats}/${measured.beatType}.`,
     });
   }
@@ -597,11 +597,25 @@ function readHeader(measures: readonly XmlNode[], warnings: ImportWarning[]): Sc
 
   const keyChanges: KeyChange[] = [];
   const timeChanges: TimeChange[] = [];
+  let inForce = { beats, beatType };
   measures.forEach((measure, measureIndex) => {
     if (measureIndex === 0) {
       return;
     }
     const later = child(measure, 'attributes');
+    // A file that states no metre states none for any bar, and its bars need
+    // not be alike: Satie's Gnossiennes, written without bar lines, come out
+    // of MuseScore a bar to a line, of twenty-eight crotchets or thirty-two.
+    // Each is as long as the music in it, so each is measured, and a bar of
+    // another length is a change of metre there.
+    const laterWritten = childNumber(child(later, 'time'), 'beats') !== null;
+    if (measured !== null && !laterWritten) {
+      const itsOwn = metreOf(measure, divisions);
+      if (itsOwn !== null && (itsOwn.beats !== inForce.beats || itsOwn.beatType !== inForce.beatType)) {
+        timeChanges.push({ measureIndex, timeSignature: new TimeSignature(itsOwn.beats, itsOwn.beatType) });
+        inForce = itsOwn;
+      }
+    }
     if (later === null) {
       return;
     }
@@ -629,6 +643,7 @@ function readHeader(measures: readonly XmlNode[], warnings: ImportWarning[]): Sc
         measureIndex,
         timeSignature: new TimeSignature(laterBeats, laterBeatType),
       });
+      inForce = { beats: laterBeats, beatType: laterBeatType };
     }
   });
 

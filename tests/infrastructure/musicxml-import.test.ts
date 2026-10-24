@@ -1171,6 +1171,42 @@ const heldOver = `<?xml version="1.0" encoding="UTF-8"?>
     expect(warnings.map((one) => one.kind)).toContain('measured-metre');
   });
 
+  it('measures every bar where the file states no metre, a bar of another length a change of metre there', () => {
+    // A piece written without bar lines comes out a bar to a line, of as
+    // many crotchets as the line holds: no metre stated, and none the same
+    // for every bar. Measured off the first alone, a longer bar was refused.
+    const quarters = (count: number): string =>
+      Array.from({ length: count }, () => '<note><pitch><step>C</step><octave>4</octave></pitch><duration>12</duration><voice>1</voice><type>quarter</type></note>').join('');
+    const bars = (counts: readonly number[], written: Readonly<Record<number, string>> = {}): string => `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    ${counts
+      .map(
+        (count, at) =>
+          `<measure number="${String(at + 1)}">${
+            at === 0
+              ? '<attributes><divisions>12</divisions><key><fifths>0</fifths></key><clef><sign>G</sign><line>2</line></clef></attributes>'
+              : (written[at] ?? '')
+          }${quarters(count)}</measure>`,
+      )
+      .join('')}
+  </part>
+</score-partwise>`;
+    const changes = (xml: string): string[] =>
+      importer.read(xml).exercise.timeChanges.map((change) => `${String(change.measureIndex)} ${String(change.timeSignature.beats)}/${String(change.timeSignature.beatType)}`);
+
+    const { exercise } = importer.read(bars([7, 7, 8, 7, 8, 8]));
+    expect([exercise.timeSignature.beats, exercise.timeSignature.beatType]).toEqual([7, 4]);
+    expect(changes(bars([7, 7, 8, 7, 8, 8]))).toEqual(['2 8/4', '3 7/4', '4 8/4']);
+    // Bars all alike: no change at all.
+    expect(changes(bars([4, 4, 4]))).toEqual([]);
+    // A metre the file does write, where it writes one, is the writer's, and measured on from.
+    expect(changes(bars([4, 3, 3, 4], { 1: '<attributes><time><beats>3</beats><beat-type>4</beat-type></time></attributes>' }))).toEqual(['1 3/4', '3 4/4']);
+    // A file that states its metre is not measured: a short last bar there is a short bar, not a change.
+    expect(changes(bars([4, 3]).replace('<clef>', '<time><beats>4</beats><beat-type>4</beat-type></time><clef>'))).toEqual([]);
+  });
+
   it('reads a bar that is a whole number of quavers as quavers', () => {
     // Three eighths is not a whole number of crotchets, and 3/8 is a metre a
     // reader meets. Rounded to crotchets it would be neither the length of

@@ -10522,6 +10522,42 @@ describe('AppView', () => {
       expect(says.textContent).toBe('Nothing to let go: C is at rest already.');
     });
 
+    it('drafts on the keys under the circle by the keyboard too, each key a button saying whether its note is in the chord', async () => {
+      const { view, sketches, clock, runtime } = createRig();
+      await view.initialize();
+      sketches.begin(
+        {
+          events: [60, 64, 67].flatMap((key) => [
+            { kind: 'noteOn' as const, atMs: 0, midi: key, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: 2_000, midi: key },
+          ]),
+          beats: Array.from({ length: 4 }, (_, beat) => ({ atMs: beat * 500, beat, beatsInBar: 4 })),
+        },
+        'By keys',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      element<HTMLButtonElement>('roll-chords-open').click();
+      element<HTMLButtonElement>('roll-chart-open').click();
+      const keys = element('roll-circle-keys');
+      const theKey = (midi: number): HTMLElement | null => keys.querySelector<HTMLElement>(`[data-midi="${String(midi)}"]`);
+      const said = (midi: number): (string | null)[] => ['tabindex', 'role', 'aria-pressed', 'aria-label'].map((name) => theKey(midi)?.getAttribute(name) ?? null);
+      // Nothing chosen: no stop for a key.
+      expect(said(64)).toEqual([null, null, null, null]);
+      // C chosen: E in it, E flat not.
+      clock.advance(1_000);
+      element('roll-chart').querySelector<HTMLElement>('.roll-chart__chord')?.click();
+      expect(said(64)).toEqual(['0', 'button', 'true', 'E, in the chord: press to leave it out']);
+      expect(said(63)).toEqual(['0', 'button', 'false', 'E♭: press to put it in the chord']);
+      // The space bar on E flat puts it in, and does not play the drawing; Enter on E leaves E out.
+      theKey(63)?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true }));
+      expect(runtime.takePlayer.playing).toBeNull();
+      theKey(64)?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      expect([element('roll-circle').querySelector('.roll-circle__sounding-name')?.textContent, said(63)[2], said(64)[2]]).toEqual(['Cm', 'true', 'false']);
+    });
+
     it('drafts another chord over the one chosen on the keys under the circle, heard as it changes, written or left', async () => {
       const { view, sketches, clock, instrument } = createRig();
       await view.initialize();

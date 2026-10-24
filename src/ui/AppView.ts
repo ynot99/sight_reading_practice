@@ -10346,6 +10346,16 @@ export class AppView {
         this.draftTheKey(Number(key.dataset['midi']));
       }
     });
+    // And by a key's own keys, as a button is: the space bar here is the key's, not the music's.
+    this.listen(this.el.rollCircleKeys, 'keydown', (event) => {
+      const said = (event as KeyboardEvent).key;
+      const key = (event.target as Element | null)?.closest<HTMLElement>('[data-midi]');
+      if ((said === 'Enter' || said === ' ') && key !== null && key !== undefined) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.draftTheKey(Number(key.dataset['midi']));
+      }
+    });
     this.listen(this.el.rollCircleDraftYes, 'click', () => {
       this.writeTheDraft();
     });
@@ -14836,6 +14846,26 @@ export class AppView {
     this.el.rollCircleKeys.dataset['drafts'] = String(drafts);
     this.el.rollCircleKeys.dataset['draft'] = String(draft !== null);
     this.el.rollCircleKeys.title = drafts ? 'Press keys to make the chosen chord another, heard as it changes' : '';
+    // While they draft, each key is a button a key reaches, saying whether its note is in the chord drafted.
+    const chosenInTheLane = this.theChordChosenInTheLane();
+    const drafted = new Set(
+      draft ?? (chosenInTheLane === null ? [] : theKeysOfTheChord(chosenInTheLane.root, chosenInTheLane.kind).map((each) => each % 12)),
+    );
+    for (const [midi, pressable] of this.circleKeys) {
+      if (drafts) {
+        const name = nameOfThePitchClass(midi, key.fifths);
+        const inIt = drafted.has(midi % 12);
+        pressable.tabIndex = 0;
+        pressable.setAttribute('role', 'button');
+        pressable.setAttribute('aria-pressed', String(inIt));
+        pressable.setAttribute('aria-label', inIt ? `${name}, in the chord: press to leave it out` : `${name}: press to put it in the chord`);
+      } else {
+        pressable.removeAttribute('tabindex');
+        pressable.removeAttribute('role');
+        pressable.removeAttribute('aria-pressed');
+        pressable.removeAttribute('aria-label');
+      }
+    }
     this.el.rollCircleDraft.hidden = draft === null;
     sayWhetherIdle(
       this.el.rollCircleDraftYes,

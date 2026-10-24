@@ -200,17 +200,17 @@ describe('the notes as the pedal holds them', () => {
     expect(theNotesThePedalHolds(notes, [], bars)).toBe(notes);
   });
 
-  it('hears a broken chord in the bass with the pedal down as its chord, its third and all', () => {
-    // A quaver of G♯ and of B, under E and B held.
+  it('hears a broken chord with the pedal down as its chord, its third and all', () => {
+    // E held in the bass and B above, the third between them a quaver.
     const broken: NoteSounding[] = [
-      { midi: 56, fromMs: 0, untilMs: 500 },
-      { midi: 59, fromMs: 500, untilMs: 1_000 },
-      { midi: 64, fromMs: 1_000, untilMs: 3_000 },
+      { midi: 52, fromMs: 0, untilMs: 3_000 },
+      { midi: 68, fromMs: 0, untilMs: 500 },
       { midi: 71, fromMs: 0, untilMs: 3_000 },
+      { midi: 76, fromMs: 1_000, untilMs: 3_000 },
     ];
     const inAMinor = [{ fromMs: Number.NEGATIVE_INFINITY, fifths: 0, scale: 'minor' as const }];
     const heard = (notes: readonly NoteSounding[]): string[] => theChordsAlongTheBars(notes, bars.slice(0, 1), inAMinor).map((chord) => `${chord.name} ${chord.numeral}`);
     expect(heard(broken)).toEqual(['E5 V5']);
-    expect(heard(theNotesThePedalHolds(broken, [{ downAtMs: 0, upAtMs: null }], bars))).toEqual(['E/G♯ V']);
+    expect(heard(theNotesThePedalHolds(broken, [{ downAtMs: 0, upAtMs: null }], bars))).toEqual(['E V']);
   });
 });

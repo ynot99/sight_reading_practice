@@ -43,7 +43,7 @@ const THE_CHORDS_ON_THE_TONIC = 1.5;
  * together less than a change of key costs, so a piece ending on its
  * fourth does not end in a key of that bar's own.
  */
-const AT_THE_OPENING = 4;
+const AT_THE_OPENING = 6;
 const AT_THE_END = 5;
 
 /**
@@ -60,7 +60,7 @@ const A_RARE_MODE_COSTS = 0.5;
  * does - the riff of a verse taken up a tone, a middle in the relative
  * minor.
  */
-const A_CHANGE_OF_KEY_COSTS = 12;
+const A_CHANGE_OF_KEY_COSTS = 16;
 
 /**
  * How many bars a key lasts at the least, unless its signature lasts

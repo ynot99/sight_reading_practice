@@ -203,7 +203,14 @@ export function theChordMostOfTheNotesMake(
     weight.set(pitchClass, (weight.get(pitchClass) ?? 0) + Math.max(note.lengthMs, 1));
   }
   const total = [...weight.values()].reduce((sum, each) => sum + each, 0);
-  const bass = ((Math.min(...notes.map((note) => note.midi)) % 12) + 12) % 12;
+  const lowest = Math.min(...notes.map((note) => note.midi));
+  const bass = ((lowest % 12) + 12) % 12;
+  // A reading the bass is no tone of loses the bass's sounding again: the
+  // harmony stands on the bass, and the same notes over another bass are
+  // another chord - D major's over a G is G's. A loss rather than a gain,
+  // so a stretch cut where the bass moves is worth no more for it, and the
+  // readings that have the bass are weighed between them as before.
+  const theBassSounds = notes.filter((note) => note.midi === lowest).reduce((sum, note) => sum + Math.max(note.lengthMs, 1), 0);
   type Reading = { readonly root: number; readonly kindAt: number; readonly tones: readonly number[]; readonly worth: number };
   const readings: Reading[] = [];
   for (let root = 0; root < 12; root += 1) {
@@ -215,7 +222,8 @@ export function theChordMostOfTheNotesMake(
       const tones = kind.intervals.filter(there).map((step) => (root + step) % 12);
       const covered = tones.reduce((sum, tone) => sum + (weight.get(tone) ?? 0), 0);
       if (covered >= MOSTLY * total) {
-        readings.push({ root, kindAt, tones, worth: covered - EACH_TONE_COSTS * total * tones.length });
+        const offTheBass = tones.includes(bass) ? 0 : theBassSounds;
+        readings.push({ root, kindAt, tones, worth: covered - offTheBass - EACH_TONE_COSTS * total * tones.length });
       }
     }
   }

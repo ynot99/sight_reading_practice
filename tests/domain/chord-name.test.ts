@@ -3,6 +3,7 @@ import {
   CHORD_KINDS,
   nameOfThePitchClass,
   nameTheChord,
+  theChordMostOfTheNotesMake,
   theChordTheKeysMake,
   theChordTheNotesMake,
   theNotesOfTheChordNamed,
@@ -67,6 +68,23 @@ describe('naming the chord held', () => {
         }
       }
     }
+  });
+
+  it('hears the chord the bass stands on: the same notes over another bass are another chord', () => {
+    // An arpeggio rung on by the pedal, every note as long: G, D, A, F♯, B, C♯ and F♯ again.
+    const rootOf = (midis: readonly number[]): number | undefined => theChordMostOfTheNotesMake(midis.map((midi) => ({ midi, lengthMs: 500 })))?.root;
+    // Over its G, G's - not the D major its upper notes are, which leaves the bass out.
+    expect(rootOf([67, 74, 81, 78, 83, 85, 90])).toBe(7);
+    // The same with a D under it: no longer G's.
+    expect(rootOf([50, 67, 74, 81, 78, 83, 85, 90])).not.toBe(7);
+    // The bass is the lowest note, for as long as it sounds: a G touched for a moment under D major held is so little
+    // of what the harmony stands on, though the melody passes a G above it for longer.
+    const chord = theChordMostOfTheNotesMake([
+      { midi: 43, lengthMs: 100 },
+      ...[62, 66, 69].map((midi) => ({ midi, lengthMs: 1_000 })),
+      { midi: 79, lengthMs: 600 },
+    ]);
+    expect(chord?.root).toBe(2);
   });
 
   it('reads the ambiguous chords off the bass', () => {

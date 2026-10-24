@@ -48,6 +48,12 @@ export interface MidiFileDocument {
     readonly hand?: Hand;
     readonly gradually?: true;
   }[];
+  /**
+   * Where the file begins a part of the piece, in its own ticks, by the name
+   * of its marker - Verse, Chorus, B - in time order, each once however many
+   * tracks mark it.
+   */
+  readonly sections: readonly { readonly atTicks: number; readonly name: string }[];
   readonly title: string | null;
   /** Each track's own name where it gives one, by the track's number. */
   readonly trackNames: readonly (string | null)[];
@@ -182,6 +188,7 @@ interface TrackResult {
   readonly keys: { readonly atTicks: number; readonly fifths: number; readonly minor: boolean }[];
   readonly tempos: { readonly atTicks: number; readonly microsecondsPerQuarter: number }[];
   readonly dynamics: { readonly atTicks: number; readonly level: DynamicLevel; readonly hand?: Hand; readonly gradually?: true }[];
+  readonly sections: { readonly atTicks: number; readonly name: string }[];
   name: string | null;
   /** Its track name, apart from any other text: a file's title may be either. */
   trackName: string | null;
@@ -226,6 +233,7 @@ function readTrack(bytes: Bytes, length: number, track: number): TrackResult {
     keys: [],
     tempos: [],
     dynamics: [],
+    sections: [],
     name: null,
     trackName: null,
   };
@@ -298,6 +306,9 @@ function readTrack(bytes: Bytes, length: number, track: number): TrackResult {
           ...(dynamic.hand === null ? {} : { hand: dynamic.hand }),
           ...(dynamic.gradually ? { gradually: true } : {}),
         });
+      } else if (type === 0x06 && decodeText(data) !== '') {
+        // A marker: a part of the piece begun here, by its name.
+        result.sections.push({ atTicks: at, name: decodeText(data) });
       } else if ((type === 0x03 || type === 0x01) && size > 0) {
         result.name ??= decodeText(data);
         if (type === 0x03) {
@@ -410,6 +421,7 @@ export function readMidiFile(data: Uint8Array): MidiFileDocument {
   const keys: { atTicks: number; fifths: number; minor: boolean }[] = [];
   const tempos: { atTicks: number; microsecondsPerQuarter: number }[] = [];
   const dynamics: { atTicks: number; level: DynamicLevel; hand?: Hand; gradually?: true }[] = [];
+  const sections: { atTicks: number; name: string }[] = [];
   let title: string | null = null;
   const trackNames: (string | null)[] = [];
   let track = 0;
@@ -435,6 +447,11 @@ export function readMidiFile(data: Uint8Array): MidiFileDocument {
     keys.push(...read.keys);
     tempos.push(...read.tempos);
     dynamics.push(...read.dynamics);
+    for (const section of read.sections) {
+      if (!sections.some((each) => each.atTicks === section.atTicks && each.name === section.name)) {
+        sections.push(section);
+      }
+    }
     title = title ?? read.name;
     trackNames.push(read.trackName);
     track += 1;
@@ -480,6 +497,7 @@ export function readMidiFile(data: Uint8Array): MidiFileDocument {
       tempoBpm: Math.round(MICROSECONDS_PER_MINUTE / lasts),
     })),
     dynamics: theChangesOfEachHand(dynamics.sort((one, other) => one.atTicks - other.atTicks)),
+    sections: sections.sort((one, other) => one.atTicks - other.atTicks),
     title,
     trackNames,
   };

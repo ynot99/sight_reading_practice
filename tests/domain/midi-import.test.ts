@@ -281,6 +281,24 @@ describe('turning a MIDI file into a page', () => {
     expect(document.dynamics).toEqual([{ atTicks: 0, level: 'p' }]);
   });
 
+  it('takes a marker for a section where it begins, each once however many tracks mark it, and none with no name', () => {
+    const marker = (ticks: number[], words: string): number[] => [...ticks, 0xff, 0x06, words.length, ...[...words].map((letter) => letter.charCodeAt(0))];
+    const struck = [0x00, 0x90, 60, 0x40, 0x83, 0x60, 0x80, 60, 0x40];
+    const document = readMidiFile(
+      twoTracks(
+        [...marker([0x00], 'Verse'), ...struck, ...marker([0x83, 0x60], 'Chorus'), ...marker([0x00], ' ')],
+        [...marker([0x00], 'Verse'), ...marker([0x83, 0x60], 'Bridge'), ...struck],
+      ),
+    );
+
+    // Chorus 480 ticks after the first track's note ends, 960 in; the other track's Bridge 480 in, between them.
+    expect(document.sections).toEqual([
+      { atTicks: 0, name: 'Verse' },
+      { atTicks: 480, name: 'Bridge' },
+      { atTicks: 960, name: 'Chorus' },
+    ]);
+  });
+
   it('takes each dynamic once where it says what the one before it for the same music said', () => {
     const text = (words: string): number[] => [0x00, 0xff, 0x01, words.length, ...[...words].map((letter) => letter.charCodeAt(0))];
     const document = readMidiFile(
@@ -318,6 +336,25 @@ describe('turning a MIDI file into a page', () => {
       [1, 2 * Duration.QUARTER.ticks, 'p', null],
     ]);
     expect(() => validateExercise(exercise)).not.toThrow();
+  });
+
+  it('names each part of the piece it marks where it begins, on the grid, and none past the last bar', () => {
+    const marked: MidiFileEvent[] = [
+      ...note(60, 0, 4 * QUARTER_MS),
+      ...note(62, 4 * QUARTER_MS, 4 * QUARTER_MS),
+      { kind: 'section', atMs: 0, name: 'A' },
+      // Played a hair after the beat, named on it.
+      { kind: 'section', atMs: 6 * QUARTER_MS + 10, name: 'B' },
+      { kind: 'section', atMs: 40 * QUARTER_MS, name: 'Coda' },
+    ];
+    const { exercise } = pageOf(marked);
+
+    expect(exercise.rehearsalMarks).toEqual([
+      { measureIndex: 0, offsetTicks: 0, text: 'A' },
+      { measureIndex: 1, offsetTicks: 2 * Duration.QUARTER.ticks, text: 'B' },
+    ]);
+    // None marked, none said.
+    expect('rehearsalMarks' in pageOf(marked.filter((event) => event.kind !== 'section')).exercise).toBe(false);
   });
 
   it("prints a hand's own dynamic on its staff, the right hand's above it, apart from those for both between them", () => {

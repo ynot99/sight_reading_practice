@@ -614,6 +614,12 @@ export function midiToExercise(
     ];
   });
 
+  // The parts of the piece it marks, where they begin on the page's grid, and none past the last bar.
+  const rehearsalMarks = document.sections
+    .map((section) => ({ ticks: pull(section.atTicks * scale), text: section.name }))
+    .filter((section) => section.ticks < (laid.bars[bars - 1]?.endTicks ?? 0))
+    .map((section) => ({ ...placed(section.ticks), text: section.text }));
+
   const exercise: Exercise = {
     id: `midi-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
     title,
@@ -631,6 +637,7 @@ export function midiToExercise(
         ...(dynamic.hand === 'right' ? { placement: 'above' as const } : {}),
       })),
     tempoWords: [],
+    ...(rehearsalMarks.length === 0 ? {} : { rehearsalMarks }),
     hairpins,
     octaveShifts: [],
     timeSignature,

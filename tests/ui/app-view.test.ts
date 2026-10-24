@@ -7953,6 +7953,33 @@ describe('AppView', () => {
       expect(kept()).toEqual([]);
     });
 
+    it('names the sections of a sketch written down as a score where they begin', async () => {
+      const { view, runtime, sketches } = createRig();
+      await view.initialize();
+      sketches.begin(
+        {
+          events: [
+            ...[0, 500, 1_000, 1_500, 2_000, 2_500, 3_000, 3_500].flatMap((atMs) => [
+              { kind: 'noteOn' as const, atMs, midi: 60, velocity: 0.5 },
+              { kind: 'noteOff' as const, atMs: atMs + 400, midi: 60 },
+            ]),
+            { kind: 'section' as const, atMs: 2_000, name: 'Chorus' },
+          ],
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'In parts',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Write this sketch down as a score').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise?.title).toBe('In parts');
+      });
+      // Its second bar, as it was named from there.
+      expect(runtime.controller.openedExercise?.rehearsalMarks).toEqual([{ measureIndex: 1, offsetTicks: 0, text: 'Chorus' }]);
+    });
+
     it('marks a dynamic from a beat in the sheet of a flag, prints it in the sketch written down, and copies it with the flag', async () => {
       const { view, sketches, clock, runtime } = createRig();
       await view.initialize();

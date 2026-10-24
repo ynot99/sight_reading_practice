@@ -879,7 +879,7 @@ describe('the sections of the music', () => {
     expect([1_000, 1_999.6, 2_000, 2_000.4, 3_000].map((atMs) => theSectionAt(one, atMs))).toEqual(['', 'A', 'A', 'A', '']);
   });
 
-  it('is written to a file as a marker, which the reader passes over', () => {
+  it('is written to a file as a marker, and read back as a section', () => {
     const marked = takeWithTheSectionAt(notes, 2_000, 'Bridge');
     const bytes = writeMidiFile(marked, { beats: click(0, 500, 16) });
     const name = [...new TextEncoder().encode('Bridge')];
@@ -890,6 +890,7 @@ describe('the sections of the music', () => {
     expect(written(bytes).find((each) => each.bytes[0] === 0xff && each.bytes[1] === 0x06)?.tick).toBe(4 * BEAT);
     const document = readMidiFile(bytes);
     expect(document.dynamics).toEqual([]);
+    expect(document.sections).toEqual([{ atTicks: 4 * BEAT, name: 'Bridge' }]);
     expect(readMidiFile(writeMidiFile(notes, { beats: click(0, 500, 16) })).notes).toEqual(document.notes);
   });
 });

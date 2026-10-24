@@ -10558,6 +10558,43 @@ describe('AppView', () => {
       expect([element('roll-circle').querySelector('.roll-circle__sounding-name')?.textContent, said(63)[2], said(64)[2]]).toEqual(['Cm', 'true', 'false']);
     });
 
+    it('writes from a slice of the circle by Enter or the space bar, the space bar not playing the drawing, and leaves its buttons their keys', async () => {
+      const { view, sketches, runtime } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: 400, midi: 60 },
+          ],
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Circled',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      element<HTMLButtonElement>('roll-chords-open').click();
+      const notes = (): number => (sketches.find(sketch.id)?.events ?? []).filter((event) => event.kind === 'noteOn').length;
+      const press = (target: Element | null, key: string): KeyboardEvent => {
+        const event = new KeyboardEvent('keydown', { key, code: key === ' ' ? 'Space' : key, bubbles: true, cancelable: true });
+        target?.dispatchEvent(event);
+        return event;
+      };
+      const slice = element('roll-circle').querySelector('[data-ring="major"][data-place="0"]');
+      const before = notes();
+      press(slice, ' ');
+      expect([notes() > before, runtime.takePlayer.playing]).toEqual([true, null]);
+      const written = notes();
+      press(slice, 'Enter');
+      expect(notes()).toBeGreaterThan(written);
+      // A button in the circle keeps its keys: not taken, nothing written.
+      const afterSlices = notes();
+      expect(press(element('roll-circle-names'), 'Enter').defaultPrevented).toBe(false);
+      expect(notes()).toBe(afterSlices);
+    });
+
     it('drafts another chord over the one chosen on the keys under the circle, heard as it changes, written or left', async () => {
       const { view, sketches, clock, instrument } = createRig();
       await view.initialize();

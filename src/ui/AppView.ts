@@ -10376,10 +10376,13 @@ export class AppView {
     this.listen(this.el.rollCircle, 'pointerout', (event) => {
       this.pointAtTheChord(theChordAskedForOnTheCircle((event as PointerEvent).relatedTarget));
     });
+    // Enter or the space bar on a slice or the middle writes its chord, the key the slice's and not the
+    // drawing's to play; on anything else in the circle - its buttons - it is that thing's own.
     this.listen(this.el.rollCircle, 'keydown', (event) => {
       const key = (event as KeyboardEvent).key;
-      if (key === 'Enter' || key === ' ') {
+      if ((key === 'Enter' || key === ' ') && theChordAskedForOnTheCircle(event.target) !== null) {
         event.preventDefault();
+        event.stopPropagation();
         writeFromTheCircle(event.target);
       }
     });

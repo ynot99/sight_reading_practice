@@ -1504,6 +1504,8 @@ export interface ChangeCopied {
   readonly dynamic?: DynamicLevel;
   /** The dynamic reached gradually from the one before wherever it is pasted. */
   readonly gradually?: true;
+  /** The part of the piece begun there, by its name. */
+  readonly section?: string;
 }
 
 /** What a change copied is called on the clipboard, so a paste can tell it from notes and any other text. */
@@ -1521,7 +1523,7 @@ export function theClipboardTextOfTheChange(change: ChangeCopied): string {
  * whole: a key, a signature a key can have and a scale this program
  * knows; a metre, a whole number of beats in a bar and a beat a note's
  * value can be; a pace, some crotchets a minute; a dynamic, a level a
- * score marks.
+ * score marks; a section, a name.
  */
 export function theChangeOnTheClipboard(text: string): ChangeCopied | null {
   let read: unknown;
@@ -1540,6 +1542,7 @@ export function theChangeOnTheClipboard(text: string): ChangeCopied | null {
     readonly crotchetsPerMinute?: unknown;
     readonly dynamic?: unknown;
     readonly gradually?: unknown;
+    readonly section?: unknown;
   } | null;
   if (typeof change !== 'object' || change === null) {
     return null;
@@ -1559,12 +1562,14 @@ export function theChangeOnTheClipboard(text: string): ChangeCopied | null {
     [1, 2, 4, 8, 16, 32].includes(Number(metre.beatType));
   const paceIsOne = Number.isFinite(pace) && Number(pace) > 0;
   const dynamic = DYNAMIC_LEVELS.find((level) => level === change.dynamic);
+  const section = typeof change.section === 'string' ? change.section.trim() : '';
   if (
     (key !== undefined && !keyIsOne) ||
     (metre !== undefined && !metreIsOne) ||
     (pace !== undefined && !paceIsOne) ||
     (change.dynamic !== undefined && dynamic === undefined) ||
-    (change.gradually !== undefined && (change.gradually !== true || dynamic === undefined))
+    (change.gradually !== undefined && (change.gradually !== true || dynamic === undefined)) ||
+    (change.section !== undefined && section === '')
   ) {
     return null;
   }
@@ -1574,6 +1579,7 @@ export function theChangeOnTheClipboard(text: string): ChangeCopied | null {
     ...(paceIsOne ? { crotchetsPerMinute: Number(pace) } : {}),
     ...(dynamic === undefined ? {} : { dynamic }),
     ...(change.gradually === true ? { gradually: true } : {}),
+    ...(section === '' ? {} : { section }),
   };
   return Object.keys(copied).length === 0 ? null : copied;
 }

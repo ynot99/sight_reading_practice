@@ -7953,6 +7953,77 @@ describe('AppView', () => {
       expect(kept()).toEqual([]);
     });
 
+    it('copies a section with its flag and pastes it on another beat, and a change pasted with none leaves the one there', async () => {
+      const { view, sketches, clock } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            ...Array.from({ length: 16 }, (_, at) => [
+              { kind: 'noteOn' as const, atMs: at * 500, midi: 60, velocity: 0.5 },
+              { kind: 'noteOff' as const, atMs: at * 500 + 400, midi: 60 },
+            ]).flat(),
+            { kind: 'section' as const, atMs: 2_000, name: 'Chorus' },
+            { kind: 'section' as const, atMs: 6_000, name: 'Bridge' },
+            { kind: 'dynamic' as const, atMs: 4_000, level: 'f' as const },
+          ],
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Parts',
+        1,
+      );
+      const written: string[] = [];
+      Object.defineProperty(window.navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: (text: string): Promise<void> => {
+            written.push(text);
+            return Promise.resolve();
+          },
+          readText: (): Promise<string> => Promise.resolve(written.at(-1) ?? ''),
+        },
+      });
+      try {
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-sketches').click();
+        rowButton('sketches-list', 'Edit this sketch').click();
+        const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+        const body = element('roll-body');
+        const sections = (): string[] =>
+          (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'section' ? [`${String(event.atMs)} ${event.name}`] : []));
+        const across = (ms: number): number =>
+          (ms / 1000) * zoom - (Number.parseFloat(body.querySelector<HTMLElement>('.roll__head')?.style.getPropertyValue('--roll-x') ?? '0') || 0);
+        const init = { bubbles: true, cancelable: true, pointerId: 83, pointerType: 'mouse', button: 0 };
+        const copyTheFlagSaying = (says: string): void => {
+          const flag = [...body.querySelectorAll<HTMLElement>('.roll__mark')].find((each) => each.textContent?.includes(says) === true);
+          flag?.dispatchEvent(new PointerEvent('pointerdown', init));
+          body.dispatchEvent(new PointerEvent('pointerup', init));
+          document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', code: 'KeyC', ctrlKey: true, bubbles: true, cancelable: true }));
+        };
+        const pasteAt = (ms: number): void => {
+          clock.advance(1_000);
+          tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: across(ms), clientY: 20 });
+          const pasted = new Event('paste', { bubbles: true, cancelable: true });
+          Object.defineProperty(pasted, 'clipboardData', {
+            value: { getData: (type: string): string => (type === 'text/plain' ? (written.at(-1) ?? '') : '') },
+          });
+          document.body.dispatchEvent(pasted);
+        };
+
+        copyTheFlagSaying('[Chorus]');
+        expect(JSON.parse(written.at(-1) ?? '{}')).toMatchObject({ change: { section: 'Chorus' } });
+        pasteAt(5_200);
+        expect(sections()).toEqual(['2000 Chorus', '5000 Chorus', '6000 Bridge']);
+        // The dynamic's flag, copied with no section, pasted where Bridge begins: Bridge stays.
+        copyTheFlagSaying(' f');
+        expect((JSON.parse(written.at(-1) ?? '{}') as { change?: { section?: string } }).change?.section).toBeUndefined();
+        pasteAt(6_200);
+        expect(sections()).toEqual(['2000 Chorus', '5000 Chorus', '6000 Bridge']);
+      } finally {
+        Reflect.deleteProperty(window.navigator, 'clipboard');
+      }
+    });
+
     it('names the sections of a sketch written down as a score where they begin', async () => {
       const { view, runtime, sketches } = createRig();
       await view.initialize();

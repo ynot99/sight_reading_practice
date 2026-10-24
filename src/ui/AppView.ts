@@ -15426,6 +15426,7 @@ export class AppView {
         : {}),
       ...(before === null || before.crotchetsPerMinute !== beat.crotchetsPerMinute ? { crotchetsPerMinute: beat.crotchetsPerMinute } : {}),
       ...theDynamicMarkedAt(stored.events, beat.atMs),
+      ...(theSectionAt(stored.events, beat.atMs) === '' ? {} : { section: theSectionAt(stored.events, beat.atMs) }),
     };
     this.changeCopiedHere = change;
     this.notesCopiedHere = null;
@@ -15463,8 +15464,8 @@ export class AppView {
       change.key ?? keyHere,
       change.dynamic ?? this.dynamicAskedAbout?.here ?? null,
       change.dynamic === undefined ? this.dynamicAskedAbout?.graduallyHere === true : change.gradually === true,
-      // A change copied says nothing of sections: the one here stays.
-      this.sectionAskedAbout,
+      // A section where the change copied begins one; otherwise the one here stays.
+      change.section ?? this.sectionAskedAbout,
     );
     this.chooseTheMark(beat.atMs);
   }

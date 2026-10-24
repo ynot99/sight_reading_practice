@@ -1716,9 +1716,12 @@ describe('changing a recording', () => {
       { crotchetsPerMinute: 1 },
       { dynamic: 'pp' as const },
       { dynamic: 'f' as const, gradually: true as const },
+      { section: 'Chorus' },
     ]) {
       expect(theChangeOnTheClipboard(theClipboardTextOfTheChange(part))).toEqual(part);
     }
+    // A section by its name, as a sheet trims it.
+    expect(theChangeOnTheClipboard(theClipboardTextOfTheChange({ section: '  B ' }))).toEqual({ section: 'B' });
     // A change of nothing is nothing to paste.
     expect(theChangeOnTheClipboard(theClipboardTextOfTheChange({}))).toBeNull();
     const written = JSON.parse(theClipboardTextOfTheChange(whole)) as { copied: string; change: Record<string, unknown> };
@@ -1751,6 +1754,11 @@ describe('changing a recording', () => {
       { gradually: true },
       { dynamic: 'f', gradually: 1 },
       { dynamic: 'f', gradually: false },
+      // A section, only by a name.
+      { section: '' },
+      { section: '   ' },
+      { section: 5 },
+      { section: null },
     ]) {
       expect(theChangeOnTheClipboard(withPart(part)), JSON.stringify(part)).toBeNull();
     }

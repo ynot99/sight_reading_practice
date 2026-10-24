@@ -659,6 +659,17 @@ function rowButton(listId: string, title: string): HTMLButtonElement {
 }
 
 /**
+ * Opens a sketch of the list in the editor by its button - the first, or the
+ * one given - once it has been written down on the page under the editor.
+ */
+async function editTheSketch(button: HTMLButtonElement | null | undefined = rowButton('sketches-list', 'Edit this sketch')): Promise<void> {
+  button?.click();
+  await vi.waitFor(() => {
+    expect(element('sheet-roll').hidden).toBe(false);
+  });
+}
+
+/**
  * Waits for something to become true, rather than for a length of time.
  *
  * A fixed pause is a race with whatever else the machine happens to be doing,
@@ -4011,7 +4022,7 @@ describe('AppView', () => {
         );
         element<HTMLButtonElement>('focus-scores').click();
         element<HTMLButtonElement>('scores-show-sketches').click();
-        rowButton('sketches-list', 'Edit this sketch').click();
+        await editTheSketch();
         const kinds = (): string[] =>
           [...element('roll-pitch-map').querySelectorAll<HTMLElement>('.roll-pitch-map__mark')].map((mark) =>
             [...mark.classList].filter((name) => name.startsWith('roll-pitch-map__mark--')).join(' '),
@@ -4053,7 +4064,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const body = element('roll-body');
       const keyOf = (midi: number): HTMLElement => {
         const found = body.querySelector<HTMLElement>(`.roll__key[data-midi='${String(midi)}']`);
@@ -4156,7 +4167,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const held = element<HTMLOutputElement>('roll-chord-held');
       const chosen = element<HTMLOutputElement>('roll-chord');
       const said = (pill: HTMLOutputElement): string | null => (pill.hidden ? null : (pill.textContent ?? '').trim());
@@ -4217,7 +4228,7 @@ describe('AppView', () => {
         );
         element<HTMLButtonElement>('focus-scores').click();
         element<HTMLButtonElement>('scores-show-sketches').click();
-        rowButton('sketches-list', 'Edit this sketch').click();
+        await editTheSketch();
         const highest = rig.view.rollScene?.highest ?? 0;
         const lit = (): number[] =>
           [...element('roll-body').querySelectorAll<HTMLElement>('.roll__key')].flatMap((key, row) =>
@@ -4288,7 +4299,7 @@ describe('AppView', () => {
         );
         element<HTMLButtonElement>('focus-scores').click();
         element<HTMLButtonElement>('scores-show-sketches').click();
-        rowButton('sketches-list', 'Edit this sketch').click();
+        await editTheSketch();
         const body = element('roll-body');
         const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
         const highest = rig.view.rollScene?.highest ?? 0;
@@ -5046,7 +5057,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const body = element('roll-body');
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const highest = view.rollScene?.highest ?? 0;
@@ -5288,7 +5299,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const scrolledDown = (): number =>
         Number.parseFloat(
@@ -5377,7 +5388,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const title = element('roll-title');
       const field = element<HTMLInputElement>('roll-rename');
       const write = (name: string, key: string): void => {
@@ -5573,7 +5584,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const scrolledDown = (): number =>
         Number.parseFloat(
@@ -5837,7 +5848,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       // On a sketch, the same copy, and the paste beside it, with the chords put away.
       expect(copy.hidden).toBe(false);
       expect(element('roll-side').hidden).toBe(true);
@@ -5874,7 +5885,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const highest = view.rollScene?.highest ?? 0;
       const scrolledDown = (): number =>
@@ -5963,7 +5974,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const highest = view.rollScene?.highest ?? 0;
       const scrolledDown =
@@ -6060,7 +6071,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoomInput = element<HTMLInputElement>('roll-zoom');
       const zoom = Number(zoomInput.value);
       const highest = view.rollScene?.highest ?? 0;
@@ -6169,7 +6180,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoomInput = element<HTMLInputElement>('roll-zoom');
       const zoom = Number(zoomInput.value);
       const along = (ms: number): number => (ms / 1000) * zoom;
@@ -6207,7 +6218,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const highest = view.rollScene?.highest ?? 0;
       const scrolledDown =
@@ -6318,7 +6329,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const highest = view.rollScene?.highest ?? 0;
       const scrolledDown =
@@ -6387,7 +6398,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const highest = view.rollScene?.highest ?? 0;
       const scrolledDown =
@@ -6528,7 +6539,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const highest = view.rollScene?.highest ?? 0;
       const scrolledDown =
@@ -6653,7 +6664,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const highest = view.rollScene?.highest ?? 0;
       const scrolledDown =
@@ -6814,7 +6825,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const highest = view.rollScene?.highest ?? 0;
       const scrolledDown =
@@ -6888,7 +6899,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const highest = view.rollScene?.highest ?? 0;
       const scrolledDown =
@@ -7000,7 +7011,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const highest = view.rollScene?.highest ?? 0;
       const scrolledDown =
@@ -7105,7 +7116,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const highest = view.rollScene?.highest ?? 0;
       const scrolledDown =
@@ -7226,7 +7237,7 @@ describe('AppView', () => {
       try {
         element<HTMLButtonElement>('focus-scores').click();
         element<HTMLButtonElement>('scores-show-sketches').click();
-        rowButton('sketches-list', 'Edit this sketch').click();
+        await editTheSketch();
         const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
         const highest = view.rollScene?.highest ?? 0;
         const scrolledDown =
@@ -7356,7 +7367,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const highest = view.rollScene?.highest ?? 0;
       const scrolledDown =
@@ -7437,7 +7448,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const tonic = element<HTMLSelectElement>('roll-key');
       const scale = element<HTMLSelectElement>('roll-scale');
       const tonics = (): string[] => [...tonic.options].map((option) => option.textContent ?? '');
@@ -7500,7 +7511,7 @@ describe('AppView', () => {
       element<HTMLButtonElement>('roll-close').click();
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       expect([tonic.value, scale.value]).toEqual(['5', 'mixolydian']);
     });
 
@@ -7520,7 +7531,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       element<HTMLButtonElement>('roll-mark').click();
       const tap = element<HTMLButtonElement>('roll-mark-tap');
       const tempo = element<HTMLInputElement>('roll-mark-tempo');
@@ -7596,7 +7607,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const mark = element<HTMLButtonElement>('roll-mark');
       const sheet = element('sheet-roll-mark');
@@ -7698,7 +7709,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const tonic = element<HTMLSelectElement>('roll-mark-key');
       const scale = element<HTMLSelectElement>('roll-mark-scale');
@@ -7819,7 +7830,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const metre = element<HTMLSelectElement>('roll-mark-metre');
       const tempo = element<HTMLInputElement>('roll-mark-tempo');
@@ -7896,7 +7907,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const section = element<HTMLInputElement>('roll-mark-section');
       const remove = element<HTMLButtonElement>('roll-mark-remove');
@@ -7986,7 +7997,7 @@ describe('AppView', () => {
       try {
         element<HTMLButtonElement>('focus-scores').click();
         element<HTMLButtonElement>('scores-show-sketches').click();
-        rowButton('sketches-list', 'Edit this sketch').click();
+        await editTheSketch();
         const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
         const body = element('roll-body');
         const sections = (): string[] =>
@@ -8051,6 +8062,65 @@ describe('AppView', () => {
       expect(runtime.controller.openedExercise?.rehearsalMarks).toEqual([{ measureIndex: 1, offsetTicks: 0, text: 'Chorus' }]);
     });
 
+    it('writes a sketch opened from the list down on the page under the editor, so its sections are named there once it is shut', async () => {
+      const { view, runtime, sketches, clock } = createRig();
+      await view.initialize();
+      const opened = runtime.controller.openedExercise;
+      sketches.begin(
+        {
+          events: Array.from({ length: 16 }, (_, at) => [
+            { kind: 'noteOn' as const, atMs: at * 500, midi: 60 + (at % 3) * 4, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: at * 500 + 400, midi: 60 + (at % 3) * 4 },
+          ]).flat(),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Parts',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      await editTheSketch();
+      // Under the editor, the sketch written down, in place of what the page was.
+      expect([opened?.title === 'Parts', runtime.controller.openedExercise?.title]).toEqual([false, 'Parts']);
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const section = element<HTMLInputElement>('roll-mark-section');
+      for (const [ms, name] of [
+        [100, 'A'],
+        [4_200, 'B'],
+      ] as const) {
+        clock.advance(1_000);
+        tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: (ms / 1000) * zoom, clientY: 20 });
+        element<HTMLButtonElement>('roll-mark').click();
+        section.value = name;
+        element<HTMLButtonElement>('roll-mark-yes').click();
+      }
+      const before = runtime.controller.openedExercise;
+      element<HTMLButtonElement>('roll-close').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise).not.toBe(before);
+      });
+      expect(runtime.controller.openedExercise?.rehearsalMarks).toEqual([
+        { measureIndex: 0, offsetTicks: 0, text: 'A' },
+        { measureIndex: 2, offsetTicks: 0, text: 'B' },
+      ]);
+      // One with nothing in it has nothing to write down: opened over the
+      // page as it is, and nothing said about it.
+      sketches.begin({ events: [], beats: [] }, 'Blank', 2);
+      const written = runtime.controller.openedExercise;
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      await editTheSketch(
+        [...element('sketches-list').querySelectorAll('li')]
+          .find((row) => row.textContent?.includes('Blank') === true)
+          ?.querySelector<HTMLButtonElement>('button[title="Edit this sketch"]'),
+      );
+      expect([element('roll-title').textContent, runtime.controller.openedExercise === written, element('result').textContent]).toEqual([
+        'Blank',
+        true,
+        '',
+      ]);
+    });
+
     it('marks a dynamic from a beat in the sheet of a flag, prints it in the sketch written down, and copies it with the flag', async () => {
       const { view, sketches, clock, runtime } = createRig();
       await view.initialize();
@@ -8079,7 +8149,7 @@ describe('AppView', () => {
       try {
         element<HTMLButtonElement>('focus-scores').click();
         element<HTMLButtonElement>('scores-show-sketches').click();
-        rowButton('sketches-list', 'Edit this sketch').click();
+        await editTheSketch();
         const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
         const body = element('roll-body');
         const dynamic = element<HTMLSelectElement>('roll-mark-dynamic');
@@ -8176,13 +8246,11 @@ describe('AppView', () => {
         expect((JSON.parse(written.at(-1) ?? '{}') as { change?: object }).change).toEqual({ key: { fifths: 1, scale: 'major' } });
         key({ key: 'z', code: 'KeyZ', ctrlKey: true });
 
-        // Written down, the page prints them on their beats.
+        // Shut, the page it is written down on prints them on their beats.
+        const before = runtime.controller.openedExercise;
         element<HTMLButtonElement>('roll-close').click();
-        element<HTMLButtonElement>('focus-scores').click();
-        element<HTMLButtonElement>('scores-show-sketches').click();
-        rowButton('sketches-list', 'Write this sketch down as a score').click();
         await vi.waitFor(() => {
-          expect(runtime.controller.openedExercise?.title).toBe('Dynamics');
+          expect(runtime.controller.openedExercise).not.toBe(before);
         });
         expect(
           runtime.controller.openedExercise?.dynamicMarks.map(({ measureIndex, offsetTicks, level }) => [measureIndex, offsetTicks / Duration.QUARTER.ticks, level]),
@@ -8242,13 +8310,23 @@ describe('AppView', () => {
         expect(runtime.controller.openedExercise).not.toBe(before);
       });
       expect(passage()).toEqual([2, 3]);
-      // Another sketch has a slice of its own, and the passage is left.
+      // Another sketch opened to be edited is written down on the page in
+      // its place, and a slice in it is the passage of that page.
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      ofTheSketch(other.title, 'Edit this sketch')?.click();
+      await editTheSketch(ofTheSketch(other.title, 'Edit this sketch'));
+      expect(runtime.controller.openedExercise?.title).toBe('Other');
+      ruler(6_200, { ctrlKey: true });
+      expect(passage()).toEqual([4, 4]);
+      // A new one, with nothing to write down, is not the page's: it has a
+      // slice of its own, and the passage is left.
+      element<HTMLButtonElement>('roll-close').click();
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      element<HTMLButtonElement>('sketches-new').click();
       ruler(6_200, { ctrlKey: true });
       expect(body.querySelector<HTMLElement>('.roll__slice')?.hidden).toBe(false);
-      expect(passage()).toEqual([2, 3]);
+      expect(passage()).toEqual([4, 4]);
     });
 
     it('carries the marker put in a sketch to where the page written down from it begins, and back', async () => {
@@ -8315,14 +8393,18 @@ describe('AppView', () => {
       await vi.waitFor(() => {
         expect(runtime.controller.barARunBeginsAt).toBe(1);
       });
-      // Another sketch, not the page's, carries nothing to it.
+      // A new one, with nothing to write down, is not the page's, and carries nothing to it.
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      ofTheSketch(elsewhere.title, 'Edit this sketch')?.click();
-      expect(element('roll-title').textContent).toBe('Elsewhere');
+      element<HTMLButtonElement>('sketches-new').click();
       ruler(6_200);
       element<HTMLButtonElement>('roll-close').click();
-      expect(runtime.controller.barARunBeginsAt).toBe(1);
+      expect([runtime.controller.openedExercise?.title, runtime.controller.barARunBeginsAt]).toEqual(['Carried', 1]);
+      // Another opened to be edited is written down on the page in its place.
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      await editTheSketch(ofTheSketch(elsewhere.title, 'Edit this sketch'));
+      expect([element('roll-title').textContent, runtime.controller.openedExercise?.title]).toEqual(['Elsewhere', 'Elsewhere']);
     });
 
     it('keeps the page of a sketch where it began when a change in the drawing writes it again, the marker left alone', async () => {
@@ -8395,7 +8477,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const body = element('roll-body');
       const sheet = element('sheet-roll-mark');
@@ -8445,7 +8527,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const body = element('roll-body');
       const insert = element<HTMLButtonElement>('roll-mark-insert');
@@ -8511,7 +8593,7 @@ describe('AppView', () => {
       try {
         element<HTMLButtonElement>('focus-scores').click();
         element<HTMLButtonElement>('scores-show-sketches').click();
-        rowButton('sketches-list', 'Edit this sketch').click();
+        await editTheSketch();
         const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
         const body = element('roll-body');
         const dynamic = element<HTMLSelectElement>('roll-mark-dynamic');
@@ -8601,13 +8683,11 @@ describe('AppView', () => {
         expect(marked()).toEqual(['0 p', '4000 f gradually', '5000 ff', '7000 f gradually']);
         expect(marks()).toEqual(['1: C major 4/4 ♩=120 p', '3: < f', ': ff', ': > f']);
 
-        // Written down, each a hairpin from the dynamic before it.
+        // Shut, the page it is written down on has each a hairpin from the dynamic before it.
+        const before = runtime.controller.openedExercise;
         element<HTMLButtonElement>('roll-close').click();
-        element<HTMLButtonElement>('focus-scores').click();
-        element<HTMLButtonElement>('scores-show-sketches').click();
-        rowButton('sketches-list', 'Write this sketch down as a score').click();
         await vi.waitFor(() => {
-          expect(runtime.controller.openedExercise?.title).toBe('Swelling');
+          expect(runtime.controller.openedExercise).not.toBe(before);
         });
         expect(
           runtime.controller.openedExercise?.hairpins.map(({ measureIndex, offsetTicks, kind, untilMeasureIndex, untilOffsetTicks }) => [
@@ -8655,7 +8735,7 @@ describe('AppView', () => {
       try {
         element<HTMLButtonElement>('focus-scores').click();
         element<HTMLButtonElement>('scores-show-sketches').click();
-        rowButton('sketches-list', 'Edit this sketch').click();
+        await editTheSketch();
         const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
         const body = element('roll-body');
         const marks = (): string[] => (view.rollScene?.marks ?? []).map((each) => `${each.after}: ${each.says}`);
@@ -8855,7 +8935,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       element<HTMLButtonElement>('roll-chords-open').click();
       const chords = (): HTMLElement[] => [...element('roll-chords-list').querySelectorAll<HTMLElement>('[data-chord]')];
@@ -8946,7 +9026,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const record = element<HTMLButtonElement>('roll-record');
       const player = runtime.takePlayer;
@@ -9108,7 +9188,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const body = element('roll-body');
       const ruler = (): Element => body.querySelector('.roll__ruler') ?? body;
@@ -9261,7 +9341,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const body = element('roll-body');
       const ruler = (): Element => body.querySelector('.roll__ruler') ?? body;
@@ -9336,17 +9416,17 @@ describe('AppView', () => {
         'Round',
         2,
       );
-      const edit = (which: number): void => {
+      const edit = async (which: number): Promise<void> => {
         element<HTMLButtonElement>('roll-close').click();
         element<HTMLButtonElement>('focus-scores').click();
         element<HTMLButtonElement>('scores-show-sketches').click();
-        element('sketches-list').querySelectorAll<HTMLButtonElement>('button[title="Edit this sketch"]')[which]?.click();
+        await editTheSketch(element('sketches-list').querySelectorAll<HTMLButtonElement>('button[title="Edit this sketch"]')[which]);
       };
       const shown = (): boolean => body.querySelector<HTMLElement>('.roll__slice')?.hidden === false;
       // The two, one after the other: one has it, the other has none.
-      edit(0);
+      await edit(0);
       const first = shown();
-      edit(1);
+      await edit(1);
       expect([first, shown()].sort()).toEqual([false, true]);
     });
 
@@ -9366,7 +9446,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const body = element('roll-body');
       const flags = (): HTMLButtonElement[] => [...body.querySelectorAll<HTMLButtonElement>('.roll__mark')];
@@ -9484,7 +9564,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       expect((view.rollScene?.marks ?? []).map((mark) => [mark.atMs, mark.after, mark.says])).toEqual([[0, '1', 'C major 7/4 \u2669=120']]);
       // The cursor a moment into the second bar, three and a half seconds into the drawing.
@@ -9517,7 +9597,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const highest = view.rollScene?.highest ?? 0;
       const scrolledDown =
@@ -9689,7 +9769,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const stage = (): HTMLElement | null => element('roll-body').closest<HTMLElement>('.roll-stage');
       const lane = (): string[] => (view.rollScene?.chords ?? []).map((chord) => `${String(chord.fromMs)}-${String(chord.untilMs)} ${chord.name} ${chord.numeral}`);
 
@@ -9829,7 +9909,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       element<HTMLButtonElement>('roll-chords-open').click();
       expect(element('sheet-roll').dataset['chords']).toBe('true');
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
@@ -9883,7 +9963,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const cursorAt = (ms: number): void => {
         clock.advance(1_000);
@@ -9965,7 +10045,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const cursorAt = (ms: number): void => {
         clock.advance(1_000);
@@ -10191,7 +10271,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       // Its leading note's chord: G♯, not the A♭ a key without sharps would spell.
       for (const key of [68, 71, 74]) {
         midi.noteOn(key, clock.now());
@@ -10231,7 +10311,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       expect(open.hidden).toBe(false);
       sketches.remove(sketch.id);
       open.click();
@@ -10346,7 +10426,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const open = element<HTMLButtonElement>('roll-chart-open');
       const chart = element('roll-chart');
       const bars = (): string[] =>
@@ -10450,7 +10530,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       element<HTMLButtonElement>('roll-chords-open').click();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const cursorAt = (ms: number): void => {
@@ -10538,7 +10618,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       element<HTMLButtonElement>('roll-chords-open').click();
       element<HTMLButtonElement>('roll-chart-open').click();
       const keys = element('roll-circle-keys');
@@ -10574,7 +10654,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       element<HTMLButtonElement>('roll-chords-open').click();
       const notes = (): number => (sketches.find(sketch.id)?.events ?? []).filter((event) => event.kind === 'noteOn').length;
       const press = (target: Element | null, key: string): KeyboardEvent => {
@@ -10614,7 +10694,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       element<HTMLButtonElement>('roll-chords-open').click();
       element<HTMLButtonElement>('roll-chart-open').click();
       const chart = element('roll-chart');
@@ -10706,7 +10786,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       element<HTMLButtonElement>('roll-chords-open').click();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       clock.advance(1_000);
@@ -10800,7 +10880,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       element<HTMLButtonElement>('roll-chords-open').click();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       clock.advance(1_000);
@@ -10879,7 +10959,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       element<HTMLButtonElement>('roll-chords-open').click();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const cursorAt = (ms: number): void => {
@@ -10928,7 +11008,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       element<HTMLButtonElement>('roll-chords-open').click();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const theLane = (): HTMLCanvasElement => {
@@ -11043,7 +11123,7 @@ describe('AppView', () => {
         );
         element<HTMLButtonElement>('focus-scores').click();
         element<HTMLButtonElement>('scores-show-sketches').click();
-        rowButton('sketches-list', 'Edit this sketch').click();
+        await editTheSketch();
         element<HTMLButtonElement>('roll-chords-open').click();
         const chord = (at: number): HTMLElement => {
           const found = element('roll-chords-list').querySelector<HTMLElement>(`[data-chord="${String(at)}"]`);
@@ -11238,7 +11318,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const highest = view.rollScene?.highest ?? 0;
       const scrolledDown =
@@ -11336,7 +11416,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const open = element<HTMLButtonElement>('roll-chords-open');
       const forget = element<HTMLButtonElement>('roll-chords-forget');
       const list = element('roll-chords-list');
@@ -11444,7 +11524,7 @@ describe('AppView', () => {
       try {
         element<HTMLButtonElement>('focus-scores').click();
         element<HTMLButtonElement>('scores-show-sketches').click();
-        rowButton('sketches-list', 'Edit this sketch').click();
+        await editTheSketch();
         const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
         const highest = view.rollScene?.highest ?? 0;
         const scrolledDown =
@@ -11550,7 +11630,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const highest = view.rollScene?.highest ?? 0;
       const scrolledDown =
@@ -11671,7 +11751,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const quantize = element<HTMLButtonElement>('roll-quantize');
       const notes = (): number[][] => {
         const events = sketches.find(sketch.id)?.events ?? [];
@@ -11738,7 +11818,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const humanize = element<HTMLButtonElement>('roll-humanize');
       const struck = (): number[][] =>
         (sketches.find(sketch.id)?.events ?? []).flatMap((event) =>
@@ -11797,7 +11877,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const highest = view.rollScene?.highest ?? 0;
       const scrolledDown =
@@ -11875,7 +11955,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const lane = (): Element => element('roll-body').querySelector('.roll__pedal') ?? element('roll-body');
       const on = (type: string, ms: number, init: PointerEventInit = {}): void => {
@@ -12006,7 +12086,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const highest = view.rollScene?.highest ?? 0;
       const scrolledDown =
@@ -12060,7 +12140,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
 
       const metre = element<HTMLSelectElement>('roll-metre');
       expect(metre.value).toBe('11/16');
@@ -12111,7 +12191,7 @@ describe('AppView', () => {
       expect(element('sketches-empty').hidden).toBe(true);
       expect(element('sketches-list').textContent).toContain(`${sketch?.title ?? ''} · 4 notes`);
 
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       expect(element('sheet-scores').hidden).toBe(true);
       expect(element('roll-title').textContent).toBe(sketch?.title);
       expect(element('roll-edit').getAttribute('aria-pressed')).toBe('true');
@@ -12172,7 +12252,7 @@ describe('AppView', () => {
       const sketch = sketches.begin({ events: played, beats: [] }, 'Keys', 1);
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const scrolledDown = (): number =>
         Number.parseFloat(
@@ -12240,7 +12320,7 @@ describe('AppView', () => {
       const sketch = sketches.begin({ events: played, beats: [] }, 'Marked', 1);
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const loudness = (): number[] =>
         (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'noteOn' ? [Math.round(event.velocity * 127)] : []));
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
@@ -12364,7 +12444,7 @@ describe('AppView', () => {
       const sketch = sketches.begin({ events: played, beats: [] }, 'Loud', 1);
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const row = element('roll-velocity');
       const level = element<HTMLInputElement>('roll-velocity-level');
       const said = (): string => element<HTMLOutputElement>('roll-velocity-said').value;
@@ -12445,7 +12525,7 @@ describe('AppView', () => {
       const sketch = sketches.begin({ events: played, beats: [] }, 'Crossed', 1);
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const hands = element('roll-hands');
       const [left, pitch, right] = ['roll-hand-left', 'roll-hand-pitch', 'roll-hand-right'].map((id) => element<HTMLButtonElement>(id));
       const pressed = (): string[] => [left, pitch, right].map((button) => button?.getAttribute('aria-pressed') ?? '');
@@ -12495,14 +12575,14 @@ describe('AppView', () => {
       right?.click();
       expect(handsOf()).toEqual(['right', 'right']);
       left?.click();
+      const before = runtime.controller.openedExercise;
       element<HTMLButtonElement>('roll-close').click();
 
-      // Saved, a track for each hand; written down, on the lower staff.
+      // Saved, a track for each hand; shut, the page it is written down on has them on the lower staff.
       element<HTMLButtonElement>('focus-scores').click();
       rowButton('sketches-list', 'Save this sketch as a MIDI file').click();
       expect(readMidiFile(files.saved[0]?.bytes ?? new Uint8Array()).trackNames).toEqual(['Right hand', 'Left hand']);
-      rowButton('sketches-list', 'Write this sketch down as a score').click();
-      await waitFor(() => runtime.controller.openedExercise?.title === 'Crossed');
+      await waitFor(() => runtime.controller.openedExercise !== before);
       const written = runtime.controller.openedExercise;
       const staves = written === null ? [] : buildTimeline(written).steps.flatMap((step) => step.notes.map((note) => note.staffNumber));
       expect(staves).toEqual([2, 2]);
@@ -12527,7 +12607,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
-      rowButton('sketches-list', 'Edit this sketch').click();
+      await editTheSketch();
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const body = element('roll-body');
       tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: 0.5 * zoom, clientY: 5 });
@@ -14458,7 +14538,7 @@ describe('AppView', () => {
         );
         element<HTMLButtonElement>('focus-scores').click();
         element<HTMLButtonElement>('scores-show-sketches').click();
-        rowButton('sketches-list', 'Edit this sketch').click();
+        await editTheSketch();
         // How faint the notes painted are: a soft note is painted faint, and so is one being recorded.
         const faint = (): number[] =>
           [...new Set(grid.marks.filter((mark) => mark.how === 'fill' && mark.alpha > 0 && mark.alpha < 1).map((mark) => mark.alpha))];
@@ -23185,7 +23265,7 @@ describe('the library on Google Drive', () => {
       { kind: 'noteOff' as const, atMs: 900, midi: 64 },
     ]);
     await otherSync.sync(null);
-    rowButton('sketches-list', 'Edit this sketch').click();
+    await editTheSketch();
     expect(rig.view.rollScene?.notes).toHaveLength(1);
     await sync();
     expect(element('drive-status').textContent).toContain('Sketches sent 0, brought here 1.');
@@ -23230,7 +23310,7 @@ describe('the library on Google Drive', () => {
     await otherSync.sync(null);
     element<HTMLButtonElement>('focus-scores').click();
     element<HTMLButtonElement>('scores-show-sketches').click();
-    rowButton('sketches-list', 'Edit this sketch').click();
+    await editTheSketch();
     // Another sketch begun here, for the sync to send - and held as it
     // writes the sketches, the drive's already taken here by then.
     rig.sketches.begin({ events: played, beats }, 'Only here', 1);
@@ -23484,7 +23564,7 @@ describe('the library on Google Drive', () => {
     );
     element<HTMLButtonElement>('focus-scores').click();
     element<HTMLButtonElement>('scores-show-sketches').click();
-    rowButton('sketches-list', 'Edit this sketch').click();
+    await editTheSketch();
     element<HTMLButtonElement>('roll-chords-open').click();
     const names = (): string[] =>
       [...element('roll-chords-list').querySelectorAll('.roll-chords__chord--kept .roll-chords__name')].map(

@@ -3551,10 +3551,7 @@ export class AppView {
       sketch !== null &&
       (wanted === 'lastSketch' || (wanted === 'lastOfAll' && (lastRead === null || sketch.atMs > lastRead.openedAtMs)))
     ) {
-      // In the editor, where a sketch is worked on, over it written down,
-      // which is what the page shows once the editor is shut.
-      await this.writeDownTheSketch(sketch.sketch.id, this.el.sheetScores);
-      this.showTheSketch(sketch.sketch.id);
+      await this.openTheSketchToEdit(sketch.sketch.id);
       return;
     }
     const chosen =
@@ -11345,7 +11342,7 @@ export class AppView {
       edit.textContent = 'Edit';
       edit.title = 'Edit this sketch';
       edit.setAttribute('aria-label', `Edit ${sketch.title}`);
-      this.listen(edit, 'click', () => this.showTheSketch(sketch.id));
+      this.listen(edit, 'click', () => void this.openTheSketchToEdit(sketch.id));
 
       const write = this.doc.createElement('button');
       write.type = 'button';
@@ -11507,6 +11504,21 @@ export class AppView {
     const opened = await this.writeDown(sketch, sketch.title, from);
     this.theSketchOnThePage = opened === null ? null : { sketch, exercise: opened };
     this.showThePencilBesideThePills();
+  }
+
+  /**
+   * Opens a sketch in the editor, where a sketch is worked on, over it
+   * written down: the page under the editor is the sketch, so shutting the
+   * editor shows it as it was changed there - its sections named, its notes
+   * moved. Over another score's page, what was changed showed nowhere until
+   * the sketch was written down by hand. One with no notes has nothing to
+   * write down, and opens over the page as it is.
+   */
+  private async openTheSketchToEdit(id: string): Promise<void> {
+    if ((this.runtime.sketches.find(id)?.noteCount ?? 0) > 0) {
+      await this.writeDownTheSketch(id, this.el.sheetScores);
+    }
+    this.showTheSketch(id);
   }
 
   /**

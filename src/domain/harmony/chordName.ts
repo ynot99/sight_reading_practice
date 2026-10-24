@@ -320,6 +320,26 @@ function theNameOfTheRootIn(
   return fifths === null || scale === undefined ? nameOfThePitchClass(chord.root, fifths) : theNameOfTheRoot(chord, { fifths, scale });
 }
 
+/** What each degree of a scale is called, from the tonic up. */
+const DEGREE_NAMES = ['tonic', 'supertonic', 'mediant', 'subdominant', 'dominant', 'submediant', 'leading tone'] as const;
+
+/**
+ * What the degree a chord stands on is called (see `theDegreeOfTheRoot`):
+ * the supertonic, the mediant, and so on. The seventh by how far it is
+ * under the tonic, as it is heard: a semitone, the leading tone, which
+ * leads up to it; further, the subtonic, which does not - B♭ in C, or G in
+ * A minor. Any other degree off the scale, raised or lowered.
+ */
+export function theNameOfTheDegree(chord: { readonly root: number; readonly kind: ChordKind }, key: KeyOfTheChord): string {
+  const { degree, alter } = theDegreeOfTheRoot(chord, key);
+  if (degree === 6) {
+    const under = floorMod((thePitchClassesOfTheScale(key.fifths, key.scale)[0] ?? 0) - chord.root, 12);
+    return under === 1 ? 'leading tone' : 'subtonic';
+  }
+  const called = DEGREE_NAMES[degree] ?? '';
+  return alter === 0 ? called : `${alter > 0 ? 'raised' : 'lowered'} ${called}`;
+}
+
 /**
  * A chord's degree in a key, in roman numerals: upper case where its third
  * is major, lower where minor, and what its kind adds after (see

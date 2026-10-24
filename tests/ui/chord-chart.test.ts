@@ -105,7 +105,7 @@ describe('the chart of the chords', () => {
     expect(fm?.querySelector('.roll-chart__function')?.textContent).toBe('S');
     expect(fm?.querySelector('.roll-chart__notes')?.textContent).toBe('F A♭ C');
     expect(fm?.title).toBe(
-      'Fm (iv, F A♭ C): subdominant: moving away, outside the key. Tension 2.5, brightness -1.2. Press to put the cursor here.',
+      'Fm (iv, F A♭ C): the subdominant, of the subdominant group: moving away, outside the key. Tension 2.5, brightness -1.2. Press to put the cursor here.',
     );
     expect(buttons[0]?.querySelector('.roll-chart__key')?.textContent).toBe('C major');
     expect(buttons[1]?.querySelector('.roll-chart__key')).toBeNull();

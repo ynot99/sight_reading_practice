@@ -1,5 +1,5 @@
 import { theBrightnessOfTheChord, theTensionOfTheChord } from '../domain/harmony/chordFeeling.js';
-import { theNotesOfTheChordNamed } from '../domain/harmony/chordName.js';
+import { theNameOfTheDegree, theNotesOfTheChordNamed } from '../domain/harmony/chordName.js';
 import { theChordInTheKey, type HarmonicFunction } from '../domain/harmony/harmonicFunction.js';
 import { theNameOfTheKey } from '../domain/harmony/scales.js';
 import type { SceneBar, SceneChord } from './rollView.js';
@@ -19,6 +19,8 @@ export interface ChartChord {
   readonly untilMs: number;
   readonly name: string;
   readonly numeral: string;
+  /** What the degree it stands on is called: the mediant, the subtonic. */
+  readonly degree: string;
   /** Its notes from its root up, as its key spells them. */
   readonly notes: string;
   readonly function: HarmonicFunction | null;
@@ -95,6 +97,7 @@ export function theChartOfTheChords(
           untilMs: chord.untilMs,
           name: chord.name,
           numeral: chord.numeral,
+          degree: theNameOfTheDegree(chord, chord.key),
           notes: theNotesOfTheChordNamed(chord, chord.key.fifths, chord.key.scale).join(' '),
           function: standing.function,
           ofTheKey: standing.ofTheKey,
@@ -108,11 +111,11 @@ export function theChartOfTheChords(
   });
 }
 
-/** What a function is called on a chord, and its letter. */
+/** What a function is called on a chord, and its letter: the group of degrees it is one of, and what they do. */
 const SAID: Readonly<Record<HarmonicFunction, { readonly letter: string; readonly called: string }>> = {
-  tonic: { letter: 'T', called: 'tonic: rest' },
-  subdominant: { letter: 'S', called: 'subdominant: moving away' },
-  dominant: { letter: 'D', called: 'dominant: pulling home' },
+  tonic: { letter: 'T', called: 'of the tonic group: at rest' },
+  subdominant: { letter: 'S', called: 'of the subdominant group: moving away' },
+  dominant: { letter: 'D', called: 'of the dominant group: pulling home' },
 };
 
 /** A chord's tension and brightness for as long as it lasts: a step of the curves over the chart. */
@@ -383,12 +386,14 @@ function theChordOfTheChart(doc: Document, chord: ChartChord): HTMLButtonElement
   does.textContent = chord.function === null ? '' : SAID[chord.function].letter;
   parts.push(name, numeral, notes, does);
   button.append(...parts);
+  // The degree it stands on, and the group of degrees that does as it does: the mediant, of the tonic group.
   const standing = [
+    `the ${chord.degree}`,
     chord.function === null ? null : SAID[chord.function].called,
     chord.ofTheKey ? null : 'outside the key',
   ].filter((each) => each !== null);
   button.title =
-    `${chord.name} (${chord.numeral}, ${chord.notes})${standing.length === 0 ? '' : `: ${standing.join(', ')}`}. ` +
+    `${chord.name} (${chord.numeral}, ${chord.notes}): ${standing.join(', ')}. ` +
     `Tension ${chord.tension.toFixed(1)}, brightness ${chord.brightness.toFixed(1)}. Press to put the cursor here.`;
   return button;
 }

@@ -6,6 +6,7 @@ import {
   theChordMostOfTheNotesMake,
   theChordTheKeysMake,
   theChordTheNotesMake,
+  theNameOfTheDegree,
   theNotesOfTheChordNamed,
   theNumeralOfTheChord,
   type ChordHeard,
@@ -272,6 +273,31 @@ describe('the degree of a chord in a scale', () => {
     // F sharp in A harmonic minor, which has neither G nor F sharp: a
     // semitone over F, its sixth degree.
     expect(said([C4 + 6, C4 + 10, C4 + 13], { fifths: 0, scale: 'harmonicMinor' })).toBe('♯VI');
+  });
+
+  it('calls each degree by its name, the seventh by how far under the tonic it is, and one off the scale raised or lowered', () => {
+    const called = (fifths: number, scale: KeyOfTheChord['scale'], midis: readonly number[]): string => {
+      const made = theChordTheKeysMake(midis, fifths, scale);
+      return made === null ? '-' : theNameOfTheDegree(made, { fifths, scale });
+    };
+    // The seven of C major.
+    expect([
+      [60, 64, 67],
+      [62, 65, 69],
+      [64, 67, 71],
+      [65, 69, 72],
+      [67, 71, 74],
+      [69, 72, 76],
+      [71, 74, 77],
+    ].map((midis) => called(0, 'major', midis))).toEqual(['tonic', 'supertonic', 'mediant', 'subdominant', 'dominant', 'submediant', 'leading tone']);
+    // B♭ in C and G in A minor a whole tone under: the subtonic; G♯ in A minor a semitone under: the leading tone.
+    expect([called(0, 'major', [70, 74, 77]), called(0, 'minor', [67, 71, 74]), called(0, 'minor', [68, 71, 74])]).toEqual(['subtonic', 'subtonic', 'leading tone']);
+    // A♭ in C, F♯ diminished in C, F♯ diminished in A minor.
+    expect([called(0, 'major', [68, 72, 75]), called(0, 'major', [66, 69, 72]), called(0, 'minor', [66, 69, 72])]).toEqual([
+      'lowered submediant',
+      'raised subdominant',
+      'raised submediant',
+    ]);
   });
 
   it('names and numbers a root off the scale one way, as leaves its chord the fewer notes off the key', () => {

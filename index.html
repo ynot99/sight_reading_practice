@@ -58,21 +58,32 @@
     </script>
 
     <!--
+      The colour of the bar the system draws above the app once it is
+      installed. Dark until the theme is known; the script under it and the
+      program light it where the interface is light.
+    -->
+    <meta name="theme-color" content="#14181f" />
+
+    <!--
       The theme chosen, said on the root before anything is painted. The
       settings are read by the program only once the browser's database has
       opened, and until then the page would be drawn in the system's theme -
       a white flash at night for a reader who chose dark. So the two choices
       are copied from where the settings are kept, here and nowhere else
       outside the program; anything unreadable leaves the system's.
+      The bar above an installed app is coloured here too, from the theme
+      that reaches the root: it is drawn before the page is.
       `tests/ui/app-view.test.ts` holds this to what the program itself says.
     -->
     <script id="theme-before-paint">
       (function () {
+        var theme = 'system';
         try {
           var kept = JSON.parse(localStorage.getItem('sight-reading-practice/settings') || 'null');
           var practice = (kept && kept.practice) || {};
           var root = document.documentElement;
           if (['system', 'light', 'light-dark-dialogs', 'dark'].indexOf(practice.theme) >= 0) {
+            theme = practice.theme;
             root.setAttribute('data-theme', practice.theme);
           }
           if (['dark', 'light-dark-dialogs'].indexOf(practice.darkSystemTheme) >= 0) {
@@ -80,6 +91,11 @@
           }
         } catch (unreadable) {
           // The system's theme, which is what no answer means.
+        }
+        var bar = document.querySelector('meta[name="theme-color"]');
+        var systemIsDark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (bar) {
+          bar.setAttribute('content', theme === 'light' || (theme === 'system' && !systemIsDark) ? '#ffffff' : '#14181f');
         }
       })();
     </script>
@@ -93,7 +109,6 @@
       leave.
     -->
     <link rel="manifest" href="manifest.webmanifest" />
-    <meta name="theme-color" content="#14181f" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />

@@ -383,6 +383,13 @@ import { calibrationExercise } from '../domain/generation/calibrationExercise.js
  * short enough that a single press still looks immediate.
  */
 /** How often the bridge pill may redraw while he plays. */
+/**
+ * The bar the system draws above the app once it is installed, light and
+ * dark: the page's own ground in each, so the bar and the page read as one.
+ */
+const SYSTEM_BAR_LIGHT = '#ffffff';
+const SYSTEM_BAR_DARK = '#14181f';
+
 const HOP_REFRESH_MS = 1_000;
 
 /**
@@ -9298,6 +9305,7 @@ export class AppView {
     // stylesheet's to ask the system, so a change of it needs nobody here.
     this.doc.documentElement.dataset['theme'] = settings.theme;
     this.doc.documentElement.dataset['darkSystem'] = settings.darkSystemTheme;
+    this.colourTheSystemBar();
     this.el.showPlayedDescription.textContent = PLAYED_NOTE_DESCRIPTIONS[settings.playedNotes];
     this.el.readAhead.value = readAheadValue(settings.readAheadSteps);
     this.el.readAheadDescription.textContent =
@@ -18348,12 +18356,33 @@ export class AppView {
       const dark = view.matchMedia('(prefers-color-scheme: dark)');
       const repaint = (): void => {
         this.paintInTheColoursNow();
+        this.colourTheSystemBar();
       };
       dark.addEventListener('change', repaint);
       this.subscriptions.push(() => {
         dark.removeEventListener('change', repaint);
       });
     }
+  }
+
+  /**
+   * Colours the bar the system draws above the app once it is installed.
+   *
+   * The one colour the stylesheet cannot reach: the system reads it from the
+   * page's `theme-color`, never from anything painted. Light only where the
+   * interface is - chosen outright, or System while the system is light -
+   * and dark wherever the dialogs are, a white page under them included:
+   * the bar stands with the bars and dialogs, not over the music.
+   */
+  private colourTheSystemBar(): void {
+    const bar = this.doc.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    if (bar === null) {
+      return;
+    }
+    const view = this.doc.defaultView;
+    const systemIsDark = typeof view?.matchMedia === 'function' && view.matchMedia('(prefers-color-scheme: dark)').matches;
+    const { theme } = this.runtime.controller.settings;
+    bar.content = theme === 'light' || (theme === 'system' && !systemIsDark) ? SYSTEM_BAR_LIGHT : SYSTEM_BAR_DARK;
   }
 
   /**

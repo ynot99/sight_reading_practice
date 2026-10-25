@@ -23471,11 +23471,94 @@ describe('the theme', () => {
     select.dispatchEvent(new Event('change'));
   };
 
+  /** The bar the system draws above an installed app, as the head holds it. */
+  const bar = (): HTMLMetaElement => {
+    const found = document.head.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    if (found !== null) {
+      return found;
+    }
+    const made = document.createElement('meta');
+    made.name = 'theme-color';
+    document.head.append(made);
+    return made;
+  };
+  /**
+   * A system whose theme is dark or light, as the page asks it; turning it
+   * tells whoever listens for the change.
+   */
+  const aSystem = (dark: boolean): { turn: (toDark: boolean) => void } => {
+    let isDark = dark;
+    const listeners: (() => void)[] = [];
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: (query: string) => ({
+        get matches() {
+          return query === '(prefers-color-scheme: dark)' && isDark;
+        },
+        addEventListener: (_: string, listener: () => void) => {
+          listeners.push(listener);
+        },
+        removeEventListener: () => {},
+      }),
+    });
+    return {
+      turn: (toDark) => {
+        isDark = toDark;
+        for (const listener of listeners) {
+          listener();
+        }
+      },
+    };
+  };
+
   beforeEach(() => {
     mountRealMarkup();
     delete root.dataset['theme'];
     delete root.dataset['darkSystem'];
     window.localStorage.clear();
+    bar().content = '';
+  });
+
+  afterEach(() => {
+    Reflect.deleteProperty(window, 'matchMedia');
+  });
+
+  it('colours the bar above an installed app light only where the interface is light', async () => {
+    const coloured: string[] = [];
+    for (const dark of [false, true]) {
+      aSystem(dark);
+      mountRealMarkup();
+      const { view } = createRig();
+      await view.initialize();
+      for (const theme of THEMES) {
+        choose('theme', theme);
+        coloured.push(`${dark ? 'dark' : 'light'} system, ${theme}: ${bar().content}`);
+      }
+      view.dispose();
+    }
+
+    expect(coloured).toEqual([
+      'light system, system: #ffffff',
+      'light system, light: #ffffff',
+      'light system, light-dark-dialogs: #14181f',
+      'light system, dark: #14181f',
+      'dark system, system: #14181f',
+      'dark system, light: #ffffff',
+      'dark system, light-dark-dialogs: #14181f',
+      'dark system, dark: #14181f',
+    ]);
+    // A system turning dark at dusk takes the bar with it, while System is chosen.
+    const system = aSystem(false);
+    mountRealMarkup();
+    const { view } = createRig();
+    await view.initialize();
+    choose('theme', 'system');
+    expect(bar().content).toBe('#ffffff');
+    system.turn(true);
+    expect(bar().content).toBe('#14181f');
+    // Dark in the file, until a theme is known: the head colours it before the page is drawn.
+    expect(INDEX_HTML.indexOf('<meta name="theme-color" content="#14181f" />')).toBeGreaterThan(-1);
+    expect(INDEX_HTML.indexOf('<meta name="theme-color"')).toBeLessThan(INDEX_HTML.indexOf('<script id="theme-before-paint">'));
   });
 
   it("offers four themes in the appearance settings, the system's first", async () => {
@@ -23562,26 +23645,30 @@ describe('the theme', () => {
     expect(script).not.toBe('');
     const runTheScript = new Function(script) as () => void;
 
-    for (const theme of THEMES) {
-      for (const darkSystem of DARK_SYSTEM_THEMES) {
-        mountRealMarkup();
-        window.localStorage.clear();
-        const store = new InMemorySettingsStore();
-        const { view } = createRig(undefined, store);
-        await view.initialize();
-        choose('theme', theme);
-        choose('dark-system-theme', darkSystem);
-        view.dispose();
-        const byTheProgram = said();
-        // Kept where the browser keeps it, by the store the program uses there.
-        new LocalStorageSettingsStore(window.localStorage, DEFAULT_STORAGE_KEY).write(store.read());
+    for (const systemIsDark of [false, true]) {
+      aSystem(systemIsDark);
+      mountRealMarkup();
+      window.localStorage.clear();
+      const store = new InMemorySettingsStore();
+      const { view } = createRig(undefined, store);
+      await view.initialize();
+      for (const theme of THEMES) {
+        for (const darkSystem of DARK_SYSTEM_THEMES) {
+          choose('theme', theme);
+          choose('dark-system-theme', darkSystem);
+          const byTheProgram = { ...said(), bar: bar().content };
+          // Kept where the browser keeps it, by the store the program uses there.
+          new LocalStorageSettingsStore(window.localStorage, DEFAULT_STORAGE_KEY).write(store.read());
 
-        delete root.dataset['theme'];
-        delete root.dataset['darkSystem'];
-        runTheScript();
+          delete root.dataset['theme'];
+          delete root.dataset['darkSystem'];
+          bar().content = '';
+          runTheScript();
 
-        expect(said(), `${theme} / ${darkSystem}`).toEqual(byTheProgram);
+          expect({ ...said(), bar: bar().content }, `${theme} / ${darkSystem} / dark system ${systemIsDark}`).toEqual(byTheProgram);
+        }
       }
+      view.dispose();
     }
   });
 
@@ -23594,9 +23681,12 @@ describe('the theme', () => {
       if (kept !== null) {
         window.localStorage.setItem(DEFAULT_STORAGE_KEY, kept);
       }
+      bar().content = '';
       runTheScript();
 
       expect(said(), String(kept)).toEqual({ theme: undefined, darkSystem: undefined });
+      // And the bar as the system's theme has it, which here is light.
+      expect(bar().content, String(kept)).toBe('#ffffff');
     }
   });
 });

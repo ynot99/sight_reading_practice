@@ -2523,6 +2523,14 @@ describe('searching the settings', () => {
     // An answer to be found by ear is off the page at once, never faded out where it could be glimpsed.
     expect(body('.note--concealed')).toMatch(/opacity\s*:\s*0\s*;/);
     expect(body('.note--concealed')).toMatch(/transition\s*:\s*none/);
+    // The answers of a naming exercise stand at the top of the page, the music moved down under them, and wrap.
+    expect(body('.score__answers')).toMatch(/position\s*:\s*absolute/);
+    expect(body('.score__answers')).toMatch(/max-height\s*:\s*var\(--answers-room\)/);
+    expect(body(".score[data-naming='true'] .score__surface")).toMatch(/padding-top\s*:\s*calc\(var\(--answers-room\)/);
+    expect(body('.score__answers-row')).toMatch(/flex-wrap\s*:\s*wrap/);
+    // An answer judged in the verdict's colours, right or wrong.
+    expect(body(".score__answers-row .solfege__chip[data-verdict='right']")).toMatch(/var\(--mark-perfect\)/);
+    expect(body(".score__answers-row .solfege__chip[data-verdict='wrong']")).toMatch(/var\(--mark-wrong\)/);
     // Its buttons, four with a bar to put in, wrap on a phone rather than running off it.
     expect(body('.sheet__actions')).toMatch(/flex-wrap\s*:\s*wrap/);
     // On a small screen, the chords open in the editor take the room of the row under the drawing.

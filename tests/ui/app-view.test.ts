@@ -8187,6 +8187,66 @@ describe('AppView', () => {
       ).toBe(true);
     });
 
+    it('asks the intervals chosen to be named on the page, bar by bar, says which were right, moves on, and says how the round went', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      element<HTMLButtonElement>('solfege-intervals-name-them').click();
+      await vi.waitFor(() => {
+        expect([runtime.controller.openedExercise?.title, runtime.controller.theScoreOpenStandsAlone]).toEqual(['Intervals by name', true]);
+      });
+      const round = runtime.controller.openedExercise;
+      const pad = element('score-answers');
+      const chips = (): string[] =>
+        [...pad.querySelectorAll<HTMLButtonElement>('[data-choice]')].map(
+          (chip) => `${chip.textContent}${chip.getAttribute('aria-pressed') === 'true' ? '*' : ''}${chip.dataset['verdict'] === undefined ? '' : ` ${chip.dataset['verdict']}`}`,
+        );
+      const press = (choice: string): void => {
+        pad.querySelector<HTMLButtonElement>(`[data-choice="${choice}"]`)?.click();
+      };
+      const answerOf = (at: number): string => round?.byName?.[at]?.parts[0]?.answer ?? '';
+      const wrongFor = (at: number): string => ['m3', 'M3', 'P4', 'P5', 'P8'].find((each) => each !== answerOf(at)) ?? '';
+
+      // On the page, the room it takes kept clear of the music, the first bar asked, the intervals chosen offered.
+      expect([pad.hidden, element('score').dataset['naming']]).toEqual([false, 'true']);
+      expect(element('score-answers-asks').textContent).toBe('1 of 10 · bar 1: interval?');
+      expect(chips()).toEqual(['m3', 'M3', 'P4', 'P5', 'P8']);
+      // Right: said so on the one picked.
+      press(answerOf(0));
+      expect(chips().filter((chip) => chip.includes('*'))).toEqual([`${answerOf(0)}* right`]);
+      // A press while it shows how it went moves on at once, the marker to the next bar.
+      pad.click();
+      expect(element('score-answers-asks').textContent).toBe('2 of 10 · bar 2: interval?');
+      expect(runtime.controller.barARunBeginsAt).toBe(1);
+      // Wrong: said so on the one picked, and the right one shown; moved on from a moment later.
+      press(wrongFor(1));
+      expect(chips().filter((chip) => chip.includes(' '))).toEqual(
+        ['m3', 'M3', 'P4', 'P5', 'P8']
+          .filter((each) => each === wrongFor(1) || each === answerOf(1))
+          .map((each) => (each === answerOf(1) ? `${each} right` : `${each}* wrong`)),
+      );
+      await vi.waitFor(
+        () => {
+          expect(element('score-answers-asks').textContent).toBe('3 of 10 · bar 3: interval?');
+        },
+        { timeout: 3_000 },
+      );
+      for (let at = 2; at < 10; at += 1) {
+        press(answerOf(at));
+        pad.click();
+      }
+      expect([element('score-answers-asks').textContent, chips()]).toEqual(['9 of 10 right.', []]);
+
+      // Music that is played puts the answers away.
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('solfege-intervals-open').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise?.title).toBe('Intervals by ear');
+      });
+      expect([pad.hidden, element('score').dataset['naming']]).toEqual([true, undefined]);
+    });
+
     it('names the sections of a sketch written down as a score where they begin', async () => {
       const { view, runtime, sketches } = createRig();
       await view.initialize();

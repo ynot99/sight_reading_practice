@@ -5413,6 +5413,78 @@ body[data-playing='true'] .score__modes {
 }
 
 /*
+ * The answers of a naming exercise: at the top of the page, under its
+ * title, and the music moved down under them - the room they take kept
+ * clear rather than laid over the bars they ask about, at any width.
+ * Never at the foot: the transport row, fixed to the foot of the window,
+ * would stand over them. Centred as the row is, and wrapping on a phone.
+ */
+.score__answers {
+  position: absolute;
+  left: 50%;
+  top: 40px;
+  transform: translateX(-50%);
+  max-height: var(--answers-room);
+  overflow-y: auto;
+  z-index: 6;
+  width: min(560px, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+/* The room the answers keep at the top of the page, while a naming exercise asks. */
+.score {
+  --answers-room: 140px;
+}
+
+@media (max-width: 600px) {
+  .score {
+    --answers-room: 200px;
+  }
+}
+
+.score[data-naming='true'] .score__surface {
+  padding-top: calc(var(--answers-room) + 8px);
+}
+
+.score__answers-asks {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.score__answers-parts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.score__answers-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* A choice picked and judged: the verdict's colours, for an answer that was judged. */
+.score__answers-row .solfege__chip[data-verdict='right'] {
+  border-color: var(--mark-perfect);
+  color: var(--mark-perfect);
+  font-weight: 600;
+}
+
+.score__answers-row .solfege__chip[data-verdict='wrong'] {
+  border-color: var(--mark-wrong);
+  color: var(--mark-wrong);
+  font-weight: 600;
+}
+
+/*
  * Turning the page by hand.
  *
  * Against the right edge, half way down: a reader using these has both hands

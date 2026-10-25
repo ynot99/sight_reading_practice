@@ -31,7 +31,8 @@ import {
   type ScaleName,
 } from '../domain/harmony/scales.js';
 import { SCALE_COMPLEX_SCALES, theScaleComplex, type ScaleOfTheComplex } from '../domain/solfege/scaleComplex.js';
-import { INTERVALS, INTERVAL_WAYS, theIntervalsByEar, type IntervalWay } from '../domain/solfege/intervalsByEar.js';
+import { INTERVALS, INTERVAL_WAYS, theIntervalsByEar, theIntervalsNamed, type IntervalWay } from '../domain/solfege/intervalsByEar.js';
+import { NamingRound } from '../application/solfege/NamingRound.js';
 import { DICTATION_LENGTHS, DICTATION_RHYTHMS, theMelodicDictation, type DictationRhythm } from '../domain/solfege/melodicDictation.js';
 import { barsOfThePicture, tiersOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
@@ -1595,6 +1596,9 @@ function thePlayingAsAFile(
   });
 }
 
+/** How long a question answered shows how it went before the next is asked. */
+const NEXT_QUESTION_AFTER_MS = 1_200;
+
 /** What each rhythm of a dictation is called in the list. */
 const DICTATION_RHYTHM_NAMES: Readonly<Record<DictationRhythm, string>> = {
   crotchets: 'Crotchets',
@@ -2167,6 +2171,10 @@ export class AppView {
    * training course begins with.
    */
   private readonly intervalsAsked = new Set<number>([3, 4, 5, 7, 12]);
+  /** The questions of the exercise of naming on the page, as they are answered; none for music that is played. */
+  private naming: NamingRound | null = null;
+  /** The moment a question answered is moved on from, while one waits to be. */
+  private nextQuestionTimer: ReturnType<typeof setTimeout> | undefined = undefined;
   /** How tall a row is, and the ruler and the pedal lane, as last measured. */
   private rollLook = { rowPx: 13, rulerTallPx: 0, chordsTallPx: 0, pedalTallPx: 0 };
   /** The frame a fling is going on in, if one is. */
@@ -2778,6 +2786,10 @@ export class AppView {
     solfegeIntervalsWay: HTMLSelectElement;
     solfegeIntervalsOpen: HTMLButtonElement;
     scoreHearAgain: HTMLButtonElement;
+    scoreAnswers: HTMLElement;
+    scoreAnswersAsks: HTMLElement;
+    scoreAnswersParts: HTMLElement;
+    solfegeIntervalsNameThem: HTMLButtonElement;
     solfegeDictationKey: HTMLSelectElement;
     solfegeDictationMode: HTMLSelectElement;
     solfegeDictationBars: HTMLSelectElement;
@@ -3210,6 +3222,10 @@ export class AppView {
       solfegeIntervalsWay: requireElement(doc, 'solfege-intervals-way'),
       solfegeIntervalsOpen: requireElement(doc, 'solfege-intervals-open'),
       scoreHearAgain: requireElement(doc, 'score-hear-again'),
+      scoreAnswers: requireElement(doc, 'score-answers'),
+      scoreAnswersAsks: requireElement(doc, 'score-answers-asks'),
+      scoreAnswersParts: requireElement(doc, 'score-answers-parts'),
+      solfegeIntervalsNameThem: requireElement(doc, 'solfege-intervals-name-them'),
       solfegeDictationKey: requireElement(doc, 'solfege-dictation-key'),
       solfegeDictationMode: requireElement(doc, 'solfege-dictation-mode'),
       solfegeDictationBars: requireElement(doc, 'solfege-dictation-bars'),
@@ -7822,6 +7838,7 @@ export class AppView {
         // Another score on the page is no sketch's.
         this.showThePencilBesideThePills();
         this.showWhatIsPlayedByEar(exercise);
+        this.askToNameIt(exercise);
       }),
     );
 
@@ -10174,7 +10191,13 @@ export class AppView {
       this.showTheIntervalsAsked();
     });
     this.listen(this.el.solfegeIntervalsOpen, 'click', () => {
-      void this.openTheIntervalsByEar();
+      void this.openTheIntervals('by ear');
+    });
+    this.listen(this.el.solfegeIntervalsNameThem, 'click', () => {
+      void this.openTheIntervals('by name');
+    });
+    this.listen(this.el.scoreAnswers, 'click', (event) => {
+      this.answerTheQuestion(event);
     });
     this.listen(this.el.solfegeDictationMode, 'change', () => {
       this.showTheDictationAsked();
@@ -11502,19 +11525,22 @@ export class AppView {
       ways.replaceChildren(...INTERVAL_WAYS.map((way) => new Option(INTERVAL_WAY_NAMES[way], way)));
     }
     const none = this.intervalsAsked.size === 0;
-    sayWhetherIdle(this.el.solfegeIntervalsOpen, none ? 'Choose an interval or more to be asked' : 'Open a round of ten', none);
+    sayWhetherIdle(this.el.solfegeIntervalsOpen, none ? 'Choose an interval or more to be asked' : 'Ten to play back by ear', none);
+    sayWhetherIdle(this.el.solfegeIntervalsNameThem, none ? 'Choose an interval or more to be asked' : 'Ten to read and name', none);
   }
 
   /**
-   * Opens a round of the intervals the sheet asks for, heard the way it
-   * asks - another round each time, as a dictation is another each lesson.
+   * Opens a round of the intervals the sheet asks for, the way it asks -
+   * played back by ear, or named - another round each time, as a dictation
+   * is another each lesson.
    */
-  private async openTheIntervalsByEar(): Promise<void> {
+  private async openTheIntervals(how: 'by ear' | 'by name'): Promise<void> {
     if (this.intervalsAsked.size === 0) {
       return;
     }
     const way = INTERVAL_WAYS.find((each) => each === this.el.solfegeIntervalsWay.value) ?? 'up';
-    const exercise = theIntervalsByEar({ semitones: [...this.intervalsAsked], way, seed: Math.floor(Math.random() * 2 ** 31) });
+    const asked = { semitones: [...this.intervalsAsked], way, seed: Math.floor(Math.random() * 2 ** 31) };
+    const exercise = how === 'by ear' ? theIntervalsByEar(asked) : theIntervalsNamed(asked);
     this.el.sheetScores.hidden = true;
     await this.pickUpTheFile(exercise);
     this.runtime.controller.playOnlyTheScoreOpen();
@@ -11547,6 +11573,107 @@ export class AppView {
   /** The scale the sheet asks a scale complex in. */
   private theScaleOfTheComplexAsked(): ScaleOfTheComplex {
     return SCALE_COMPLEX_SCALES.find((scale) => scale === this.el.solfegeComplexScale.value) ?? 'major';
+  }
+
+  /**
+   * Begins asking the questions an exercise of naming asks, from its first;
+   * or, for music that is played, puts the answers away.
+   */
+  private askToNameIt(exercise: Exercise): void {
+    clearTimeout(this.nextQuestionTimer);
+    this.naming = exercise.byName === undefined ? null : new NamingRound(exercise.byName);
+    this.showTheQuestion();
+  }
+
+  /**
+   * Shows the question being asked: the marker on its bar, what it asks,
+   * its choices - and once answered, which were right, until it is moved on
+   * from. Over, the round says how it went.
+   */
+  private showTheQuestion(): void {
+    const round = this.naming;
+    this.el.scoreAnswers.hidden = round === null;
+    // The room the answers take at the top of the page, kept clear of the music.
+    if (round === null) {
+      delete this.el.score.dataset['naming'];
+      return;
+    }
+    this.el.score.dataset['naming'] = 'true';
+    const question = round.asking;
+    const exercise = this.runtime.controller.openedExercise;
+    if (question === null || exercise === null) {
+      const { right, of } = round.score;
+      this.el.scoreAnswersAsks.textContent = `${String(right)} of ${String(of)} right.`;
+      this.el.scoreAnswersParts.replaceChildren();
+      return;
+    }
+    if (this.placedOnBar !== question.measureIndex) {
+      this.beginAt(question.measureIndex);
+    }
+    const answered = round.answered;
+    const asks = question.parts.map((part) => part.asks.toLowerCase()).join(' and ');
+    this.el.scoreAnswersAsks.textContent = `${String(round.place + 1)} of ${String(round.questions.length)} · bar ${String(
+      barNumberOf(exercise, question.measureIndex),
+    )}: ${asks}?`;
+    this.el.scoreAnswersParts.replaceChildren(
+      ...question.parts.map((part, at) => {
+        const row = this.doc.createElement('div');
+        row.className = 'score__answers-row';
+        row.setAttribute('role', 'group');
+        row.setAttribute('aria-label', part.asks);
+        row.append(
+          ...part.choices.map((choice) => {
+            const chip = this.doc.createElement('button');
+            chip.type = 'button';
+            chip.className = 'solfege__chip';
+            chip.textContent = choice;
+            chip.dataset['part'] = String(at);
+            chip.dataset['choice'] = choice;
+            const picked = (answered?.picked ?? round.pickedSoFar)[at] === choice;
+            chip.setAttribute('aria-pressed', String(picked));
+            if (answered !== null && choice === part.answer) {
+              chip.dataset['verdict'] = 'right';
+            } else if (answered !== null && picked) {
+              chip.dataset['verdict'] = 'wrong';
+            }
+            return chip;
+          }),
+        );
+        return row;
+      }),
+    );
+  }
+
+  /**
+   * A press on the answers: a choice picked for its part of the question,
+   * which is judged once every part is and moved on from a moment later -
+   * or at once, by another press while it shows how it went.
+   */
+  private answerTheQuestion(event: Event): void {
+    const round = this.naming;
+    if (round === null) {
+      return;
+    }
+    if (round.answered !== null) {
+      clearTimeout(this.nextQuestionTimer);
+      round.next();
+      this.showTheQuestion();
+      return;
+    }
+    const chip = (event.target as Element | null)?.closest<HTMLElement>('[data-choice]');
+    const part = Number(chip?.dataset['part']);
+    const choice = chip?.dataset['choice'];
+    if (choice === undefined || !Number.isInteger(part) || !round.pick(part, choice)) {
+      return;
+    }
+    this.showTheQuestion();
+    if (round.answered !== null) {
+      this.nextQuestionTimer = setTimeout(() => {
+        if (this.naming === round && round.next()) {
+          this.showTheQuestion();
+        }
+      }, NEXT_QUESTION_AFTER_MS);
+    }
   }
 
   /**

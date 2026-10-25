@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { validateExercise, type Exercise } from '../../src/domain/model/Exercise.js';
 import { Pitch } from '../../src/domain/model/Pitch.js';
-import { INTERVALS, INTERVAL_WAYS, QUESTIONS_IN_A_ROUND, theIntervalsByEar } from '../../src/domain/solfege/intervalsByEar.js';
+import { INTERVALS, INTERVAL_WAYS, QUESTIONS_IN_A_ROUND, theIntervalsByEar, theIntervalsNamed } from '../../src/domain/solfege/intervalsByEar.js';
 
 /** Each bar's given note and its answer, as pitches. */
 function questions(exercise: Exercise): { readonly given: Pitch; readonly answer: readonly Pitch[]; readonly lengths: readonly number[] }[] {
@@ -73,5 +73,26 @@ describe('intervals by ear', () => {
       SEEDS.flatMap((seed) => questions(theIntervalsByEar({ semitones: [], way: 'up', seed })).map((each) => (each.answer[0]?.midi ?? 0) - each.given.midi)),
     );
     expect(spans.size).toBe(INTERVALS.length);
+  });
+});
+
+describe('intervals by name', () => {
+  it('asks the bars a round by ear plays which of the intervals chosen each is, read and not heard', () => {
+    for (const way of INTERVAL_WAYS) {
+      for (const seed of SEEDS.slice(0, 20)) {
+        const asked = { semitones: [12, 3, 7], way, seed };
+        const named = theIntervalsNamed(asked);
+        expect([named.title, named.byEar, named.staves]).toEqual(['Intervals by name', undefined, theIntervalsByEar(asked).staves]);
+        expect(named.byName?.map((question) => question.measureIndex)).toEqual(Array.from({ length: QUESTIONS_IN_A_ROUND }, (_, at) => at));
+        questions(named).forEach(({ given, answer }, at) => {
+          const span = Math.abs((answer.at(-1)?.midi ?? 0) - given.midi);
+          expect(named.byName?.[at]?.parts).toEqual([
+            { asks: 'Interval', choices: ['m3', 'P5', 'P8'], answer: INTERVALS.find((each) => each.semitones === span)?.short },
+          ]);
+        });
+      }
+    }
+    // Every one offered where none is chosen.
+    expect(theIntervalsNamed({ semitones: [], way: 'up', seed: 1 }).byName?.[0]?.parts[0]?.choices).toEqual(INTERVALS.map((each) => each.short));
   });
 });

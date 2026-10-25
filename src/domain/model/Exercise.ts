@@ -567,6 +567,21 @@ export interface BarLabel {
   readonly repeated: boolean;
 }
 
+/** A question of music named rather than played: see `Exercise.byName`. */
+export interface NamingQuestion {
+  /** The bar it asks about. */
+  readonly measureIndex: number;
+  /** What it asks, part by part - an interval, or a chord's quality and its position. */
+  readonly parts: readonly NamingPart[];
+}
+
+/** One part of a question to be named: what it asks, the answers offered, and the right one among them. */
+export interface NamingPart {
+  readonly asks: string;
+  readonly choices: readonly string[];
+  readonly answer: string;
+}
+
 /** How music played back by ear is asked: see `Exercise.byEar`. */
 export interface ByEar {
   /** The bars the questions begin at, in order: each runs until the next begins, the last to the end. */
@@ -1156,6 +1171,12 @@ export interface Exercise {
    * read.
    */
   readonly byEar?: ByEar;
+  /**
+   * The questions it asks to be named rather than played, where it is an
+   * exercise of naming what is written - an interval, a chord, a key - each
+   * about one bar, in order. Absent for music that is played.
+   */
+  readonly byName?: readonly NamingQuestion[];
 }
 
 /** What the reader should see printed over a bar, one-based. */

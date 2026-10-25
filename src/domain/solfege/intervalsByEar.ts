@@ -1,5 +1,5 @@
 import { Duration } from '../model/Duration.js';
-import type { Exercise } from '../model/Exercise.js';
+import type { Exercise, Measure } from '../model/Exercise.js';
 import { measureOf, noteEntry } from '../model/Exercise.js';
 import { KeySignature } from '../model/KeySignature.js';
 import { Pitch } from '../model/Pitch.js';
@@ -65,20 +65,63 @@ const HIGHEST = Pitch.parse('A5').midi;
  * found (see `Exercise.byEar`); the answer is the very key, in its octave,
  * since from a given note an interval has only one.
  *
- * Heard together, the given note sounds alone first and then with the
- * other: the bar is the note and then the two of them, so there is still a
- * note to be given and a step that is all answer. Every note is spelled as
- * the interval writes it - its letters counted, a third over F an A flat -
- * and the given ones as often with flats as with sharps.
- *
  * The same request is the same round; another seed, another.
  */
 export function theIntervalsByEar(asked: IntervalsAsked): Exercise {
+  const { measures, asking } = theIntervalsWritten(asked);
+  return {
+    ...asking,
+    id: `${INTERVALS_BY_EAR_ID}:${String(asked.seed)}`,
+    title: 'Intervals by ear',
+    metadata: { generatorId: INTERVALS_BY_EAR_ID, seed: asked.seed },
+    byEar: { questionsAt: measures.map((_, at) => at), keyFirst: false },
+  };
+}
+
+/** What a round of intervals to be named is filed as. */
+export const INTERVALS_BY_NAME_ID = 'solfege.intervals-by-name';
+
+/**
+ * A round of intervals to be named: the same bars as a round by ear, read
+ * rather than heard, each asking which of the intervals chosen it is. Its
+ * choices are those chosen, smallest first - as every one, where none is.
+ */
+export function theIntervalsNamed(asked: IntervalsAsked): Exercise {
+  const { asking, named, intervals } = theIntervalsWritten(asked);
+  const choices = intervals.map((interval) => interval.short);
+  return {
+    ...asking,
+    id: `${INTERVALS_BY_NAME_ID}:${String(asked.seed)}`,
+    title: 'Intervals by name',
+    metadata: { generatorId: INTERVALS_BY_NAME_ID, seed: asked.seed },
+    byName: named.map((interval, measureIndex) => ({ measureIndex, parts: [{ asks: 'Interval', choices, answer: interval.short }] })),
+  };
+}
+
+type Interval = (typeof INTERVALS)[number];
+
+/**
+ * The bars of a round of intervals, one for each, its first note and then
+ * the other above it, below it or with it - with the two together, the bar
+ * is the note and then the two of them, so a round by ear still has a note
+ * to give and a step that is all answer. Every note is spelled as the
+ * interval writes it - its letters counted, a third over F an A flat - and
+ * the first as often with flats as with sharps. The rest of the exercise
+ * around them, and which interval each bar is.
+ */
+function theIntervalsWritten(asked: IntervalsAsked): {
+  readonly measures: readonly Measure[];
+  readonly asking: Exercise;
+  readonly named: readonly Interval[];
+  readonly intervals: readonly Interval[];
+} {
   const rng = createRng(asked.seed);
   const chosen = INTERVALS.filter((interval) => asked.semitones.includes(interval.semitones));
   const intervals = chosen.length === 0 ? INTERVALS : chosen;
+  const named: Interval[] = [];
   const measures = Array.from({ length: QUESTIONS_IN_A_ROUND }, () => {
     const interval = rng.pick(intervals);
+    named.push(interval);
     const down = asked.way === 'down';
     const lowestGiven = down ? LOWEST + interval.semitones : LOWEST;
     const highestGiven = down ? HIGHEST : HIGHEST - interval.semitones;
@@ -90,9 +133,9 @@ export function theIntervalsByEar(asked: IntervalsAsked): Exercise {
       noteEntry(asked.way === 'together' ? [given, other] : other, Duration.HALF),
     ]);
   });
-  return {
-    id: `${INTERVALS_BY_EAR_ID}:${String(asked.seed)}`,
-    title: 'Intervals by ear',
+  const asking: Exercise = {
+    id: '',
+    title: '',
     key: KeySignature.C_MAJOR,
     keyChanges: [],
     timeChanges: [],
@@ -107,7 +150,7 @@ export function theIntervalsByEar(asked: IntervalsAsked): Exercise {
     firstBarNumber: 1,
     barLabels: [],
     staves: [{ staffNumber: 1, voice: 1, clef: 'treble', clefChanges: [], measures }],
-    metadata: { generatorId: INTERVALS_BY_EAR_ID, seed: asked.seed },
-    byEar: { questionsAt: measures.map((_, at) => at), keyFirst: false },
+    metadata: { generatorId: '', seed: asked.seed },
   };
+  return { measures, asking, named, intervals };
 }

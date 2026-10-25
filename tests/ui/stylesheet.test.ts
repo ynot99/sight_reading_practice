@@ -659,6 +659,28 @@ describe('the stylesheet', () => {
     expect(room).toBeGreaterThanOrEqual(8);
   });
 
+  it('washes the squares left off in their colour on a light sheet, and fills only the one that is on', () => {
+    // A dark square on a white sheet reads as a hole in the page. Each theme
+    // says how much of a square's own colour shows while it is off; the dark
+    // one fills it and dims it, as it always did.
+    const dark = CSS.indexOf('@media (prefers-color-scheme: dark)');
+    const token = (name: string, from: number): string =>
+      new RegExp(`${name}\\s*:\\s*([^;]+);`).exec(CSS.slice(from))?.[1]?.trim() ?? '';
+    const card = rules().find((rule) => rule.selector === '.mode-card')?.body ?? '';
+    const chosen = rules().find((rule) => rule.selector === ".mode-card[aria-pressed='true']")?.body ?? '';
+
+    expect(card).toMatch(/background\s*:\s*color-mix\(in srgb, var\(--mode-ground, #2a2f3a\) var\(--mode-card-fill\), var\(--surface\)\)/);
+    expect(card).toMatch(/(^|[^-])color\s*:\s*color-mix\(in srgb, var\(--mode-ground, #2a2f3a\) var\(--mode-card-ink\), #e9edf5\)/);
+    expect(card).toMatch(/filter\s*:\s*var\(--mode-card-dim\)/);
+    expect(['--mode-card-fill', '--mode-card-ink', '--mode-card-dim'].map((name) => [token(name, 0), token(name, dark)])).toEqual([
+      ['12%', '100%'],
+      ['100%', '0%'],
+      ['none', 'saturate(0.55) brightness(0.72)'],
+    ]);
+    expect(chosen).toMatch(/background\s*:\s*var\(--mode-ground, #2a2f3a\)/);
+    expect(chosen).toMatch(/(^|[^-])color\s*:\s*#e9edf5/);
+  });
+
   it('says two things at once on a strip of bars', () => {
     // What was read there is the cell's colour; whether the music had to stop
     // for the reader is a mark on it. A bar that waited is very often a bar

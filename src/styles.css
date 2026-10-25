@@ -2539,6 +2539,12 @@ textarea {
   margin-bottom: 16px;
 }
 
+/* The name of a section takes the line it is on, however long it is. */
+.roll-mark__section {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 /* A metre asked for inside a bar, which counts from the bar's first beat. */
 .roll-mark__fields select[data-idle='true'] {
   opacity: 0.45;

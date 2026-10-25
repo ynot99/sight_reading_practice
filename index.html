@@ -983,15 +983,20 @@
                 title="How loud the music is marked from here"></select>
             </span>
             <span class="roll-velocity__group">
+              <label class="roll-velocity__name" for="roll-mark-reached">Reached</label>
+              <select id="roll-mark-reached" class="roll-velocity__key"
+                title="Whether the dynamic is reached at once here, or gradually from the one marked before"></select>
+            </span>
+            <!--
+              The part of the piece beginning here, on a line of its own after
+              the dynamic: between the dynamic and how it is reached, it parted
+              two fields that answer one question.
+            -->
+            <span class="roll-velocity__group roll-velocity__group--wide">
               <label class="roll-velocity__name" for="roll-mark-section">Section</label>
               <input id="roll-mark-section" class="sheet__input roll-mark__section" type="text" maxlength="24"
                 placeholder="A, Verse…" title="The part of the piece beginning here, by any name: nothing for none"
                 autocomplete="off" />
-            </span>
-            <span class="roll-velocity__group">
-              <label class="roll-velocity__name" for="roll-mark-reached">Reached</label>
-              <select id="roll-mark-reached" class="roll-velocity__key"
-                title="Whether the dynamic is reached at once here, or gradually from the one marked before"></select>
             </span>
           </div>
           <div class="sheet__actions">

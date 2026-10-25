@@ -2506,6 +2506,13 @@ describe('searching the settings', () => {
     expect(body('.roll-mark__fields')).toMatch(/display\s*:\s*flex/);
     expect(body('.roll-mark__fields')).toMatch(/flex-wrap\s*:\s*wrap/);
     expect(body(".roll-mark__fields select[data-idle='true']")).toMatch(/opacity\s*:\s*0?\.\d+/);
+    // The dynamic and how it is reached side by side, nothing between them;
+    // the section after them, on a line of its own that its name fills.
+    expect(HTML).toMatch(/<select id="roll-mark-dynamic"[^>]*><\/select>\s*<\/span>\s*<span class="roll-velocity__group">\s*<label[^>]*for="roll-mark-reached"/);
+    expect(HTML).toMatch(/id="roll-mark-reached"[\s\S]*?<span class="roll-velocity__group roll-velocity__group--wide">\s*<label[^>]*for="roll-mark-section"/);
+    expect(body('.roll-velocity__group--wide')).toMatch(/flex\s*:\s*1 1 14em/);
+    expect(body('.roll-mark__section')).toMatch(/flex\s*:\s*1 1 auto/);
+    expect(body('.roll-mark__section')).toMatch(/min-width\s*:\s*0/);
     // Its buttons, four with a bar to put in, wrap on a phone rather than running off it.
     expect(body('.sheet__actions')).toMatch(/flex-wrap\s*:\s*wrap/);
     // On a small screen, the chords open in the editor take the room of the row under the drawing.

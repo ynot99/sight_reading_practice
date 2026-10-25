@@ -8282,6 +8282,24 @@ describe('AppView', () => {
       expect(rows().map((row) => row.filter((chip) => chip.includes('|')))).toEqual([[`${parts[0]?.answer ?? ''}*|right`], [`${parts[1]?.answer ?? ''}*|right`]]);
     });
 
+    it('asks key signatures to be named as the keys chosen', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      const as = element<HTMLSelectElement>('solfege-keys-as');
+      expect([...as.options].map((option) => `${option.value} ${option.label}`)).toEqual(['major Major keys', 'minor Minor keys', 'either Either']);
+      as.value = 'minor';
+      element<HTMLButtonElement>('solfege-keys-open').click();
+      await vi.waitFor(() => {
+        expect([runtime.controller.openedExercise?.title, runtime.controller.theScoreOpenStandsAlone]).toEqual(['Keys by name', true]);
+      });
+      const round = runtime.controller.openedExercise;
+      expect([round?.key.mode, ...(round?.keyChanges ?? []).map((change) => change.key.mode)]).toEqual(Array.from({ length: 10 }, () => 'minor'));
+      expect(element('score-answers-asks').textContent).toBe('1 of 10 · bar 1: minor key?');
+      expect(element('score-answers').querySelectorAll('[data-choice]').length).toBe(15);
+    });
+
     it('names the sections of a sketch written down as a score where they begin', async () => {
       const { view, runtime, sketches } = createRig();
       await view.initialize();

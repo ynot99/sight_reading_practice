@@ -34,6 +34,7 @@ import { SCALE_COMPLEX_SCALES, theScaleComplex, type ScaleOfTheComplex } from '.
 import { INTERVALS, INTERVAL_WAYS, theIntervalsByEar, theIntervalsNamed, type IntervalWay } from '../domain/solfege/intervalsByEar.js';
 import { NamingRound } from '../application/solfege/NamingRound.js';
 import { theChordsNamed } from '../domain/solfege/chordsNamed.js';
+import { KEYS_ASKED, theKeysNamed } from '../domain/solfege/keysNamed.js';
 import { DICTATION_LENGTHS, DICTATION_RHYTHMS, theMelodicDictation, type DictationRhythm } from '../domain/solfege/melodicDictation.js';
 import { barsOfThePicture, tiersOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
@@ -2793,6 +2794,8 @@ export class AppView {
     solfegeIntervalsNameThem: HTMLButtonElement;
     solfegeChordsAsks: HTMLSelectElement;
     solfegeChordsOpen: HTMLButtonElement;
+    solfegeKeysAs: HTMLSelectElement;
+    solfegeKeysOpen: HTMLButtonElement;
     solfegeDictationKey: HTMLSelectElement;
     solfegeDictationMode: HTMLSelectElement;
     solfegeDictationBars: HTMLSelectElement;
@@ -3231,6 +3234,8 @@ export class AppView {
       solfegeIntervalsNameThem: requireElement(doc, 'solfege-intervals-name-them'),
       solfegeChordsAsks: requireElement(doc, 'solfege-chords-asks'),
       solfegeChordsOpen: requireElement(doc, 'solfege-chords-open'),
+      solfegeKeysAs: requireElement(doc, 'solfege-keys-as'),
+      solfegeKeysOpen: requireElement(doc, 'solfege-keys-open'),
       solfegeDictationKey: requireElement(doc, 'solfege-dictation-key'),
       solfegeDictationMode: requireElement(doc, 'solfege-dictation-mode'),
       solfegeDictationBars: requireElement(doc, 'solfege-dictation-bars'),
@@ -10201,6 +10206,14 @@ export class AppView {
     this.listen(this.el.solfegeIntervalsNameThem, 'click', () => {
       void this.openTheIntervals('by name');
     });
+    this.listen(this.el.solfegeKeysOpen, 'click', () => {
+      void this.openTheExercise(
+        theKeysNamed({
+          as: KEYS_ASKED.find((as) => as === this.el.solfegeKeysAs.value) ?? 'major',
+          seed: Math.floor(Math.random() * 2 ** 31),
+        }),
+      );
+    });
     this.listen(this.el.solfegeChordsOpen, 'click', () => {
       void this.openTheExercise(
         theChordsNamed({ inversions: this.el.solfegeChordsAsks.value === 'positions', seed: Math.floor(Math.random() * 2 ** 31) }),
@@ -11460,6 +11473,9 @@ export class AppView {
       this.showTheDictationAsked();
       if (this.el.solfegeChordsAsks.options.length === 0) {
         this.el.solfegeChordsAsks.replaceChildren(new Option('Their quality', 'quality'), new Option('Their quality and position', 'positions'));
+      }
+      if (this.el.solfegeKeysAs.options.length === 0) {
+        this.el.solfegeKeysAs.replaceChildren(new Option('Major keys', 'major'), new Option('Minor keys', 'minor'), new Option('Either', 'either'));
       }
     }
   }

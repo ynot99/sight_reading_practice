@@ -9,6 +9,7 @@ import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { theScaleComplex } from '../../src/domain/solfege/scaleComplex.js';
+import { SIGNATURES_IN_A_ROUND, theKeysNamed } from '../../src/domain/solfege/keysNamed.js';
 import { CHORDS_IN_A_ROUND, theChordsNamed } from '../../src/domain/solfege/chordsNamed.js';
 import { DICTATIONS_IN_A_ROUND, theMelodicDictation } from '../../src/domain/solfege/melodicDictation.js';
 import { INTERVAL_WAYS, QUESTIONS_IN_A_ROUND, theIntervalsByEar } from '../../src/domain/solfege/intervalsByEar.js';
@@ -227,6 +228,15 @@ describe('Verovio and our timeline agree on every step', () => {
     for (const seed of [3, 11]) {
       expect({ seed, ...agreementOf(theChordsNamed({ inversions: true, seed })) }).toEqual({ seed, ...agreeing(CHORDS_IN_A_ROUND) });
     }
+  });
+
+  it('on a round of key signatures to be named, a signature drawn on every bar', () => {
+    const round = theKeysNamed({ as: 'either', seed: 5 });
+    expect(agreementOf(round)).toEqual(agreeing(SIGNATURES_IN_A_ROUND));
+    // Each bar's signature drawn where it begins: one a bar, the first beside the clef.
+    const pages = core.load(serializer.serialize(round), SHAPE);
+    const drawn = Array.from({ length: pages }, (_, page) => (core.page(page + 1).match(/class="keySig/g) ?? []).length).reduce((all, each) => all + each, 0);
+    expect(drawn).toBeGreaterThanOrEqual(SIGNATURES_IN_A_ROUND);
   });
 
   it('on every built-in preset, in three-four and two flats', () => {

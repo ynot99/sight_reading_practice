@@ -56,7 +56,7 @@ const WIDEST_LEAP = 5;
 /**
  * A round of melodic dictations, as a music school sets them: in each, the
  * key heard first by its cadence, then a phrase played; its first note is
- * given, the rest found by ear and played back (see `Exercise.byEar`).
+ * given, the rest found by ear and played back (see `Exercise.playedBack`).
  *
  * Each phrase is written as a first dictation is: it begins on a note of the
  * tonic triad, moves mostly by step, leaps only to a note of the tonic triad
@@ -94,18 +94,22 @@ export function theMelodicDictation(asked: DictationAsked): Exercise {
     barLabels: [],
     staves: [{ staffNumber: 1, voice: 1, clef: 'treble', clefChanges: [], measures: entries.flatMap((phrase) => intoBars(phrase, TIME)) }],
     metadata: { generatorId: MELODIC_DICTATION_ID, seed: asked.seed },
-    byEar: { questionsAt: entries.map((_, at) => at * asked.bars), keyFirst: true },
+    playedBack: { questions: entries.map((_, at) => ({ from: at * asked.bars, until: (at + 1) * asked.bars })), heard: true, keyFirst: true },
   };
 }
 
 /** A note of a phrase: its step from the tonic, and how long it lasts. */
-interface NoteOfAPhrase {
+export interface NoteOfAPhrase {
   readonly step: number;
   readonly length: Duration;
 }
 
-/** One phrase of a dictation, note by note. */
-function aPhrase(rng: Rng, asked: DictationAsked): NoteOfAPhrase[] {
+/**
+ * One phrase as a first dictation is written - see `theMelodicDictation` -
+ * note by note, as steps from its tonic: for a dictation, and for a phrase
+ * to be transposed.
+ */
+export function aPhrase(rng: Rng, asked: Pick<DictationAsked, 'bars' | 'rhythm' | 'minor'>): NoteOfAPhrase[] {
   // Its rhythm first: every beat but the last two a crotchet or two quavers,
   // and the tonic held over those two.
   const beats = asked.bars * TIME.beats - 2;

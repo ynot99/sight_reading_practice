@@ -582,10 +582,16 @@ export interface NamingPart {
   readonly answer: string;
 }
 
-/** How music played back by ear is asked: see `Exercise.byEar`. */
-export interface ByEar {
-  /** The bars the questions begin at, in order: each runs until the next begins, the last to the end. */
-  readonly questionsAt: readonly number[];
+/** How music played back is asked: see `Exercise.playedBack`. */
+export interface PlayedBack {
+  /** The questions, in order, each by the bars it runs over: from its first, until the bar after its last. */
+  readonly questions: readonly { readonly from: number; readonly until: number }[];
+  /**
+   * Whether each question is heard before it is answered - a dictation, an
+   * interval by ear - or found from what is written before it, as a phrase
+   * is transposed.
+   */
+  readonly heard: boolean;
   /**
    * Whether the key is heard before each question, by its cadence - heard
    * and not written - so a melody is heard in its key, as a dictation is
@@ -1163,14 +1169,14 @@ export interface Exercise {
   readonly staves: readonly StaffPart[];
   readonly metadata: ExerciseMetadata;
   /**
-   * How it is played back by ear, where it is rather than read: each
-   * question heard before it is answered, and every note of it but its first
-   * kept off the page until it is found - the first given, as a teacher
-   * gives the note a dictation begins on, so the rest can be found from it
-   * without perfect pitch. See `theQuestionsByEar`. Absent for music that is
-   * read.
+   * How it is played back, where it is rather than read: each question
+   * heard, or found from what is written before it, and then answered, every
+   * note of it but its first kept off the page until it is found - the first
+   * given, as a teacher gives the note a dictation begins on, so the rest can
+   * be found from it without perfect pitch. See `theQuestionsPlayedBack`.
+   * Absent for music that is read.
    */
-  readonly byEar?: ByEar;
+  readonly playedBack?: PlayedBack;
   /**
    * The questions it asks to be named rather than played, where it is an
    * exercise of naming what is written - an interval, a chord, a key - each

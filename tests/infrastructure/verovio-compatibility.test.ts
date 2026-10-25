@@ -9,6 +9,7 @@ import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { theScaleComplex } from '../../src/domain/solfege/scaleComplex.js';
+import { TRANSPOSITIONS_IN_A_ROUND, theTransposition } from '../../src/domain/solfege/transposition.js';
 import { theProgression } from '../../src/domain/solfege/progressions.js';
 import { PROGRESSIONS_IN_A_ROUND, theFunctionsNamed } from '../../src/domain/solfege/functionsNamed.js';
 import { SIGNATURES_IN_A_ROUND, theKeysNamed } from '../../src/domain/solfege/keysNamed.js';
@@ -258,6 +259,15 @@ describe('Verovio and our timeline agree on every step', () => {
     ] as const) {
       const exercise = theProgression({ ...asked, fifths: 0, throughEveryKey: true });
       expect({ ...asked, ...agreementOf(exercise) }).toEqual({ ...asked, ...agreeing(exercise.staves[0]?.measures.length ?? 0) });
+    }
+  });
+
+  it('on phrases to transpose, their keys changing back and forth', () => {
+    for (const asked of [
+      { fifths: 0, minor: false, by: 'upASecond' },
+      { fifths: -5, minor: true, by: 'downAFourth' },
+    ] as const) {
+      expect({ ...asked, ...agreementOf(theTransposition({ ...asked, seed: 3 })) }).toEqual({ ...asked, ...agreeing(TRANSPOSITIONS_IN_A_ROUND * 4) });
     }
   });
 

@@ -38,9 +38,13 @@ describe('a melodic dictation', () => {
         expect(() => {
           validateExercise(round);
         }).not.toThrow();
-        expect([round.staves[0]?.measures.length, round.byEar]).toEqual([
+        expect([round.staves[0]?.measures.length, round.playedBack]).toEqual([
           DICTATIONS_IN_A_ROUND * asked.bars,
-          { questionsAt: Array.from({ length: DICTATIONS_IN_A_ROUND }, (_, at) => at * asked.bars), keyFirst: true },
+          {
+            questions: Array.from({ length: DICTATIONS_IN_A_ROUND }, (_, at) => ({ from: at * asked.bars, until: (at + 1) * asked.bars })),
+            heard: true,
+            keyFirst: true,
+          },
         ]);
         expect(theMelodicDictation({ ...asked, seed })).toEqual(round);
       }

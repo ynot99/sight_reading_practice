@@ -8117,7 +8117,7 @@ describe('AppView', () => {
         expect([runtime.controller.openedExercise?.title, runtime.controller.theScoreOpenStandsAlone]).toEqual(['Intervals by ear', true]);
       });
       const round = runtime.controller.openedExercise;
-      expect(round?.byEar?.keyFirst).toBe(false);
+      expect([round?.playedBack?.heard, round?.playedBack?.keyFirst]).toEqual([true, false]);
       // Every answer a tritone or a minor sixth under the note given.
       const spans = (round?.staves[0]?.measures ?? []).map((measure) => {
         const [given, answer] = measure.entries;
@@ -8134,14 +8134,14 @@ describe('AppView', () => {
       const modes = element<HTMLButtonElement>('focus-modes');
       expect([modes.dataset['idle'], modes.title]).toEqual([
         'true',
-        'Modes: music played back by ear waits for each note, whatever they say for music that is read',
+        'Modes: music played back waits for each note, whatever they say for music that is read',
       ]);
 
       // Music that is read again: neither.
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('solfege-complex-open').click();
       await vi.waitFor(() => {
-        expect(runtime.controller.openedExercise?.byEar).toBeUndefined();
+        expect(runtime.controller.openedExercise?.playedBack).toBeUndefined();
       });
       expect([again.hidden, modes.dataset['idle'], modes.title]).toEqual([true, undefined, 'Modes']);
     });
@@ -8176,10 +8176,19 @@ describe('AppView', () => {
         expect([runtime.controller.openedExercise?.title, runtime.controller.theScoreOpenStandsAlone]).toEqual(['Melodic dictation', true]);
       });
       const round = runtime.controller.openedExercise;
-      expect([round?.key.fifths, round?.key.mode, round?.byEar, element('score-hear-again').hidden]).toEqual([
+      expect([round?.key.fifths, round?.key.mode, round?.playedBack, element('score-hear-again').hidden]).toEqual([
         -2,
         'minor',
-        { questionsAt: [0, 4, 8, 12], keyFirst: true },
+        {
+          questions: [
+            { from: 0, until: 4 },
+            { from: 4, until: 8 },
+            { from: 8, until: 12 },
+            { from: 12, until: 16 },
+          ],
+          heard: true,
+          keyFirst: true,
+        },
         false,
       ]);
       expect(
@@ -8353,9 +8362,34 @@ describe('AppView', () => {
         expect([runtime.controller.openedExercise?.title, runtime.controller.theScoreOpenStandsAlone]).toEqual(['iiø7–V7–i through every key', true]);
       });
       const opened = runtime.controller.openedExercise;
-      expect([opened?.key.fifths, opened?.key.mode, opened?.keyChanges.length, opened?.byEar, opened?.byName]).toEqual([-1, 'minor', 11, undefined, undefined]);
+      expect([opened?.key.fifths, opened?.key.mode, opened?.keyChanges.length, opened?.playedBack, opened?.byName]).toEqual([-1, 'minor', 11, undefined, undefined]);
       // Played, as a score is: the modes as they are.
       expect(element('focus-modes').dataset['idle']).toBeUndefined();
+    });
+
+    it('opens phrases to transpose from the Solfege list, by the interval chosen, found and not heard', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      const key = element<HTMLSelectElement>('solfege-transpose-key');
+      const by = element<HTMLSelectElement>('solfege-transpose-by');
+      expect([...by.options].map((option) => `${option.value} ${option.label}`)).toEqual([
+        'upASecond Up a major second',
+        'downASecond Down a major second',
+        'upAThird Up a minor third',
+        'downAThird Down a minor third',
+        'upAFourth Up a fourth',
+        'downAFourth Down a fourth',
+      ]);
+      key.value = '-1';
+      by.value = 'downAFourth';
+      element<HTMLButtonElement>('solfege-transpose-open').click();
+      await vi.waitFor(() => {
+        expect([runtime.controller.openedExercise?.title, runtime.controller.theScoreOpenStandsAlone]).toEqual(['Down a fourth: F major to C major', true]);
+      });
+      // Played back, so the modes are dimmed; found from what is written, so there is nothing to hear again.
+      expect([element('focus-modes').dataset['idle'], element('score-hear-again').hidden]).toEqual(['true', true]);
     });
 
     it('names the sections of a sketch written down as a score where they begin', async () => {

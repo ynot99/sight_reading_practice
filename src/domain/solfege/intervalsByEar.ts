@@ -62,7 +62,7 @@ const HIGHEST = Pitch.parse('A5').midi;
  * A round of intervals to be found by ear: a bar for each, its first note
  * given and the second heard and then played, above it, below it or with
  * it. Played back by ear, so the second is kept off the page until it is
- * found (see `Exercise.byEar`); the answer is the very key, in its octave,
+ * found (see `Exercise.playedBack`); the answer is the very key, in its octave,
  * since from a given note an interval has only one.
  *
  * The same request is the same round; another seed, another.
@@ -74,7 +74,7 @@ export function theIntervalsByEar(asked: IntervalsAsked): Exercise {
     id: `${INTERVALS_BY_EAR_ID}:${String(asked.seed)}`,
     title: 'Intervals by ear',
     metadata: { generatorId: INTERVALS_BY_EAR_ID, seed: asked.seed },
-    byEar: { questionsAt: measures.map((_, at) => at), keyFirst: false },
+    playedBack: { questions: measures.map((_, at) => ({ from: at, until: at + 1 })), heard: true, keyFirst: false },
   };
 }
 

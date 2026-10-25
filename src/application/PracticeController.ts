@@ -99,7 +99,7 @@ import {
 import { machineIsPlaying } from './modes/ListenFrame.js';
 import { playsFreely } from './modes/FreePlayFrame.js';
 import { WAIT_MODE_ID } from './modes/WaitMode.js';
-import { theQuestionsByEar, type QuestionByEar } from '../domain/solfege/byEar.js';
+import { theQuestionsPlayedBack, type QuestionPlayedBack } from '../domain/solfege/playedBack.js';
 import { theCadenceOfTheKey } from '../domain/solfege/cadence.js';
 import { tapsWith, tempoOfTaps } from './tapTempo.js';
 import { FreePlayed } from './freePlay.js';
@@ -922,11 +922,11 @@ export class PracticeController {
   private readonly emitter = new TypedEventEmitter<ControllerEventMap>();
 
   private currentSettings: PracticeSettings;
-  /** The steps of the music on the page played by ear, each given or found: see `theStepsByEar`. */
-  private questionsByEar: ReadonlyMap<number, QuestionByEar> = new Map();
-  private foundByEar: ReadonlySet<number> = new Set();
+  /** The questions of the music on the page played back, by the step each is given at, and the steps found: see `theQuestionsPlayedBack`. */
+  private questionsPlayedBack: ReadonlyMap<number, QuestionPlayedBack> = new Map();
+  private stepsToFind: ReadonlySet<number> = new Set();
   /** The settings a run was last worked out to be played under: see `playedUnder`. */
-  private playedUnderLast: { readonly settings: PracticeSettings; readonly byEar: boolean; readonly under: PracticeSettings } | null = null;
+  private playedUnderLast: { readonly settings: PracticeSettings; readonly playedBack: boolean; readonly under: PracticeSettings } | null = null;
   private provider: IExerciseProvider;
   private exercise: Exercise | null = null;
   private timeline: ExerciseTimeline | null = null;
@@ -1920,10 +1920,10 @@ export class PracticeController {
     this.exercise = exercise;
     this.timeline = buildTimeline(exercise);
     // Before it is drawn, so an answer is never on the page for a moment.
-    const questions = theQuestionsByEar(this.timeline);
-    this.questionsByEar = new Map(questions.map((question) => [question.given, question]));
-    this.foundByEar = new Set(questions.flatMap((question) => question.found));
-    this.deps.fade.conceal([...this.foundByEar]);
+    const questions = theQuestionsPlayedBack(this.timeline);
+    this.questionsPlayedBack = new Map(questions.map((question) => [question.given, question]));
+    this.stepsToFind = new Set(questions.flatMap((question) => question.found));
+    this.deps.fade.conceal([...this.stepsToFind]);
     timeTheStart('score: timeline built', () => `${String(this.timeline?.length ?? 0)} steps`);
     this.lastSeed = exercise.metadata.seed;
     if (newMusic) {
@@ -3221,7 +3221,7 @@ export class PracticeController {
       session.events.on('stepCompleted', ({ result, atMs }) => {
         this.readerReaches(result.index, result.status, atMs);
         // Found by ear, it goes on the page.
-        if (this.foundByEar.has(result.index)) {
+        if (this.stepsToFind.has(result.index)) {
           this.deps.fade.reveal(result.index);
         }
         // The beat is finished, so its right notes stop being provisional.
@@ -3341,8 +3341,8 @@ export class PracticeController {
         // A new step is nobody's fault yet.
         this.forgetTheTrouble();
         this.otherHandReaches(step);
-        const question = this.questionsByEar.get(step.index);
-        if (question !== undefined) {
+        const question = this.questionsPlayedBack.get(step.index);
+        if (question !== undefined && this.exercise?.playedBack?.heard === true) {
           this.soundTheQuestion(question);
         }
       }),
@@ -3465,7 +3465,7 @@ export class PracticeController {
     this.deps.overlay.clearPlayed();
     this.deps.fade.clearFaded();
     // What was found by ear in the run before is to be found again.
-    this.deps.fade.conceal([...this.foundByEar]);
+    this.deps.fade.conceal([...this.stepsToFind]);
     this.fadedThrough = -1;
 
     // The clock first, and the page behind it.
@@ -3822,7 +3822,7 @@ export class PracticeController {
    * rest after it, so the melody is heard in its key; then every key of the
    * question as written, from the note given, each for as long as it sounds.
    */
-  private soundTheQuestion(question: QuestionByEar, nowMs = this.deps.clock.now()): void {
+  private soundTheQuestion(question: QuestionPlayedBack, nowMs = this.deps.clock.now()): void {
     const exercise = this.exercise;
     const timeline = this.timeline;
     const given = timeline?.at(question.given) ?? null;
@@ -3831,7 +3831,7 @@ export class PracticeController {
     }
     const beatMs = spanMs(exercise, given.onsetTicks, given.onsetTicks + Duration.QUARTER.ticks);
     let fromMs = nowMs;
-    if (exercise.byEar?.keyFirst === true) {
+    if (exercise.playedBack?.keyFirst === true) {
       for (const chord of theCadenceOfTheKey(exercise.key)) {
         for (const key of chord) {
           this.deps.instrument.play(key, QUESTION_VELOCITY, fromMs);
@@ -3861,11 +3861,11 @@ export class PracticeController {
    */
   hearTheQuestionAgain(): void {
     const timeline = this.timeline;
-    if (timeline === null) {
+    if (timeline === null || this.exercise?.playedBack?.heard !== true) {
       return;
     }
     const at = this.currentSession?.currentStep?.index ?? this.whereARunBegins(undefined);
-    const questions = [...this.questionsByEar.values()];
+    const questions = [...this.questionsPlayedBack.values()];
     const question =
       questions.find((each) => each.given === at || each.found.includes(at)) ?? questions.find((each) => each.given >= at);
     if (question !== undefined) {
@@ -3883,12 +3883,12 @@ export class PracticeController {
    */
   private get playedUnder(): PracticeSettings {
     const settings = this.currentSettings;
-    const byEar = this.exercise?.byEar !== undefined;
+    const playedBack = this.exercise?.playedBack !== undefined;
     const kept = this.playedUnderLast;
-    if (kept !== null && kept.settings === settings && kept.byEar === byEar) {
+    if (kept !== null && kept.settings === settings && kept.playedBack === playedBack) {
       return kept.under;
     }
-    const under: PracticeSettings = byEar
+    const under: PracticeSettings = playedBack
       ? {
           ...settings,
           modeId: WAIT_MODE_ID,
@@ -3902,7 +3902,7 @@ export class PracticeController {
           pitchClassOnly: false,
         }
       : settings;
-    this.playedUnderLast = { settings, byEar, under };
+    this.playedUnderLast = { settings, playedBack, under };
     return under;
   }
 

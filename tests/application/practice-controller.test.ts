@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { theTransposition } from '../../src/domain/solfege/transposition.js';
 import { theMelodicDictation } from '../../src/domain/solfege/melodicDictation.js';
 import { theCadenceOfTheKey } from '../../src/domain/solfege/cadence.js';
 import { QUESTIONS_IN_A_ROUND, theIntervalsByEar } from '../../src/domain/solfege/intervalsByEar.js';
@@ -6566,6 +6567,26 @@ describe('music played back by ear', () => {
     instrument.played.length = 0;
     controller.hearTheQuestionAgain();
     expect(heard()).toEqual(phrase(clock.now()));
+  });
+
+  it('plays nothing of a phrase to be transposed, found from what is written and not heard, hiding only the bars to transpose', async () => {
+    const { controller, instrument, renderer, midi } = createController(false, undefined, { modeId: new FlowMode().id });
+    await controller.openScore(theTransposition({ fifths: 0, minor: false, by: 'upAFourth', seed: 6 }));
+    const timeline = controller.currentTimeline;
+    const hidden = [...renderer.concealed].map((index) => timeline?.at(index)?.measureIndex);
+    expect(hidden.length).toBeGreaterThan(0);
+    expect(hidden.every((bar) => [2, 3, 6, 7, 10, 11].includes(bar ?? -1))).toBe(true);
+    const session = controller.start();
+    // Through the phrase as written and into the one to transpose: nothing played for it.
+    for (let guard = 0; guard < 40 && (session?.currentStep?.measureIndex ?? 0) < 2; guard += 1) {
+      for (const key of session?.currentStep?.expectedMidi ?? []) {
+        midi.noteOn(key, 0);
+      }
+    }
+    controller.hearTheQuestionAgain();
+    expect([session?.currentStep?.measureIndex, asked(instrument)]).toEqual([2, []]);
+    // Waited for, whatever was chosen.
+    expect(session?.status).toBe('running');
   });
 
   it('asks nothing of music that is read', async () => {

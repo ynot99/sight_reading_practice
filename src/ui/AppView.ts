@@ -37,6 +37,7 @@ import { theChordsNamed } from '../domain/solfege/chordsNamed.js';
 import { KEYS_ASKED, theKeysNamed } from '../domain/solfege/keysNamed.js';
 import { theFunctionsNamed } from '../domain/solfege/functionsNamed.js';
 import { PROGRESSION_NAMES, theProgression, theProgressionNamed } from '../domain/solfege/progressions.js';
+import { TRANSPOSITION_NAMES, TRANSPOSITIONS, theTransposition } from '../domain/solfege/transposition.js';
 import { DICTATION_LENGTHS, DICTATION_RHYTHMS, theMelodicDictation, type DictationRhythm } from '../domain/solfege/melodicDictation.js';
 import { barsOfThePicture, tiersOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
@@ -2806,6 +2807,10 @@ export class AppView {
     solfegeProgressionsMode: HTMLSelectElement;
     solfegeProgressionsWhere: HTMLSelectElement;
     solfegeProgressionsOpen: HTMLButtonElement;
+    solfegeTransposeKey: HTMLSelectElement;
+    solfegeTransposeMode: HTMLSelectElement;
+    solfegeTransposeBy: HTMLSelectElement;
+    solfegeTransposeOpen: HTMLButtonElement;
     solfegeDictationKey: HTMLSelectElement;
     solfegeDictationMode: HTMLSelectElement;
     solfegeDictationBars: HTMLSelectElement;
@@ -3254,6 +3259,10 @@ export class AppView {
       solfegeProgressionsMode: requireElement(doc, 'solfege-progressions-mode'),
       solfegeProgressionsWhere: requireElement(doc, 'solfege-progressions-where'),
       solfegeProgressionsOpen: requireElement(doc, 'solfege-progressions-open'),
+      solfegeTransposeKey: requireElement(doc, 'solfege-transpose-key'),
+      solfegeTransposeMode: requireElement(doc, 'solfege-transpose-mode'),
+      solfegeTransposeBy: requireElement(doc, 'solfege-transpose-by'),
+      solfegeTransposeOpen: requireElement(doc, 'solfege-transpose-open'),
       solfegeDictationKey: requireElement(doc, 'solfege-dictation-key'),
       solfegeDictationMode: requireElement(doc, 'solfege-dictation-mode'),
       solfegeDictationBars: requireElement(doc, 'solfege-dictation-bars'),
@@ -7865,7 +7874,7 @@ export class AppView {
         this.showTheRung();
         // Another score on the page is no sketch's.
         this.showThePencilBesideThePills();
-        this.showWhatIsPlayedByEar(exercise);
+        this.showWhatIsPlayedBack(exercise);
         this.askToNameIt(exercise);
       }),
     );
@@ -10224,6 +10233,19 @@ export class AppView {
     this.listen(this.el.solfegeIntervalsNameThem, 'click', () => {
       void this.openTheIntervals('by name');
     });
+    this.listen(this.el.solfegeTransposeMode, 'change', () => {
+      this.nameTheKeysOfTheList(this.el.solfegeTransposeKey, this.el.solfegeTransposeMode.value === 'minor' ? 'minor' : 'major');
+    });
+    this.listen(this.el.solfegeTransposeOpen, 'click', () => {
+      void this.openTheExercise(
+        theTransposition({
+          fifths: Number(this.el.solfegeTransposeKey.value),
+          minor: this.el.solfegeTransposeMode.value === 'minor',
+          by: TRANSPOSITION_NAMES.find((name) => name === this.el.solfegeTransposeBy.value) ?? 'upASecond',
+          seed: Math.floor(Math.random() * 2 ** 31),
+        }),
+      );
+    });
     this.listen(this.el.solfegeProgressionsMode, 'change', () => {
       this.showTheProgressionsAsked();
     });
@@ -11525,6 +11547,11 @@ export class AppView {
       }
       this.nameTheKeysOfTheList(this.el.solfegeFunctionsKey, this.el.solfegeFunctionsMode.value === 'minor' ? 'minor' : 'major');
       this.showTheProgressionsAsked();
+      if (this.el.solfegeTransposeMode.options.length === 0) {
+        this.el.solfegeTransposeMode.replaceChildren(new Option('Major', 'major'), new Option('Minor', 'minor'));
+        this.el.solfegeTransposeBy.replaceChildren(...TRANSPOSITION_NAMES.map((name) => new Option(TRANSPOSITIONS[name].called, name)));
+      }
+      this.nameTheKeysOfTheList(this.el.solfegeTransposeKey, this.el.solfegeTransposeMode.value === 'minor' ? 'minor' : 'major');
     }
   }
 
@@ -11800,18 +11827,18 @@ export class AppView {
   }
 
   /**
-   * Says on the page whether its music is played back by ear: the button
-   * that plays its question again, and the modes dimmed, saying why - such
-   * music is answered as it is heard, whatever they say for music that is
-   * read.
+   * Says on the page whether its music is played back: the modes dimmed,
+   * saying why - such music is answered as it is heard or read, whatever
+   * they say for music that is read - and, where it is heard, the button
+   * that plays its question again.
    */
-  private showWhatIsPlayedByEar(exercise: Exercise): void {
-    const byEar = exercise.byEar !== undefined;
-    this.el.scoreHearAgain.hidden = !byEar;
+  private showWhatIsPlayedBack(exercise: Exercise): void {
+    const playedBack = exercise.playedBack !== undefined;
+    this.el.scoreHearAgain.hidden = exercise.playedBack?.heard !== true;
     sayWhetherIdle(
       this.el.focusModes,
-      byEar ? 'Modes: music played back by ear waits for each note, whatever they say for music that is read' : 'Modes',
-      byEar,
+      playedBack ? 'Modes: music played back waits for each note, whatever they say for music that is read' : 'Modes',
+      playedBack,
     );
   }
 

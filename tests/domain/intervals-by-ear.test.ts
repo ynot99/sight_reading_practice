@@ -27,8 +27,8 @@ describe('intervals by ear', () => {
           validateExercise(round);
         }).not.toThrow();
         // A question a bar, the key not heard first: an interval is heard from its own note.
-        expect([round.byEar, round.staves[0]?.measures.length]).toEqual([
-          { questionsAt: Array.from({ length: QUESTIONS_IN_A_ROUND }, (_, at) => at), keyFirst: false },
+        expect([round.playedBack, round.staves[0]?.measures.length]).toEqual([
+          { questions: Array.from({ length: QUESTIONS_IN_A_ROUND }, (_, at) => ({ from: at, until: at + 1 })), heard: true, keyFirst: false },
           QUESTIONS_IN_A_ROUND,
         ]);
         expect(theIntervalsByEar({ semitones: [3, 4, 7], way, seed })).toEqual(round);
@@ -82,7 +82,7 @@ describe('intervals by name', () => {
       for (const seed of SEEDS.slice(0, 20)) {
         const asked = { semitones: [12, 3, 7], way, seed };
         const named = theIntervalsNamed(asked);
-        expect([named.title, named.byEar, named.staves]).toEqual(['Intervals by name', undefined, theIntervalsByEar(asked).staves]);
+        expect([named.title, named.playedBack, named.staves]).toEqual(['Intervals by name', undefined, theIntervalsByEar(asked).staves]);
         expect(named.byName?.map((question) => question.measureIndex)).toEqual(Array.from({ length: QUESTIONS_IN_A_ROUND }, (_, at) => at));
         questions(named).forEach(({ given, answer }, at) => {
           const span = Math.abs((answer.at(-1)?.midi ?? 0) - given.midi);

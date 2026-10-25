@@ -33,6 +33,7 @@ import {
 import { SCALE_COMPLEX_SCALES, theScaleComplex, type ScaleOfTheComplex } from '../domain/solfege/scaleComplex.js';
 import { INTERVALS, INTERVAL_WAYS, theIntervalsByEar, theIntervalsNamed, type IntervalWay } from '../domain/solfege/intervalsByEar.js';
 import { NamingRound } from '../application/solfege/NamingRound.js';
+import { theChordsNamed } from '../domain/solfege/chordsNamed.js';
 import { DICTATION_LENGTHS, DICTATION_RHYTHMS, theMelodicDictation, type DictationRhythm } from '../domain/solfege/melodicDictation.js';
 import { barsOfThePicture, tiersOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
@@ -2790,6 +2791,8 @@ export class AppView {
     scoreAnswersAsks: HTMLElement;
     scoreAnswersParts: HTMLElement;
     solfegeIntervalsNameThem: HTMLButtonElement;
+    solfegeChordsAsks: HTMLSelectElement;
+    solfegeChordsOpen: HTMLButtonElement;
     solfegeDictationKey: HTMLSelectElement;
     solfegeDictationMode: HTMLSelectElement;
     solfegeDictationBars: HTMLSelectElement;
@@ -3226,6 +3229,8 @@ export class AppView {
       scoreAnswersAsks: requireElement(doc, 'score-answers-asks'),
       scoreAnswersParts: requireElement(doc, 'score-answers-parts'),
       solfegeIntervalsNameThem: requireElement(doc, 'solfege-intervals-name-them'),
+      solfegeChordsAsks: requireElement(doc, 'solfege-chords-asks'),
+      solfegeChordsOpen: requireElement(doc, 'solfege-chords-open'),
       solfegeDictationKey: requireElement(doc, 'solfege-dictation-key'),
       solfegeDictationMode: requireElement(doc, 'solfege-dictation-mode'),
       solfegeDictationBars: requireElement(doc, 'solfege-dictation-bars'),
@@ -10196,6 +10201,11 @@ export class AppView {
     this.listen(this.el.solfegeIntervalsNameThem, 'click', () => {
       void this.openTheIntervals('by name');
     });
+    this.listen(this.el.solfegeChordsOpen, 'click', () => {
+      void this.openTheExercise(
+        theChordsNamed({ inversions: this.el.solfegeChordsAsks.value === 'positions', seed: Math.floor(Math.random() * 2 ** 31) }),
+      );
+    });
     this.listen(this.el.scoreAnswers, 'click', (event) => {
       this.answerTheQuestion(event);
     });
@@ -11448,7 +11458,17 @@ export class AppView {
       this.nameTheKeysOfTheScaleComplex();
       this.showTheIntervalsAsked();
       this.showTheDictationAsked();
+      if (this.el.solfegeChordsAsks.options.length === 0) {
+        this.el.solfegeChordsAsks.replaceChildren(new Option('Their quality', 'quality'), new Option('Their quality and position', 'positions'));
+      }
     }
+  }
+
+  /** Opens an exercise of the solfege list as a score is opened: on no shelf, so a playback of it goes on to no other piece. */
+  private async openTheExercise(exercise: Exercise): Promise<void> {
+    this.el.sheetScores.hidden = true;
+    await this.pickUpTheFile(exercise);
+    this.runtime.controller.playOnlyTheScoreOpen();
   }
 
   /**
@@ -11491,9 +11511,7 @@ export class AppView {
       rhythm: DICTATION_RHYTHMS.find((rhythm) => rhythm === this.el.solfegeDictationRhythm.value) ?? 'crotchets',
       seed: Math.floor(Math.random() * 2 ** 31),
     });
-    this.el.sheetScores.hidden = true;
-    await this.pickUpTheFile(exercise);
-    this.runtime.controller.playOnlyTheScoreOpen();
+    await this.openTheExercise(exercise);
   }
 
   /**
@@ -11541,9 +11559,7 @@ export class AppView {
     const way = INTERVAL_WAYS.find((each) => each === this.el.solfegeIntervalsWay.value) ?? 'up';
     const asked = { semitones: [...this.intervalsAsked], way, seed: Math.floor(Math.random() * 2 ** 31) };
     const exercise = how === 'by ear' ? theIntervalsByEar(asked) : theIntervalsNamed(asked);
-    this.el.sheetScores.hidden = true;
-    await this.pickUpTheFile(exercise);
-    this.runtime.controller.playOnlyTheScoreOpen();
+    await this.openTheExercise(exercise);
   }
 
   /**
@@ -11698,9 +11714,7 @@ export class AppView {
    */
   private async openTheScaleComplex(): Promise<void> {
     const exercise = theScaleComplex({ fifths: Number(this.el.solfegeComplexKey.value), scale: this.theScaleOfTheComplexAsked() });
-    this.el.sheetScores.hidden = true;
-    await this.pickUpTheFile(exercise);
-    this.runtime.controller.playOnlyTheScoreOpen();
+    await this.openTheExercise(exercise);
   }
 
   private renderSketches(): void {

@@ -8247,6 +8247,41 @@ describe('AppView', () => {
       expect([pad.hidden, element('score').dataset['naming']]).toEqual([true, undefined]);
     });
 
+    it('asks chords to be named by their quality and their position, judged once both are picked', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      const asks = element<HTMLSelectElement>('solfege-chords-asks');
+      expect([...asks.options].map((option) => `${option.value} ${option.label}`)).toEqual([
+        'quality Their quality',
+        'positions Their quality and position',
+      ]);
+      asks.value = 'positions';
+      element<HTMLButtonElement>('solfege-chords-open').click();
+      await vi.waitFor(() => {
+        expect([runtime.controller.openedExercise?.title, runtime.controller.theScoreOpenStandsAlone]).toEqual(['Chords by name', true]);
+      });
+      const pad = element('score-answers');
+      const rows = (): string[][] =>
+        [...pad.querySelectorAll('.score__answers-row')].map((row) =>
+          [...row.querySelectorAll<HTMLButtonElement>('[data-choice]')].map(
+            (chip) => `${chip.textContent}${chip.getAttribute('aria-pressed') === 'true' ? '*' : ''}${chip.dataset['verdict'] === undefined ? '' : `|${chip.dataset['verdict']}`}`,
+          ),
+        );
+      const parts = runtime.controller.openedExercise?.byName?.[0]?.parts ?? [];
+      expect(element('score-answers-asks').textContent).toBe('1 of 10 · bar 1: quality and position?');
+      expect(rows()).toEqual([
+        ['Major', 'Minor', 'Diminished', 'Augmented'],
+        ['Root position', 'First inversion', 'Second inversion'],
+      ]);
+      // The quality alone is not judged; with the position too, it is.
+      pad.querySelector<HTMLButtonElement>(`[data-part="0"][data-choice="${parts[0]?.answer ?? ''}"]`)?.click();
+      expect(rows().flat().filter((chip) => chip.includes('|'))).toEqual([]);
+      pad.querySelector<HTMLButtonElement>(`[data-part="1"][data-choice="${parts[1]?.answer ?? ''}"]`)?.click();
+      expect(rows().map((row) => row.filter((chip) => chip.includes('|')))).toEqual([[`${parts[0]?.answer ?? ''}*|right`], [`${parts[1]?.answer ?? ''}*|right`]]);
+    });
+
     it('names the sections of a sketch written down as a score where they begin', async () => {
       const { view, runtime, sketches } = createRig();
       await view.initialize();

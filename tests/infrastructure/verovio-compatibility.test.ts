@@ -9,6 +9,7 @@ import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { theScaleComplex } from '../../src/domain/solfege/scaleComplex.js';
+import { CHORDS_IN_A_ROUND, theChordsNamed } from '../../src/domain/solfege/chordsNamed.js';
 import { DICTATIONS_IN_A_ROUND, theMelodicDictation } from '../../src/domain/solfege/melodicDictation.js';
 import { INTERVAL_WAYS, QUESTIONS_IN_A_ROUND, theIntervalsByEar } from '../../src/domain/solfege/intervalsByEar.js';
 import { barId, printedAtEachStep } from '../../src/domain/notation/printedIds.js';
@@ -219,6 +220,12 @@ describe('Verovio and our timeline agree on every step', () => {
       { fifths: 5, minor: true, bars: 2, rhythm: 'quavers' },
     ] as const) {
       expect({ ...asked, ...agreementOf(theMelodicDictation({ ...asked, seed: 9 })) }).toEqual({ ...asked, ...agreeing(DICTATIONS_IN_A_ROUND * asked.bars) });
+    }
+  });
+
+  it('on a round of chords to be named, in every position', () => {
+    for (const seed of [3, 11]) {
+      expect({ seed, ...agreementOf(theChordsNamed({ inversions: true, seed })) }).toEqual({ seed, ...agreeing(CHORDS_IN_A_ROUND) });
     }
   });
 

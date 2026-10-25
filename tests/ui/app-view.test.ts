@@ -8565,6 +8565,84 @@ describe('AppView', () => {
       expect(struck()).toEqual(was);
     });
 
+    it('deletes the bar of the beat asked about and everything in it, as one change, and not a bar every note is in', async () => {
+      const { view, sketches, clock } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            ...Array.from({ length: 12 }, (_, at) => [
+              { kind: 'noteOn' as const, atMs: at * 500, midi: 60 + at, velocity: 0.5 },
+              { kind: 'noteOff' as const, atMs: at * 500 + 400, midi: 60 + at },
+            ]).flat(),
+            { kind: 'dynamic' as const, atMs: 4_000, level: 'f' as const },
+          ],
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Fewer',
+        1,
+      );
+      sketches.begin(
+        {
+          events: [
+            { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: 1_500, midi: 60 },
+          ],
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'One bar',
+        2,
+      );
+      const edit = async (name: string): Promise<void> => {
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-sketches').click();
+        await editTheSketch(
+          [...element('sketches-list').querySelectorAll('li')]
+            .find((row) => row.textContent?.includes(name) === true)
+            ?.querySelector<HTMLButtonElement>('button[title="Edit this sketch"]'),
+        );
+      };
+      await edit('Fewer');
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const body = element('roll-body');
+      const remove = element<HTMLButtonElement>('roll-mark-delete-bar');
+      const struck = (id: string): number[] =>
+        (sketches.find(id)?.events ?? []).flatMap((event) => (event.kind === 'noteOn' || event.kind === 'dynamic' ? [event.atMs] : []));
+      const across = (ms: number): number =>
+        (ms / 1000) * zoom - (Number.parseFloat(body.querySelector<HTMLElement>('.roll__head')?.style.getPropertyValue('--roll-x') ?? '0') || 0);
+      const ask = (ms: number): void => {
+        clock.advance(1_000);
+        tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: across(ms), clientY: 20 });
+        element<HTMLButtonElement>('roll-mark').click();
+      };
+      const was = struck(sketch.id);
+
+      // Asked on the second bar's second beat: that bar, the forte after it from where it began.
+      ask(2_600);
+      expect([remove.dataset['idle'], remove.title]).toEqual([
+        undefined,
+        'Delete bar 2 and everything in it, moving everything after it back by a bar',
+      ]);
+      remove.click();
+      expect(element('sheet-roll-mark').hidden).toBe(true);
+      expect(struck(sketch.id)).toEqual(
+        was.flatMap((atMs) => (atMs < 2_000 ? [atMs] : atMs >= 4_000 ? [atMs - 2_000] : [])).sort((one, other) => one - other),
+      );
+      // One change, put back as one.
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'z', code: 'KeyZ', ctrlKey: true }));
+      expect(struck(sketch.id)).toEqual(was);
+
+      // A sketch whose every note is in the bar: dimmed, saying why, and nothing done.
+      element<HTMLButtonElement>('roll-close').click();
+      await edit('One bar');
+      const alone = sketches.list().find((each) => each.title === 'One bar')?.id ?? '';
+      ask(600);
+      expect([remove.dataset['idle'], remove.title]).toEqual(['true', 'Every note of the sketch is in this bar: deleting it would leave none']);
+      remove.click();
+      expect(struck(alone)).toEqual([0]);
+      expect(element('sheet-roll-mark').hidden).toBe(true);
+    });
+
     it('reaches a dynamic gradually from the one marked before, says so on its flag, copies it so, and prints a hairpin', async () => {
       const { view, sketches, clock, runtime } = createRig();
       await view.initialize();

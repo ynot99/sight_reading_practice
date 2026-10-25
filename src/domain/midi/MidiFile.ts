@@ -317,7 +317,7 @@ function theBeatAt(grid: readonly HeardBeat[], atMs: number): number {
 }
 
 /** How near two moments are to be one: what rounding a click's beats to the millisecond leaves. */
-const SAME_MOMENT_MS = 0.5;
+export const SAME_MOMENT_MS = 0.5;
 
 /** A metre as a bar says it: "6/8". */
 function metreOf(beat: HeardBeat): string {
@@ -806,30 +806,69 @@ export function thePlayingWithABarInserted(
   beats: readonly HeardBeat[],
   atMs: number,
 ): { readonly events: readonly MidiFileEvent[]; readonly beats: readonly HeardBeat[] } {
-  const grid = theClickReaching(events, beats, atMs, true);
-  if (grid === null) {
+  const bar = theBarOfTheTakeAt(events, beats, atMs);
+  if (bar === null) {
     return { events, beats };
   }
-  const from = theBarAt(grid, atMs);
-  const first = elementAt(grid, from);
-  // The bar and the beat after it, carried on at its pace where the click stops short of them.
-  const laid = [...grid];
-  while (laid.length <= from + first.beatsInBar) {
-    const last = elementAt(laid, laid.length - 1);
-    laid.push({ ...last, atMs: last.atMs + gapAfter(laid, laid.length - 1), beat: (last.beat + 1) % last.beatsInBar });
-  }
-  const lengthMs = elementAt(laid, from + first.beatsInBar).atMs - first.atMs;
-  const begins = (event: MidiFileEvent): boolean =>
-    event.kind === 'noteOn' || event.kind === 'key' || event.kind === 'dynamic' || (event.kind === 'sustain' && damperIsDown(event.value));
+  const { laid, from, fromMs, untilMs } = bar;
+  const lengthMs = untilMs - fromMs;
   const moves = (event: MidiFileEvent): boolean =>
-    event.atMs > first.atMs + SAME_MOMENT_MS || (event.atMs >= first.atMs - SAME_MOMENT_MS && begins(event));
+    event.atMs > fromMs + SAME_MOMENT_MS || (event.atMs >= fromMs - SAME_MOMENT_MS && beginsSomething(event));
   return {
     events: inTheOrderPlayed(events.map((event) => (moves(event) ? { ...event, atMs: event.atMs + lengthMs } : event))),
     beats: [
-      ...laid.slice(0, from + first.beatsInBar),
+      ...laid.slice(0, bar.after),
       ...laid.slice(from).map((beat) => ({ ...beat, atMs: beat.atMs + lengthMs })),
     ],
   };
+}
+
+/**
+ * Whether an event begins something - a note, the pedal put down, a key, a
+ * dynamic, a section - rather than ending what was begun: on a bar line,
+ * what begins there is the bar after's, and what ends there the bar before's.
+ */
+export function beginsSomething(event: MidiFileEvent): boolean {
+  return (
+    event.kind === 'noteOn' ||
+    event.kind === 'key' ||
+    event.kind === 'dynamic' ||
+    event.kind === 'section' ||
+    (event.kind === 'sustain' && damperIsDown(event.value))
+  );
+}
+
+/** The bar a moment is in, as a take's click lays it: see `theBarOfTheTakeAt`. */
+export interface BarOfTheTake {
+  /** The click, carried on at its pace as far as the beat after the bar where it stops short of it. */
+  readonly laid: readonly HeardBeat[];
+  /** Where in it the bar's first beat is, and the next bar's. */
+  readonly from: number;
+  readonly after: number;
+  /** When the bar begins, and when the next does. */
+  readonly fromMs: number;
+  readonly untilMs: number;
+}
+
+/**
+ * The bar of a take's click a moment is in - the first bar for a moment
+ * before it - with the click laid as far as the bar after it begins; `null`
+ * where the click says nothing.
+ */
+export function theBarOfTheTakeAt(events: readonly MidiFileEvent[], beats: readonly HeardBeat[], atMs: number): BarOfTheTake | null {
+  const grid = theClickReaching(events, beats, atMs, true);
+  if (grid === null) {
+    return null;
+  }
+  const from = theBarAt(grid, atMs);
+  const first = elementAt(grid, from);
+  const after = from + first.beatsInBar;
+  const laid = [...grid];
+  while (laid.length <= after) {
+    const last = elementAt(laid, laid.length - 1);
+    laid.push({ ...last, atMs: last.atMs + gapAfter(laid, laid.length - 1), beat: (last.beat + 1) % last.beatsInBar });
+  }
+  return { laid, from, after, fromMs: first.atMs, untilMs: elementAt(laid, after).atMs };
 }
 
 /** A beat of a click: how many crotchets after its first it falls, and when. */

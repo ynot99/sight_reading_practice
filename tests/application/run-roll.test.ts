@@ -28,6 +28,7 @@ import {
   rollEndedAtMs,
   rollOfTheScore,
   rollOfTheTake,
+  thePlayingWithABarTakenOut,
   barsCountedOnItsBeats,
   takeOfTheRun,
   takeWithoutTheKeys,
@@ -63,7 +64,15 @@ import type {
 } from '../../src/application/ports/IMidiSource.js';
 import type { NoteJudgedEvent } from '../../src/application/session/SessionEvents.js';
 import type { Take } from '../../src/application/PerformanceRecorder.js';
-import { inTheOrderPlayed, type MidiFileEvent } from '../../src/domain/midi/MidiFile.js';
+import {
+  inTheOrderPlayed,
+  theChangesOfTheClick,
+  theClickOfTheTake,
+  theClickInAnotherMetre,
+  thePlayingAtAnotherPace,
+  type HeardBeat,
+  type MidiFileEvent,
+} from '../../src/domain/midi/MidiFile.js';
 import type { BeatWeight } from '../../src/application/ports/IMetronome.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { MIDI, offBeatAfterALongNote, twoBarExercise, unisonInTwoVoices } from '../support/fixtures.js';
@@ -2228,5 +2237,135 @@ describe('changing a recording', () => {
     expect(played.beats.map((beat) => beat.atMs)).toEqual([0, 500, 1_000, 1_500, 2_000, 2_500]);
     expect(empty.beats.map((beat) => beat.atMs)).toEqual([0, 500, 1_000, 1_500, 2_000, 2_500, 3_000, 3_500, 4_000, 4_500]);
     expect(rollOfTheTake({ events: [on(0, MIDI.C4), off(900, MIDI.C4)], beats }).beats).toHaveLength(3);
+  });
+});
+
+describe('a bar taken out', () => {
+  /** A click of four in a bar, a beat every half second: a bar every two. */
+  const fours = (count = 2): HeardBeat[] => Array.from({ length: count }, (_, at) => ({ atMs: at * 500, beat: at % 4, beatsInBar: 4 }));
+  const key = (midi: number, downAtMs: number, upAtMs: number): MidiFileEvent[] => [
+    { kind: 'noteOn', atMs: downAtMs, midi, velocity: 0.5 },
+    { kind: 'noteOff', atMs: upAtMs, midi },
+  ];
+  const said = (events: readonly MidiFileEvent[]): string[] =>
+    events.map((event) => {
+      switch (event.kind) {
+        case 'noteOn':
+          return `${String(event.atMs)} on ${String(event.midi)}`;
+        case 'noteOff':
+          return `${String(event.atMs)} off ${String(event.midi)}`;
+        case 'sustain':
+          return `${String(event.atMs)} pedal ${String(event.value)}`;
+        case 'key':
+          return `${String(event.atMs)} key ${String(event.fifths)}`;
+        case 'dynamic':
+          return `${String(event.atMs)} ${event.level}`;
+        case 'section':
+          return `${String(event.atMs)} [${event.name}]`;
+      }
+    });
+
+  it('takes out what is struck in it and lets go where it began of what is held into it, moving what follows back by a bar', () => {
+    const events = inTheOrderPlayed([
+      ...key(60, 0, 400),
+      // Let go on its first bar line: the music's before it.
+      ...key(71, 1_000, 2_000),
+      // Held into it, and across the whole of it.
+      ...key(62, 1_500, 2_600),
+      ...key(64, 1_800, 4_500),
+      // Struck on its first bar line, and ringing past its end: its own.
+      ...key(65, 2_000, 2_400),
+      ...key(67, 3_500, 4_500),
+      // On the next bar line: the bar after's.
+      ...key(69, 4_000, 4_400),
+    ]);
+    // Asked anywhere in the second bar.
+    const taken = thePlayingWithABarTakenOut(events, fours(), 3_200);
+    expect(said(taken?.events ?? [])).toEqual([
+      '0 on 60',
+      '400 off 60',
+      '1000 on 71',
+      '1500 on 62',
+      '1800 on 64',
+      '2000 off 71',
+      '2000 off 62',
+      '2000 off 64',
+      '2000 on 69',
+      '2400 off 69',
+    ]);
+    // Bars of four still, every beat where it was or a bar earlier, as far as the music goes.
+    expect((theClickOfTheTake(taken?.events ?? [], taken?.beats ?? []) ?? []).map((beat) => `${String(beat.atMs)}:${String(beat.beat)}`)).toEqual(
+      Array.from({ length: 6 }, (_, at) => `${String(at * 500)}:${String(at % 4)}`),
+    );
+  });
+
+  it('leaves in force what it left in force: the pedal as it stood at its end, and its last key, dynamic and section, unless the bar after says its own', () => {
+    const notes = [...key(60, 0, 400), ...key(60, 4_000, 4_400)];
+    const out = (events: MidiFileEvent[]): string[] =>
+      said(thePlayingWithABarTakenOut(inTheOrderPlayed([...notes, ...events]), fours(), 2_100)?.events ?? []).filter(
+        (each) => !each.includes(' on ') && !each.includes(' off '),
+      );
+
+    // Put down before it and let up in it: up from where it was.
+    expect(out([{ kind: 'sustain', atMs: 1_000, value: 1 }, { kind: 'sustain', atMs: 2_500, value: 0 }])).toEqual(['1000 pedal 1', '2000 pedal 0']);
+    // Let up and put down again in it: down still, nothing to say.
+    expect(
+      out([
+        { kind: 'sustain', atMs: 1_000, value: 1 },
+        { kind: 'sustain', atMs: 2_500, value: 0 },
+        { kind: 'sustain', atMs: 3_000, value: 1 },
+      ]),
+    ).toEqual(['1000 pedal 1']);
+    // Put down in it only: down from where it was.
+    expect(out([{ kind: 'sustain', atMs: 3_000, value: 1 }])).toEqual(['2000 pedal 1']);
+    // Put down on its first bar line, which is its own: down from there still.
+    expect(out([{ kind: 'sustain', atMs: 2_000, value: 1 }])).toEqual(['2000 pedal 1']);
+    // Marks begun in it, the last of each, from where it was; one on its first bar line is its own.
+    expect(
+      out([
+        { kind: 'key', atMs: 2_500, fifths: 1, scale: 'major' },
+        { kind: 'key', atMs: 3_000, fifths: 2, scale: 'major' },
+        { kind: 'dynamic', atMs: 3_500, level: 'f' },
+        { kind: 'section', atMs: 2_000, name: 'B' },
+      ]),
+    ).toEqual(['2000 [B]', '2000 key 2', '2000 f']);
+    // The bar after beginning with its own: that one, and nothing carried.
+    expect(
+      out([
+        { kind: 'dynamic', atMs: 3_500, level: 'f' },
+        { kind: 'dynamic', atMs: 4_000, level: 'p' },
+        { kind: 'section', atMs: 2_000, name: 'B' },
+        { kind: 'section', atMs: 4_000, name: 'C' },
+      ]),
+    ).toEqual(['2000 p', '2000 [C]']);
+  });
+
+  it('leaves the bars after it their metre and pace, and the first may go', () => {
+    const notes = [...key(60, 0, 400), ...key(62, 2_000, 2_400), ...key(64, 5_000, 5_400)];
+    const waltz = theClickInAnotherMetre(notes, fours(), 3, 4, 2_000);
+    const paced = thePlayingAtAnotherPace(notes, waltz, 90, 2_000);
+    const taken = thePlayingWithABarTakenOut(paced.events, paced.beats, 100);
+    const changes = (playing: { readonly events: readonly MidiFileEvent[]; readonly beats: readonly HeardBeat[] } | null): string[] =>
+      playing === null
+        ? []
+        : theChangesOfTheClick(playing.events, playing.beats).map(
+            (change) => `${String(Math.round(change.atMs))} ${String(change.metre?.beatsInBar ?? '')} ${String(change.crotchetsPerMinute ?? '')}`,
+          );
+
+    expect(changes(paced)).toEqual(['0 4 120', '2000 3 90']);
+    expect(changes(taken)).toEqual(['0 3 90']);
+    // A bar of three between bars of four taken out: four all through, its beats gone with it.
+    const between = theClickInAnotherMetre(notes, theClickInAnotherMetre(notes, fours(), 3, 4, 2_000), 4, 4, 3_500);
+    expect(changes({ events: notes, beats: between })).toEqual(['0 4 120', '2000 3 ', '3500 4 ']);
+    expect(changes(thePlayingWithABarTakenOut(notes, between, 2_100))).toEqual(['0 4 120']);
+    expect(said(taken?.events ?? []).filter((each) => each.includes(' on '))).toEqual(
+      paced.events.flatMap((event) => (event.kind === 'noteOn' && event.atMs >= 2_000 ? [`${String(event.atMs - 2_000)} on ${String(event.midi)}`] : [])),
+    );
+  });
+
+  it('leaves nothing taken where no note would be left, or the click says nothing', () => {
+    expect(thePlayingWithABarTakenOut(key(60, 2_000, 4_500), fours(), 2_100)).toBeNull();
+    expect(thePlayingWithABarTakenOut([], fours(), 0)).toBeNull();
+    expect(thePlayingWithABarTakenOut([...key(60, 0, 400), ...key(60, 2_000, 2_400)], [{ atMs: 0, beat: 0, beatsInBar: 4 }], 2_100)).toBeNull();
   });
 });

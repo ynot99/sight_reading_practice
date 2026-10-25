@@ -1,13 +1,18 @@
 import type { NoteVerdict } from '../../domain/matching/ChordMatcher.js';
 import {
+  beginsSomething,
   damperIsDown,
   inTheOrderPlayed,
+  SAME_MOMENT_MS,
+  theBarOfTheTakeAt,
   theClickOfTheTake,
   theLevelOfTheNote,
   type Hand,
+  type HeardBeat,
   type MidiFileEvent,
   type NoteLoudness,
 } from '../../domain/midi/MidiFile.js';
+import { elementAt } from '../../shared/asserts.js';
 import { Duration } from '../../domain/model/Duration.js';
 import {
   barLines,
@@ -1087,6 +1092,90 @@ export function takeWithoutTheKeys(
   }
   const gone = new Set(keys.flatMap(({ on, off }) => (off === null ? [on] : [on, off])));
   return events.filter((_, at) => !gone.has(at));
+}
+
+/**
+ * A take with the bar a moment is in taken out, and everything after it
+ * moved earlier by as long as the bar lasted - the notes, the pedal, the
+ * keys, the dynamics, the sections and the beats; or `null` where no note
+ * would be left, or the click says nothing.
+ *
+ * On its first bar line, what begins there is the bar's, and what ends
+ * there the music's before it; on the next, what begins is the bar after's.
+ * A note struck in it goes, however long it rings past it; one held into
+ * it from before is let go where it began. What it leaves in force stays in
+ * force: the pedal as it stood at its end, and the last key, dynamic and
+ * section begun in it, from where it was - unless the bar after begins with
+ * one of its own. The bars after keep their metre and pace, which their
+ * beats carry.
+ */
+export function thePlayingWithABarTakenOut(
+  events: readonly MidiFileEvent[],
+  beats: readonly HeardBeat[],
+  atMs: number,
+): { readonly events: readonly MidiFileEvent[]; readonly beats: readonly HeardBeat[] } | null {
+  const bar = theBarOfTheTakeAt(events, beats, atMs);
+  if (bar === null) {
+    return null;
+  }
+  const { laid, from, after, fromMs, untilMs } = bar;
+  const lengthMs = untilMs - fromMs;
+  const inIt = (event: MidiFileEvent): boolean =>
+    event.atMs < untilMs - SAME_MOMENT_MS &&
+    (event.atMs > fromMs + SAME_MOMENT_MS || (event.atMs >= fromMs - SAME_MOMENT_MS && beginsSomething(event)));
+  const keys = theKeysOfTheTake(events);
+  if (keys.every((key) => inIt(elementAt(events, key.on)))) {
+    return null;
+  }
+  const gone = new Set<number>();
+  const letGo = new Set<number>();
+  for (const key of keys) {
+    if (inIt(elementAt(events, key.on))) {
+      gone.add(key.on);
+      if (key.off !== null) {
+        gone.add(key.off);
+      }
+    } else if (key.off !== null && key.downAtMs < fromMs && (key.upAtMs ?? fromMs) > fromMs + SAME_MOMENT_MS) {
+      letGo.add(key.off);
+    }
+  }
+  const theLastIn = (counts: (event: MidiFileEvent) => boolean): number =>
+    events.reduce((found, event, at) => (counts(event) ? at : found), -1);
+  // Each kind of mark begun in it, its last, carried to where it began
+  // unless the bar after begins with its own.
+  const carried = new Set<number>();
+  for (const kind of ['key', 'dynamic', 'section'] as const) {
+    const last = theLastIn((event) => event.kind === kind && inIt(event));
+    const its = events.some((event) => event.kind === kind && Math.abs(event.atMs - untilMs) <= SAME_MOMENT_MS);
+    if (last >= 0 && !its) {
+      carried.add(last);
+    }
+  }
+  // And the pedal, where it stands otherwise at the bar's end than at its start.
+  const theDamperAfter = (counts: (event: MidiFileEvent) => boolean): boolean =>
+    events.reduce((down, event) => (event.kind === 'sustain' && counts(event) ? damperIsDown(event.value) : down), false);
+  const pedalledInIt = theLastIn((event) => event.kind === 'sustain' && inIt(event));
+  if (
+    pedalledInIt >= 0 &&
+    theDamperAfter((event) => event.atMs < untilMs - SAME_MOMENT_MS) !==
+      theDamperAfter((event) => event.atMs <= fromMs + SAME_MOMENT_MS && !inIt(event))
+  ) {
+    carried.add(pedalledInIt);
+  }
+  return {
+    events: inTheOrderPlayed(
+      events.flatMap((event, at) =>
+        gone.has(at)
+          ? []
+          : letGo.has(at) || carried.has(at)
+            ? [{ ...event, atMs: fromMs }]
+            : inIt(event)
+              ? []
+              : [event.atMs >= untilMs - SAME_MOMENT_MS ? { ...event, atMs: event.atMs - lengthMs } : event],
+      ),
+    ),
+    beats: [...laid.slice(0, from), ...laid.slice(after).map((beat) => ({ ...beat, atMs: beat.atMs - lengthMs }))],
+  };
 }
 
 /**

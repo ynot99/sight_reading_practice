@@ -225,6 +225,7 @@ import {
   takeWithTheKeysCopied,
   takeWithTheKeyCut,
   takeWithTheNotesPasted,
+  thePlayingWithABarTakenOut,
   takeWithTheChordsBroken,
   theMusicsBeats,
   type ArpeggioWay,
@@ -2823,6 +2824,7 @@ export class AppView {
     rollMarkReached: HTMLSelectElement;
     rollMarkRemove: HTMLButtonElement;
     rollMarkInsert: HTMLButtonElement;
+    rollMarkDeleteBar: HTMLButtonElement;
     rollMarkYes: HTMLButtonElement;
     rollMarkNo: HTMLButtonElement;
     rollChords: HTMLElement;
@@ -3240,6 +3242,7 @@ export class AppView {
       rollMarkReached: requireElement(doc, 'roll-mark-reached'),
       rollMarkRemove: requireElement(doc, 'roll-mark-remove'),
       rollMarkInsert: requireElement(doc, 'roll-mark-insert'),
+      rollMarkDeleteBar: requireElement(doc, 'roll-mark-delete-bar'),
       rollMarkYes: requireElement(doc, 'roll-mark-yes'),
       rollMarkNo: requireElement(doc, 'roll-mark-no'),
       rollChords: requireElement(doc, 'roll-chords'),
@@ -10254,6 +10257,9 @@ export class AppView {
     this.listen(this.el.rollMarkRemove, 'click', () => {
       this.takeTheChangeAway();
     });
+    this.listen(this.el.rollMarkDeleteBar, 'click', () => {
+      this.deleteTheBarOfTheBeatAsked();
+    });
     this.listen(this.el.rollMarkInsert, 'click', () => {
       this.insertABarBeforeTheBeatAsked();
     });
@@ -15222,6 +15228,15 @@ export class AppView {
         : `Insert an empty bar before bar ${String(bar.bar)}, moving everything from it on by a bar`,
       bar.bar === 1,
     );
+    // Its notes all in this bar, a sketch would be left with none.
+    const leavesNone = thePlayingWithABarTakenOut(stored.events, stored.beats, bar.atMs) === null;
+    sayWhetherIdle(
+      this.el.rollMarkDeleteBar,
+      leavesNone
+        ? 'Every note of the sketch is in this bar: deleting it would leave none'
+        : `Delete bar ${String(bar.bar)} and everything in it, moving everything after it back by a bar`,
+      leavesNone,
+    );
     return true;
   }
 
@@ -15247,6 +15262,31 @@ export class AppView {
       [...sketch.before, asItWas(stored, sketch.chosen)],
       this.theChosenMovedWith(stored.events, inserted.events, sketch.chosen),
       inserted.beats,
+    );
+  }
+
+  /**
+   * Takes the bar of the beat asked about out of the sketch, everything in
+   * it with it, and moves everything after it back by as long: one change,
+   * put back as one. None where it would leave no note.
+   */
+  private deleteTheBarOfTheBeatAsked(): void {
+    const bar = this.beatAskedAbout;
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    this.el.sheetRollMark.hidden = true;
+    this.beatAskedAbout = null;
+    this.keyAskedAbout = null;
+    this.dynamicAskedAbout = null;
+    const taken = bar === null || stored === null ? null : thePlayingWithABarTakenOut(stored.events, stored.beats, bar.atMs);
+    if (taken === null || sketch === undefined || stored === null) {
+      return;
+    }
+    this.changeTheSketchShowing(
+      taken.events,
+      [...sketch.before, asItWas(stored, sketch.chosen)],
+      this.theChosenMovedWith(stored.events, taken.events, sketch.chosen),
+      taken.beats,
     );
   }
 

@@ -954,11 +954,12 @@ describe('an empty bar put in before another', () => {
       // The pedal let up on the bar line and put down again on it.
       { kind: 'sustain', atMs: 4_000, value: 0 },
       { kind: 'sustain', atMs: 4_000, value: 1 },
-      // A hair before the bar line is on it; a key and a dynamic go with the music.
+      // A hair before the bar line is on it; a key, a dynamic and a section go with the music.
       { kind: 'noteOn', atMs: 3_999.6, midi: 67, velocity: 0.5 },
       { kind: 'noteOff', atMs: 4_400, midi: 67 },
       { kind: 'key', atMs: 4_000, fifths: 1, scale: 'major' },
       { kind: 'dynamic', atMs: 5_000, level: 'f' },
+      { kind: 'section', atMs: 4_000, name: 'B' },
     ];
     // Asked anywhere in the third bar: before it.
     const { events: moved, beats } = thePlayingWithABarInserted(events, click(0, 500, 2), 5_200);
@@ -972,7 +973,7 @@ describe('an empty bar put in before another', () => {
     expect(where('noteOn')).toEqual(['0 60', '3500 62', '3800 64', '5999.6 67']);
     expect(where('noteOff')).toEqual(['1 60', '4000 62', '6200 64', '6400 67']);
     expect(where('sustain')).toEqual(['4000 0', '6000 1']);
-    expect([...where('key'), ...where('dynamic')]).toEqual(['6000', '7000']);
+    expect([...where('key'), ...where('dynamic'), ...where('section')]).toEqual(['6000', '7000', '6000']);
     // Four bars of four now, the third the one put in.
     expect(beats.slice(0, 17).map((beat) => `${String(beat.atMs)}:${String(beat.beat)}`)).toEqual(
       Array.from({ length: 17 }, (_, at) => `${String(at * 500)}:${String(at % 4)}`),

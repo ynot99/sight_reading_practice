@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { theScaleComplex } from '../../src/domain/solfege/scaleComplex.js';
 import { readFileSync } from 'node:fs';
 import type { CloudFile, ICloudDrive } from '../../src/application/ports/ICloudDrive.js';
 import type { ICodeSignIn, SignInCode } from '../../src/application/ports/ICodeSignIn.js';
@@ -8033,6 +8034,52 @@ describe('AppView', () => {
       } finally {
         Reflect.deleteProperty(window.navigator, 'clipboard');
       }
+    });
+
+    it('opens a scale complex from the Solfege list of the scores sheet, in the key and scale chosen, on no shelf', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      const scale = element<HTMLSelectElement>('solfege-complex-scale');
+      const key = element<HTMLSelectElement>('solfege-complex-key');
+      const shown = (): Record<string, boolean | string | null> => ({
+        solfege: !element('solfege').hidden,
+        scores: !element('scores-list').hidden,
+        tools: !element('scores-tools').hidden,
+        sketches: !element('sketches-list').hidden,
+        empty: !element('scores-empty').hidden,
+        pressed: element('scores-show-solfege').getAttribute('aria-pressed'),
+      });
+      element<HTMLButtonElement>('focus-scores').click();
+      expect(shown()).toMatchObject({ solfege: false, scores: true, pressed: 'false' });
+
+      // The third list: the exercises alone, and nothing of the shelf or the sketches.
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      expect(shown()).toEqual({ solfege: true, scores: false, tools: false, sketches: false, empty: false, pressed: 'true' });
+      expect([...scale.options].map((option) => `${option.value} ${option.label}`)).toEqual([
+        'major Major',
+        'minor Minor',
+        'harmonicMinor Harmonic minor',
+        'melodicMinor Melodic minor',
+      ]);
+      expect([key.options.length, key.value, key.selectedOptions[0]?.label]).toEqual([15, '0', 'C major']);
+      // Another scale keeps the signature, every key named in it.
+      scale.value = 'harmonicMinor';
+      scale.dispatchEvent(new Event('change', { bubbles: true }));
+      expect([key.value, key.selectedOptions[0]?.label, key.options[0]?.label]).toEqual(['0', 'A harmonic minor', 'A♭ harmonic minor']);
+
+      key.value = '3';
+      element<HTMLButtonElement>('solfege-complex-open').click();
+      const asked = theScaleComplex({ fifths: 3, scale: 'harmonicMinor' });
+      await vi.waitFor(() => {
+        expect([runtime.controller.openedExercise?.title, runtime.controller.theScoreOpenStandsAlone]).toEqual([asked.title, true]);
+      });
+      expect([element('sheet-scores').hidden, runtime.controller.openedExercise?.rehearsalMarks?.length]).toEqual([true, 4]);
+      // Opened again, the list is where it was left; and the scores are a press away.
+      element<HTMLButtonElement>('focus-scores').click();
+      expect(shown()).toMatchObject({ solfege: true, pressed: 'true' });
+      expect([scale.value, key.value]).toEqual(['harmonicMinor', '3']);
+      element<HTMLButtonElement>('scores-show-scores').click();
+      expect(shown()).toMatchObject({ solfege: false, scores: true, tools: true, pressed: 'false' });
     });
 
     it('names the sections of a sketch written down as a score where they begin', async () => {

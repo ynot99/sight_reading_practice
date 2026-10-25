@@ -5850,6 +5850,47 @@ body[data-take-on-keys='true'] #take-off-the-keys {
   gap: 8px;
 }
 
+/* A section of the exercises a music school sets: its name, what it is, and what it asks for. */
+.solfege {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.solfege__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.solfege__what {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.solfege__asks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* A list, its arrow kept so it reads as one; never below sixteen pixels, or Safari magnifies the page. */
+.solfege__ask {
+  flex: 1 1 8em;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 8px;
+  font: inherit;
+  font-size: max(16px, 1em);
+}
+
 .sheet__switch-choice {
   appearance: none;
   border: 0;

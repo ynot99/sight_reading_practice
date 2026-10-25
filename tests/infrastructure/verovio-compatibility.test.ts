@@ -8,6 +8,7 @@ import { noteEntry, silenceEntry, validateExercise, type Exercise } from '../../
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
+import { theScaleComplex } from '../../src/domain/solfege/scaleComplex.js';
 import { barId, printedAtEachStep } from '../../src/domain/notation/printedIds.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { readThePage, type PageLayout, type SvgNode } from '../../src/infrastructure/rendering/verovio/pageLayout.js';
@@ -190,6 +191,17 @@ describe('Verovio and our timeline agree on every step', () => {
     expect(pagesOf(exercise).length).toBeGreaterThan(1);
 
     expect(agreementOf(exercise)).toEqual(agreeing(120));
+  });
+
+  it('on a scale complex, its chords and raised notes as a minor key writes them', () => {
+    for (const asked of [
+      { fifths: 0, scale: 'major' },
+      { fifths: 3, scale: 'harmonicMinor' },
+      { fifths: -3, scale: 'melodicMinor' },
+      { fifths: 7, scale: 'harmonicMinor' },
+    ] as const) {
+      expect({ ...asked, ...agreementOf(theScaleComplex(asked)) }).toEqual({ ...asked, ...agreeing(10) });
+    }
   });
 
   it('on every built-in preset, in three-four and two flats', () => {

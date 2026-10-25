@@ -30,6 +30,7 @@ import {
   theTonicPitchClass,
   type ScaleName,
 } from '../domain/harmony/scales.js';
+import { SCALE_COMPLEX_SCALES, theScaleComplex, type ScaleOfTheComplex } from '../domain/solfege/scaleComplex.js';
 import { barsOfThePicture, tiersOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
 import { FREE_PLAY_MODE_ID } from '../application/modes/FreePlayFrame.js';
@@ -2144,7 +2145,7 @@ export class AppView {
    */
   private rollPlacedAtMs = 0;
   /** Which of the scores sheet's two lists it shows; see `showTheList`. */
-  private scoresListShown: 'scores' | 'sketches' = 'scores';
+  private scoresListShown: 'scores' | 'sketches' | 'solfege' = 'scores';
   /** How tall a row is, and the ruler and the pedal lane, as last measured. */
   private rollLook = { rowPx: 13, rulerTallPx: 0, chordsTallPx: 0, pedalTallPx: 0 };
   /** The frame a fling is going on in, if one is. */
@@ -2747,6 +2748,11 @@ export class AppView {
     scoresTools: HTMLElement;
     scoresShowScores: HTMLButtonElement;
     scoresShowSketches: HTMLButtonElement;
+    scoresShowSolfege: HTMLButtonElement;
+    solfege: HTMLElement;
+    solfegeComplexKey: HTMLSelectElement;
+    solfegeComplexScale: HTMLSelectElement;
+    solfegeComplexOpen: HTMLButtonElement;
     sketchesList: HTMLElement;
     sketchesEmpty: HTMLElement;
     sketchesNew: HTMLButtonElement;
@@ -3165,6 +3171,11 @@ export class AppView {
       scoresTools: requireElement(doc, 'scores-tools'),
       scoresShowScores: requireElement(doc, 'scores-show-scores'),
       scoresShowSketches: requireElement(doc, 'scores-show-sketches'),
+      scoresShowSolfege: requireElement(doc, 'scores-show-solfege'),
+      solfege: requireElement(doc, 'solfege'),
+      solfegeComplexKey: requireElement(doc, 'solfege-complex-key'),
+      solfegeComplexScale: requireElement(doc, 'solfege-complex-scale'),
+      solfegeComplexOpen: requireElement(doc, 'solfege-complex-open'),
       sketchesList: requireElement(doc, 'sketches-list'),
       sketchesEmpty: requireElement(doc, 'sketches-empty'),
       sketchesNew: requireElement(doc, 'sketches-new'),
@@ -10102,6 +10113,15 @@ export class AppView {
     this.listen(this.el.scoresShowSketches, 'click', () => {
       this.showTheList('sketches');
     });
+    this.listen(this.el.scoresShowSolfege, 'click', () => {
+      this.showTheList('solfege');
+    });
+    this.listen(this.el.solfegeComplexScale, 'change', () => {
+      this.nameTheKeysOfTheScaleComplex();
+    });
+    this.listen(this.el.solfegeComplexOpen, 'click', () => {
+      void this.openTheScaleComplex();
+    });
     this.listen(this.el.sketchesNew, 'click', () => {
       const now = Date.now();
       const sketch = this.runtime.sketches.begin(
@@ -11309,27 +11329,78 @@ export class AppView {
   }
 
   /**
-   * Shows one of the two lists of the scores sheet: the scores kept, with the
-   * means of finding and adding them, or the sketches being written.
+   * Shows one of the three lists of the scores sheet: the scores kept, with
+   * the means of finding and adding them, the sketches being written, or the
+   * exercises a music school sets.
    */
-  private showTheList(which: 'scores' | 'sketches'): void {
+  private showTheList(which: 'scores' | 'sketches' | 'solfege'): void {
     this.scoresListShown = which;
+    const scores = which === 'scores';
     const sketches = which === 'sketches';
-    this.el.scoresShowScores.setAttribute('aria-pressed', String(!sketches));
+    const solfege = which === 'solfege';
+    this.el.scoresShowScores.setAttribute('aria-pressed', String(scores));
     this.el.scoresShowSketches.setAttribute('aria-pressed', String(sketches));
+    this.el.scoresShowSolfege.setAttribute('aria-pressed', String(solfege));
     for (const part of [this.el.scoresTools, this.el.scoresFreshRow, this.el.scoresList]) {
-      part.hidden = sketches;
+      part.hidden = !scores;
     }
     this.el.sketchesList.hidden = !sketches;
     this.el.sketchesNew.hidden = !sketches;
-    if (sketches) {
+    this.el.solfege.hidden = !solfege;
+    if (!scores) {
       this.el.scoresEmpty.hidden = true;
       this.el.scoresAdded.hidden = true;
+    }
+    if (!sketches) {
+      this.el.sketchesEmpty.hidden = true;
+    }
+    if (scores) {
+      this.renderScores();
+    } else if (sketches) {
       this.renderSketches();
     } else {
-      this.el.sketchesEmpty.hidden = true;
-      this.renderScores();
+      this.nameTheKeysOfTheScaleComplex();
     }
+  }
+
+  /**
+   * Fills the lists a scale complex is asked for by: its scales, and every
+   * key of the one chosen by its tonic, from seven flats to seven sharps -
+   * the key kept by its signature when the scale changes, so A minor turned
+   * major is C major, as the signature has it.
+   */
+  private nameTheKeysOfTheScaleComplex(): void {
+    const scaleList = this.el.solfegeComplexScale;
+    if (scaleList.options.length === 0) {
+      scaleList.replaceChildren(
+        ...SCALE_COMPLEX_SCALES.map((scale) => {
+          const called = SCALES[scale].called;
+          return new Option(`${called.charAt(0).toUpperCase()}${called.slice(1)}`, scale);
+        }),
+      );
+    }
+    const scale = this.theScaleOfTheComplexAsked();
+    const fifths = this.el.solfegeComplexKey.value === '' ? 0 : Number(this.el.solfegeComplexKey.value);
+    this.el.solfegeComplexKey.replaceChildren(
+      ...Array.from({ length: 15 }, (_, at) => at - 7).map((each) => new Option(theNameOfTheKey({ fifths: each, scale }), String(each))),
+    );
+    this.el.solfegeComplexKey.value = String(fifths);
+  }
+
+  /** The scale the sheet asks a scale complex in. */
+  private theScaleOfTheComplexAsked(): ScaleOfTheComplex {
+    return SCALE_COMPLEX_SCALES.find((scale) => scale === this.el.solfegeComplexScale.value) ?? 'major';
+  }
+
+  /**
+   * Opens the scale complex the sheet asks for, as a score is opened: on no
+   * shelf, so a playback of it goes on to no other piece.
+   */
+  private async openTheScaleComplex(): Promise<void> {
+    const exercise = theScaleComplex({ fifths: Number(this.el.solfegeComplexKey.value), scale: this.theScaleOfTheComplexAsked() });
+    this.el.sheetScores.hidden = true;
+    await this.pickUpTheFile(exercise);
+    this.runtime.controller.playOnlyTheScoreOpen();
   }
 
   private renderSketches(): void {

@@ -310,15 +310,18 @@
         <div class="sheet__panel" role="dialog" aria-modal="true" aria-label="Kept scores">
           <div class="sheet__head sheet__head--two-rows">
             <!--
-              Two lists in one sheet: the scores kept, and the sketches being
-              written. A switch in the title rather than a second pill, since
-              both answer one question - which music is on the shelf.
+              Three lists in one sheet: the scores kept, the sketches being
+              written, and the exercises a music school sets. A switch in the
+              title rather than another pill, since all three answer one
+              question - what music to open.
             -->
             <div class="sheet__title sheet__switch" role="group" aria-label="Which list">
               <button id="scores-show-scores" type="button" class="sheet__switch-choice"
                 aria-pressed="true">Scores</button>
               <button id="scores-show-sketches" type="button" class="sheet__switch-choice"
                 aria-pressed="false">Sketches</button>
+              <button id="scores-show-solfege" type="button" class="sheet__switch-choice"
+                aria-pressed="false">Solfege</button>
             </div>
             <!--
               The means of finding and adding scores, a row of their own under
@@ -400,6 +403,26 @@
             and what it was begun from stays as it was.</p>
           <div class="sketches__new-row">
             <button id="sketches-new" type="button" class="button" hidden>New sketch</button>
+          </div>
+          <!--
+            The exercises a music school sets, a section each: what it asks
+            for chosen beside it, and opened as a score is, to be played in
+            any of the ways a score is.
+          -->
+          <div id="solfege" class="solfege" hidden>
+            <section class="solfege__section" aria-labelledby="solfege-complex-name">
+              <strong id="solfege-complex-name" class="solfege__name">Scale complex</strong>
+              <p class="solfege__what">A key under the fingers: the scale two octaves up and down,
+                the arpeggio of its tonic, the tonic chord in its three positions, and the cadence
+                tonic, subdominant, dominant, tonic. Both hands.</p>
+              <div class="solfege__asks">
+                <select id="solfege-complex-key" class="solfege__ask" aria-label="Key"
+                  title="The key, by its sharps or flats"></select>
+                <select id="solfege-complex-scale" class="solfege__ask" aria-label="Scale"
+                  title="Major, or minor in one of its three forms"></select>
+                <button id="solfege-complex-open" type="button" class="button button--primary">Open</button>
+              </div>
+            </section>
           </div>
         </div>
       </div>

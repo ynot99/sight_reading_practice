@@ -2513,6 +2513,9 @@ describe('searching the settings', () => {
     expect(body('.roll-velocity__group--wide')).toMatch(/flex\s*:\s*1 1 14em/);
     expect(body('.roll-mark__section')).toMatch(/flex\s*:\s*1 1 auto/);
     expect(body('.roll-mark__section')).toMatch(/min-width\s*:\s*0/);
+    // What a section of the exercises asks for wraps on a phone rather than running off it.
+    expect(body('.solfege__asks')).toMatch(/flex-wrap\s*:\s*wrap/);
+    expect(HTML).toMatch(/<button id="scores-show-sketches"[^>]*>Sketches<\/button>\s*<button id="scores-show-solfege"[^>]*>Solfege<\/button>/);
     // Its buttons, four with a bar to put in, wrap on a phone rather than running off it.
     expect(body('.sheet__actions')).toMatch(/flex-wrap\s*:\s*wrap/);
     // On a small screen, the chords open in the editor take the room of the row under the drawing.

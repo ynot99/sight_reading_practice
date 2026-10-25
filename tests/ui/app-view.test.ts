@@ -8082,6 +8082,70 @@ describe('AppView', () => {
       expect(shown()).toMatchObject({ solfege: false, scores: true, tools: true, pressed: 'false' });
     });
 
+    it('opens a round of intervals by ear from the Solfege list, the intervals and the way chosen, its question heard again from the page and the modes dimmed', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      const chips = (): string[] =>
+        [...element('solfege-intervals-which').querySelectorAll<HTMLButtonElement>('[data-semitones]')].map(
+          (chip) => `${chip.textContent}${chip.getAttribute('aria-pressed') === 'true' ? '*' : ''}`,
+        );
+      const chip = (short: string): HTMLButtonElement | undefined =>
+        [...element('solfege-intervals-which').querySelectorAll<HTMLButtonElement>('[data-semitones]')].find((each) => each.textContent === short);
+      const open = element<HTMLButtonElement>('solfege-intervals-open');
+      const way = element<HTMLSelectElement>('solfege-intervals-way');
+
+      // The thirds, the fourth, the fifth and the octave to begin with.
+      expect(chips()).toEqual(['m2', 'M2', 'm3*', 'M3*', 'P4*', 'TT', 'P5*', 'm6', 'M6', 'm7', 'M7', 'P8*']);
+      expect([...way.options].map((option) => `${option.value} ${option.label}`)).toEqual(['up Upwards', 'down Downwards', 'together Together']);
+      // Each chosen or not by a press; none chosen, nothing to open, and it says why.
+      for (const short of ['m3', 'M3', 'P4', 'P5', 'P8']) {
+        chip(short)?.click();
+      }
+      expect([open.dataset['idle'], open.title]).toEqual(['true', 'Choose an interval or more to be asked']);
+      open.click();
+      expect(element('sheet-scores').hidden).toBe(false);
+      chip('TT')?.click();
+      chip('m6')?.click();
+      expect(chips().filter((each) => each.endsWith('*'))).toEqual(['TT*', 'm6*']);
+      expect(open.dataset['idle']).toBeUndefined();
+
+      way.value = 'down';
+      open.click();
+      await vi.waitFor(() => {
+        expect([runtime.controller.openedExercise?.title, runtime.controller.theScoreOpenStandsAlone]).toEqual(['Intervals by ear', true]);
+      });
+      const round = runtime.controller.openedExercise;
+      expect(round?.byEar).toBe(true);
+      // Every answer a tritone or a minor sixth under the note given.
+      const spans = (round?.staves[0]?.measures ?? []).map((measure) => {
+        const [given, answer] = measure.entries;
+        return (answer?.kind === 'note' ? (answer.pitches[0]?.midi ?? 0) : 0) - (given?.kind === 'note' ? (given.pitches[0]?.midi ?? 0) : 0);
+      });
+      expect(new Set(spans).size).toBeGreaterThan(0);
+      expect(spans.every((span) => span === -6 || span === -8)).toBe(true);
+      // Its question heard again from the page; the modes dimmed, saying why.
+      const again = element<HTMLButtonElement>('score-hear-again');
+      const heard = vi.spyOn(runtime.controller, 'hearTheQuestionAgain');
+      expect(again.hidden).toBe(false);
+      again.click();
+      expect(heard).toHaveBeenCalledTimes(1);
+      const modes = element<HTMLButtonElement>('focus-modes');
+      expect([modes.dataset['idle'], modes.title]).toEqual([
+        'true',
+        'Modes: music played back by ear waits for each note, whatever they say for music that is read',
+      ]);
+
+      // Music that is read again: neither.
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('solfege-complex-open').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise?.byEar).toBeUndefined();
+      });
+      expect([again.hidden, modes.dataset['idle'], modes.title]).toEqual([true, undefined, 'Modes']);
+    });
+
     it('names the sections of a sketch written down as a score where they begin', async () => {
       const { view, runtime, sketches } = createRig();
       await view.initialize();

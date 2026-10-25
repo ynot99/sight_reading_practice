@@ -168,6 +168,18 @@
               it arrives: with repeat on, the next lap begins the moment the
               verdict is put up and takes it away again in the same frame.
             -->
+            <!--
+              Music played back by ear: the bar it is at heard again. Where the
+              music is and not in the transport row, whose buttons mean the
+              same for every piece.
+            -->
+            <button id="score-hear-again" class="score__reading" type="button" hidden
+              title="Hear the question again" aria-label="Hear the question again">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M4 9h4l5-4v14l-5-4H4z M16 8.5a4.5 4.5 0 0 1 0 7 M18.5 6a8 8 0 0 1 0 12" />
+              </svg>
+              <span>Hear it again</span>
+            </button>
             <button id="score-reading" class="score__reading" type="button" hidden>
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M4 5h16v2H4zM4 11h16v2H4zM4 17h10v2H4z" />
@@ -421,6 +433,18 @@
                 <select id="solfege-complex-scale" class="solfege__ask" aria-label="Scale"
                   title="Major, or minor in one of its three forms"></select>
                 <button id="solfege-complex-open" type="button" class="button button--primary">Open</button>
+              </div>
+            </section>
+            <section class="solfege__section" aria-labelledby="solfege-intervals-name">
+              <strong id="solfege-intervals-name" class="solfege__name">Intervals by ear</strong>
+              <p class="solfege__what">Ten intervals, each heard and then played back from the note
+                given: found by ear, and shown on the staff as it is found.</p>
+              <div id="solfege-intervals-which" class="solfege__chips" role="group"
+                aria-label="Which intervals"></div>
+              <div class="solfege__asks">
+                <select id="solfege-intervals-way" class="solfege__ask" aria-label="How they are heard"
+                  title="The second note above the first, below it, or both at once"></select>
+                <button id="solfege-intervals-open" type="button" class="button button--primary">Open</button>
               </div>
             </section>
           </div>

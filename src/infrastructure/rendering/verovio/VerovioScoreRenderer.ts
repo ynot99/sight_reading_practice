@@ -114,6 +114,8 @@ const HEAD_HALF_WIDTH = 0.59;
 
 /** A step already played: its notes are gone from the page. */
 const FADED_CLASS = 'note--passed';
+/** A step kept off the page until it is found by ear: see `IScoreFade.conceal`. */
+const CONCEALED_CLASS = 'note--concealed';
 /** What the run will not ask for: the other hand, or outside the passage. */
 const UNPLAYED_CLASS = 'note--unplayed';
 
@@ -235,6 +237,8 @@ export class VerovioScoreRenderer
   private overlayContext: OverlayContext | null = null;
   /** Steps already passed, whose notes are taken off the page; see `IScoreFade`. */
   private readonly faded = new Set<number>();
+  /** Steps kept off the page until they are found; see `IScoreFade.conceal`. */
+  private readonly concealed = new Set<number>();
   /** What the run is about to ask for, or `null` to dim nothing. */
   private reading: ScoreReading | null = null;
   /** Each drawn page's layer of played notes, and what they are placed by. */
@@ -697,6 +701,9 @@ export class VerovioScoreRenderer
         this.dimTheStep(stepIndex);
         if (this.faded.has(stepIndex)) {
           this.markTheStep(stepIndex, FADED_CLASS, true);
+        }
+        if (this.concealed.has(stepIndex)) {
+          this.markTheStep(stepIndex, CONCEALED_CLASS, true);
         }
       }
     }
@@ -1809,6 +1816,22 @@ export class VerovioScoreRenderer
       this.markTheStep(stepIndex, FADED_CLASS, false);
     }
     this.faded.clear();
+  }
+
+  conceal(stepIndexes: readonly number[]): void {
+    for (const stepIndex of this.concealed) {
+      this.markTheStep(stepIndex, CONCEALED_CLASS, false);
+    }
+    this.concealed.clear();
+    for (const stepIndex of stepIndexes) {
+      this.concealed.add(stepIndex);
+      this.markTheStep(stepIndex, CONCEALED_CLASS, true);
+    }
+  }
+
+  reveal(stepIndex: number): void {
+    this.concealed.delete(stepIndex);
+    this.markTheStep(stepIndex, CONCEALED_CLASS, false);
   }
 
   /** Dims the notes this run will not ask for, and undims the rest. */

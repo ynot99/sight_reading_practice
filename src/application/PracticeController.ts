@@ -98,6 +98,8 @@ import {
 } from './runReplay.js';
 import { machineIsPlaying } from './modes/ListenFrame.js';
 import { playsFreely } from './modes/FreePlayFrame.js';
+import { WAIT_MODE_ID } from './modes/WaitMode.js';
+import { theStepsByEar } from '../domain/solfege/intervalsByEar.js';
 import { tapsWith, tempoOfTaps } from './tapTempo.js';
 import { FreePlayed } from './freePlay.js';
 import { nameTheChord } from '../domain/harmony/chordName.js';
@@ -196,6 +198,12 @@ export const TEMPO_STEP_PERCENT = 5;
  * nobody asked for.
  */
 const OTHER_HAND_VELOCITY = 0.45;
+
+/**
+ * How hard a question played by ear is struck: plainly, as a teacher plays
+ * a dictation, so every note of it is heard.
+ */
+const QUESTION_VELOCITY = 0.7;
 
 const MIN_TEMPO_BPM = 20;
 const MAX_TEMPO_BPM = 300;
@@ -913,6 +921,11 @@ export class PracticeController {
   private readonly emitter = new TypedEventEmitter<ControllerEventMap>();
 
   private currentSettings: PracticeSettings;
+  /** The steps of the music on the page played by ear, each given or found: see `theStepsByEar`. */
+  private givenByEar: ReadonlySet<number> = new Set();
+  private foundByEar: ReadonlySet<number> = new Set();
+  /** The settings a run was last worked out to be played under: see `playedUnder`. */
+  private playedUnderLast: { readonly settings: PracticeSettings; readonly byEar: boolean; readonly under: PracticeSettings } | null = null;
   private provider: IExerciseProvider;
   private exercise: Exercise | null = null;
   private timeline: ExerciseTimeline | null = null;
@@ -1905,6 +1918,11 @@ export class PracticeController {
 
     this.exercise = exercise;
     this.timeline = buildTimeline(exercise);
+    // Before it is drawn, so an answer is never on the page for a moment.
+    const byEar = theStepsByEar(this.timeline);
+    this.givenByEar = new Set(byEar.given);
+    this.foundByEar = new Set(byEar.found);
+    this.deps.fade.conceal([...this.foundByEar]);
     timeTheStart('score: timeline built', () => `${String(this.timeline?.length ?? 0)} steps`);
     this.lastSeed = exercise.metadata.seed;
     if (newMusic) {
@@ -1986,7 +2004,7 @@ export class PracticeController {
     const player = this.ensurePlayer();
     const passage = this.passageSteps;
     player.start(timeline, {
-      staffNumber: this.currentSettings.handStaff,
+      staffNumber: this.playedUnder.handStaff,
       click: this.currentSettings.clickPattern,
       clickSilences: this.currentSettings.clickSilences,
       clickWhen: this.theClickAPlaybackUses,
@@ -2639,7 +2657,7 @@ export class PracticeController {
    * for. See `PracticeSession.notesComingBefore`.
    */
   notesClosingBetween(fromMs: number, untilMs: number): readonly NotesComing[] {
-    if (!this.currentSettings.closingCursors) {
+    if (!this.playedUnder.closingCursors) {
       return [];
     }
     return (this.currentSession?.notesComingBefore(untilMs) ?? []).filter((notes) => notes.atMs >= fromMs);
@@ -2937,7 +2955,7 @@ export class PracticeController {
     }
     // What the performance is actually sounding, which is the hand it was
     // asked to play - listening to one hand should not light the other.
-    const midis = expectedFor(step, this.currentSettings.handStaff);
+    const midis = expectedFor(step, this.playedUnder.handStaff);
     this.litNotes = midis.map((midi) => ({ stepIndex, midi }));
     for (const note of this.litNotes) {
       this.deps.overlay.showPlayed({ ...note, correct: true, sounding: true, offset: 0 });
@@ -2963,7 +2981,7 @@ export class PracticeController {
     // What the reader would have been asked for here, so playing along to one
     // hand is marked against that hand - the same question the run asks, put
     // to the beat that is sounding.
-    const wanted = expectedFor(step, this.currentSettings.handStaff);
+    const wanted = expectedFor(step, this.playedUnder.handStaff);
     this.deps.overlay.showPlayed({
       stepIndex: this.listeningStep,
       midi: event.midi,
@@ -3040,11 +3058,11 @@ export class PracticeController {
       step === null
         ? null
         : new ChordMatcher(
-            expectedFor(step, this.currentSettings.handStaff),
+            expectedFor(step, this.playedUnder.handStaff),
             {
               toleranceMs: this.currentSettings.matchToleranceMs,
-              pitchClassOnly: this.currentSettings.pitchClassOnly,
-              anyPitch: this.currentSettings.rhythmOnly,
+              pitchClassOnly: this.playedUnder.pitchClassOnly,
+              anyPitch: this.playedUnder.rhythmOnly,
             },
             step.ornamentMidi ?? [],
           );
@@ -3136,7 +3154,7 @@ export class PracticeController {
 
     this.disposeSession('another run');
 
-    const mode = this.deps.modes.get(this.currentSettings.modeId);
+    const mode = this.deps.modes.get(this.playedUnder.modeId);
     const passage = this.passageSteps;
     // Where the reader put the cursor, unless a run begun by playing has
     // already been told otherwise - and never outside the passage they chose.
@@ -3161,13 +3179,13 @@ export class PracticeController {
       options: {
         matchPolicy: {
           toleranceMs: this.currentSettings.matchToleranceMs,
-          pitchClassOnly: this.currentSettings.pitchClassOnly,
-          anyPitch: this.currentSettings.rhythmOnly,
+          pitchClassOnly: this.playedUnder.pitchClassOnly,
+          anyPitch: this.playedUnder.rhythmOnly,
         },
         countInBars,
         startAtIndex: beginsAt,
         stopAfterIndex: passage.to,
-        expectedStaff: this.currentSettings.handStaff,
+        expectedStaff: this.playedUnder.handStaff,
         inputLatencyMs: this.currentSettings.inputLatencyMs,
         playingAhead: this.currentSettings.playingAhead,
         // Gated on there being an accompaniment at all: without one there is
@@ -3201,6 +3219,10 @@ export class PracticeController {
       // well, badly or not at all: the page empties as the music passes.
       session.events.on('stepCompleted', ({ result, atMs }) => {
         this.readerReaches(result.index, result.status, atMs);
+        // Found by ear, it goes on the page.
+        if (this.foundByEar.has(result.index)) {
+          this.deps.fade.reveal(result.index);
+        }
         // The beat is finished, so its right notes stop being provisional.
         // Said for every step, including one nobody played: telling the
         // drawing about a step it has no marks for costs nothing, and the
@@ -3213,7 +3235,7 @@ export class PracticeController {
         // beat that judges it, and so none held yet belongs to a later one -
         // even a note taken early is marked once the beat before it is over.
         this.heldMarks = this.heldMarks.map((mark) => ({ ...mark, settled: true }));
-        if (this.currentSettings.readAheadSteps !== null) {
+        if (this.playedUnder.readAheadSteps !== null) {
           this.fadeThrough(result.index);
         }
         if (this.survivalRuns && this.survivalKeepsTime) {
@@ -3261,7 +3283,7 @@ export class PracticeController {
         this.noteTheTrouble(verdict);
         // A wrong note, and only that: a rushed one is the right key, off its
         // moment, and the reading goes on.
-        if (verdict === 'wrong' && this.currentSettings.stopAtAMistake) {
+        if (verdict === 'wrong' && this.playedUnder.stopAtAMistake) {
           // After the mark is noted and before it is drawn: stopping fires
           // `finished`, which puts up everything the run was holding back -
           // so the note that ended it is on the page with the rest.
@@ -3318,6 +3340,9 @@ export class PracticeController {
         // A new step is nobody's fault yet.
         this.forgetTheTrouble();
         this.otherHandReaches(step);
+        if (this.givenByEar.has(step.index)) {
+          this.soundTheQuestion(step);
+        }
       }),
     );
     this.sessionSubscriptions.push(
@@ -3360,8 +3385,8 @@ export class PracticeController {
         // A run that is over takes back what it was still holding.
         this.silenceTheOtherHand();
         const picture = this.pictureOfTheReading(report, session.roll);
-        const modes = modesOn(this.currentSettings);
-        this.finishedPlayedWith = { modeId: this.currentSettings.modeId, modes };
+        const modes = modesOn(this.playedUnder);
+        this.finishedPlayedWith = { modeId: this.playedUnder.modeId, modes };
         this.deps.history?.record(this.practiceKey(), {
           // The calendar, so a table of readings can say when. `IClock`
           // counts from an arbitrary zero for measuring music.
@@ -3371,10 +3396,10 @@ export class PracticeController {
           completed: report.completed,
           notes: noteCountsOf(report.totals),
           tempoPercent: Math.round(this.currentSettings.tempoPercent),
-          hand: this.currentSettings.handStaff,
+          hand: this.playedUnder.handStaff,
           stoppedAtBar: picture.stoppedAtBar,
           startedAtBar,
-          modeId: this.currentSettings.modeId,
+          modeId: this.playedUnder.modeId,
           ...(modes.length > 0 ? { modes } : {}),
           picture,
           roll: session.roll,
@@ -3437,6 +3462,8 @@ export class PracticeController {
     this.dropTheReplay();
     this.deps.overlay.clearPlayed();
     this.deps.fade.clearFaded();
+    // What was found by ear in the run before is to be found again.
+    this.deps.fade.conceal([...this.foundByEar]);
     this.fadedThrough = -1;
 
     // The clock first, and the page behind it.
@@ -3591,7 +3618,7 @@ export class PracticeController {
    * and then the one after it.
    */
   private fadeAhead(stepIndex: number): void {
-    const lead = this.currentSettings.readAheadSteps;
+    const lead = this.playedUnder.readAheadSteps;
     if (lead === null) {
       return;
     }
@@ -3611,7 +3638,7 @@ export class PracticeController {
       return;
     }
     const passage = this.passageSteps;
-    const hand = this.currentSettings.handStaff;
+    const hand = this.playedUnder.handStaff;
     this.deps.fade.dimUnplayed({
       staves: hand === null ? [] : [hand],
       from: passage.from,
@@ -3755,7 +3782,7 @@ export class PracticeController {
    * reader, so there is nothing to survive and the bar would sit still.
    */
   get survivalRuns(): boolean {
-    return this.currentSettings.survival;
+    return this.playedUnder.survival;
   }
 
   /**
@@ -3782,19 +3809,92 @@ export class PracticeController {
     // Asked of the registry, which holds only the frames a run is played in:
     // listening and free play keep no time because nobody is being timed.
     return (
-      this.deps.modes.has(this.currentSettings.modeId) &&
-      this.deps.modes.get(this.currentSettings.modeId).requiresMetronome
+      this.deps.modes.has(this.playedUnder.modeId) &&
+      this.deps.modes.get(this.playedUnder.modeId).requiresMetronome
     );
+  }
+
+  /**
+   * Plays the bar a step asks as a question by ear, from now: every key of
+   * it as written, each for as long as it sounds - heard before it is
+   * answered, as a dictation is.
+   */
+  private soundTheQuestion(step: TimelineStep, nowMs = this.deps.clock.now()): void {
+    const exercise = this.exercise;
+    const timeline = this.timeline;
+    if (exercise === null || timeline === null) {
+      return;
+    }
+    for (const each of timeline.steps) {
+      if (each.measureIndex !== step.measureIndex || each.index < step.index) {
+        continue;
+      }
+      const atMs = nowMs + spanMs(exercise, step.onsetTicks, each.onsetTicks);
+      for (const note of each.notes) {
+        this.deps.instrument.play(note.midi, QUESTION_VELOCITY, atMs);
+        this.deps.instrument.stop(note.midi, atMs + spanMs(exercise, each.onsetTicks, each.onsetTicks + soundsFor(note)));
+      }
+    }
+  }
+
+  /**
+   * Plays again the question the run is at - the bar of the step it is
+   * waiting on, or, between runs, the bar it would begin in. Nothing for
+   * music that is read.
+   */
+  hearTheQuestionAgain(): void {
+    const timeline = this.timeline;
+    if (timeline === null || this.exercise?.byEar !== true) {
+      return;
+    }
+    const at = this.currentSession?.currentStep ?? timeline.at(this.whereARunBegins(undefined));
+    const question = timeline.steps.find((step) => step.measureIndex === at?.measureIndex && this.givenByEar.has(step.index));
+    if (question !== undefined) {
+      this.soundTheQuestion(question);
+    }
+  }
+
+  /**
+   * The settings a run is played under: the reader's own, but for music
+   * played back by ear, which is answered as it is heard whatever the modes
+   * say for music that is read - waiting for each note, every note of it
+   * asked for and asked as written, the marker where it is, nothing taken
+   * off the page or let through. One answer, so no part of a run plays by
+   * the other's rules; worked out once for each settings and each piece.
+   */
+  private get playedUnder(): PracticeSettings {
+    const settings = this.currentSettings;
+    const byEar = this.exercise?.byEar === true;
+    const kept = this.playedUnderLast;
+    if (kept !== null && kept.settings === settings && kept.byEar === byEar) {
+      return kept.under;
+    }
+    const under: PracticeSettings = byEar
+      ? {
+          ...settings,
+          modeId: WAIT_MODE_ID,
+          survival: false,
+          readAheadSteps: null,
+          rhythmOnly: false,
+          stopAtAMistake: false,
+          cursorWhileRunning: true,
+          closingCursors: false,
+          handStaff: null,
+          pitchClassOnly: false,
+        }
+      : settings;
+    this.playedUnderLast = { settings, byEar, under };
+    return under;
   }
 
   /** Whether the frame now chosen is the one the machine plays. */
   get machinePlays(): boolean {
-    return machineIsPlaying(this.currentSettings.modeId);
+    return machineIsPlaying(this.playedUnder.modeId);
   }
 
   /** Whether the frame now chosen is the one where the reader plays freely. */
   get playsFreely(): boolean {
-    return playsFreely(this.currentSettings.modeId);
+    return playsFreely(this.playedUnder.modeId);
   }
 
   /** Whether the click is going in free play. */
@@ -4433,7 +4533,7 @@ export class PracticeController {
   private wantsTheOtherHand(): boolean {
     return (
       this.currentSettings.hearTheOtherHand &&
-      this.currentSettings.handStaff !== null &&
+      this.playedUnder.handStaff !== null &&
       this.exercise !== null
     );
   }
@@ -4499,11 +4599,11 @@ export class PracticeController {
 
   /** Whether this step is one the reader has to play. */
   private owedByTheReader(step: TimelineStep): boolean {
-    return expectedFor(step, this.currentSettings.handStaff).length > 0;
+    return expectedFor(step, this.playedUnder.handStaff).length > 0;
   }
 
   private soundTheOtherHand(step: TimelineStep, atMs: number): void {
-    const hand = this.currentSettings.handStaff;
+    const hand = this.playedUnder.handStaff;
     const exercise = this.exercise;
     if (hand === null || exercise === null) {
       return;
@@ -4596,7 +4696,7 @@ export class PracticeController {
     }
     const status = this.currentSession?.status;
     const running = status === 'running' || status === 'counting-in' || status === 'paused';
-    return running ? this.currentSettings.cursorWhileRunning : this.currentSettings.cursorAtRest;
+    return running ? this.playedUnder.cursorWhileRunning : this.currentSettings.cursorAtRest;
   }
 
   /** Whether the marker is on show for whatever is happening now. */

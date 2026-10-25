@@ -1135,6 +1135,14 @@ export interface Exercise {
   readonly barLabels: readonly BarLabel[];
   readonly staves: readonly StaffPart[];
   readonly metadata: ExerciseMetadata;
+  /**
+   * Whether it is played back by ear rather than read: each bar is heard
+   * before it is answered, and every note of a bar but its first is kept off
+   * the page until it is found - the first given, as a teacher gives the note
+   * a dictation begins on, so the rest can be found from it without perfect
+   * pitch. See `theStepsByEar`. Absent for music that is read.
+   */
+  readonly byEar?: boolean;
 }
 
 /** What the reader should see printed over a bar, one-based. */

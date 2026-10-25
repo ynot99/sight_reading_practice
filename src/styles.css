@@ -5634,6 +5634,11 @@ body[data-playing='true'] .score__modes {
   opacity: 0.45;
 }
 
+/* An exercise with nothing asked of it to open, saying why on its title. */
+.solfege__asks .button[data-idle='true'] {
+  opacity: 0.45;
+}
+
 /* Watching the take on the keys is asked for from the list, and ended on the page. */
 #take-off-the-keys,
 body[data-take-on-keys='true'] #take-on-the-keys {
@@ -5876,6 +5881,30 @@ body[data-take-on-keys='true'] #take-off-the-keys {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+/* The intervals a round asks, each a button that is chosen or not; they wrap. */
+.solfege__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.solfege__chip {
+  min-width: 44px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 14px;
+}
+
+.solfege__chip[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--text);
+  font-weight: 600;
 }
 
 /* A list, its arrow kept so it reads as one; never below sixteen pixels, or Safari magnifies the page. */
@@ -7127,6 +7156,15 @@ body[data-repeats='hidden'] .repeat-mark {
 .note--passed {
   opacity: 0;
   transition: opacity 400ms ease-out;
+}
+
+/*
+ * A note to be found by ear, kept off the page until it is: gone at once,
+ * so it is never glimpsed, and drawn in as it is found.
+ */
+.note--concealed {
+  opacity: 0;
+  transition: none;
 }
 
 /*

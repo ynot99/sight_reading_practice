@@ -31,6 +31,7 @@ import {
   type ScaleName,
 } from '../domain/harmony/scales.js';
 import { SCALE_COMPLEX_SCALES, theScaleComplex, type ScaleOfTheComplex } from '../domain/solfege/scaleComplex.js';
+import { INTERVALS, INTERVAL_WAYS, theIntervalsByEar, type IntervalWay } from '../domain/solfege/intervalsByEar.js';
 import { barsOfThePicture, tiersOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
 import { FREE_PLAY_MODE_ID } from '../application/modes/FreePlayFrame.js';
@@ -1593,6 +1594,13 @@ function thePlayingAsAFile(
   });
 }
 
+/** What each way of hearing an interval is called in the list. */
+const INTERVAL_WAY_NAMES: Readonly<Record<IntervalWay, string>> = {
+  up: 'Upwards',
+  down: 'Downwards',
+  together: 'Together',
+};
+
 /** The paces a sketch may be set to, in crotchets a minute: those a metronome offers. */
 const SLOWEST_SKETCH_BPM = 20;
 const FASTEST_SKETCH_BPM = 400;
@@ -2146,6 +2154,12 @@ export class AppView {
   private rollPlacedAtMs = 0;
   /** Which of the scores sheet's two lists it shows; see `showTheList`. */
   private scoresListShown: 'scores' | 'sketches' | 'solfege' = 'scores';
+  /**
+   * The intervals a round by ear asks, by their semitones: the thirds, the
+   * fourth, the fifth and the octave to begin with, the ones a first ear
+   * training course begins with.
+   */
+  private readonly intervalsAsked = new Set<number>([3, 4, 5, 7, 12]);
   /** How tall a row is, and the ruler and the pedal lane, as last measured. */
   private rollLook = { rowPx: 13, rulerTallPx: 0, chordsTallPx: 0, pedalTallPx: 0 };
   /** The frame a fling is going on in, if one is. */
@@ -2753,6 +2767,10 @@ export class AppView {
     solfegeComplexKey: HTMLSelectElement;
     solfegeComplexScale: HTMLSelectElement;
     solfegeComplexOpen: HTMLButtonElement;
+    solfegeIntervalsWhich: HTMLElement;
+    solfegeIntervalsWay: HTMLSelectElement;
+    solfegeIntervalsOpen: HTMLButtonElement;
+    scoreHearAgain: HTMLButtonElement;
     sketchesList: HTMLElement;
     sketchesEmpty: HTMLElement;
     sketchesNew: HTMLButtonElement;
@@ -3176,6 +3194,10 @@ export class AppView {
       solfegeComplexKey: requireElement(doc, 'solfege-complex-key'),
       solfegeComplexScale: requireElement(doc, 'solfege-complex-scale'),
       solfegeComplexOpen: requireElement(doc, 'solfege-complex-open'),
+      solfegeIntervalsWhich: requireElement(doc, 'solfege-intervals-which'),
+      solfegeIntervalsWay: requireElement(doc, 'solfege-intervals-way'),
+      solfegeIntervalsOpen: requireElement(doc, 'solfege-intervals-open'),
+      scoreHearAgain: requireElement(doc, 'score-hear-again'),
       sketchesList: requireElement(doc, 'sketches-list'),
       sketchesEmpty: requireElement(doc, 'sketches-empty'),
       sketchesNew: requireElement(doc, 'sketches-new'),
@@ -7782,6 +7804,7 @@ export class AppView {
         this.showTheRung();
         // Another score on the page is no sketch's.
         this.showThePencilBesideThePills();
+        this.showWhatIsPlayedByEar(exercise);
       }),
     );
 
@@ -10122,6 +10145,23 @@ export class AppView {
     this.listen(this.el.solfegeComplexOpen, 'click', () => {
       void this.openTheScaleComplex();
     });
+    this.listen(this.el.solfegeIntervalsWhich, 'click', (event) => {
+      const chip = (event.target as Element | null)?.closest<HTMLElement>('[data-semitones]');
+      const semitones = Number(chip?.dataset['semitones']);
+      if (chip === null || chip === undefined || !Number.isInteger(semitones)) {
+        return;
+      }
+      if (!this.intervalsAsked.delete(semitones)) {
+        this.intervalsAsked.add(semitones);
+      }
+      this.showTheIntervalsAsked();
+    });
+    this.listen(this.el.solfegeIntervalsOpen, 'click', () => {
+      void this.openTheIntervalsByEar();
+    });
+    this.listen(this.el.scoreHearAgain, 'click', () => {
+      this.runtime.controller.hearTheQuestionAgain();
+    });
     this.listen(this.el.sketchesNew, 'click', () => {
       const now = Date.now();
       const sketch = this.runtime.sketches.begin(
@@ -11360,7 +11400,55 @@ export class AppView {
       this.renderSketches();
     } else {
       this.nameTheKeysOfTheScaleComplex();
+      this.showTheIntervalsAsked();
     }
+  }
+
+  /**
+   * Draws the intervals a round by ear may ask, each chosen or not, and the
+   * ways they may be heard; and dims the button that opens a round while
+   * none is chosen, saying why.
+   */
+  private showTheIntervalsAsked(): void {
+    const which = this.el.solfegeIntervalsWhich;
+    if (which.childElementCount === 0) {
+      which.replaceChildren(
+        ...INTERVALS.map((interval) => {
+          const chip = this.doc.createElement('button');
+          chip.type = 'button';
+          chip.className = 'solfege__chip';
+          chip.dataset['semitones'] = String(interval.semitones);
+          chip.textContent = interval.short;
+          chip.title = interval.called;
+          chip.setAttribute('aria-label', interval.called);
+          return chip;
+        }),
+      );
+    }
+    for (const chip of which.querySelectorAll<HTMLElement>('[data-semitones]')) {
+      chip.setAttribute('aria-pressed', String(this.intervalsAsked.has(Number(chip.dataset['semitones']))));
+    }
+    const ways = this.el.solfegeIntervalsWay;
+    if (ways.options.length === 0) {
+      ways.replaceChildren(...INTERVAL_WAYS.map((way) => new Option(INTERVAL_WAY_NAMES[way], way)));
+    }
+    const none = this.intervalsAsked.size === 0;
+    sayWhetherIdle(this.el.solfegeIntervalsOpen, none ? 'Choose an interval or more to be asked' : 'Open a round of ten', none);
+  }
+
+  /**
+   * Opens a round of the intervals the sheet asks for, heard the way it
+   * asks - another round each time, as a dictation is another each lesson.
+   */
+  private async openTheIntervalsByEar(): Promise<void> {
+    if (this.intervalsAsked.size === 0) {
+      return;
+    }
+    const way = INTERVAL_WAYS.find((each) => each === this.el.solfegeIntervalsWay.value) ?? 'up';
+    const exercise = theIntervalsByEar({ semitones: [...this.intervalsAsked], way, seed: Math.floor(Math.random() * 2 ** 31) });
+    this.el.sheetScores.hidden = true;
+    await this.pickUpTheFile(exercise);
+    this.runtime.controller.playOnlyTheScoreOpen();
   }
 
   /**
@@ -11390,6 +11478,22 @@ export class AppView {
   /** The scale the sheet asks a scale complex in. */
   private theScaleOfTheComplexAsked(): ScaleOfTheComplex {
     return SCALE_COMPLEX_SCALES.find((scale) => scale === this.el.solfegeComplexScale.value) ?? 'major';
+  }
+
+  /**
+   * Says on the page whether its music is played back by ear: the button
+   * that plays its question again, and the modes dimmed, saying why - such
+   * music is answered as it is heard, whatever they say for music that is
+   * read.
+   */
+  private showWhatIsPlayedByEar(exercise: Exercise): void {
+    const byEar = exercise.byEar === true;
+    this.el.scoreHearAgain.hidden = !byEar;
+    sayWhetherIdle(
+      this.el.focusModes,
+      byEar ? 'Modes: music played back by ear waits for each note, whatever they say for music that is read' : 'Modes',
+      byEar,
+    );
   }
 
   /**

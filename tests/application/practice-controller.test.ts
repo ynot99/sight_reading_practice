@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { QUESTIONS_IN_A_ROUND, theIntervalsByEar } from '../../src/domain/solfege/intervalsByEar.js';
 import {
   PracticeController,
   type PracticeControllerDependencies,
@@ -6448,5 +6449,96 @@ describe('the click in free play', () => {
     expect(controller.clicksFreely).toBe(false);
     expect(metronome.isRunning).toBe(true);
     expect(metronome.currentConfig.bpm).not.toBe(controller.settings.freePlayBpm);
+  });
+});
+
+describe('music played back by ear', () => {
+  const round = (): Exercise => theIntervalsByEar({ semitones: [4, 7], way: 'up', seed: 3 });
+  /** The question's keys the instrument was asked for, and when: the reader's own presses are heard otherwise. */
+  const asked = (instrument: RecordingPitchPlayer): string[] =>
+    instrument.played.filter((note) => note.velocity === 0.7).map((note) => `${String(note.midi)}@${String(note.atMs)}`);
+
+  it('keeps every answer off the page until it is found, each found going on it, and hides them again for another run', async () => {
+    const { controller, renderer, midi } = createController(false, undefined, { modeId: new WaitMode().id });
+    await controller.openScore(round());
+    const found = Array.from({ length: QUESTIONS_IN_A_ROUND }, (_, bar) => bar * 2 + 1);
+    expect([...renderer.concealed]).toEqual(found);
+
+    const session = controller.start();
+    const first = session?.currentStep;
+    for (const key of first?.expectedMidi ?? []) {
+      midi.noteOn(key, 0);
+    }
+    // The given note is given; the answer still hidden until it is played.
+    expect(renderer.concealed.has(1)).toBe(true);
+    for (const key of session?.currentStep?.expectedMidi ?? []) {
+      midi.noteOn(key, 0);
+    }
+    expect([...renderer.concealed]).toEqual(found.slice(1));
+    // A run begun again hides them again.
+    controller.stop();
+    controller.start();
+    expect([...renderer.concealed]).toEqual(found);
+    controller.stop();
+    playItThrough(controller, midi);
+    expect([...renderer.concealed]).toEqual([]);
+    // Music that is read has nothing hidden.
+    await controller.openScore(twoBarExercise());
+    expect([...renderer.concealed]).toEqual([]);
+  });
+
+  it('plays each bar before it is answered, again when asked, and waits for the very keys whatever the modes say', async () => {
+    const { controller, instrument, midi, clock } = createController(false, undefined, {
+      modeId: new FlowMode().id,
+      rhythmOnly: true,
+      pitchClassOnly: true,
+      stopAtAMistake: true,
+      handStaff: 2,
+    });
+    const exercise = round();
+    await controller.openScore(exercise);
+    const timeline = controller.currentTimeline;
+    const bar = (index: number): string[] =>
+      [timeline?.at(index * 2), timeline?.at(index * 2 + 1)].map((step, at) => `${String(step?.expectedMidi[0] ?? 0)}@${String(clock.now() + at * 2_000)}`);
+    const firstBar = bar(0);
+
+    const session = controller.start();
+    expect(asked(instrument)).toEqual(firstBar);
+    // Asked again, the bar it is at again, from now.
+    clock.advance(5_000);
+    instrument.played.length = 0;
+    controller.hearTheQuestionAgain();
+    expect(asked(instrument)).toEqual(bar(0));
+    // A wrong key is wrong and stops nothing; the same note an octave off is not the answer.
+    const given = timeline?.at(0)?.expectedMidi[0] ?? 0;
+    const answer = timeline?.at(1)?.expectedMidi[0] ?? 0;
+    midi.noteOn(given, 0);
+    midi.noteOn(answer + 12, 0);
+    expect([session?.status, session?.currentStep?.index]).toEqual(['running', 1]);
+    instrument.played.length = 0;
+    midi.noteOn(answer, 0);
+    // On into the next bar, which is heard as it is reached.
+    expect(session?.currentStep?.index).toBe(2);
+    expect(asked(instrument)).toEqual(bar(1));
+    // Asked again there, that bar's question, not the first.
+    clock.advance(5_000);
+    instrument.played.length = 0;
+    controller.hearTheQuestionAgain();
+    expect(asked(instrument)).toEqual(bar(1));
+    // Answered to the end, it was played as Wait is, with no mode on, whatever was chosen.
+    for (let guard = 0; guard < 50 && session?.status === 'running'; guard += 1) {
+      for (const key of session.currentStep?.expectedMidi ?? []) {
+        midi.noteOn(key, 0);
+      }
+    }
+    expect(controller.lastPlayedWith).toEqual({ modeId: new WaitMode().id, modes: [] });
+  });
+
+  it('asks nothing of music that is read', async () => {
+    const { controller, instrument } = createController(false, undefined, { modeId: new WaitMode().id });
+    await controller.openScore(twoBarExercise());
+    controller.start();
+    controller.hearTheQuestionAgain();
+    expect(asked(instrument)).toEqual([]);
   });
 });

@@ -182,6 +182,20 @@ export class FakeScoreRenderer
     this.clearFadedCount += 1;
   }
 
+  /** Steps kept off the page until they are found by ear. */
+  readonly concealed = new Set<number>();
+
+  conceal(stepIndexes: readonly number[]): void {
+    this.concealed.clear();
+    for (const stepIndex of stepIndexes) {
+      this.concealed.add(stepIndex);
+    }
+  }
+
+  reveal(stepIndex: number): void {
+    this.concealed.delete(stepIndex);
+  }
+
   /** What the run is about to ask for, as the view last said. */
   reading: ScoreReading | null = null;
 

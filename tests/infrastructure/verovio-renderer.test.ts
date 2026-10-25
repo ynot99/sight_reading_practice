@@ -1122,6 +1122,24 @@ describe('what has been played past, and what the run will not ask for', () => {
     expect(classesOf(surface, 'n0-1-1-0')).not.toContain('note--passed');
   });
 
+  it('keeps the steps to be found by ear off the page until each is shown, a page drawn again keeping them off, and shows them all on none', async () => {
+    const { renderer, surface } = await twoBarsOpen();
+    const concealed = (): boolean[] =>
+      ['n0-1-0-0', 'n0-1-1-0', 'n1-2-0-0'].map((id) => classesOf(surface, id).includes('note--concealed') || (surface.querySelector(`[id="${id}"]`)?.parentElement?.getAttribute('class') ?? '').includes('note--concealed'));
+
+    renderer.conceal([1, 4]);
+    expect(concealed()).toEqual([false, true, true]);
+    renderer.reveal(1);
+    expect(concealed()).toEqual([false, false, true]);
+    // Drawn again, as a page is when the window changes: still off.
+    renderer.conceal([0, 4]);
+    const two = printed(twoBarExercise());
+    await renderer.load(two.xml, two.steps);
+    expect(concealed()).toEqual([true, false, true]);
+    renderer.conceal([]);
+    expect(concealed()).toEqual([false, false, false]);
+  });
+
   it('takes a note’s ledger line off with it', async () => {
     // Verovio draws ledger lines with the staff, not the note: left behind,
     // one would hang where middle C was.

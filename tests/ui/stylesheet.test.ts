@@ -2516,6 +2516,13 @@ describe('searching the settings', () => {
     // What a section of the exercises asks for wraps on a phone rather than running off it.
     expect(body('.solfege__asks')).toMatch(/flex-wrap\s*:\s*wrap/);
     expect(HTML).toMatch(/<button id="scores-show-sketches"[^>]*>Sketches<\/button>\s*<button id="scores-show-solfege"[^>]*>Solfege<\/button>/);
+    // The intervals a round asks wrap too, and one chosen says so.
+    expect(body('.solfege__chips')).toMatch(/flex-wrap\s*:\s*wrap/);
+    expect(body(".solfege__chip[aria-pressed='true']")).toMatch(/border-color\s*:\s*var\(--accent\)/);
+    expect(body(".solfege__asks .button[data-idle='true']")).toMatch(/opacity\s*:\s*0?\.\d+/);
+    // An answer to be found by ear is off the page at once, never faded out where it could be glimpsed.
+    expect(body('.note--concealed')).toMatch(/opacity\s*:\s*0\s*;/);
+    expect(body('.note--concealed')).toMatch(/transition\s*:\s*none/);
     // Its buttons, four with a bar to put in, wrap on a phone rather than running off it.
     expect(body('.sheet__actions')).toMatch(/flex-wrap\s*:\s*wrap/);
     // On a small screen, the chords open in the editor take the room of the row under the drawing.

@@ -465,6 +465,15 @@ export interface IScoreFade {
    * `null` when nothing should be dimmed, which is the reader's own choice.
    */
   dimUnplayed(reading: ScoreReading | null): void;
+  /**
+   * Keeps steps off the page until each is found: music played back by ear,
+   * whose answers drawn ahead of time would be read rather than heard. Kept
+   * off as a passed note is, so nothing moves when one is shown; `[]` shows
+   * them all again.
+   */
+  conceal(stepIndexes: readonly number[]): void;
+  /** Shows a step kept off the page, now that it has been found. */
+  reveal(stepIndex: number): void;
 }
 
 /** What a run is about to ask for, as the page can see it. */

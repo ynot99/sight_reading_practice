@@ -8198,9 +8198,11 @@ describe('AppView', () => {
       });
       const round = runtime.controller.openedExercise;
       const pad = element('score-answers');
-      const chips = (): string[] =>
-        [...pad.querySelectorAll<HTMLButtonElement>('[data-choice]')].map(
-          (chip) => `${chip.textContent}${chip.getAttribute('aria-pressed') === 'true' ? '*' : ''}${chip.dataset['verdict'] === undefined ? '' : ` ${chip.dataset['verdict']}`}`,
+      // The choices offered now, and what was picked, judged once it all is.
+      const chips = (): string[] => [...pad.querySelectorAll<HTMLButtonElement>('[data-choice]')].map((chip) => chip.textContent);
+      const given = (): string[] =>
+        [...pad.querySelectorAll<HTMLElement>('.score__answers-given .solfege__chip')].map(
+          (chip) => `${chip.textContent}${chip.dataset['verdict'] === undefined ? '' : `|${chip.dataset['verdict']}`}`,
         );
       const press = (choice: string): void => {
         pad.querySelector<HTMLButtonElement>(`[data-choice="${choice}"]`)?.click();
@@ -8212,20 +8214,17 @@ describe('AppView', () => {
       expect([pad.hidden, element('score').dataset['naming']]).toEqual([false, 'true']);
       expect(element('score-answers-asks').textContent).toBe('1 of 10 · bar 1: interval?');
       expect(chips()).toEqual(['m3', 'M3', 'P4', 'P5', 'P8']);
-      // Right: said so on the one picked.
+      // Right: said so on the one picked, and nothing more to pick.
       press(answerOf(0));
-      expect(chips().filter((chip) => chip.includes('*'))).toEqual([`${answerOf(0)}* right`]);
+      expect([given(), chips()]).toEqual([[`${answerOf(0)}|right`], []]);
+      expect(element('score-answers-asks').textContent).toBe('1 of 10 · bar 1');
       // A press while it shows how it went moves on at once, the marker to the next bar.
       pad.click();
       expect(element('score-answers-asks').textContent).toBe('2 of 10 · bar 2: interval?');
       expect(runtime.controller.barARunBeginsAt).toBe(1);
-      // Wrong: said so on the one picked, and the right one shown; moved on from a moment later.
+      // Wrong: said so on the one picked, and the right one shown beside it; moved on from a moment later.
       press(wrongFor(1));
-      expect(chips().filter((chip) => chip.includes(' '))).toEqual(
-        ['m3', 'M3', 'P4', 'P5', 'P8']
-          .filter((each) => each === wrongFor(1) || each === answerOf(1))
-          .map((each) => (each === answerOf(1) ? `${each} right` : `${each}* wrong`)),
-      );
+      expect(given()).toEqual([`${wrongFor(1)}|wrong`, `${answerOf(1)}|right`]);
       await vi.waitFor(
         () => {
           expect(element('score-answers-asks').textContent).toBe('3 of 10 · bar 3: interval?');
@@ -8236,7 +8235,7 @@ describe('AppView', () => {
         press(answerOf(at));
         pad.click();
       }
-      expect([element('score-answers-asks').textContent, chips()]).toEqual(['9 of 10 right.', []]);
+      expect([element('score-answers-asks').textContent, chips(), given()]).toEqual(['9 of 10 right.', [], []]);
 
       // Music that is played puts the answers away.
       element<HTMLButtonElement>('focus-scores').click();
@@ -8263,23 +8262,28 @@ describe('AppView', () => {
         expect([runtime.controller.openedExercise?.title, runtime.controller.theScoreOpenStandsAlone]).toEqual(['Chords by name', true]);
       });
       const pad = element('score-answers');
-      const rows = (): string[][] =>
-        [...pad.querySelectorAll('.score__answers-row')].map((row) =>
-          [...row.querySelectorAll<HTMLButtonElement>('[data-choice]')].map(
-            (chip) => `${chip.textContent}${chip.getAttribute('aria-pressed') === 'true' ? '*' : ''}${chip.dataset['verdict'] === undefined ? '' : `|${chip.dataset['verdict']}`}`,
-          ),
+      const chips = (): string[] => [...pad.querySelectorAll<HTMLButtonElement>('[data-choice]')].map((chip) => chip.textContent);
+      const given = (): string[] =>
+        [...pad.querySelectorAll<HTMLElement>('.score__answers-given .solfege__chip')].map(
+          (chip) => `${chip.textContent}${chip.dataset['verdict'] === undefined ? '' : `|${chip.dataset['verdict']}`}`,
         );
       const parts = runtime.controller.openedExercise?.byName?.[0]?.parts ?? [];
-      expect(element('score-answers-asks').textContent).toBe('1 of 10 · bar 1: quality and position?');
-      expect(rows()).toEqual([
+      // One part at a time: the quality first.
+      expect([element('score-answers-asks').textContent, chips(), given()]).toEqual([
+        '1 of 10 · bar 1: quality?',
         ['Major', 'Minor', 'Diminished', 'Augmented'],
-        ['Root position', 'First inversion', 'Second inversion'],
+        [],
       ]);
-      // The quality alone is not judged; with the position too, it is.
+      // Picked, it is not judged yet; the position is asked under it.
       pad.querySelector<HTMLButtonElement>(`[data-part="0"][data-choice="${parts[0]?.answer ?? ''}"]`)?.click();
-      expect(rows().flat().filter((chip) => chip.includes('|'))).toEqual([]);
+      expect([element('score-answers-asks').textContent, chips(), given()]).toEqual([
+        '1 of 10 · bar 1: position?',
+        ['Root position', 'First inversion', 'Second inversion'],
+        [parts[0]?.answer ?? ''],
+      ]);
+      // With the position too, both judged.
       pad.querySelector<HTMLButtonElement>(`[data-part="1"][data-choice="${parts[1]?.answer ?? ''}"]`)?.click();
-      expect(rows().map((row) => row.filter((chip) => chip.includes('|')))).toEqual([[`${parts[0]?.answer ?? ''}*|right`], [`${parts[1]?.answer ?? ''}*|right`]]);
+      expect([chips(), given()]).toEqual([[], [`${parts[0]?.answer ?? ''}|right`, `${parts[1]?.answer ?? ''}|right`]]);
     });
 
     it('asks key signatures to be named as the keys chosen', async () => {
@@ -8298,6 +8302,28 @@ describe('AppView', () => {
       expect([round?.key.mode, ...(round?.keyChanges ?? []).map((change) => change.key.mode)]).toEqual(Array.from({ length: 10 }, () => 'minor'));
       expect(element('score-answers-asks').textContent).toBe('1 of 10 · bar 1: minor key?');
       expect(element('score-answers').querySelectorAll('[data-choice]').length).toBe(15);
+    });
+
+    it('asks the chords of progressions to be named by their numerals, in the key chosen', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      const key = element<HTMLSelectElement>('solfege-functions-key');
+      const mode = element<HTMLSelectElement>('solfege-functions-mode');
+      expect([[...mode.options].map((option) => option.value), key.options.length, key.selectedOptions[0]?.label]).toEqual([['major', 'minor'], 15, 'C major']);
+      key.value = '3';
+      mode.value = 'minor';
+      mode.dispatchEvent(new Event('change', { bubbles: true }));
+      expect(key.selectedOptions[0]?.label).toBe('F♯ minor');
+      element<HTMLButtonElement>('solfege-functions-open').click();
+      await vi.waitFor(() => {
+        expect([runtime.controller.openedExercise?.title, runtime.controller.theScoreOpenStandsAlone]).toEqual(['Functions by name', true]);
+      });
+      expect([runtime.controller.openedExercise?.key.fifths, runtime.controller.openedExercise?.key.mode]).toEqual([3, 'minor']);
+      // A chord at a time, one row of the key's seven.
+      expect(element('score-answers-asks').textContent).toBe('1 of 6 · bar 1: chord 1?');
+      expect([...element('score-answers').querySelectorAll('[data-choice]')].map((chip) => chip.textContent)).toEqual(['i', 'ii°', 'III', 'iv', 'V', 'VI', 'vii°']);
     });
 
     it('names the sections of a sketch written down as a score where they begin', async () => {

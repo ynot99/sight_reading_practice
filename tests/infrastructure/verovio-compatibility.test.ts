@@ -9,6 +9,7 @@ import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { theScaleComplex } from '../../src/domain/solfege/scaleComplex.js';
+import { PROGRESSIONS_IN_A_ROUND, theFunctionsNamed } from '../../src/domain/solfege/functionsNamed.js';
 import { SIGNATURES_IN_A_ROUND, theKeysNamed } from '../../src/domain/solfege/keysNamed.js';
 import { CHORDS_IN_A_ROUND, theChordsNamed } from '../../src/domain/solfege/chordsNamed.js';
 import { DICTATIONS_IN_A_ROUND, theMelodicDictation } from '../../src/domain/solfege/melodicDictation.js';
@@ -237,6 +238,16 @@ describe('Verovio and our timeline agree on every step', () => {
     const pages = core.load(serializer.serialize(round), SHAPE);
     const drawn = Array.from({ length: pages }, (_, page) => (core.page(page + 1).match(/class="keySig/g) ?? []).length).reduce((all, each) => all + each, 0);
     expect(drawn).toBeGreaterThanOrEqual(SIGNATURES_IN_A_ROUND);
+  });
+
+  it('on a round of progressions to be named, in major and in minor', () => {
+    for (const asked of [
+      { fifths: 0, minor: false },
+      { fifths: -4, minor: true },
+      { fifths: 6, minor: true },
+    ]) {
+      expect({ ...asked, ...agreementOf(theFunctionsNamed({ ...asked, seed: 2 })) }).toEqual({ ...asked, ...agreeing(PROGRESSIONS_IN_A_ROUND) });
+    }
   });
 
   it('on every built-in preset, in three-four and two flats', () => {

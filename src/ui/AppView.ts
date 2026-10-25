@@ -35,6 +35,7 @@ import { INTERVALS, INTERVAL_WAYS, theIntervalsByEar, theIntervalsNamed, type In
 import { NamingRound } from '../application/solfege/NamingRound.js';
 import { theChordsNamed } from '../domain/solfege/chordsNamed.js';
 import { KEYS_ASKED, theKeysNamed } from '../domain/solfege/keysNamed.js';
+import { theFunctionsNamed } from '../domain/solfege/functionsNamed.js';
 import { DICTATION_LENGTHS, DICTATION_RHYTHMS, theMelodicDictation, type DictationRhythm } from '../domain/solfege/melodicDictation.js';
 import { barsOfThePicture, tiersOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
@@ -2796,6 +2797,9 @@ export class AppView {
     solfegeChordsOpen: HTMLButtonElement;
     solfegeKeysAs: HTMLSelectElement;
     solfegeKeysOpen: HTMLButtonElement;
+    solfegeFunctionsKey: HTMLSelectElement;
+    solfegeFunctionsMode: HTMLSelectElement;
+    solfegeFunctionsOpen: HTMLButtonElement;
     solfegeDictationKey: HTMLSelectElement;
     solfegeDictationMode: HTMLSelectElement;
     solfegeDictationBars: HTMLSelectElement;
@@ -3236,6 +3240,9 @@ export class AppView {
       solfegeChordsOpen: requireElement(doc, 'solfege-chords-open'),
       solfegeKeysAs: requireElement(doc, 'solfege-keys-as'),
       solfegeKeysOpen: requireElement(doc, 'solfege-keys-open'),
+      solfegeFunctionsKey: requireElement(doc, 'solfege-functions-key'),
+      solfegeFunctionsMode: requireElement(doc, 'solfege-functions-mode'),
+      solfegeFunctionsOpen: requireElement(doc, 'solfege-functions-open'),
       solfegeDictationKey: requireElement(doc, 'solfege-dictation-key'),
       solfegeDictationMode: requireElement(doc, 'solfege-dictation-mode'),
       solfegeDictationBars: requireElement(doc, 'solfege-dictation-bars'),
@@ -10206,6 +10213,18 @@ export class AppView {
     this.listen(this.el.solfegeIntervalsNameThem, 'click', () => {
       void this.openTheIntervals('by name');
     });
+    this.listen(this.el.solfegeFunctionsMode, 'change', () => {
+      this.nameTheKeysOfTheList(this.el.solfegeFunctionsKey, this.el.solfegeFunctionsMode.value === 'minor' ? 'minor' : 'major');
+    });
+    this.listen(this.el.solfegeFunctionsOpen, 'click', () => {
+      void this.openTheExercise(
+        theFunctionsNamed({
+          fifths: Number(this.el.solfegeFunctionsKey.value),
+          minor: this.el.solfegeFunctionsMode.value === 'minor',
+          seed: Math.floor(Math.random() * 2 ** 31),
+        }),
+      );
+    });
     this.listen(this.el.solfegeKeysOpen, 'click', () => {
       void this.openTheExercise(
         theKeysNamed({
@@ -11477,6 +11496,10 @@ export class AppView {
       if (this.el.solfegeKeysAs.options.length === 0) {
         this.el.solfegeKeysAs.replaceChildren(new Option('Major keys', 'major'), new Option('Minor keys', 'minor'), new Option('Either', 'either'));
       }
+      if (this.el.solfegeFunctionsMode.options.length === 0) {
+        this.el.solfegeFunctionsMode.replaceChildren(new Option('Major', 'major'), new Option('Minor', 'minor'));
+      }
+      this.nameTheKeysOfTheList(this.el.solfegeFunctionsKey, this.el.solfegeFunctionsMode.value === 'minor' ? 'minor' : 'major');
     }
   }
 
@@ -11510,12 +11533,18 @@ export class AppView {
       this.el.solfegeDictationRhythm,
       DICTATION_RHYTHMS.map((rhythm) => [rhythm, DICTATION_RHYTHM_NAMES[rhythm]] as const),
     );
-    const scale = this.el.solfegeDictationMode.value === 'minor' ? 'minor' : 'major';
-    const fifths = this.el.solfegeDictationKey.value === '' ? 0 : Number(this.el.solfegeDictationKey.value);
-    this.el.solfegeDictationKey.replaceChildren(
-      ...Array.from({ length: 15 }, (_, at) => at - 7).map((each) => new Option(theNameOfTheKey({ fifths: each, scale }), String(each))),
-    );
-    this.el.solfegeDictationKey.value = String(fifths);
+    this.nameTheKeysOfTheList(this.el.solfegeDictationKey, this.el.solfegeDictationMode.value === 'minor' ? 'minor' : 'major');
+  }
+
+  /**
+   * Fills a list of keys by their signatures, seven flats to seven sharps,
+   * each named in the scale given - the key chosen kept by its signature, so
+   * A minor turned major is C major, as the signature has it.
+   */
+  private nameTheKeysOfTheList(list: HTMLSelectElement, scale: ScaleName): void {
+    const fifths = list.value === '' ? 0 : Number(list.value);
+    list.replaceChildren(...Array.from({ length: 15 }, (_, at) => at - 7).map((each) => new Option(theNameOfTheKey({ fifths: each, scale }), String(each))));
+    list.value = String(fifths);
   }
 
   /** Opens a round of melodic dictation as the sheet asks for it - another each time. */
@@ -11594,12 +11623,7 @@ export class AppView {
         }),
       );
     }
-    const scale = this.theScaleOfTheComplexAsked();
-    const fifths = this.el.solfegeComplexKey.value === '' ? 0 : Number(this.el.solfegeComplexKey.value);
-    this.el.solfegeComplexKey.replaceChildren(
-      ...Array.from({ length: 15 }, (_, at) => at - 7).map((each) => new Option(theNameOfTheKey({ fifths: each, scale }), String(each))),
-    );
-    this.el.solfegeComplexKey.value = String(fifths);
+    this.nameTheKeysOfTheList(this.el.solfegeComplexKey, this.theScaleOfTheComplexAsked());
   }
 
   /** The scale the sheet asks a scale complex in. */
@@ -11618,9 +11642,12 @@ export class AppView {
   }
 
   /**
-   * Shows the question being asked: the marker on its bar, what it asks,
-   * its choices - and once answered, which were right, until it is moved on
-   * from. Over, the round says how it went.
+   * Shows the question being asked: the marker on its bar, the part of it
+   * asked now and that part's choices, under what was picked for the parts
+   * before it - one row of choices at a time, so a question of four chords
+   * takes no more room than one of an interval. Answered, the row of what
+   * was picked says which were right, the right answer beside each that
+   * was not, until it is moved on from. Over, the round says how it went.
    */
   private showTheQuestion(): void {
     const round = this.naming;
@@ -11643,37 +11670,56 @@ export class AppView {
       this.beginAt(question.measureIndex);
     }
     const answered = round.answered;
-    const asks = question.parts.map((part) => part.asks.toLowerCase()).join(' and ');
-    this.el.scoreAnswersAsks.textContent = `${String(round.place + 1)} of ${String(round.questions.length)} · bar ${String(
-      barNumberOf(exercise, question.measureIndex),
-    )}: ${asks}?`;
-    this.el.scoreAnswersParts.replaceChildren(
-      ...question.parts.map((part, at) => {
-        const row = this.doc.createElement('div');
-        row.className = 'score__answers-row';
-        row.setAttribute('role', 'group');
-        row.setAttribute('aria-label', part.asks);
-        row.append(
-          ...part.choices.map((choice) => {
-            const chip = this.doc.createElement('button');
-            chip.type = 'button';
-            chip.className = 'solfege__chip';
-            chip.textContent = choice;
-            chip.dataset['part'] = String(at);
-            chip.dataset['choice'] = choice;
-            const picked = (answered?.picked ?? round.pickedSoFar)[at] === choice;
-            chip.setAttribute('aria-pressed', String(picked));
-            if (answered !== null && choice === part.answer) {
-              chip.dataset['verdict'] = 'right';
-            } else if (answered !== null && picked) {
-              chip.dataset['verdict'] = 'wrong';
-            }
-            return chip;
-          }),
-        );
-        return row;
-      }),
-    );
+    const picked = answered?.picked ?? round.pickedSoFar;
+    const asking = answered === null ? picked.findIndex((each) => each === null) : -1;
+    const part = question.parts[asking];
+    const where = `${String(round.place + 1)} of ${String(round.questions.length)} · bar ${String(barNumberOf(exercise, question.measureIndex))}`;
+    this.el.scoreAnswersAsks.textContent = part === undefined ? where : `${where}: ${part.asks.toLowerCase()}?`;
+    // What was picked, part by part - judged, once it all is.
+    const given = this.doc.createElement('div');
+    given.className = 'score__answers-row score__answers-given';
+    question.parts.forEach((each, at) => {
+      const choice = picked[at];
+      if (choice === null || choice === undefined) {
+        return;
+      }
+      const said = this.doc.createElement('span');
+      said.className = 'solfege__chip';
+      said.textContent = choice;
+      said.title = each.asks;
+      if (answered !== null) {
+        said.dataset['verdict'] = choice === each.answer ? 'right' : 'wrong';
+      }
+      given.append(said);
+      if (answered !== null && choice !== each.answer) {
+        const right = this.doc.createElement('span');
+        right.className = 'solfege__chip';
+        right.textContent = each.answer;
+        right.title = `${each.asks}: the right answer`;
+        right.dataset['verdict'] = 'right';
+        given.append(right);
+      }
+    });
+    const rows: HTMLElement[] = given.childElementCount === 0 ? [] : [given];
+    if (part !== undefined) {
+      const row = this.doc.createElement('div');
+      row.className = 'score__answers-row';
+      row.setAttribute('role', 'group');
+      row.setAttribute('aria-label', part.asks);
+      row.append(
+        ...part.choices.map((choice) => {
+          const chip = this.doc.createElement('button');
+          chip.type = 'button';
+          chip.className = 'solfege__chip';
+          chip.textContent = choice;
+          chip.dataset['part'] = String(asking);
+          chip.dataset['choice'] = choice;
+          return chip;
+        }),
+      );
+      rows.push(row);
+    }
+    this.el.scoreAnswersParts.replaceChildren(...rows);
   }
 
   /**

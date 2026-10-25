@@ -5422,7 +5422,7 @@ body[data-playing='true'] .score__modes {
 .score__answers {
   position: absolute;
   left: 50%;
-  top: 40px;
+  top: var(--answers-from);
   transform: translateX(-50%);
   max-height: var(--answers-room);
   overflow-y: auto;
@@ -5438,8 +5438,13 @@ body[data-playing='true'] .score__modes {
   box-shadow: var(--shadow);
 }
 
-/* The room the answers keep at the top of the page, while a naming exercise asks. */
+/*
+ * The room the answers keep at the top of the page, while a naming exercise
+ * asks: from under the corner's clock, as tall as a question with a row of
+ * what was picked and a row of choices wraps to.
+ */
 .score {
+  --answers-from: 58px;
   --answers-room: 140px;
 }
 
@@ -5450,7 +5455,7 @@ body[data-playing='true'] .score__modes {
 }
 
 .score[data-naming='true'] .score__surface {
-  padding-top: calc(var(--answers-room) + 8px);
+  padding-top: calc(var(--answers-from) + var(--answers-room));
 }
 
 .score__answers-asks {

@@ -2526,7 +2526,8 @@ describe('searching the settings', () => {
     // The answers of a naming exercise stand at the top of the page, the music moved down under them, and wrap.
     expect(body('.score__answers')).toMatch(/position\s*:\s*absolute/);
     expect(body('.score__answers')).toMatch(/max-height\s*:\s*var\(--answers-room\)/);
-    expect(body(".score[data-naming='true'] .score__surface")).toMatch(/padding-top\s*:\s*calc\(var\(--answers-room\)/);
+    expect(body(".score[data-naming='true'] .score__surface")).toMatch(/padding-top\s*:\s*calc\(var\(--answers-from\) \+ var\(--answers-room\)\)/);
+    expect(body('.score__answers')).toMatch(/top\s*:\s*var\(--answers-from\)/);
     expect(body('.score__answers-row')).toMatch(/flex-wrap\s*:\s*wrap/);
     // An answer judged in the verdict's colours, right or wrong.
     expect(body(".score__answers-row .solfege__chip[data-verdict='right']")).toMatch(/var\(--mark-perfect\)/);

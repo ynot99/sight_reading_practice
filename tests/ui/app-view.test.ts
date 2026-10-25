@@ -8431,6 +8431,30 @@ describe('AppView', () => {
       expect(heard.mock.calls).toEqual([[0], [0], [1]]);
     });
 
+    it('asks cadences to be named, heard or read, in the key chosen', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      const key = element<HTMLSelectElement>('solfege-cadences-key');
+      const mode = element<HTMLSelectElement>('solfege-cadences-mode');
+      key.value = '-3';
+      mode.value = 'minor';
+      mode.dispatchEvent(new Event('change', { bubbles: true }));
+      expect(key.selectedOptions[0]?.label).toBe('C minor');
+      element<HTMLButtonElement>('solfege-cadences-by-ear').click();
+      await vi.waitFor(() => {
+        expect([runtime.controller.openedExercise?.title, runtime.controller.openedExercise?.namedByEar]).toEqual(['Cadences by ear', true]);
+      });
+      expect([runtime.controller.openedExercise?.key.fifths, runtime.controller.openedExercise?.key.mode]).toEqual([-3, 'minor']);
+      expect([...element('score-answers').querySelectorAll('[data-choice]')].map((chip) => chip.textContent)).toEqual(['Authentic', 'Plagal', 'Half', 'Deceptive']);
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('solfege-cadences-open').click();
+      await vi.waitFor(() => {
+        expect([runtime.controller.openedExercise?.title, runtime.controller.openedExercise?.namedByEar]).toEqual(['Cadences by name', undefined]);
+      });
+    });
+
     it('names the sections of a sketch written down as a score where they begin', async () => {
       const { view, runtime, sketches } = createRig();
       await view.initialize();

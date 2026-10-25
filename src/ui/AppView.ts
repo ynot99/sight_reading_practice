@@ -36,6 +36,7 @@ import { NamingRound } from '../application/solfege/NamingRound.js';
 import { CHORDS_ASKS, theChordsNamed } from '../domain/solfege/chordsNamed.js';
 import { KEYS_ASKED, theKeysNamed } from '../domain/solfege/keysNamed.js';
 import { theFunctionsNamed } from '../domain/solfege/functionsNamed.js';
+import { theCadencesNamed } from '../domain/solfege/cadencesNamed.js';
 import { PROGRESSION_NAMES, theProgression, theProgressionNamed } from '../domain/solfege/progressions.js';
 import { TRANSPOSITION_NAMES, TRANSPOSITIONS, theTransposition } from '../domain/solfege/transposition.js';
 import { DICTATION_LENGTHS, DICTATION_RHYTHMS, theMelodicDictation, type DictationRhythm } from '../domain/solfege/melodicDictation.js';
@@ -2801,6 +2802,10 @@ export class AppView {
     solfegeChordsOpen: HTMLButtonElement;
     solfegeChordsByEar: HTMLButtonElement;
     solfegeFunctionsByEar: HTMLButtonElement;
+    solfegeCadencesKey: HTMLSelectElement;
+    solfegeCadencesMode: HTMLSelectElement;
+    solfegeCadencesOpen: HTMLButtonElement;
+    solfegeCadencesByEar: HTMLButtonElement;
     solfegeKeysAs: HTMLSelectElement;
     solfegeKeysOpen: HTMLButtonElement;
     solfegeFunctionsKey: HTMLSelectElement;
@@ -3255,6 +3260,10 @@ export class AppView {
       solfegeChordsOpen: requireElement(doc, 'solfege-chords-open'),
       solfegeChordsByEar: requireElement(doc, 'solfege-chords-by-ear'),
       solfegeFunctionsByEar: requireElement(doc, 'solfege-functions-by-ear'),
+      solfegeCadencesKey: requireElement(doc, 'solfege-cadences-key'),
+      solfegeCadencesMode: requireElement(doc, 'solfege-cadences-mode'),
+      solfegeCadencesOpen: requireElement(doc, 'solfege-cadences-open'),
+      solfegeCadencesByEar: requireElement(doc, 'solfege-cadences-by-ear'),
       solfegeKeysAs: requireElement(doc, 'solfege-keys-as'),
       solfegeKeysOpen: requireElement(doc, 'solfege-keys-open'),
       solfegeFunctionsKey: requireElement(doc, 'solfege-functions-key'),
@@ -10268,6 +10277,24 @@ export class AppView {
     this.listen(this.el.solfegeFunctionsMode, 'change', () => {
       this.nameTheKeysOfTheList(this.el.solfegeFunctionsKey, this.el.solfegeFunctionsMode.value === 'minor' ? 'minor' : 'major');
     });
+    this.listen(this.el.solfegeCadencesMode, 'change', () => {
+      this.nameTheKeysOfTheList(this.el.solfegeCadencesKey, this.el.solfegeCadencesMode.value === 'minor' ? 'minor' : 'major');
+    });
+    for (const [button, heard] of [
+      [this.el.solfegeCadencesOpen, false],
+      [this.el.solfegeCadencesByEar, true],
+    ] as const) {
+      this.listen(button, 'click', () => {
+        void this.openTheExercise(
+          theCadencesNamed({
+            fifths: Number(this.el.solfegeCadencesKey.value),
+            minor: this.el.solfegeCadencesMode.value === 'minor',
+            heard,
+            seed: Math.floor(Math.random() * 2 ** 31),
+          }),
+        );
+      });
+    }
     for (const [button, heard] of [
       [this.el.solfegeFunctionsOpen, false],
       [this.el.solfegeFunctionsByEar, true],
@@ -11577,6 +11604,10 @@ export class AppView {
       }
       this.nameTheKeysOfTheList(this.el.solfegeFunctionsKey, this.el.solfegeFunctionsMode.value === 'minor' ? 'minor' : 'major');
       this.showTheProgressionsAsked();
+      if (this.el.solfegeCadencesMode.options.length === 0) {
+        this.el.solfegeCadencesMode.replaceChildren(new Option('Major', 'major'), new Option('Minor', 'minor'));
+      }
+      this.nameTheKeysOfTheList(this.el.solfegeCadencesKey, this.el.solfegeCadencesMode.value === 'minor' ? 'minor' : 'major');
       if (this.el.solfegeTransposeMode.options.length === 0) {
         this.el.solfegeTransposeMode.replaceChildren(new Option('Major', 'major'), new Option('Minor', 'minor'));
         this.el.solfegeTransposeBy.replaceChildren(...TRANSPOSITION_NAMES.map((name) => new Option(TRANSPOSITIONS[name].called, name)));

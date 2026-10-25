@@ -9,6 +9,7 @@ import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { theScaleComplex } from '../../src/domain/solfege/scaleComplex.js';
+import { theCadencesNamed } from '../../src/domain/solfege/cadencesNamed.js';
 import { TRANSPOSITIONS_IN_A_ROUND, theTransposition } from '../../src/domain/solfege/transposition.js';
 import { theProgression } from '../../src/domain/solfege/progressions.js';
 import { PROGRESSIONS_IN_A_ROUND, theFunctionsNamed } from '../../src/domain/solfege/functionsNamed.js';
@@ -270,6 +271,10 @@ describe('Verovio and our timeline agree on every step', () => {
     ] as const) {
       expect({ ...asked, ...agreementOf(theTransposition({ ...asked, seed: 3 })) }).toEqual({ ...asked, ...agreeing(TRANSPOSITIONS_IN_A_ROUND * 4) });
     }
+  });
+
+  it('on a round of cadences to be named', () => {
+    expect(agreementOf(theCadencesNamed({ fifths: 5, minor: true, heard: false, seed: 8 }))).toEqual(agreeing(PROGRESSIONS_IN_A_ROUND));
   });
 
   it('on every built-in preset, in three-four and two flats', () => {

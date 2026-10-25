@@ -1,10 +1,10 @@
 import { Duration } from '../model/Duration.js';
-import type { Exercise, NamingQuestion } from '../model/Exercise.js';
+import type { Exercise, NamingPart, NamingQuestion } from '../model/Exercise.js';
 import { measureOf, noteEntry } from '../model/Exercise.js';
 import { KeySignature } from '../model/KeySignature.js';
 import type { Pitch } from '../model/Pitch.js';
 import { TimeSignature } from '../model/TimeSignature.js';
-import { createRng } from '../generation/Rng.js';
+import { createRng, type Rng } from '../generation/Rng.js';
 import { theChordTheKeysMake, theNumeralOfTheChord } from '../harmony/chordName.js';
 import type { ScaleName } from '../harmony/scales.js';
 import { aStepOfTheKey, OCTAVE, theTonicOfTheHand } from './cadence.js';
@@ -66,6 +66,33 @@ const LEADING = [4, 6];
  * The same request is the same round; another seed, another.
  */
 export function theFunctionsNamed(asked: ProgressionsAsked): Exercise {
+  return aRoundOfProgressions(
+    asked,
+    { id: FUNCTIONS_BY_NAME_ID, title: asked.heard ? 'Functions by ear' : 'Functions by name' },
+    (rng, numeralOf, choices) => {
+      const degrees = rng.pick(PROGRESSIONS);
+      return { degrees, parts: degrees.map((degree, place) => ({ asks: `Chord ${String(place + 1)}`, choices, answer: numeralOf(degree) })) };
+    },
+  );
+}
+
+/** What a progression of a round asks: its chords, by the degrees of their roots, and the parts of the question about them. */
+export interface ProgressionToName {
+  readonly degrees: readonly number[];
+  readonly parts: readonly NamingPart[];
+}
+
+/**
+ * A round of progressions to be named, a bar of four chords each, voiced as
+ * `theFunctionsNamed` voices them, in the key asked, read or heard: what each
+ * asks is said by `ask`, given the numeral of each degree's chord as the
+ * chart numbers it and the seven of the key.
+ */
+export function aRoundOfProgressions(
+  asked: ProgressionsAsked,
+  filed: { readonly id: string; readonly title: string },
+  ask: (rng: Rng, numeralOf: (degree: number) => string, choices: readonly string[]) => ProgressionToName,
+): Exercise {
   const rng = createRng(asked.seed);
   const key = asked.minor ? KeySignature.minor(asked.fifths) : KeySignature.major(asked.fifths);
   const scale: ScaleName = asked.minor ? 'harmonicMinor' : 'major';
@@ -80,7 +107,7 @@ export function theFunctionsNamed(asked: ProgressionsAsked): Exercise {
 
   const questions: { readonly right: Pitch[][]; readonly left: Pitch[]; readonly question: NamingQuestion }[] = [];
   for (let at = 0; at < PROGRESSIONS_IN_A_ROUND; at += 1) {
-    const degrees = rng.pick(PROGRESSIONS);
+    const { degrees, parts } = ask(rng, numeralOf, choices);
     const right: Pitch[][] = [];
     for (const degree of degrees) {
       right.push(theNearestVoicing(triad(degree), right.at(-1) ?? null));
@@ -88,15 +115,12 @@ export function theFunctionsNamed(asked: ProgressionsAsked): Exercise {
     questions.push({
       right,
       left: degrees.map((degree) => aStepOfTheKey(key, tonic - OCTAVE, degree > 3 ? degree - OCTAVE : degree, LEADING.includes(degree))),
-      question: {
-        measureIndex: at,
-        parts: degrees.map((degree, place) => ({ asks: `Chord ${String(place + 1)}`, choices, answer: numeralOf(degree) })),
-      },
+      question: { measureIndex: at, parts },
     });
   }
   return {
-    id: `${FUNCTIONS_BY_NAME_ID}:${String(asked.seed)}`,
-    title: asked.heard ? 'Functions by ear' : 'Functions by name',
+    id: `${filed.id}:${String(asked.seed)}`,
+    title: filed.title,
     key,
     keyChanges: [],
     timeChanges: [],
@@ -126,7 +150,7 @@ export function theFunctionsNamed(asked: ProgressionsAsked): Exercise {
         measures: questions.map(({ left }) => measureOf(left.map((root) => noteEntry(root, Duration.QUARTER)))),
       },
     ],
-    metadata: { generatorId: FUNCTIONS_BY_NAME_ID, seed: asked.seed },
+    metadata: { generatorId: filed.id, seed: asked.seed },
     byName: questions.map(({ question }) => question),
     ...(asked.heard ? { namedByEar: true } : {}),
   };

@@ -14,6 +14,8 @@ import { theNearestVoicing } from './voicing.js';
 export interface ProgressionsAsked {
   readonly fifths: number;
   readonly minor: boolean;
+  /** Whether each progression is heard rather than read: see `Exercise.namedByEar`. */
+  readonly heard: boolean;
   readonly seed: number;
 }
 
@@ -57,6 +59,10 @@ const LEADING = [4, 6];
  * a keyboard harmony lesson voices them, so the reader names a chord from
  * its notes however it stands.
  *
+ * Read off the page, or heard - each progression played as it is asked,
+ * its notes kept off the page until it is answered - as functions are first
+ * named by ear.
+ *
  * The same request is the same round; another seed, another.
  */
 export function theFunctionsNamed(asked: ProgressionsAsked): Exercise {
@@ -90,7 +96,7 @@ export function theFunctionsNamed(asked: ProgressionsAsked): Exercise {
   }
   return {
     id: `${FUNCTIONS_BY_NAME_ID}:${String(asked.seed)}`,
-    title: 'Functions by name',
+    title: asked.heard ? 'Functions by ear' : 'Functions by name',
     key,
     keyChanges: [],
     timeChanges: [],
@@ -122,5 +128,6 @@ export function theFunctionsNamed(asked: ProgressionsAsked): Exercise {
     ],
     metadata: { generatorId: FUNCTIONS_BY_NAME_ID, seed: asked.seed },
     byName: questions.map(({ question }) => question),
+    ...(asked.heard ? { namedByEar: true } : {}),
   };
 }

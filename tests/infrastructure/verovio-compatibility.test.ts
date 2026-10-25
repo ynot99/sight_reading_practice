@@ -229,7 +229,8 @@ describe('Verovio and our timeline agree on every step', () => {
 
   it('on a round of chords to be named, in every position', () => {
     for (const seed of [3, 11]) {
-      expect({ seed, ...agreementOf(theChordsNamed({ inversions: true, seed })) }).toEqual({ seed, ...agreeing(CHORDS_IN_A_ROUND) });
+      expect({ seed, ...agreementOf(theChordsNamed({ asks: 'positions', heard: false, seed })) }).toEqual({ seed, ...agreeing(CHORDS_IN_A_ROUND) });
+      expect({ seed, ...agreementOf(theChordsNamed({ asks: 'sevenths', heard: false, seed })) }).toEqual({ seed, ...agreeing(CHORDS_IN_A_ROUND) });
     }
   });
 
@@ -248,7 +249,7 @@ describe('Verovio and our timeline agree on every step', () => {
       { fifths: -4, minor: true },
       { fifths: 6, minor: true },
     ]) {
-      expect({ ...asked, ...agreementOf(theFunctionsNamed({ ...asked, seed: 2 })) }).toEqual({ ...asked, ...agreeing(PROGRESSIONS_IN_A_ROUND) });
+      expect({ ...asked, ...agreementOf(theFunctionsNamed({ ...asked, heard: false, seed: 2 })) }).toEqual({ ...asked, ...agreeing(PROGRESSIONS_IN_A_ROUND) });
     }
   });
 

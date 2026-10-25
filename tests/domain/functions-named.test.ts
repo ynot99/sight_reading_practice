@@ -24,7 +24,7 @@ describe('functions by name', () => {
   it('is a valid round of six progressions of four chords, both hands, the same for the same seed', () => {
     for (const key of KEYS) {
       for (const seed of SEEDS.slice(0, 10)) {
-        const round = theFunctionsNamed({ ...key, seed });
+        const round = theFunctionsNamed({ ...key, heard: false, seed });
         expect(() => {
           validateExercise(round);
         }).not.toThrow();
@@ -32,7 +32,7 @@ describe('functions by name', () => {
           [PROGRESSIONS_IN_A_ROUND, PROGRESSIONS_IN_A_ROUND],
           Array.from({ length: PROGRESSIONS_IN_A_ROUND }, () => 4),
         ]);
-        expect(theFunctionsNamed({ ...key, seed })).toEqual(round);
+        expect(theFunctionsNamed({ ...key, heard: false, seed })).toEqual(round);
       }
     }
   });
@@ -42,7 +42,7 @@ describe('functions by name', () => {
     for (const key of KEYS) {
       const scale = key.minor ? 'harmonicMinor' : 'major';
       for (const seed of SEEDS) {
-        const round = theFunctionsNamed({ ...key, seed });
+        const round = theFunctionsNamed({ ...key, heard: false, seed });
         chordsOf(round).forEach((bar, at) => {
           const parts = round.byName?.[at]?.parts ?? [];
           bar.forEach((chord, place) => {
@@ -70,8 +70,14 @@ describe('functions by name', () => {
   });
 
   it('offers the seven chords of the key, the dominant and the leading note raised in minor', () => {
-    const choices = (minor: boolean): readonly string[] => theFunctionsNamed({ fifths: 0, minor, seed: 1 }).byName?.[0]?.parts[0]?.choices ?? [];
+    const choices = (minor: boolean): readonly string[] => theFunctionsNamed({ fifths: 0, minor, heard: false, seed: 1 }).byName?.[0]?.parts[0]?.choices ?? [];
     expect(choices(false)).toEqual(['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°']);
     expect(choices(true)).toEqual(['i', 'ii°', 'III', 'iv', 'V', 'VI', 'vii°']);
+  });
+
+  it('is heard, where asked, the same progressions named by ear', () => {
+    const heard = theFunctionsNamed({ fifths: 2, minor: false, heard: true, seed: 5 });
+    const read = theFunctionsNamed({ fifths: 2, minor: false, heard: false, seed: 5 });
+    expect([heard.title, heard.namedByEar, read.namedByEar, heard.staves, heard.byName]).toEqual(['Functions by ear', true, undefined, read.staves, read.byName]);
   });
 });

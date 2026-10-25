@@ -7,13 +7,23 @@ import { CHORDS_IN_A_ROUND, POSITIONS, TRIADS, theChordsNamed } from '../../src/
 const SEEDS = Array.from({ length: 60 }, (_, seed) => seed + 1);
 
 /** What the program names a triad of each quality, by its kind. */
-const SUFFIXES: Readonly<Record<string, string>> = { Major: '', Minor: 'm', Diminished: 'dim', Augmented: '+' };
+const SUFFIXES: Readonly<Record<string, string>> = {
+  Major: '',
+  Minor: 'm',
+  Diminished: 'dim',
+  Augmented: '+',
+  'Dominant seventh': '7',
+  'Major seventh': 'maj7',
+  'Minor seventh': 'm7',
+  'Half-diminished seventh': 'm7♭5',
+  'Diminished seventh': 'dim7',
+};
 
 describe('chords by name', () => {
   it('is a valid round of ten chords, a bar each, the same for the same seed', () => {
     for (const inversions of [false, true]) {
       for (const seed of SEEDS) {
-        const round = theChordsNamed({ inversions, seed });
+        const round = theChordsNamed({ asks: inversions ? 'positions' : 'quality', heard: false, seed });
         expect(() => {
           validateExercise(round);
         }).not.toThrow();
@@ -22,7 +32,7 @@ describe('chords by name', () => {
           CHORDS_IN_A_ROUND,
           Array.from({ length: CHORDS_IN_A_ROUND }, (_, at) => at),
         ]);
-        expect(theChordsNamed({ inversions, seed })).toEqual(round);
+        expect(theChordsNamed({ asks: inversions ? 'positions' : 'quality', heard: false, seed })).toEqual(round);
       }
     }
   });
@@ -32,7 +42,7 @@ describe('chords by name', () => {
     const broken: string[] = [];
     for (const inversions of [false, true]) {
       for (const seed of SEEDS) {
-        const round = theChordsNamed({ inversions, seed });
+        const round = theChordsNamed({ asks: inversions ? 'positions' : 'quality', heard: false, seed });
         round.staves[0]?.measures.forEach((measure, at) => {
           const entry = measure.entries[0];
           const notes = entry?.kind === 'note' ? entry.pitches : [];
@@ -67,12 +77,43 @@ describe('chords by name', () => {
 
   it('roots its chords on flats as often as on sharps', () => {
     const roots = SEEDS.flatMap((seed) =>
-      (theChordsNamed({ inversions: false, seed }).staves[0]?.measures ?? []).map((measure) => {
+      (theChordsNamed({ asks: 'quality', heard: false, seed }).staves[0]?.measures ?? []).map((measure) => {
         const entry = measure.entries[0];
         return entry?.kind === 'note' ? (entry.pitches[0]?.alter ?? 0) : 0;
       }),
     );
     expect(roots).toContain(1);
     expect(roots).toContain(-1);
+  });
+
+  it('asks seventh chords among the triads where asked, in root position, as the program names them, read or heard', () => {
+    const asked = new Set<string>();
+    const broken: string[] = [];
+    for (const seed of Array.from({ length: 60 }, (_, at) => at + 1)) {
+      const round = theChordsNamed({ asks: 'sevenths', heard: false, seed });
+      round.staves[0]?.measures.forEach((measure, at) => {
+        const entry = measure.entries[0];
+        const notes = entry?.kind === 'note' ? entry.pitches : [];
+        const parts = round.byName?.[at]?.parts ?? [];
+        const quality = parts[0]?.answer ?? '';
+        asked.add(quality);
+        const heard = theChordTheKeysMake(notes.map((pitch) => pitch.midi));
+        const said = [
+          heard?.kind.suffix === SUFFIXES[quality],
+          (((notes[0]?.midi ?? 0) - (heard?.root ?? 0)) % 12 + 12) % 12 === 0 || quality === 'Augmented' || quality === 'Diminished seventh',
+          parts.length === 1 && parts[0]?.choices.length === 9,
+          notes.every((pitch) => pitch.midi >= Pitch.parse('A3').midi && pitch.midi <= Pitch.parse('A5').midi),
+        ];
+        if (said.includes(false)) {
+          broken.push(`${notes.map((pitch) => pitch.toString()).join(' ')} ${quality}: ${String(said)}`);
+        }
+      });
+    }
+    expect(broken).toEqual([]);
+    expect(asked.size).toBe(9);
+    // Heard: the same chords, named by ear.
+    const heard = theChordsNamed({ asks: 'sevenths', heard: true, seed: 3 });
+    const read = theChordsNamed({ asks: 'sevenths', heard: false, seed: 3 });
+    expect([heard.title, heard.namedByEar, read.namedByEar, heard.staves]).toEqual(['Chords by ear', true, undefined, read.staves]);
   });
 });

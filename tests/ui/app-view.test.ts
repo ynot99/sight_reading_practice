@@ -8264,6 +8264,7 @@ describe('AppView', () => {
       expect([...asks.options].map((option) => `${option.value} ${option.label}`)).toEqual([
         'quality Their quality',
         'positions Their quality and position',
+        'sevenths Triads and sevenths',
       ]);
       asks.value = 'positions';
       element<HTMLButtonElement>('solfege-chords-open').click();
@@ -8333,6 +8334,16 @@ describe('AppView', () => {
       // A chord at a time, one row of the key's seven.
       expect(element('score-answers-asks').textContent).toBe('1 of 6 · bar 1: chord 1?');
       expect([...element('score-answers').querySelectorAll('[data-choice]')].map((chip) => chip.textContent)).toEqual(['i', 'ii°', 'III', 'iv', 'V', 'VI', 'vii°']);
+      // And by ear, the same key.
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('solfege-functions-by-ear').click();
+      await vi.waitFor(() => {
+        expect([runtime.controller.openedExercise?.title, runtime.controller.openedExercise?.namedByEar, runtime.controller.openedExercise?.key.fifths]).toEqual([
+          'Functions by ear',
+          true,
+          3,
+        ]);
+      });
     });
 
     it('opens a progression to play from the Solfege list, named by its numerals in the mode chosen, in one key or through every key', async () => {
@@ -8390,6 +8401,34 @@ describe('AppView', () => {
       });
       // Played back, so the modes are dimmed; found from what is written, so there is nothing to hear again.
       expect([element('focus-modes').dataset['idle'], element('score-hear-again').hidden]).toEqual(['true', true]);
+    });
+
+    it('asks chords to be named by ear: each heard as it is asked and again when asked, shown once answered', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      const asks = element<HTMLSelectElement>('solfege-chords-asks');
+      expect([...asks.options].map((option) => option.value)).toEqual(['quality', 'positions', 'sevenths']);
+      asks.value = 'sevenths';
+      const heard = vi.spyOn(runtime.controller, 'hearTheBarNamed');
+      const shown = vi.spyOn(runtime.controller, 'showTheBarNamed');
+      element<HTMLButtonElement>('solfege-chords-by-ear').click();
+      await vi.waitFor(() => {
+        expect([runtime.controller.openedExercise?.title, runtime.controller.openedExercise?.namedByEar]).toEqual(['Chords by ear', true]);
+      });
+      const pad = element('score-answers');
+      const answer = runtime.controller.openedExercise?.byName?.[0]?.parts[0]?.answer ?? '';
+      // Heard as it is asked, once; the button to hear it again on the page; the modes left as they are.
+      expect(heard.mock.calls).toEqual([[0]]);
+      expect([element('score-hear-again').hidden, element('focus-modes').dataset['idle']]).toEqual([false, undefined]);
+      element<HTMLButtonElement>('score-hear-again').click();
+      expect(heard.mock.calls).toEqual([[0], [0]]);
+      // Answered: shown on the page; moved on, the next heard.
+      pad.querySelector<HTMLButtonElement>(`[data-choice="${answer}"]`)?.click();
+      expect(shown.mock.calls).toEqual([[0]]);
+      pad.click();
+      expect(heard.mock.calls).toEqual([[0], [0], [1]]);
     });
 
     it('names the sections of a sketch written down as a score where they begin', async () => {

@@ -33,7 +33,7 @@ import {
 import { SCALE_COMPLEX_SCALES, theScaleComplex, type ScaleOfTheComplex } from '../domain/solfege/scaleComplex.js';
 import { INTERVALS, INTERVAL_WAYS, theIntervalsByEar, theIntervalsNamed, type IntervalWay } from '../domain/solfege/intervalsByEar.js';
 import { NamingRound } from '../application/solfege/NamingRound.js';
-import { theChordsNamed } from '../domain/solfege/chordsNamed.js';
+import { CHORDS_ASKS, theChordsNamed } from '../domain/solfege/chordsNamed.js';
 import { KEYS_ASKED, theKeysNamed } from '../domain/solfege/keysNamed.js';
 import { theFunctionsNamed } from '../domain/solfege/functionsNamed.js';
 import { PROGRESSION_NAMES, theProgression, theProgressionNamed } from '../domain/solfege/progressions.js';
@@ -199,7 +199,7 @@ import type { StoredScoreSummary } from '../application/ports/IScoreStore.js';
 import { replayFits } from '../application/runReplay.js';
 import type { NoteCounts } from '../domain/scoring/PerformanceReport.js';
 import type { ClosingCue, DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
-import { barLines, barNumberOf, measureCount, measureIndexAt, pedalHeldUntil, type Exercise } from '../domain/model/Exercise.js';
+import { barLines, barNumberOf, measureCount, measureIndexAt, pedalHeldUntil, type Exercise, type NamingQuestion } from '../domain/model/Exercise.js';
 import type { ImportedScore, ImportWarning } from '../domain/notation/MusicXmlParser.js';
 import { theHitErrors } from '../domain/scoring/theHitErrors.js';
 import { theProfile } from '../domain/scoring/theProfile.js';
@@ -2178,6 +2178,8 @@ export class AppView {
   private readonly intervalsAsked = new Set<number>([3, 4, 5, 7, 12]);
   /** The questions of the exercise of naming on the page, as they are answered; none for music that is played. */
   private naming: NamingRound | null = null;
+  /** The question named by ear last played as it was asked, so it is played once and not at every drawing. */
+  private questionHeard: NamingQuestion | null = null;
   /** The moment a question answered is moved on from, while one waits to be. */
   private nextQuestionTimer: ReturnType<typeof setTimeout> | undefined = undefined;
   /** How tall a row is, and the ruler and the pedal lane, as last measured. */
@@ -2797,6 +2799,8 @@ export class AppView {
     solfegeIntervalsNameThem: HTMLButtonElement;
     solfegeChordsAsks: HTMLSelectElement;
     solfegeChordsOpen: HTMLButtonElement;
+    solfegeChordsByEar: HTMLButtonElement;
+    solfegeFunctionsByEar: HTMLButtonElement;
     solfegeKeysAs: HTMLSelectElement;
     solfegeKeysOpen: HTMLButtonElement;
     solfegeFunctionsKey: HTMLSelectElement;
@@ -3249,6 +3253,8 @@ export class AppView {
       solfegeIntervalsNameThem: requireElement(doc, 'solfege-intervals-name-them'),
       solfegeChordsAsks: requireElement(doc, 'solfege-chords-asks'),
       solfegeChordsOpen: requireElement(doc, 'solfege-chords-open'),
+      solfegeChordsByEar: requireElement(doc, 'solfege-chords-by-ear'),
+      solfegeFunctionsByEar: requireElement(doc, 'solfege-functions-by-ear'),
       solfegeKeysAs: requireElement(doc, 'solfege-keys-as'),
       solfegeKeysOpen: requireElement(doc, 'solfege-keys-open'),
       solfegeFunctionsKey: requireElement(doc, 'solfege-functions-key'),
@@ -10262,15 +10268,21 @@ export class AppView {
     this.listen(this.el.solfegeFunctionsMode, 'change', () => {
       this.nameTheKeysOfTheList(this.el.solfegeFunctionsKey, this.el.solfegeFunctionsMode.value === 'minor' ? 'minor' : 'major');
     });
-    this.listen(this.el.solfegeFunctionsOpen, 'click', () => {
-      void this.openTheExercise(
-        theFunctionsNamed({
-          fifths: Number(this.el.solfegeFunctionsKey.value),
-          minor: this.el.solfegeFunctionsMode.value === 'minor',
-          seed: Math.floor(Math.random() * 2 ** 31),
-        }),
-      );
-    });
+    for (const [button, heard] of [
+      [this.el.solfegeFunctionsOpen, false],
+      [this.el.solfegeFunctionsByEar, true],
+    ] as const) {
+      this.listen(button, 'click', () => {
+        void this.openTheExercise(
+          theFunctionsNamed({
+            fifths: Number(this.el.solfegeFunctionsKey.value),
+            minor: this.el.solfegeFunctionsMode.value === 'minor',
+            heard,
+            seed: Math.floor(Math.random() * 2 ** 31),
+          }),
+        );
+      });
+    }
     this.listen(this.el.solfegeKeysOpen, 'click', () => {
       void this.openTheExercise(
         theKeysNamed({
@@ -10279,11 +10291,20 @@ export class AppView {
         }),
       );
     });
-    this.listen(this.el.solfegeChordsOpen, 'click', () => {
-      void this.openTheExercise(
-        theChordsNamed({ inversions: this.el.solfegeChordsAsks.value === 'positions', seed: Math.floor(Math.random() * 2 ** 31) }),
-      );
-    });
+    for (const [button, heard] of [
+      [this.el.solfegeChordsOpen, false],
+      [this.el.solfegeChordsByEar, true],
+    ] as const) {
+      this.listen(button, 'click', () => {
+        void this.openTheExercise(
+          theChordsNamed({
+            asks: CHORDS_ASKS.find((asks) => asks === this.el.solfegeChordsAsks.value) ?? 'quality',
+            heard,
+            seed: Math.floor(Math.random() * 2 ** 31),
+          }),
+        );
+      });
+    }
     this.listen(this.el.scoreAnswers, 'click', (event) => {
       this.answerTheQuestion(event);
     });
@@ -10294,6 +10315,11 @@ export class AppView {
       void this.openTheMelodicDictation();
     });
     this.listen(this.el.scoreHearAgain, 'click', () => {
+      const named = this.naming?.asking ?? null;
+      if (named !== null && this.runtime.controller.openedExercise?.namedByEar === true) {
+        this.runtime.controller.hearTheBarNamed(named.measureIndex);
+        return;
+      }
       this.runtime.controller.hearTheQuestionAgain();
     });
     this.listen(this.el.sketchesNew, 'click', () => {
@@ -11537,7 +11563,11 @@ export class AppView {
       this.showTheIntervalsAsked();
       this.showTheDictationAsked();
       if (this.el.solfegeChordsAsks.options.length === 0) {
-        this.el.solfegeChordsAsks.replaceChildren(new Option('Their quality', 'quality'), new Option('Their quality and position', 'positions'));
+        this.el.solfegeChordsAsks.replaceChildren(
+          new Option('Their quality', 'quality'),
+          new Option('Their quality and position', 'positions'),
+          new Option('Triads and sevenths', 'sevenths'),
+        );
       }
       if (this.el.solfegeKeysAs.options.length === 0) {
         this.el.solfegeKeysAs.replaceChildren(new Option('Major keys', 'major'), new Option('Minor keys', 'minor'), new Option('Either', 'either'));
@@ -11709,6 +11739,7 @@ export class AppView {
    */
   private askToNameIt(exercise: Exercise): void {
     clearTimeout(this.nextQuestionTimer);
+    this.questionHeard = null;
     this.naming = exercise.byName === undefined ? null : new NamingRound(exercise.byName);
     this.showTheQuestion();
   }
@@ -11740,6 +11771,11 @@ export class AppView {
     }
     if (this.placedOnBar !== question.measureIndex) {
       this.beginAt(question.measureIndex);
+    }
+    // Heard, as it is asked: once, and again only when asked again.
+    if (this.questionHeard !== question && exercise.namedByEar === true) {
+      this.questionHeard = question;
+      this.runtime.controller.hearTheBarNamed(question.measureIndex);
     }
     const answered = round.answered;
     const picked = answered?.picked ?? round.pickedSoFar;
@@ -11816,6 +11852,11 @@ export class AppView {
     if (choice === undefined || !Number.isInteger(part) || !round.pick(part, choice)) {
       return;
     }
+    // Answered - the question still the one asked until it is moved on from - a bar heard goes on the page, to see what was heard.
+    const asked = round.asking;
+    if (round.answered !== null && asked !== null) {
+      this.runtime.controller.showTheBarNamed(asked.measureIndex);
+    }
     this.showTheQuestion();
     if (round.answered !== null) {
       this.nextQuestionTimer = setTimeout(() => {
@@ -11834,7 +11875,7 @@ export class AppView {
    */
   private showWhatIsPlayedBack(exercise: Exercise): void {
     const playedBack = exercise.playedBack !== undefined;
-    this.el.scoreHearAgain.hidden = exercise.playedBack?.heard !== true;
+    this.el.scoreHearAgain.hidden = exercise.playedBack?.heard !== true && exercise.namedByEar !== true;
     sayWhetherIdle(
       this.el.focusModes,
       playedBack ? 'Modes: music played back waits for each note, whatever they say for music that is read' : 'Modes',

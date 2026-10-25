@@ -925,6 +925,8 @@ export class PracticeController {
   /** The questions of the music on the page played back, by the step each is given at, and the steps found: see `theQuestionsPlayedBack`. */
   private questionsPlayedBack: ReadonlyMap<number, QuestionPlayedBack> = new Map();
   private stepsToFind: ReadonlySet<number> = new Set();
+  /** Every step kept off the page until it is found or answered: those to find, and those of bars to name by ear. */
+  private stepsKeptOff: readonly number[] = [];
   /** The settings a run was last worked out to be played under: see `playedUnder`. */
   private playedUnderLast: { readonly settings: PracticeSettings; readonly playedBack: boolean; readonly under: PracticeSettings } | null = null;
   private provider: IExerciseProvider;
@@ -1923,7 +1925,9 @@ export class PracticeController {
     const questions = theQuestionsPlayedBack(this.timeline);
     this.questionsPlayedBack = new Map(questions.map((question) => [question.given, question]));
     this.stepsToFind = new Set(questions.flatMap((question) => question.found));
-    this.deps.fade.conceal([...this.stepsToFind]);
+    // And every note of a bar to be named by ear, until it is answered.
+    this.stepsKeptOff = [...this.stepsToFind, ...(exercise.byName ?? []).flatMap((question) => this.theStepsNamedByEar(question.measureIndex))];
+    this.deps.fade.conceal(this.stepsKeptOff);
     timeTheStart('score: timeline built', () => `${String(this.timeline?.length ?? 0)} steps`);
     this.lastSeed = exercise.metadata.seed;
     if (newMusic) {
@@ -3465,7 +3469,7 @@ export class PracticeController {
     this.deps.overlay.clearPlayed();
     this.deps.fade.clearFaded();
     // What was found by ear in the run before is to be found again.
-    this.deps.fade.conceal([...this.stepsToFind]);
+    this.deps.fade.conceal(this.stepsKeptOff);
     this.fadedThrough = -1;
 
     // The clock first, and the page behind it.
@@ -3823,15 +3827,25 @@ export class PracticeController {
    * question as written, from the note given, each for as long as it sounds.
    */
   private soundTheQuestion(question: QuestionPlayedBack, nowMs = this.deps.clock.now()): void {
+    this.soundTheSteps([question.given, ...question.found], this.exercise?.playedBack?.keyFirst === true, nowMs);
+  }
+
+  /**
+   * Plays steps of the music from now, as a question is played: the key's
+   * cadence first where asked, a chord a beat and a beat's rest; then every
+   * key of the steps as written, from the first, each for as long as it
+   * sounds.
+   */
+  private soundTheSteps(indexes: readonly number[], keyFirst: boolean, nowMs: number): void {
     const exercise = this.exercise;
     const timeline = this.timeline;
-    const given = timeline?.at(question.given) ?? null;
+    const given = indexes[0] === undefined ? null : (timeline?.at(indexes[0]) ?? null);
     if (exercise === null || timeline === null || given === null) {
       return;
     }
     const beatMs = spanMs(exercise, given.onsetTicks, given.onsetTicks + Duration.QUARTER.ticks);
     let fromMs = nowMs;
-    if (exercise.playedBack?.keyFirst === true) {
+    if (keyFirst) {
       for (const chord of theCadenceOfTheKey(exercise.key)) {
         for (const key of chord) {
           this.deps.instrument.play(key, QUESTION_VELOCITY, fromMs);
@@ -3841,7 +3855,7 @@ export class PracticeController {
       }
       fromMs += beatMs;
     }
-    for (const index of [question.given, ...question.found]) {
+    for (const index of indexes) {
       const each = timeline.at(index);
       if (each === null) {
         continue;
@@ -3852,6 +3866,34 @@ export class PracticeController {
         this.deps.instrument.stop(note.midi, atMs + spanMs(exercise, each.onsetTicks, each.onsetTicks + soundsFor(note)));
       }
     }
+  }
+
+  /**
+   * Plays a bar asked to be named by ear (see `Exercise.namedByEar`), from
+   * now: as it is asked, and again when asked again. Nothing for questions
+   * read off the page.
+   */
+  hearTheBarNamed(measureIndex: number): void {
+    const steps = this.theStepsNamedByEar(measureIndex);
+    if (steps.length > 0) {
+      this.soundTheSteps(steps, false, this.deps.clock.now());
+    }
+  }
+
+  /** Shows a bar named by ear on the page, now that it has been answered. */
+  showTheBarNamed(measureIndex: number): void {
+    for (const index of this.theStepsNamedByEar(measureIndex)) {
+      this.deps.fade.reveal(index);
+    }
+  }
+
+  /** The steps of a bar asked to be named by ear that sound: none where it is read. */
+  private theStepsNamedByEar(measureIndex: number): readonly number[] {
+    const exercise = this.exercise;
+    const asked = exercise?.namedByEar === true && exercise.byName?.some((question) => question.measureIndex === measureIndex) === true;
+    return asked
+      ? (this.timeline?.steps ?? []).filter((step) => step.measureIndex === measureIndex && step.notes.length > 0).map((step) => step.index)
+      : [];
   }
 
   /**

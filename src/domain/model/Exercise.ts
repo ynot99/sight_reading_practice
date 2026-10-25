@@ -1183,6 +1183,13 @@ export interface Exercise {
    * about one bar, in order. Absent for music that is played.
    */
   readonly byName?: readonly NamingQuestion[];
+  /**
+   * Whether the questions to be named are heard rather than read: each bar
+   * played as it is asked, and its notes kept off the page until it is
+   * answered - then shown, so the reader sees what they heard. Absent for
+   * questions read off the page.
+   */
+  readonly namedByEar?: boolean;
 }
 
 /** What the reader should see printed over a bar, one-based. */

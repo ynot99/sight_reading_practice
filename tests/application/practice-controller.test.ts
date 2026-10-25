@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { CHORDS_IN_A_ROUND, theChordsNamed } from '../../src/domain/solfege/chordsNamed.js';
 import { theTransposition } from '../../src/domain/solfege/transposition.js';
 import { theMelodicDictation } from '../../src/domain/solfege/melodicDictation.js';
 import { theCadenceOfTheKey } from '../../src/domain/solfege/cadence.js';
@@ -6587,6 +6588,27 @@ describe('music played back by ear', () => {
     expect([session?.currentStep?.measureIndex, asked(instrument)]).toEqual([2, []]);
     // Waited for, whatever was chosen.
     expect(session?.status).toBe('running');
+  });
+
+  it('keeps every note of a bar to be named by ear off the page, plays it when asked, and shows it once answered', async () => {
+    const { controller, instrument, renderer, clock } = createController(false, undefined, { modeId: new WaitMode().id });
+    await controller.openScore(theChordsNamed({ asks: 'sevenths', heard: true, seed: 2 }));
+    const timeline = controller.currentTimeline;
+    const ofBar = (bar: number): number[] => (timeline?.steps ?? []).filter((step) => step.measureIndex === bar).map((step) => step.index);
+    expect([...renderer.concealed].sort((one, other) => one - other)).toEqual(Array.from({ length: CHORDS_IN_A_ROUND }, (_, bar) => ofBar(bar)).flat());
+    // Asked, the bar's chord heard from now.
+    clock.advance(3_000);
+    controller.hearTheBarNamed(4);
+    expect(asked(instrument)).toEqual((timeline?.at(ofBar(4)[0] ?? 0)?.notes ?? []).map((note) => `${String(note.midi)}@${String(clock.now())}`));
+    // Answered, on the page.
+    controller.showTheBarNamed(4);
+    expect(ofBar(4).some((index) => renderer.concealed.has(index))).toBe(false);
+    expect(ofBar(5).every((index) => renderer.concealed.has(index))).toBe(true);
+    // Read off the page, nothing kept off it and nothing heard.
+    instrument.played.length = 0;
+    await controller.openScore(theChordsNamed({ asks: 'sevenths', heard: false, seed: 2 }));
+    controller.hearTheBarNamed(4);
+    expect([[...renderer.concealed], asked(instrument)]).toEqual([[], []]);
   });
 
   it('asks nothing of music that is read', async () => {

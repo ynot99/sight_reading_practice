@@ -9,6 +9,7 @@ import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { theScaleComplex } from '../../src/domain/solfege/scaleComplex.js';
+import { DICTATIONS_IN_A_ROUND, theMelodicDictation } from '../../src/domain/solfege/melodicDictation.js';
 import { INTERVAL_WAYS, QUESTIONS_IN_A_ROUND, theIntervalsByEar } from '../../src/domain/solfege/intervalsByEar.js';
 import { barId, printedAtEachStep } from '../../src/domain/notation/printedIds.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
@@ -208,6 +209,16 @@ describe('Verovio and our timeline agree on every step', () => {
   it('on a round of intervals by ear, heard each way', () => {
     for (const way of INTERVAL_WAYS) {
       expect({ way, ...agreementOf(theIntervalsByEar({ semitones: [1, 6, 11, 12], way, seed: 7 })) }).toEqual({ way, ...agreeing(QUESTIONS_IN_A_ROUND) });
+    }
+  });
+
+  it('on a melodic dictation, in crotchets and in quavers, in major and in minor', () => {
+    for (const asked of [
+      { fifths: 0, minor: false, bars: 2, rhythm: 'crotchets' },
+      { fifths: -3, minor: true, bars: 4, rhythm: 'quavers' },
+      { fifths: 5, minor: true, bars: 2, rhythm: 'quavers' },
+    ] as const) {
+      expect({ ...asked, ...agreementOf(theMelodicDictation({ ...asked, seed: 9 })) }).toEqual({ ...asked, ...agreeing(DICTATIONS_IN_A_ROUND * asked.bars) });
     }
   });
 

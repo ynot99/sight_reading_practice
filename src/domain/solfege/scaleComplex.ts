@@ -1,10 +1,11 @@
 import { Duration } from '../model/Duration.js';
-import type { Exercise, Measure, MusicalEntry, RehearsalMark } from '../model/Exercise.js';
-import { measureOf, noteEntry } from '../model/Exercise.js';
+import type { Exercise, MusicalEntry, RehearsalMark } from '../model/Exercise.js';
+import { noteEntry } from '../model/Exercise.js';
 import { KeySignature } from '../model/KeySignature.js';
 import { Pitch } from '../model/Pitch.js';
 import { TimeSignature } from '../model/TimeSignature.js';
-import { beamedByTheBeat } from '../generation/beaming.js';
+import { intoBars } from './bars.js';
+import { aStepOfTheKey, OCTAVE, THE_CADENCE, THE_SEVENTH, theTonicOfTheHand } from './cadence.js';
 import { theNameOfTheKey, type ScaleName } from '../harmony/scales.js';
 import { elementAt } from '../../shared/asserts.js';
 
@@ -29,12 +30,8 @@ const TIME = new TimeSignature(4, 4);
 /** The parts of a complex, in the order a lesson plays them, each named where it begins. */
 const PARTS = ['Scale', 'Arpeggio', 'Chords', 'Cadence'] as const;
 
-/** Steps of a scale up from the tonic, the octave counted on. */
-const OCTAVE = 7;
-
-/** The leading note and the sixth: the degrees a minor scale's forms raise. */
+/** The sixth: with the leading note, the degrees a minor scale's forms raise. */
 const SIXTH = 5;
-const SEVENTH = 6;
 
 /**
  * The scale complex of a key, as a music school sets it for every lesson:
@@ -60,7 +57,7 @@ const SEVENTH = 6;
 export function theScaleComplex(asked: ScaleComplexAsked): Exercise {
   const minor = asked.scale !== 'major';
   const key = minor ? KeySignature.minor(asked.fifths) : KeySignature.major(asked.fifths);
-  const right = key.tonicIndexAtOrAbove(Pitch.parse('A3').diatonicIndex);
+  const right = theTonicOfTheHand(key);
   // A degree as the key writes it, raised a semitone where the form raises it.
   const at = (tonic: number, step: number, raised: boolean): Pitch => {
     const natural = key.pitchAt(tonic + step);
@@ -68,9 +65,8 @@ export function theScaleComplex(asked: ScaleComplexAsked): Exercise {
   };
   const degree = (step: number): number => ((step % OCTAVE) + OCTAVE) % OCTAVE;
   const raisedInTheScale = (step: number, going: 'up' | 'down'): boolean =>
-    (asked.scale === 'harmonicMinor' && degree(step) === SEVENTH) ||
-    (asked.scale === 'melodicMinor' && going === 'up' && (degree(step) === SIXTH || degree(step) === SEVENTH));
-  const theLeadingNote = (step: number): boolean => minor && degree(step) === SEVENTH;
+    (asked.scale === 'harmonicMinor' && degree(step) === THE_SEVENTH) ||
+    (asked.scale === 'melodicMinor' && going === 'up' && (degree(step) === SIXTH || degree(step) === THE_SEVENTH));
 
   // Each hand's part, as runs of eighths closed by a held tonic.
   const scale = (tonic: number): MusicalEntry[] => [
@@ -87,7 +83,7 @@ export function theScaleComplex(asked: ScaleComplexAsked): Exercise {
   ];
   const chord = (tonic: number, steps: readonly number[], length: Duration): MusicalEntry =>
     noteEntry(
-      steps.map((step) => at(tonic, step, theLeadingNote(step))),
+      steps.map((step) => aStepOfTheKey(key, tonic, step, true)),
       length,
     );
   const positions = (tonic: number): MusicalEntry[] => [
@@ -101,23 +97,15 @@ export function theScaleComplex(asked: ScaleComplexAsked): Exercise {
     ].map((steps) => chord(tonic, steps, Duration.QUARTER)),
     chord(tonic, [0, 2, 4], Duration.HALF),
   ];
-  // The cadence in the hand position a keyboard harmony lesson begins with:
-  // the tonic held where it is common, the rest moving by a step.
-  const cadence = (tonic: number): MusicalEntry[] =>
-    [
-      [0, 2, 4],
-      [0, 3, 5],
-      [-1, 1, 4],
-      [0, 2, 4],
-    ].map((steps) => chord(tonic, steps, Duration.HALF));
-  const roots = (tonic: number): MusicalEntry[] => [0, -4, -3, 0].map((step) => chord(tonic, [step], Duration.HALF));
+  const cadence = (tonic: number): MusicalEntry[] => THE_CADENCE.upper.map((steps) => chord(tonic, steps, Duration.HALF));
+  const roots = (tonic: number): MusicalEntry[] => THE_CADENCE.bass.map((step) => chord(tonic, [step], Duration.HALF));
 
   const rightHand = [scale(right), arpeggio(right), positions(right), cadence(right)];
   const leftHand = [scale(right - 2 * OCTAVE), arpeggio(right - 2 * OCTAVE), positions(right - OCTAVE), roots(right - OCTAVE)];
   // Each part named over the bar it begins in, as a section of the piece.
   const marks = rightHand.reduce<{ readonly bar: number; readonly named: readonly RehearsalMark[] }>(
     ({ bar, named }, part, index) => ({
-      bar: bar + intoBars(part).length,
+      bar: bar + intoBars(part, TIME).length,
       named: [...named, { measureIndex: bar, offsetTicks: 0, text: elementAt(PARTS, index) }],
     }),
     { bar: 0, named: [] },
@@ -140,25 +128,10 @@ export function theScaleComplex(asked: ScaleComplexAsked): Exercise {
     firstBarNumber: 1,
     barLabels: [],
     staves: [
-      { staffNumber: 1, voice: 1, clef: 'treble', clefChanges: [], measures: rightHand.flatMap(intoBars) },
-      { staffNumber: 2, voice: 2, clef: 'bass', clefChanges: [], measures: leftHand.flatMap(intoBars) },
+      { staffNumber: 1, voice: 1, clef: 'treble', clefChanges: [], measures: rightHand.flatMap((part) => intoBars(part, TIME)) },
+      { staffNumber: 2, voice: 2, clef: 'bass', clefChanges: [], measures: leftHand.flatMap((part) => intoBars(part, TIME)) },
     ],
     rehearsalMarks: marks,
     metadata: { generatorId: SCALE_COMPLEX_ID, seed: 0 },
   };
-}
-
-/** A part's entries laid into bars of the metre, each beamed by the beat. */
-function intoBars(entries: readonly MusicalEntry[]): Measure[] {
-  const bars: MusicalEntry[][] = [[]];
-  let filled = 0;
-  for (const entry of entries) {
-    if (filled === TIME.ticksPerMeasure) {
-      bars.push([]);
-      filled = 0;
-    }
-    bars[bars.length - 1]?.push(entry);
-    filled += entry.duration.ticks;
-  }
-  return bars.map((bar) => beamedByTheBeat(measureOf(bar), TIME));
 }

@@ -99,7 +99,8 @@ import {
 import { machineIsPlaying } from './modes/ListenFrame.js';
 import { playsFreely } from './modes/FreePlayFrame.js';
 import { WAIT_MODE_ID } from './modes/WaitMode.js';
-import { theStepsByEar } from '../domain/solfege/intervalsByEar.js';
+import { theQuestionsByEar, type QuestionByEar } from '../domain/solfege/byEar.js';
+import { theCadenceOfTheKey } from '../domain/solfege/cadence.js';
 import { tapsWith, tempoOfTaps } from './tapTempo.js';
 import { FreePlayed } from './freePlay.js';
 import { nameTheChord } from '../domain/harmony/chordName.js';
@@ -922,7 +923,7 @@ export class PracticeController {
 
   private currentSettings: PracticeSettings;
   /** The steps of the music on the page played by ear, each given or found: see `theStepsByEar`. */
-  private givenByEar: ReadonlySet<number> = new Set();
+  private questionsByEar: ReadonlyMap<number, QuestionByEar> = new Map();
   private foundByEar: ReadonlySet<number> = new Set();
   /** The settings a run was last worked out to be played under: see `playedUnder`. */
   private playedUnderLast: { readonly settings: PracticeSettings; readonly byEar: boolean; readonly under: PracticeSettings } | null = null;
@@ -1919,9 +1920,9 @@ export class PracticeController {
     this.exercise = exercise;
     this.timeline = buildTimeline(exercise);
     // Before it is drawn, so an answer is never on the page for a moment.
-    const byEar = theStepsByEar(this.timeline);
-    this.givenByEar = new Set(byEar.given);
-    this.foundByEar = new Set(byEar.found);
+    const questions = theQuestionsByEar(this.timeline);
+    this.questionsByEar = new Map(questions.map((question) => [question.given, question]));
+    this.foundByEar = new Set(questions.flatMap((question) => question.found));
     this.deps.fade.conceal([...this.foundByEar]);
     timeTheStart('score: timeline built', () => `${String(this.timeline?.length ?? 0)} steps`);
     this.lastSeed = exercise.metadata.seed;
@@ -3340,8 +3341,9 @@ export class PracticeController {
         // A new step is nobody's fault yet.
         this.forgetTheTrouble();
         this.otherHandReaches(step);
-        if (this.givenByEar.has(step.index)) {
-          this.soundTheQuestion(step);
+        const question = this.questionsByEar.get(step.index);
+        if (question !== undefined) {
+          this.soundTheQuestion(question);
         }
       }),
     );
@@ -3815,21 +3817,36 @@ export class PracticeController {
   }
 
   /**
-   * Plays the bar a step asks as a question by ear, from now: every key of
-   * it as written, each for as long as it sounds - heard before it is
-   * answered, as a dictation is.
+   * Plays a question by ear from now, as a dictation is played: the key's
+   * cadence first where the music asks for it, a chord a beat and a beat's
+   * rest after it, so the melody is heard in its key; then every key of the
+   * question as written, from the note given, each for as long as it sounds.
    */
-  private soundTheQuestion(step: TimelineStep, nowMs = this.deps.clock.now()): void {
+  private soundTheQuestion(question: QuestionByEar, nowMs = this.deps.clock.now()): void {
     const exercise = this.exercise;
     const timeline = this.timeline;
-    if (exercise === null || timeline === null) {
+    const given = timeline?.at(question.given) ?? null;
+    if (exercise === null || timeline === null || given === null) {
       return;
     }
-    for (const each of timeline.steps) {
-      if (each.measureIndex !== step.measureIndex || each.index < step.index) {
+    const beatMs = spanMs(exercise, given.onsetTicks, given.onsetTicks + Duration.QUARTER.ticks);
+    let fromMs = nowMs;
+    if (exercise.byEar?.keyFirst === true) {
+      for (const chord of theCadenceOfTheKey(exercise.key)) {
+        for (const key of chord) {
+          this.deps.instrument.play(key, QUESTION_VELOCITY, fromMs);
+          this.deps.instrument.stop(key, fromMs + beatMs);
+        }
+        fromMs += beatMs;
+      }
+      fromMs += beatMs;
+    }
+    for (const index of [question.given, ...question.found]) {
+      const each = timeline.at(index);
+      if (each === null) {
         continue;
       }
-      const atMs = nowMs + spanMs(exercise, step.onsetTicks, each.onsetTicks);
+      const atMs = fromMs + spanMs(exercise, given.onsetTicks, each.onsetTicks);
       for (const note of each.notes) {
         this.deps.instrument.play(note.midi, QUESTION_VELOCITY, atMs);
         this.deps.instrument.stop(note.midi, atMs + spanMs(exercise, each.onsetTicks, each.onsetTicks + soundsFor(note)));
@@ -3838,17 +3855,19 @@ export class PracticeController {
   }
 
   /**
-   * Plays again the question the run is at - the bar of the step it is
-   * waiting on, or, between runs, the bar it would begin in. Nothing for
-   * music that is read.
+   * Plays again the question the run is at - the one of the step it is
+   * waiting on, or, between runs, the one it would begin in or after.
+   * Nothing for music that is read.
    */
   hearTheQuestionAgain(): void {
     const timeline = this.timeline;
-    if (timeline === null || this.exercise?.byEar !== true) {
+    if (timeline === null) {
       return;
     }
-    const at = this.currentSession?.currentStep ?? timeline.at(this.whereARunBegins(undefined));
-    const question = timeline.steps.find((step) => step.measureIndex === at?.measureIndex && this.givenByEar.has(step.index));
+    const at = this.currentSession?.currentStep?.index ?? this.whereARunBegins(undefined);
+    const questions = [...this.questionsByEar.values()];
+    const question =
+      questions.find((each) => each.given === at || each.found.includes(at)) ?? questions.find((each) => each.given >= at);
     if (question !== undefined) {
       this.soundTheQuestion(question);
     }
@@ -3864,7 +3883,7 @@ export class PracticeController {
    */
   private get playedUnder(): PracticeSettings {
     const settings = this.currentSettings;
-    const byEar = this.exercise?.byEar === true;
+    const byEar = this.exercise?.byEar !== undefined;
     const kept = this.playedUnderLast;
     if (kept !== null && kept.settings === settings && kept.byEar === byEar) {
       return kept.under;

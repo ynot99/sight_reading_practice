@@ -32,6 +32,7 @@ import {
 } from '../domain/harmony/scales.js';
 import { SCALE_COMPLEX_SCALES, theScaleComplex, type ScaleOfTheComplex } from '../domain/solfege/scaleComplex.js';
 import { INTERVALS, INTERVAL_WAYS, theIntervalsByEar, type IntervalWay } from '../domain/solfege/intervalsByEar.js';
+import { DICTATION_LENGTHS, DICTATION_RHYTHMS, theMelodicDictation, type DictationRhythm } from '../domain/solfege/melodicDictation.js';
 import { barsOfThePicture, tiersOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
 import { FREE_PLAY_MODE_ID } from '../application/modes/FreePlayFrame.js';
@@ -1594,6 +1595,12 @@ function thePlayingAsAFile(
   });
 }
 
+/** What each rhythm of a dictation is called in the list. */
+const DICTATION_RHYTHM_NAMES: Readonly<Record<DictationRhythm, string>> = {
+  crotchets: 'Crotchets',
+  quavers: 'With quavers',
+};
+
 /** What each way of hearing an interval is called in the list. */
 const INTERVAL_WAY_NAMES: Readonly<Record<IntervalWay, string>> = {
   up: 'Upwards',
@@ -2771,6 +2778,11 @@ export class AppView {
     solfegeIntervalsWay: HTMLSelectElement;
     solfegeIntervalsOpen: HTMLButtonElement;
     scoreHearAgain: HTMLButtonElement;
+    solfegeDictationKey: HTMLSelectElement;
+    solfegeDictationMode: HTMLSelectElement;
+    solfegeDictationBars: HTMLSelectElement;
+    solfegeDictationRhythm: HTMLSelectElement;
+    solfegeDictationOpen: HTMLButtonElement;
     sketchesList: HTMLElement;
     sketchesEmpty: HTMLElement;
     sketchesNew: HTMLButtonElement;
@@ -3198,6 +3210,11 @@ export class AppView {
       solfegeIntervalsWay: requireElement(doc, 'solfege-intervals-way'),
       solfegeIntervalsOpen: requireElement(doc, 'solfege-intervals-open'),
       scoreHearAgain: requireElement(doc, 'score-hear-again'),
+      solfegeDictationKey: requireElement(doc, 'solfege-dictation-key'),
+      solfegeDictationMode: requireElement(doc, 'solfege-dictation-mode'),
+      solfegeDictationBars: requireElement(doc, 'solfege-dictation-bars'),
+      solfegeDictationRhythm: requireElement(doc, 'solfege-dictation-rhythm'),
+      solfegeDictationOpen: requireElement(doc, 'solfege-dictation-open'),
       sketchesList: requireElement(doc, 'sketches-list'),
       sketchesEmpty: requireElement(doc, 'sketches-empty'),
       sketchesNew: requireElement(doc, 'sketches-new'),
@@ -10159,6 +10176,12 @@ export class AppView {
     this.listen(this.el.solfegeIntervalsOpen, 'click', () => {
       void this.openTheIntervalsByEar();
     });
+    this.listen(this.el.solfegeDictationMode, 'change', () => {
+      this.showTheDictationAsked();
+    });
+    this.listen(this.el.solfegeDictationOpen, 'click', () => {
+      void this.openTheMelodicDictation();
+    });
     this.listen(this.el.scoreHearAgain, 'click', () => {
       this.runtime.controller.hearTheQuestionAgain();
     });
@@ -11401,7 +11424,53 @@ export class AppView {
     } else {
       this.nameTheKeysOfTheScaleComplex();
       this.showTheIntervalsAsked();
+      this.showTheDictationAsked();
     }
+  }
+
+  /**
+   * Fills the lists a melodic dictation is asked by: major or minor, every
+   * key of the one chosen by its tonic - kept by its signature when the mode
+   * changes - how long a phrase is, and its rhythm.
+   */
+  private showTheDictationAsked(): void {
+    const fill = (list: HTMLSelectElement, options: readonly (readonly [string, string])[]): void => {
+      if (list.options.length === 0) {
+        list.replaceChildren(...options.map(([value, label]) => new Option(label, value)));
+      }
+    };
+    fill(this.el.solfegeDictationMode, [
+      ['major', 'Major'],
+      ['minor', 'Minor'],
+    ]);
+    fill(
+      this.el.solfegeDictationBars,
+      DICTATION_LENGTHS.map((bars) => [String(bars), `${String(bars)} bars`] as const),
+    );
+    fill(
+      this.el.solfegeDictationRhythm,
+      DICTATION_RHYTHMS.map((rhythm) => [rhythm, DICTATION_RHYTHM_NAMES[rhythm]] as const),
+    );
+    const scale = this.el.solfegeDictationMode.value === 'minor' ? 'minor' : 'major';
+    const fifths = this.el.solfegeDictationKey.value === '' ? 0 : Number(this.el.solfegeDictationKey.value);
+    this.el.solfegeDictationKey.replaceChildren(
+      ...Array.from({ length: 15 }, (_, at) => at - 7).map((each) => new Option(theNameOfTheKey({ fifths: each, scale }), String(each))),
+    );
+    this.el.solfegeDictationKey.value = String(fifths);
+  }
+
+  /** Opens a round of melodic dictation as the sheet asks for it - another each time. */
+  private async openTheMelodicDictation(): Promise<void> {
+    const exercise = theMelodicDictation({
+      fifths: Number(this.el.solfegeDictationKey.value),
+      minor: this.el.solfegeDictationMode.value === 'minor',
+      bars: DICTATION_LENGTHS.find((bars) => String(bars) === this.el.solfegeDictationBars.value) ?? 2,
+      rhythm: DICTATION_RHYTHMS.find((rhythm) => rhythm === this.el.solfegeDictationRhythm.value) ?? 'crotchets',
+      seed: Math.floor(Math.random() * 2 ** 31),
+    });
+    this.el.sheetScores.hidden = true;
+    await this.pickUpTheFile(exercise);
+    this.runtime.controller.playOnlyTheScoreOpen();
   }
 
   /**
@@ -11487,7 +11556,7 @@ export class AppView {
    * read.
    */
   private showWhatIsPlayedByEar(exercise: Exercise): void {
-    const byEar = exercise.byEar === true;
+    const byEar = exercise.byEar !== undefined;
     this.el.scoreHearAgain.hidden = !byEar;
     sayWhetherIdle(
       this.el.focusModes,

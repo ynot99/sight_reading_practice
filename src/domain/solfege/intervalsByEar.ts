@@ -5,7 +5,6 @@ import { KeySignature } from '../model/KeySignature.js';
 import { Pitch } from '../model/Pitch.js';
 import { TimeSignature } from '../model/TimeSignature.js';
 import { createRng } from '../generation/Rng.js';
-import type { ExerciseTimeline } from '../timeline/Timeline.js';
 
 /**
  * The intervals within an octave, each by how many semitones it spans and
@@ -109,32 +108,6 @@ export function theIntervalsByEar(asked: IntervalsAsked): Exercise {
     barLabels: [],
     staves: [{ staffNumber: 1, voice: 1, clef: 'treble', clefChanges: [], measures }],
     metadata: { generatorId: INTERVALS_BY_EAR_ID, seed: asked.seed },
-    byEar: true,
+    byEar: { questionsAt: measures.map((_, at) => at), keyFirst: false },
   };
-}
-
-/**
- * How music played by ear is asked: in each bar, the first step a key is
- * asked at is given - the question is heard from there - and every step
- * after it that asks a key is found. A bar of one note gives it and asks
- * nothing. None of either for music that is read.
- */
-export function theStepsByEar(timeline: ExerciseTimeline): { readonly given: readonly number[]; readonly found: readonly number[] } {
-  if (timeline.exercise.byEar !== true) {
-    return { given: [], found: [] };
-  }
-  const first = new Map<number, number>();
-  const found: number[] = [];
-  for (const step of timeline.steps) {
-    if (step.expectedMidi.length === 0) {
-      continue;
-    }
-    if (first.has(step.measureIndex)) {
-      found.push(step.index);
-    } else {
-      first.set(step.measureIndex, step.index);
-    }
-  }
-  const asked = new Set(found.map((index) => timeline.at(index)?.measureIndex));
-  return { given: [...first].filter(([bar]) => asked.has(bar)).map(([, index]) => index), found };
 }

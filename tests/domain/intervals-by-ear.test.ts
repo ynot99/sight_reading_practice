@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Duration } from '../../src/domain/model/Duration.js';
-import { measureOf, noteEntry, restEntry, validateExercise, type Exercise } from '../../src/domain/model/Exercise.js';
+import { validateExercise, type Exercise } from '../../src/domain/model/Exercise.js';
 import { Pitch } from '../../src/domain/model/Pitch.js';
-import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
-import { INTERVALS, INTERVAL_WAYS, QUESTIONS_IN_A_ROUND, theIntervalsByEar, theStepsByEar } from '../../src/domain/solfege/intervalsByEar.js';
+import { INTERVALS, INTERVAL_WAYS, QUESTIONS_IN_A_ROUND, theIntervalsByEar } from '../../src/domain/solfege/intervalsByEar.js';
 
 /** Each bar's given note and its answer, as pitches. */
 function questions(exercise: Exercise): { readonly given: Pitch; readonly answer: readonly Pitch[]; readonly lengths: readonly number[] }[] {
@@ -27,7 +26,11 @@ describe('intervals by ear', () => {
         expect(() => {
           validateExercise(round);
         }).not.toThrow();
-        expect([round.byEar, round.staves[0]?.measures.length]).toEqual([true, QUESTIONS_IN_A_ROUND]);
+        // A question a bar, the key not heard first: an interval is heard from its own note.
+        expect([round.byEar, round.staves[0]?.measures.length]).toEqual([
+          { questionsAt: Array.from({ length: QUESTIONS_IN_A_ROUND }, (_, at) => at), keyFirst: false },
+          QUESTIONS_IN_A_ROUND,
+        ]);
         expect(theIntervalsByEar({ semitones: [3, 4, 7], way, seed })).toEqual(round);
       }
     }
@@ -70,41 +73,5 @@ describe('intervals by ear', () => {
       SEEDS.flatMap((seed) => questions(theIntervalsByEar({ semitones: [], way: 'up', seed })).map((each) => (each.answer[0]?.midi ?? 0) - each.given.midi)),
     );
     expect(spans.size).toBe(INTERVALS.length);
-  });
-
-  it('gives the first step of a bar a key is asked at and finds every one after it, and none of music that is read', () => {
-    const round = theIntervalsByEar({ semitones: [4], way: 'together', seed: 5 });
-    expect(theStepsByEar(buildTimeline(round))).toEqual({
-      given: Array.from({ length: QUESTIONS_IN_A_ROUND }, (_, bar) => bar * 2),
-      found: Array.from({ length: QUESTIONS_IN_A_ROUND }, (_, bar) => bar * 2 + 1),
-    });
-    expect(theStepsByEar(buildTimeline({ ...round, byEar: false }))).toEqual({ given: [], found: [] });
-    // A bar that opens on a rest gives the note after it.
-    const resting = {
-      ...round,
-      staves: [
-        {
-          staffNumber: 1,
-          voice: 1,
-          clef: 'treble' as const,
-          clefChanges: [],
-          measures: [
-            measureOf([
-              restEntry(Duration.QUARTER),
-              noteEntry(Pitch.parse('C4'), Duration.QUARTER),
-              noteEntry(Pitch.parse('E4'), Duration.QUARTER),
-              noteEntry(Pitch.parse('G4'), Duration.QUARTER),
-            ]),
-          ],
-        },
-      ],
-    };
-    expect(theStepsByEar(buildTimeline(resting))).toEqual({ given: [1], found: [2, 3] });
-    // A bar of one note gives it and asks nothing.
-    const alone = {
-      ...resting,
-      staves: [{ staffNumber: 1, voice: 1, clef: 'treble' as const, clefChanges: [], measures: [measureOf([noteEntry(Pitch.parse('C4'), Duration.WHOLE)])] }],
-    };
-    expect(theStepsByEar(buildTimeline(alone))).toEqual({ given: [], found: [] });
   });
 });

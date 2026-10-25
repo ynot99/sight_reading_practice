@@ -567,6 +567,18 @@ export interface BarLabel {
   readonly repeated: boolean;
 }
 
+/** How music played back by ear is asked: see `Exercise.byEar`. */
+export interface ByEar {
+  /** The bars the questions begin at, in order: each runs until the next begins, the last to the end. */
+  readonly questionsAt: readonly number[];
+  /**
+   * Whether the key is heard before each question, by its cadence - heard
+   * and not written - so a melody is heard in its key, as a dictation is
+   * begun.
+   */
+  readonly keyFirst: boolean;
+}
+
 export interface ExerciseMetadata {
   readonly generatorId: string;
   readonly seed: number;
@@ -1136,13 +1148,14 @@ export interface Exercise {
   readonly staves: readonly StaffPart[];
   readonly metadata: ExerciseMetadata;
   /**
-   * Whether it is played back by ear rather than read: each bar is heard
-   * before it is answered, and every note of a bar but its first is kept off
-   * the page until it is found - the first given, as a teacher gives the note
-   * a dictation begins on, so the rest can be found from it without perfect
-   * pitch. See `theStepsByEar`. Absent for music that is read.
+   * How it is played back by ear, where it is rather than read: each
+   * question heard before it is answered, and every note of it but its first
+   * kept off the page until it is found - the first given, as a teacher
+   * gives the note a dictation begins on, so the rest can be found from it
+   * without perfect pitch. See `theQuestionsByEar`. Absent for music that is
+   * read.
    */
-  readonly byEar?: boolean;
+  readonly byEar?: ByEar;
 }
 
 /** What the reader should see printed over a bar, one-based. */

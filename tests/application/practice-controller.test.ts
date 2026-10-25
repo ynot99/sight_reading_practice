@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { theMelodicDictation } from '../../src/domain/solfege/melodicDictation.js';
+import { theCadenceOfTheKey } from '../../src/domain/solfege/cadence.js';
 import { QUESTIONS_IN_A_ROUND, theIntervalsByEar } from '../../src/domain/solfege/intervalsByEar.js';
 import {
   PracticeController,
@@ -6532,6 +6534,38 @@ describe('music played back by ear', () => {
       }
     }
     expect(controller.lastPlayedWith).toEqual({ modeId: new WaitMode().id, modes: [] });
+  });
+
+  it('plays a dictation after the cadence of its key, a chord a beat and then a beat of rest, the whole phrase across its bars, and again from anywhere in it', async () => {
+    const { controller, instrument, midi, clock } = createController(false, undefined, { modeId: new WaitMode().id });
+    const dictation = theMelodicDictation({ fifths: -1, minor: true, bars: 2, rhythm: 'crotchets', seed: 4 });
+    await controller.openScore(dictation);
+    const timeline = controller.currentTimeline;
+    // A beat at seventy-two crotchets a minute.
+    const beatMs = 60_000 / 72;
+    const phrase = (from: number): string[] => {
+      const steps = (timeline?.steps ?? []).filter((step) => step.measureIndex < 2);
+      return [
+        ...theCadenceOfTheKey(dictation.key).flatMap((chord, at) => chord.map((key) => `${String(key)}@${String(Math.round(from + at * beatMs))}`)),
+        ...steps.map((step, at) => `${String(step.expectedMidi[0] ?? 0)}@${String(Math.round(from + 5 * beatMs + at * beatMs))}`),
+      ];
+    };
+    const heard = (): string[] =>
+      instrument.played.filter((note) => note.velocity === 0.7).map((note) => `${String(note.midi)}@${String(Math.round(note.atMs ?? 0))}`);
+
+    const session = controller.start();
+    expect(heard()).toEqual(phrase(clock.now()));
+    // Into its second bar: the same phrase asked again, from its key.
+    for (let guard = 0; guard < 20 && (session?.currentStep?.measureIndex ?? 0) < 1; guard += 1) {
+      for (const key of session?.currentStep?.expectedMidi ?? []) {
+        midi.noteOn(key, 0);
+      }
+    }
+    expect(session?.currentStep?.measureIndex).toBe(1);
+    clock.advance(10_000);
+    instrument.played.length = 0;
+    controller.hearTheQuestionAgain();
+    expect(heard()).toEqual(phrase(clock.now()));
   });
 
   it('asks nothing of music that is read', async () => {

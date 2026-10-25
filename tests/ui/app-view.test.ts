@@ -8117,7 +8117,7 @@ describe('AppView', () => {
         expect([runtime.controller.openedExercise?.title, runtime.controller.theScoreOpenStandsAlone]).toEqual(['Intervals by ear', true]);
       });
       const round = runtime.controller.openedExercise;
-      expect(round?.byEar).toBe(true);
+      expect(round?.byEar?.keyFirst).toBe(false);
       // Every answer a tritone or a minor sixth under the note given.
       const spans = (round?.staves[0]?.measures ?? []).map((measure) => {
         const [given, answer] = measure.entries;
@@ -8144,6 +8144,47 @@ describe('AppView', () => {
         expect(runtime.controller.openedExercise?.byEar).toBeUndefined();
       });
       expect([again.hidden, modes.dataset['idle'], modes.title]).toEqual([true, undefined, 'Modes']);
+    });
+
+    it('opens a round of melodic dictation from the Solfege list, in the key, mode, length and rhythm chosen', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      const key = element<HTMLSelectElement>('solfege-dictation-key');
+      const mode = element<HTMLSelectElement>('solfege-dictation-mode');
+      const bars = element<HTMLSelectElement>('solfege-dictation-bars');
+      const rhythm = element<HTMLSelectElement>('solfege-dictation-rhythm');
+      const said = (list: HTMLSelectElement): string[] => [...list.options].map((option) => `${option.value} ${option.label}`);
+
+      expect([said(mode), said(bars), said(rhythm)]).toEqual([
+        ['major Major', 'minor Minor'],
+        ['2 2 bars', '4 4 bars'],
+        ['crotchets Crotchets', 'quavers With quavers'],
+      ]);
+      expect([key.options.length, key.value, key.selectedOptions[0]?.label]).toEqual([15, '0', 'C major']);
+      // Minor keeps the signature: two flats, G minor.
+      key.value = '-2';
+      mode.value = 'minor';
+      mode.dispatchEvent(new Event('change', { bubbles: true }));
+      expect([key.value, key.selectedOptions[0]?.label]).toEqual(['-2', 'G minor']);
+
+      bars.value = '4';
+      rhythm.value = 'quavers';
+      element<HTMLButtonElement>('solfege-dictation-open').click();
+      await vi.waitFor(() => {
+        expect([runtime.controller.openedExercise?.title, runtime.controller.theScoreOpenStandsAlone]).toEqual(['Melodic dictation', true]);
+      });
+      const round = runtime.controller.openedExercise;
+      expect([round?.key.fifths, round?.key.mode, round?.byEar, element('score-hear-again').hidden]).toEqual([
+        -2,
+        'minor',
+        { questionsAt: [0, 4, 8, 12], keyFirst: true },
+        false,
+      ]);
+      expect(
+        (round?.staves[0]?.measures ?? []).some((measure) => measure.entries.some((entry) => entry.duration.ticks === Duration.EIGHTH.ticks)),
+      ).toBe(true);
     });
 
     it('names the sections of a sketch written down as a score where they begin', async () => {

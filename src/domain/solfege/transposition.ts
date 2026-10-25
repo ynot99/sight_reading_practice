@@ -114,7 +114,7 @@ export function theTransposition(asked: TranspositionAsked): Exercise {
     staves: [{ staffNumber: 1, voice: 1, clef: 'treble', clefChanges: [], measures: measures.flatMap((part) => intoBars(part, TIME)) }],
     rehearsalMarks: marks,
     metadata: { generatorId: TRANSPOSITION_ID, seed: asked.seed },
-    playedBack: { questions, heard: false, keyFirst: false },
+    playedBack: { questions, heard: false, keyFirst: false, inTime: false },
   };
 }
 

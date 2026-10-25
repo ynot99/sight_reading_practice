@@ -37,6 +37,7 @@ import { CHORDS_ASKS, theChordsNamed } from '../domain/solfege/chordsNamed.js';
 import { KEYS_ASKED, theKeysNamed } from '../domain/solfege/keysNamed.js';
 import { theFunctionsNamed } from '../domain/solfege/functionsNamed.js';
 import { theCadencesNamed } from '../domain/solfege/cadencesNamed.js';
+import { RHYTHM_LEVELS, theRhythmicDictation } from '../domain/solfege/rhythmicDictation.js';
 import { PROGRESSION_NAMES, theProgression, theProgressionNamed } from '../domain/solfege/progressions.js';
 import { TRANSPOSITION_NAMES, TRANSPOSITIONS, theTransposition } from '../domain/solfege/transposition.js';
 import { DICTATION_LENGTHS, DICTATION_RHYTHMS, theMelodicDictation, type DictationRhythm } from '../domain/solfege/melodicDictation.js';
@@ -2806,6 +2807,8 @@ export class AppView {
     solfegeCadencesMode: HTMLSelectElement;
     solfegeCadencesOpen: HTMLButtonElement;
     solfegeCadencesByEar: HTMLButtonElement;
+    solfegeRhythmLevel: HTMLSelectElement;
+    solfegeRhythmOpen: HTMLButtonElement;
     solfegeKeysAs: HTMLSelectElement;
     solfegeKeysOpen: HTMLButtonElement;
     solfegeFunctionsKey: HTMLSelectElement;
@@ -3264,6 +3267,8 @@ export class AppView {
       solfegeCadencesMode: requireElement(doc, 'solfege-cadences-mode'),
       solfegeCadencesOpen: requireElement(doc, 'solfege-cadences-open'),
       solfegeCadencesByEar: requireElement(doc, 'solfege-cadences-by-ear'),
+      solfegeRhythmLevel: requireElement(doc, 'solfege-rhythm-level'),
+      solfegeRhythmOpen: requireElement(doc, 'solfege-rhythm-open'),
       solfegeKeysAs: requireElement(doc, 'solfege-keys-as'),
       solfegeKeysOpen: requireElement(doc, 'solfege-keys-open'),
       solfegeFunctionsKey: requireElement(doc, 'solfege-functions-key'),
@@ -10277,6 +10282,14 @@ export class AppView {
     this.listen(this.el.solfegeFunctionsMode, 'change', () => {
       this.nameTheKeysOfTheList(this.el.solfegeFunctionsKey, this.el.solfegeFunctionsMode.value === 'minor' ? 'minor' : 'major');
     });
+    this.listen(this.el.solfegeRhythmOpen, 'click', () => {
+      void this.openTheExercise(
+        theRhythmicDictation({
+          level: RHYTHM_LEVELS.find((level) => level === this.el.solfegeRhythmLevel.value) ?? 'simple',
+          seed: Math.floor(Math.random() * 2 ** 31),
+        }),
+      );
+    });
     this.listen(this.el.solfegeCadencesMode, 'change', () => {
       this.nameTheKeysOfTheList(this.el.solfegeCadencesKey, this.el.solfegeCadencesMode.value === 'minor' ? 'minor' : 'major');
     });
@@ -11604,6 +11617,9 @@ export class AppView {
       }
       this.nameTheKeysOfTheList(this.el.solfegeFunctionsKey, this.el.solfegeFunctionsMode.value === 'minor' ? 'minor' : 'major');
       this.showTheProgressionsAsked();
+      if (this.el.solfegeRhythmLevel.options.length === 0) {
+        this.el.solfegeRhythmLevel.replaceChildren(new Option('Crotchets, quavers and minims', 'simple'), new Option('Dotted notes and semiquavers too', 'dotted'));
+      }
       if (this.el.solfegeCadencesMode.options.length === 0) {
         this.el.solfegeCadencesMode.replaceChildren(new Option('Major', 'major'), new Option('Minor', 'minor'));
       }

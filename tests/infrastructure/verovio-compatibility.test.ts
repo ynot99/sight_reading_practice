@@ -9,6 +9,7 @@ import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { theScaleComplex } from '../../src/domain/solfege/scaleComplex.js';
+import { RHYTHMS_IN_A_ROUND, theRhythmicDictation } from '../../src/domain/solfege/rhythmicDictation.js';
 import { theCadencesNamed } from '../../src/domain/solfege/cadencesNamed.js';
 import { TRANSPOSITIONS_IN_A_ROUND, theTransposition } from '../../src/domain/solfege/transposition.js';
 import { theProgression } from '../../src/domain/solfege/progressions.js';
@@ -275,6 +276,12 @@ describe('Verovio and our timeline agree on every step', () => {
 
   it('on a round of cadences to be named', () => {
     expect(agreementOf(theCadencesNamed({ fifths: 5, minor: true, heard: false, seed: 8 }))).toEqual(agreeing(PROGRESSIONS_IN_A_ROUND));
+  });
+
+  it('on a round of rhythmic dictation, plain and dotted', () => {
+    for (const level of ['simple', 'dotted'] as const) {
+      expect({ level, ...agreementOf(theRhythmicDictation({ level, seed: 12 })) }).toEqual({ level, ...agreeing(RHYTHMS_IN_A_ROUND) });
+    }
   });
 
   it('on every built-in preset, in three-four and two flats', () => {

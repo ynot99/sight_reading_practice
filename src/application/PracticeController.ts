@@ -1,7 +1,7 @@
 import type { ExercisePresetRegistry } from '../domain/generation/ExercisePresetRegistry.js';
 import type { ExerciseRequest, IExerciseGenerator } from '../domain/generation/IExerciseGenerator.js';
 import type { RhythmProfileRegistry } from '../domain/generation/RhythmProfile.js';
-import type { Exercise } from '../domain/model/Exercise.js';
+import type { Exercise, PlayedBack } from '../domain/model/Exercise.js';
 import type { PlayingAhead } from './session/PracticeContext.js';
 import type { KeySignature } from '../domain/model/KeySignature.js';
 import { TimeSignature } from '../domain/model/TimeSignature.js';
@@ -99,6 +99,7 @@ import {
 import { machineIsPlaying } from './modes/ListenFrame.js';
 import { playsFreely } from './modes/FreePlayFrame.js';
 import { WAIT_MODE_ID } from './modes/WaitMode.js';
+import { BAR_MODE_ID } from './modes/BarMode.js';
 import { theQuestionsPlayedBack, type QuestionPlayedBack } from '../domain/solfege/playedBack.js';
 import { theCadenceOfTheKey } from '../domain/solfege/cadence.js';
 import { tapsWith, tempoOfTaps } from './tapTempo.js';
@@ -925,10 +926,12 @@ export class PracticeController {
   /** The questions of the music on the page played back, by the step each is given at, and the steps found: see `theQuestionsPlayedBack`. */
   private questionsPlayedBack: ReadonlyMap<number, QuestionPlayedBack> = new Map();
   private stepsToFind: ReadonlySet<number> = new Set();
+  /** The step whose question was last played as it was asked, so it is played once a run. */
+  private questionAsked: number | null = null;
   /** Every step kept off the page until it is found or answered: those to find, and those of bars to name by ear. */
   private stepsKeptOff: readonly number[] = [];
   /** The settings a run was last worked out to be played under: see `playedUnder`. */
-  private playedUnderLast: { readonly settings: PracticeSettings; readonly playedBack: boolean; readonly under: PracticeSettings } | null = null;
+  private playedUnderLast: { readonly settings: PracticeSettings; readonly playedBack: PlayedBack | undefined; readonly under: PracticeSettings } | null = null;
   private provider: IExerciseProvider;
   private exercise: Exercise | null = null;
   private timeline: ExerciseTimeline | null = null;
@@ -3137,7 +3140,7 @@ export class PracticeController {
     if (this.playsFreely) {
       return null;
     }
-    const bars = options.countIn === false ? 0 : this.currentSettings.countInBars;
+    const bars = options.countIn === false ? 0 : this.playedUnder.countInBars;
     return this.beginRun(bars, []);
   }
 
@@ -3345,10 +3348,7 @@ export class PracticeController {
         // A new step is nobody's fault yet.
         this.forgetTheTrouble();
         this.otherHandReaches(step);
-        const question = this.questionsPlayedBack.get(step.index);
-        if (question !== undefined && this.exercise?.playedBack?.heard === true) {
-          this.soundTheQuestion(question);
-        }
+        this.askTheQuestionAt(step.index);
       }),
     );
     this.sessionSubscriptions.push(
@@ -3488,8 +3488,12 @@ export class PracticeController {
     // until it is due, which is a scheduling lead away, and all of this
     // finishes long before it.
     timeTheStart('pulse about to start');
+    this.questionAsked = null;
     session.start(opening, this.pedalIsDown);
     timeTheStart('pulse started');
+    // A question heard is heard before it is answered - before the downbeat
+    // a frame waiting for its first beat has not been given, too.
+    this.askTheQuestionAt(beginsAt);
     // Drawn afterwards. Everything the page shows about a run being under way is
     // the same a moment later, and the run's first act - a click placed where
     // the reader's key went down - cannot be moved any earlier than it already
@@ -3821,6 +3825,20 @@ export class PracticeController {
   }
 
   /**
+   * Plays the question a step is given at, where the music played back is
+   * heard - once a run, however many ways the step is reached: as the run
+   * begins at it, and as it is entered.
+   */
+  private askTheQuestionAt(stepIndex: number): void {
+    const question = this.questionsPlayedBack.get(stepIndex);
+    if (question === undefined || this.exercise?.playedBack?.heard !== true || this.questionAsked === stepIndex) {
+      return;
+    }
+    this.questionAsked = stepIndex;
+    this.soundTheQuestion(question);
+  }
+
+  /**
    * Plays a question by ear from now, as a dictation is played: the key's
    * cadence first where the music asks for it, a chord a beat and a beat's
    * rest after it, so the melody is heard in its key; then every key of the
@@ -3925,18 +3943,22 @@ export class PracticeController {
    */
   private get playedUnder(): PracticeSettings {
     const settings = this.currentSettings;
-    const playedBack = this.exercise?.playedBack !== undefined;
+    const playedBack = this.exercise?.playedBack;
     const kept = this.playedUnderLast;
     if (kept !== null && kept.settings === settings && kept.playedBack === playedBack) {
       return kept.under;
     }
-    const under: PracticeSettings = playedBack
+    const under: PracticeSettings =
+      playedBack !== undefined
       ? {
           ...settings,
-          modeId: WAIT_MODE_ID,
+          // In time from the downbeat the reader gives, any key counting, for a rhythm; else note by note.
+          modeId: playedBack.inTime ? BAR_MODE_ID : WAIT_MODE_ID,
+          // The question is the count-in.
+          countInBars: 0,
           survival: false,
           readAheadSteps: null,
-          rhythmOnly: false,
+          rhythmOnly: playedBack.inTime,
           stopAtAMistake: false,
           cursorWhileRunning: true,
           closingCursors: false,
@@ -4647,7 +4669,7 @@ export class PracticeController {
     if (this.keepsTime) {
       return true;
     }
-    if (this.currentSettings.countInBars > 0) {
+    if (this.playedUnder.countInBars > 0) {
       return true;
     }
     return !clickIsSilent(this.clickWhenHeard);

@@ -8188,6 +8188,7 @@ describe('AppView', () => {
           ],
           heard: true,
           keyFirst: true,
+          inTime: false,
         },
         false,
       ]);
@@ -8453,6 +8454,32 @@ describe('AppView', () => {
       await vi.waitFor(() => {
         expect([runtime.controller.openedExercise?.title, runtime.controller.openedExercise?.namedByEar]).toEqual(['Cadences by name', undefined]);
       });
+    });
+
+    it('opens a round of rhythmic dictation from the Solfege list, at the level chosen, heard and tapped back', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      const level = element<HTMLSelectElement>('solfege-rhythm-level');
+      expect([...level.options].map((option) => `${option.value} ${option.label}`)).toEqual([
+        'simple Crotchets, quavers and minims',
+        'dotted Dotted notes and semiquavers too',
+      ]);
+      level.value = 'dotted';
+      element<HTMLButtonElement>('solfege-rhythm-open').click();
+      await vi.waitFor(() => {
+        expect([runtime.controller.openedExercise?.title, runtime.controller.theScoreOpenStandsAlone]).toEqual(['Rhythmic dictation', true]);
+      });
+      const lengths = new Set(
+        (runtime.controller.openedExercise?.staves[0]?.measures ?? []).flatMap((measure) => measure.entries.map((entry) => entry.duration.ticks)),
+      );
+      expect([...lengths].some((ticks) => ticks === Duration.SIXTEENTH.ticks || ticks === Duration.DOTTED_QUARTER.ticks || ticks === Duration.DOTTED_HALF.ticks)).toBe(true);
+      expect([element('score-hear-again').hidden, element('focus-modes').dataset['idle'], runtime.controller.openedExercise?.playedBack?.inTime]).toEqual([
+        false,
+        'true',
+        true,
+      ]);
     });
 
     it('names the sections of a sketch written down as a score where they begin', async () => {

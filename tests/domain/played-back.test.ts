@@ -28,7 +28,7 @@ function playedBack(measures: readonly Measure[], questions: readonly (readonly 
     barLabels: [],
     staves: [{ staffNumber: 1, voice: 1, clef: 'treble', clefChanges: [], measures }],
     metadata: { generatorId: 'test', seed: 0 },
-    ...(questions === null ? {} : { playedBack: { questions: questions.map(([from, until]) => ({ from, until })), heard: true, keyFirst: false } }),
+    ...(questions === null ? {} : { playedBack: { questions: questions.map(([from, until]) => ({ from, until })), heard: true, keyFirst: false, inTime: false } }),
   };
 }
 

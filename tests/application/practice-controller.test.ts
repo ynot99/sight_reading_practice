@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { theRhythmicDictation } from '../../src/domain/solfege/rhythmicDictation.js';
 import { CHORDS_IN_A_ROUND, theChordsNamed } from '../../src/domain/solfege/chordsNamed.js';
 import { theTransposition } from '../../src/domain/solfege/transposition.js';
 import { theMelodicDictation } from '../../src/domain/solfege/melodicDictation.js';
@@ -6609,6 +6610,27 @@ describe('music played back by ear', () => {
     await controller.openScore(theChordsNamed({ asks: 'sevenths', heard: false, seed: 2 }));
     controller.hearTheBarNamed(4);
     expect([[...renderer.concealed], asked(instrument)]).toEqual([[], []]);
+  });
+
+  it('plays a rhythm to tap back in time: no count-in, the bar waiting for the downbeat the reader gives on any key', async () => {
+    const { controller, instrument, midi, metronome, clock } = createController(false, undefined, {
+      modeId: new WaitMode().id,
+      countInBars: 1,
+      rhythmOnly: false,
+      clickOn: true,
+    });
+    await controller.openScore(theRhythmicDictation({ level: 'simple', seed: 3 }));
+    const session = controller.start();
+    // The question heard at once, once, with no bar counted in before it: the run waiting for the downbeat the reader gives.
+    const first = asked(instrument);
+    expect([session?.status, first.length > 0]).toEqual(['counting-in', true]);
+    // Any key is the downbeat; the bar it begins, asked already, not asked again.
+    metronome.advanceSubdivisions(1);
+    midi.noteOn(30, clock.now());
+    expect([session?.status, asked(instrument)]).toEqual(['running', first]);
+    // Played in time from the bar line, any key counting, whatever was chosen.
+    controller.stop();
+    expect(controller.lastPlayedWith).toEqual({ modeId: BAR_MODE_ID, modes: ['rhythm'] });
   });
 
   it('asks nothing of music that is read', async () => {

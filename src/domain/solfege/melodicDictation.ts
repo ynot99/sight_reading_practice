@@ -94,7 +94,7 @@ export function theMelodicDictation(asked: DictationAsked): Exercise {
     barLabels: [],
     staves: [{ staffNumber: 1, voice: 1, clef: 'treble', clefChanges: [], measures: entries.flatMap((phrase) => intoBars(phrase, TIME)) }],
     metadata: { generatorId: MELODIC_DICTATION_ID, seed: asked.seed },
-    playedBack: { questions: entries.map((_, at) => ({ from: at * asked.bars, until: (at + 1) * asked.bars })), heard: true, keyFirst: true },
+    playedBack: { questions: entries.map((_, at) => ({ from: at * asked.bars, until: (at + 1) * asked.bars })), heard: true, keyFirst: true, inTime: false },
   };
 }
 

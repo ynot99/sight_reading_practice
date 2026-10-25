@@ -44,6 +44,7 @@ describe('a melodic dictation', () => {
             questions: Array.from({ length: DICTATIONS_IN_A_ROUND }, (_, at) => ({ from: at * asked.bars, until: (at + 1) * asked.bars })),
             heard: true,
             keyFirst: true,
+            inTime: false,
           },
         ]);
         expect(theMelodicDictation({ ...asked, seed })).toEqual(round);

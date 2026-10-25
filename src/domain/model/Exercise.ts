@@ -598,6 +598,12 @@ export interface PlayedBack {
    * begun.
    */
   readonly keyFirst: boolean;
+  /**
+   * Whether each question is answered in time - its rhythm judged against
+   * the pulse from the downbeat the reader gives, any key counting, as a
+   * rhythm is dictated - or note by note, waiting for each.
+   */
+  readonly inTime: boolean;
 }
 
 export interface ExerciseMetadata {

@@ -28,7 +28,7 @@ describe('intervals by ear', () => {
         }).not.toThrow();
         // A question a bar, the key not heard first: an interval is heard from its own note.
         expect([round.playedBack, round.staves[0]?.measures.length]).toEqual([
-          { questions: Array.from({ length: QUESTIONS_IN_A_ROUND }, (_, at) => ({ from: at, until: at + 1 })), heard: true, keyFirst: false },
+          { questions: Array.from({ length: QUESTIONS_IN_A_ROUND }, (_, at) => ({ from: at, until: at + 1 })), heard: true, keyFirst: false, inTime: false },
           QUESTIONS_IN_A_ROUND,
         ]);
         expect(theIntervalsByEar({ semitones: [3, 4, 7], way, seed })).toEqual(round);

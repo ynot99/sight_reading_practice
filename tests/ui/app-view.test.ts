@@ -8326,6 +8326,38 @@ describe('AppView', () => {
       expect([...element('score-answers').querySelectorAll('[data-choice]')].map((chip) => chip.textContent)).toEqual(['i', 'ii°', 'III', 'iv', 'V', 'VI', 'vii°']);
     });
 
+    it('opens a progression to play from the Solfege list, named by its numerals in the mode chosen, in one key or through every key', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      const which = element<HTMLSelectElement>('solfege-progressions-which');
+      const key = element<HTMLSelectElement>('solfege-progressions-key');
+      const mode = element<HTMLSelectElement>('solfege-progressions-mode');
+      const where = element<HTMLSelectElement>('solfege-progressions-where');
+      const said = (list: HTMLSelectElement): string[] => [...list.options].map((option) => `${option.value} ${option.label}`);
+      expect([said(which), said(where), key.selectedOptions[0]?.label]).toEqual([
+        ['cadence I–IV–V–I', 'dominantSeventh I–IV–V7–I', 'turnaround I–vi–ii–V–I', 'twoFiveOne ii7–V7–I', 'circle I–IV–vii°–iii–vi–ii–V–I'],
+        ['one In this key', 'every Through every key'],
+        'C major',
+      ]);
+      // Minor: the same progression chosen, named in minor; the key kept by its signature.
+      which.value = 'twoFiveOne';
+      key.value = '-1';
+      mode.value = 'minor';
+      mode.dispatchEvent(new Event('change', { bubbles: true }));
+      expect([which.value, which.selectedOptions[0]?.label, key.selectedOptions[0]?.label]).toEqual(['twoFiveOne', 'iiø7–V7–i', 'D minor']);
+      where.value = 'every';
+      element<HTMLButtonElement>('solfege-progressions-open').click();
+      await vi.waitFor(() => {
+        expect([runtime.controller.openedExercise?.title, runtime.controller.theScoreOpenStandsAlone]).toEqual(['iiø7–V7–i through every key', true]);
+      });
+      const opened = runtime.controller.openedExercise;
+      expect([opened?.key.fifths, opened?.key.mode, opened?.keyChanges.length, opened?.byEar, opened?.byName]).toEqual([-1, 'minor', 11, undefined, undefined]);
+      // Played, as a score is: the modes as they are.
+      expect(element('focus-modes').dataset['idle']).toBeUndefined();
+    });
+
     it('names the sections of a sketch written down as a score where they begin', async () => {
       const { view, runtime, sketches } = createRig();
       await view.initialize();

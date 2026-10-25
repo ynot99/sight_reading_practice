@@ -36,6 +36,7 @@ import { NamingRound } from '../application/solfege/NamingRound.js';
 import { theChordsNamed } from '../domain/solfege/chordsNamed.js';
 import { KEYS_ASKED, theKeysNamed } from '../domain/solfege/keysNamed.js';
 import { theFunctionsNamed } from '../domain/solfege/functionsNamed.js';
+import { PROGRESSION_NAMES, theProgression, theProgressionNamed } from '../domain/solfege/progressions.js';
 import { DICTATION_LENGTHS, DICTATION_RHYTHMS, theMelodicDictation, type DictationRhythm } from '../domain/solfege/melodicDictation.js';
 import { barsOfThePicture, tiersOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
@@ -2800,6 +2801,11 @@ export class AppView {
     solfegeFunctionsKey: HTMLSelectElement;
     solfegeFunctionsMode: HTMLSelectElement;
     solfegeFunctionsOpen: HTMLButtonElement;
+    solfegeProgressionsWhich: HTMLSelectElement;
+    solfegeProgressionsKey: HTMLSelectElement;
+    solfegeProgressionsMode: HTMLSelectElement;
+    solfegeProgressionsWhere: HTMLSelectElement;
+    solfegeProgressionsOpen: HTMLButtonElement;
     solfegeDictationKey: HTMLSelectElement;
     solfegeDictationMode: HTMLSelectElement;
     solfegeDictationBars: HTMLSelectElement;
@@ -3243,6 +3249,11 @@ export class AppView {
       solfegeFunctionsKey: requireElement(doc, 'solfege-functions-key'),
       solfegeFunctionsMode: requireElement(doc, 'solfege-functions-mode'),
       solfegeFunctionsOpen: requireElement(doc, 'solfege-functions-open'),
+      solfegeProgressionsWhich: requireElement(doc, 'solfege-progressions-which'),
+      solfegeProgressionsKey: requireElement(doc, 'solfege-progressions-key'),
+      solfegeProgressionsMode: requireElement(doc, 'solfege-progressions-mode'),
+      solfegeProgressionsWhere: requireElement(doc, 'solfege-progressions-where'),
+      solfegeProgressionsOpen: requireElement(doc, 'solfege-progressions-open'),
       solfegeDictationKey: requireElement(doc, 'solfege-dictation-key'),
       solfegeDictationMode: requireElement(doc, 'solfege-dictation-mode'),
       solfegeDictationBars: requireElement(doc, 'solfege-dictation-bars'),
@@ -10213,6 +10224,19 @@ export class AppView {
     this.listen(this.el.solfegeIntervalsNameThem, 'click', () => {
       void this.openTheIntervals('by name');
     });
+    this.listen(this.el.solfegeProgressionsMode, 'change', () => {
+      this.showTheProgressionsAsked();
+    });
+    this.listen(this.el.solfegeProgressionsOpen, 'click', () => {
+      void this.openTheExercise(
+        theProgression({
+          progression: PROGRESSION_NAMES.find((name) => name === this.el.solfegeProgressionsWhich.value) ?? 'cadence',
+          fifths: Number(this.el.solfegeProgressionsKey.value),
+          minor: this.el.solfegeProgressionsMode.value === 'minor',
+          throughEveryKey: this.el.solfegeProgressionsWhere.value === 'every',
+        }),
+      );
+    });
     this.listen(this.el.solfegeFunctionsMode, 'change', () => {
       this.nameTheKeysOfTheList(this.el.solfegeFunctionsKey, this.el.solfegeFunctionsMode.value === 'minor' ? 'minor' : 'major');
     });
@@ -11500,7 +11524,28 @@ export class AppView {
         this.el.solfegeFunctionsMode.replaceChildren(new Option('Major', 'major'), new Option('Minor', 'minor'));
       }
       this.nameTheKeysOfTheList(this.el.solfegeFunctionsKey, this.el.solfegeFunctionsMode.value === 'minor' ? 'minor' : 'major');
+      this.showTheProgressionsAsked();
     }
+  }
+
+  /**
+   * Fills the lists a progression is asked by: which, named by its numerals
+   * in the mode chosen - "ii7–V7–I", "iiø7–V7–i" - the key, the mode, and
+   * whether in that key or through every key; each choice kept as the mode
+   * changes.
+   */
+  private showTheProgressionsAsked(): void {
+    const minor = this.el.solfegeProgressionsMode.value === 'minor';
+    if (this.el.solfegeProgressionsMode.options.length === 0) {
+      this.el.solfegeProgressionsMode.replaceChildren(new Option('Major', 'major'), new Option('Minor', 'minor'));
+      this.el.solfegeProgressionsWhere.replaceChildren(new Option('In this key', 'one'), new Option('Through every key', 'every'));
+    }
+    const which = this.el.solfegeProgressionsWhich.value;
+    this.el.solfegeProgressionsWhich.replaceChildren(...PROGRESSION_NAMES.map((name) => new Option(theProgressionNamed(name, minor), name)));
+    if (which !== '') {
+      this.el.solfegeProgressionsWhich.value = which;
+    }
+    this.nameTheKeysOfTheList(this.el.solfegeProgressionsKey, minor ? 'minor' : 'major');
   }
 
   /** Opens an exercise of the solfege list as a score is opened: on no shelf, so a playback of it goes on to no other piece. */

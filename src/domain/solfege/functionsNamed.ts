@@ -2,12 +2,13 @@ import { Duration } from '../model/Duration.js';
 import type { Exercise, NamingQuestion } from '../model/Exercise.js';
 import { measureOf, noteEntry } from '../model/Exercise.js';
 import { KeySignature } from '../model/KeySignature.js';
-import { Pitch } from '../model/Pitch.js';
+import type { Pitch } from '../model/Pitch.js';
 import { TimeSignature } from '../model/TimeSignature.js';
 import { createRng } from '../generation/Rng.js';
 import { theChordTheKeysMake, theNumeralOfTheChord } from '../harmony/chordName.js';
 import type { ScaleName } from '../harmony/scales.js';
 import { aStepOfTheKey, OCTAVE, theTonicOfTheHand } from './cadence.js';
+import { theNearestVoicing } from './voicing.js';
 
 /** A round of progressions to be named: the key, and the seed that chooses them. */
 export interface ProgressionsAsked {
@@ -122,25 +123,4 @@ export function theFunctionsNamed(asked: ProgressionsAsked): Exercise {
     metadata: { generatorId: FUNCTIONS_BY_NAME_ID, seed: asked.seed },
     byName: questions.map(({ question }) => question),
   };
-}
-
-/**
- * A triad's three notes laid as near the chord before as they can be -
- * each position of it in the octaves around, the one whose notes move
- * least - or, for the first, in root position where it was written.
- */
-function theNearestVoicing(triad: readonly Pitch[], before: readonly Pitch[] | null): Pitch[] {
-  if (before === null) {
-    return [...triad];
-  }
-  const moved = (pitch: Pitch, octaves: number): Pitch => new Pitch(pitch.step, pitch.octave + octaves, pitch.alter);
-  const candidates = [-1, 0].flatMap((octave) =>
-    [0, 1, 2].map((rotation) => [
-      ...triad.slice(rotation).map((pitch) => moved(pitch, octave)),
-      ...triad.slice(0, rotation).map((pitch) => moved(pitch, octave + 1)),
-    ]),
-  );
-  const distance = (chord: readonly Pitch[]): number =>
-    chord.reduce((sum, pitch, at) => sum + Math.abs(pitch.midi - (before[at]?.midi ?? pitch.midi)), 0);
-  return [...candidates].sort((one, other) => distance(one) - distance(other))[0] ?? [...triad];
 }

@@ -5932,11 +5932,19 @@ body[data-take-on-keys='true'] #take-off-the-keys {
   gap: 8px;
 }
 
-/* A section of the exercises a music school sets: its name, what it is, and what it asks for. */
+/*
+ * The exercises a music school sets, a section each. Taller than the sheet
+ * holding it, so it scrolls inside the panel as the lists do: a flex child
+ * will not shrink below its content unless its minimum height is let go of.
+ */
 .solfege {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+  flex: 0 1 auto;
 }
 
 .solfege__section {

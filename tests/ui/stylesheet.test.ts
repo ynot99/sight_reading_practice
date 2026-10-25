@@ -2516,6 +2516,10 @@ describe('searching the settings', () => {
     // What a section of the exercises asks for wraps on a phone rather than running off it.
     expect(body('.solfege__asks')).toMatch(/flex-wrap\s*:\s*wrap/);
     expect(HTML).toMatch(/<button id="scores-show-sketches"[^>]*>Sketches<\/button>\s*<button id="scores-show-solfege"[^>]*>Solfege<\/button>/);
+    // The sections are taller than the sheet, so they scroll inside it as the lists do.
+    expect(body('.solfege')).toMatch(/overflow-y\s*:\s*auto/);
+    expect(body('.solfege')).toMatch(/min-height\s*:\s*0/);
+    expect(body('.solfege')).toMatch(/flex\s*:\s*0\s+1\s+auto/);
     // The intervals a round asks wrap too, and one chosen says so.
     expect(body('.solfege__chips')).toMatch(/flex-wrap\s*:\s*wrap/);
     expect(body(".solfege__chip[aria-pressed='true']")).toMatch(/border-color\s*:\s*var\(--accent\)/);

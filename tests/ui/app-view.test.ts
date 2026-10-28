@@ -3564,6 +3564,72 @@ describe('AppView', () => {
       }
     });
 
+    it('takes the other hand’s marker off the page when its run ends, and leaves no walk of it running', async () => {
+      // It stood where the accompaniment had got to after the run, and with
+      // its place still a step index went on standing over that step of the
+      // next piece opened - played with both hands, so nothing moved it again.
+      vi.useFakeTimers();
+      try {
+        const rig = createRig();
+        await rig.view.initialize();
+        await rig.runtime.controller.openScore(oneHandWalksUnderAHeldNote({ tempoBpm: 60 }));
+        rig.runtime.controller.updateSettings({
+          handStaff: 1,
+          hearTheOtherHand: true,
+          modeId: new WaitMode().id,
+          countInBars: 0,
+          clickOn: false,
+        });
+        rig.runtime.controller.start();
+        rig.midi.noteOn(MIDI.C4, 0);
+        rig.clock.advance(1_000);
+        vi.advanceTimersByTime(1_000);
+        const walking = [rig.renderer.otherHand.visible, rig.renderer.otherHand.position];
+
+        element<HTMLButtonElement>('focus-stop').click();
+        const movesWhenStopped = rig.renderer.otherHand.moves.length;
+        rig.clock.advance(4_000);
+        vi.advanceTimersByTime(4_000);
+
+        expect(walking).toEqual([true, 1]);
+        expect(rig.renderer.otherHand.visible).toBe(false);
+        // The rest of the phrase it was walking went with the run.
+        expect(rig.renderer.otherHand.moves).toHaveLength(movesWhenStopped);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('takes the other hand’s marker off the page when another piece is opened', async () => {
+      vi.useFakeTimers();
+      try {
+        const rig = createRig();
+        await rig.view.initialize();
+        await rig.runtime.controller.openScore(oneHandWalksUnderAHeldNote({ tempoBpm: 60 }));
+        rig.runtime.controller.updateSettings({
+          handStaff: 1,
+          hearTheOtherHand: true,
+          modeId: new WaitMode().id,
+          countInBars: 0,
+          clickOn: false,
+        });
+        rig.runtime.controller.start();
+        rig.midi.noteOn(MIDI.C4, 0);
+        rig.clock.advance(1_000);
+        vi.advanceTimersByTime(1_000);
+        const walking = rig.renderer.otherHand.visible;
+
+        await rig.runtime.controller.openScore(oneHandWalksUnderAHeldNote({ tempoBpm: 90 }));
+        rig.clock.advance(4_000);
+        vi.advanceTimersByTime(4_000);
+
+        expect(walking).toBe(true);
+        expect(rig.renderer.otherHand.visible).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('keeps the run being looked at with the recordings', async () => {
       const { view, runtime, midi } = createRig();
       await view.initialize();

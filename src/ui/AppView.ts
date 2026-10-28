@@ -7878,6 +7878,9 @@ export class AppView {
       controller.events.on('exerciseLoaded', ({ exercise }) => {
         this.hasLooked = false;
         this.placedOnBar = null;
+        // Its place is a step of the piece it walked, and on another piece
+        // the same number is some other step that nothing is playing.
+        this.stopTheOtherHandsMarker();
         // The places marked out belong to the piece, so they are drawn again
         // whenever the piece changes - however it was opened.
         this.renderPassages();
@@ -8131,6 +8134,9 @@ export class AppView {
         this.updateButtons(status);
         this.keepDrainingWhileWaiting(status === 'running');
         this.letTheCursorsClose();
+        if (status === 'completed' || status === 'aborted') {
+          this.stopTheOtherHandsMarker();
+        }
         // Playing a piece is the plainest way of saying it is the one being
         // worked on - and the only way to say it about a score the program
         // put on the stand by itself.
@@ -14230,7 +14236,13 @@ export class AppView {
     this.moveTheOtherHandsMarker();
   }
 
-  /** Takes the second marker off the page, the run being over. */
+  /**
+   * Takes the second marker off the page, and the rest of its walk with it.
+   *
+   * When the run is over, however it ended, and when another piece is opened.
+   * Left up, it stood where the accompaniment had got to, and over that same
+   * step of the next piece - played with both hands, nothing moved it again.
+   */
   private stopTheOtherHandsMarker(): void {
     if (this.theOtherHandsStep !== null) {
       clearTimeout(this.theOtherHandsStep);

@@ -709,6 +709,13 @@ describe('AppView', () => {
     mountRealMarkup();
   });
 
+  it('names no element of the shipped markup by an id another already has', () => {
+    // A button of the Solfege list took the id of its section's heading, and
+    // what was looked up by it was the heading: the button pressed did nothing.
+    const ids = [...document.querySelectorAll('[id]')].map((each) => each.id);
+    expect(ids.filter((id, at) => ids.indexOf(id) !== at)).toEqual([]);
+  });
+
   it('finds every element it needs in the shipped markup', () => {
     expect(() => createRig()).not.toThrow();
   });
@@ -8371,11 +8378,14 @@ describe('AppView', () => {
       );
       await new Promise((resolve) => setTimeout(resolve, 1_400));
       expect(element('score-answers-asks').textContent).toBe('2 of 10 · bar 2');
-      pad.querySelector<HTMLButtonElement>('[data-next]')?.click();
+      // Next beside the question, where a long row of what was picked cannot push it out of the strip.
+      const next = element<HTMLButtonElement>('score-answers-next');
+      expect([next.hidden, next.closest('.score__answers-head') !== null]).toEqual([false, true]);
+      next.click();
       expect(element('score-answers-asks').textContent).toBe('3 of 10 · bar 3: interval?');
       // Right: moved on from by itself a moment later, with nothing to wait for.
       press(answerOf(2));
-      expect(pad.querySelector('[data-next]')).toBeNull();
+      expect(element('score-answers-next').hidden).toBe(true);
       await vi.waitFor(
         () => {
           expect(element('score-answers-asks').textContent).toBe('4 of 10 · bar 4: interval?');
@@ -8493,7 +8503,7 @@ describe('AppView', () => {
       expect(said.filter((each) => each.shown !== each.how || !each.named)).toEqual([]);
       // Every way there is, so none of them was left out of the sweep.
       expect([said.length, [...new Set(said.map((each) => each.how))].sort()]).toEqual([
-        15,
+        16,
         ['Hear & name', 'Hear & play back', 'Hear & tap back', 'Open', 'Read & name'],
       ]);
     });
@@ -8594,6 +8604,41 @@ describe('AppView', () => {
       // Begun again, nothing yet.
       element<HTMLButtonElement>('focus-play').click();
       expect(shown()).toBe('');
+    });
+
+    it('asks the notes of a melodic dictation by their degrees, a note at a time, a phrase to a question', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      const heard = vi.spyOn(runtime.controller, 'hearTheBarNamed');
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      element<HTMLButtonElement>('solfege-dictation-hear-name').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise?.title).toBe('Melodic dictation by degrees');
+      });
+      const round = runtime.controller.openedExercise;
+      const pad = element('score-answers');
+      const chips = (): string[] => [...pad.querySelectorAll<HTMLButtonElement>('[data-choice]')].map((chip) => chip.textContent);
+      const first = round?.byName?.[0];
+      expect([chips(), element('score-answers-asks').textContent, heard.mock.calls]).toEqual([
+        ['1', '2', '3', '4', '5', '6', '7'],
+        '1 of 4 · bar 1: note 1?',
+        [[0]],
+      ]);
+      // The choices under the question, what was picked under them: a phrase's picks grow, the choices stay in sight.
+      pad.querySelector<HTMLButtonElement>(`[data-part="0"][data-choice="${first?.parts[0]?.answer ?? ''}"]`)?.click();
+      const choicesRow = pad.querySelector('[data-choice]')?.parentElement;
+      const pickedRow = pad.querySelector('.score__answers-given');
+      expect(choicesRow !== null && choicesRow !== undefined && pickedRow !== null && choicesRow.compareDocumentPosition(pickedRow) === Node.DOCUMENT_POSITION_FOLLOWING).toBe(true);
+      // Every note named, right: the next phrase asked, two bars on.
+      for (const [at, part] of (first?.parts ?? []).entries()) {
+        if (at === 0) {
+          continue;
+        }
+        pad.querySelector<HTMLButtonElement>(`[data-part="${String(at)}"][data-choice="${part.answer}"]`)?.click();
+      }
+      pad.click();
+      expect([element('score-answers-asks').textContent, heard.mock.calls.at(-1)]).toEqual(['2 of 4 · bar 3: note 1?', [2]]);
     });
 
     it('offers another round at the end of a round of naming: what was asked, other notes, asked from the first', async () => {

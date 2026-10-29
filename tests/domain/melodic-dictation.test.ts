@@ -7,7 +7,9 @@ import {
   DICTATIONS_IN_A_ROUND,
   DICTATION_LENGTHS,
   DICTATION_RHYTHMS,
+  DEGREES,
   theMelodicDictation,
+  theMelodicDictationNamed,
   type DictationAsked,
 } from '../../src/domain/solfege/melodicDictation.js';
 
@@ -129,5 +131,67 @@ describe('a melodic dictation', () => {
       );
     expect([...lengths('crotchets')].sort((one, other) => one - other)).toEqual([Duration.QUARTER.ticks, Duration.HALF.ticks]);
     expect([...lengths('quavers')].sort((one, other) => one - other)).toEqual([Duration.EIGHTH.ticks, Duration.QUARTER.ticks, Duration.HALF.ticks]);
+  });
+
+  it('names the notes of the same phrases by their degrees, each degree offered heard as the phrase would be with it', () => {
+    const broken: string[] = [];
+    for (const minor of [false, true]) {
+      for (let fifths = -7; fifths <= 7; fifths += 1) {
+        for (const bars of DICTATION_LENGTHS) {
+          const asked: DictationAsked = { fifths, minor, bars, rhythm: 'quavers', seed: fifths + 20 };
+          const named = theMelodicDictationNamed(asked);
+          const played = theMelodicDictation(asked);
+          expect(() => {
+            validateExercise(named);
+          }).not.toThrow();
+          expect([named.staves, named.namedByEar, named.playedBack, named.byName?.length]).toEqual([played.staves, true, undefined, DICTATIONS_IN_A_ROUND]);
+          // Which pitch class each degree is, from the notes written and their answers.
+          const classOf = new Map<string, number>();
+          const written = phrases(named, bars);
+          named.byName?.forEach((question, at) => {
+            const notes = written[at] ?? [];
+            if ([question.measureIndex, question.bars, question.keyFirst, question.parts.length].join() !== [at * bars, bars, true, notes.length].join()) {
+              broken.push(`${String(fifths)} ${String(minor)} ${String(bars)}: question ${String(at)} not over its phrase`);
+            }
+            question.parts.forEach((part, which) => {
+              const pc = (((notes[which]?.pitch.midi ?? 0) % 12) + 12) % 12;
+              if (classOf.has(part.answer) && classOf.get(part.answer) !== pc) {
+                broken.push(`${String(fifths)} ${String(minor)}: degree ${part.answer} is two pitch classes`);
+              }
+              classOf.set(part.answer, pc);
+              // Heard as its answer, the phrase as written.
+              if (JSON.stringify(part.heardAs?.[part.answer]) !== JSON.stringify(notes.map((note) => [note.pitch.midi]))) {
+                broken.push(`${String(fifths)} ${String(minor)}: note ${String(which)} heard as its answer is not the phrase`);
+              }
+            });
+          });
+          // Heard as another degree: only that note moved, to that degree, no further than a fifth from the one written.
+          named.byName?.forEach((question, at) => {
+            const notes = written[at] ?? [];
+            question.parts.forEach((part, which) => {
+              for (const degree of DEGREES) {
+                const moments = part.heardAs?.[degree] ?? [];
+                const moved = moments.map((keys, other) => (keys[0] ?? 0) - (notes[other]?.pitch.midi ?? 0));
+                const pc = ((((moments[which]?.[0] ?? 0) % 12) + 12) % 12);
+                const said = [
+                  moved.every((by, other) => other === which || by === 0),
+                  Math.abs(moved[which] ?? 99) <= 7,
+                  !classOf.has(degree) || classOf.get(degree) === pc,
+                ];
+                if (said.includes(false)) {
+                  broken.push(`${String(fifths)} ${String(minor)} q${String(at)} n${String(which)} as ${degree}: ${String(said)}`);
+                }
+              }
+            });
+          });
+          // In minor the leading note is raised: the seventh a semitone under the tonic.
+          if (minor && classOf.has('7') && classOf.has('1') && ((((classOf.get('1') ?? 0) - (classOf.get('7') ?? 0)) % 12) + 12) % 12 !== 1) {
+            broken.push(`${String(fifths)} minor: the seventh is not raised`);
+          }
+        }
+      }
+    }
+    expect(broken).toEqual([]);
+    expect(DEGREES).toEqual(['1', '2', '3', '4', '5', '6', '7']);
   });
 });

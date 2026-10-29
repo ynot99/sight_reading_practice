@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { theRhythmicDictation } from '../../src/domain/solfege/rhythmicDictation.js';
 import { CHORDS_IN_A_ROUND, theChordsNamed } from '../../src/domain/solfege/chordsNamed.js';
 import { theTransposition } from '../../src/domain/solfege/transposition.js';
-import { theMelodicDictation } from '../../src/domain/solfege/melodicDictation.js';
+import { theMelodicDictation, theMelodicDictationNamed } from '../../src/domain/solfege/melodicDictation.js';
 import { theCadenceOfTheKey } from '../../src/domain/solfege/cadence.js';
 import { QUESTIONS_IN_A_ROUND, theIntervalsByEar, theIntervalsNamed } from '../../src/domain/solfege/intervalsByEar.js';
 import {
@@ -6725,6 +6725,40 @@ describe('music played back by ear', () => {
     controller.updateSettings({ modeId: LISTEN_MODE_ID });
     controller.listen();
     expect(controller.isListening).toBe(true);
+  });
+
+  it('hears a phrase named by its degrees after its key, over every bar it runs over, and each degree offered in its rhythm', async () => {
+    const { controller, instrument, renderer, clock } = createController(false, undefined, { modeId: new WaitMode().id });
+    const round = theMelodicDictationNamed({ fifths: -1, minor: true, bars: 2, rhythm: 'quavers', seed: 4 });
+    await controller.openScore(round);
+    const timeline = controller.currentTimeline;
+    const ofThePhrase = (timeline?.steps ?? []).filter((step) => step.measureIndex < 2 && step.notes.length > 0);
+    const beatMs = 60_000 / 72;
+    const heard = (): string[] => instrument.played.filter((note) => note.velocity === 0.7).map((note) => `${String(note.midi)}@${String(Math.round(note.atMs ?? 0))}`);
+    // Kept off the page, every bar of every phrase.
+    expect(renderer.concealed.size).toBe((timeline?.steps ?? []).filter((step) => step.notes.length > 0).length);
+
+    clock.advance(1_000);
+    controller.hearTheBarNamed(0);
+    const from = clock.now();
+    expect(heard()).toEqual([
+      ...theCadenceOfTheKey(round.key).flatMap((chord, at) => chord.map((key) => `${String(key)}@${String(Math.round(from + at * beatMs))}`)),
+      ...ofThePhrase.map((step) => `${String(step.notes[0]?.midi ?? 0)}@${String(Math.round(from + 5 * beatMs + (step.onsetTicks / Duration.QUARTER.ticks) * beatMs))}`),
+    ]);
+
+    // An answer offered for its third note: the phrase in its own rhythm, that note moved, no cadence.
+    clock.advance(10_000);
+    instrument.played.length = 0;
+    const part = round.byName?.[0]?.parts[2];
+    const other = (part?.choices ?? []).find((choice) => choice !== part?.answer) ?? '';
+    controller.hearTheAnswerAs(0, 2, other);
+    const now = clock.now();
+    expect(heard()).toEqual(
+      (part?.heardAs?.[other] ?? []).map((keys, at) => `${String(keys[0] ?? 0)}@${String(Math.round(now + ((ofThePhrase[at]?.onsetTicks ?? 0) / Duration.QUARTER.ticks) * beatMs))}`),
+    );
+    // Shown once answered, the whole of it.
+    controller.showTheBarNamed(0);
+    expect(ofThePhrase.some((step) => renderer.concealed.has(step.index))).toBe(false);
   });
 
   it('counts the questions of music played back found with no key wrong, one after another, a run at a time', async () => {

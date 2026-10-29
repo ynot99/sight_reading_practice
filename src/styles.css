@@ -5548,6 +5548,10 @@ body[data-playing='true'] .score__modes {
   white-space: nowrap;
 }
 
+.score__answers-next {
+  flex: none;
+}
+
 .score__answers-hear {
   flex: none;
   display: inline-flex;
@@ -5584,6 +5588,17 @@ body[data-playing='true'] .score__modes {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+/*
+ * Picked and not judged yet - the notes of a phrase named one at a time -
+ * smaller and quieter than the choices above them, which are what is pressed.
+ */
+.score__answers-given .solfege__chip:not([data-verdict]) {
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-style: dashed;
 }
 
 /* A choice picked and judged: the verdict's colours, for an answer that was judged. */

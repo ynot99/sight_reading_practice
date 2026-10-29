@@ -569,8 +569,12 @@ export interface BarLabel {
 
 /** A question of music named rather than played: see `Exercise.byName`. */
 export interface NamingQuestion {
-  /** The bar it asks about. */
+  /** The bar it asks about, or the first of them. */
   readonly measureIndex: number;
+  /** How many bars it runs over, from that one: one where not said - a phrase of a dictation runs over two or four. */
+  readonly bars?: number;
+  /** Whether it is heard after the key's cadence, so a melody is heard in its key, as a dictation is begun. */
+  readonly keyFirst?: boolean;
   /** What it asks, part by part - an interval, or a chord's quality and its position. */
   readonly parts: readonly NamingPart[];
 }

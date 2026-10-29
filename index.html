@@ -175,6 +175,13 @@
               </svg>
               <span>Hear again</span>
             </button>
+            <!--
+              Beside the question and not after what was picked: a phrase of a
+              dictation picks fifteen notes, and the button at the end of them
+              was below the bottom of the strip.
+            -->
+            <button id="score-answers-next" type="button" class="button button--primary score__answers-next"
+              data-next="true" hidden>Next</button>
           </div>
           <div id="score-answers-parts" class="score__answers-parts"></div>
         </div>
@@ -567,7 +574,7 @@
             <section class="solfege__section" aria-labelledby="solfege-dictation-name">
               <strong id="solfege-dictation-name" class="solfege__name">Melodic dictation</strong>
               <p class="solfege__what">Four phrases, each after its key's cadence: hear one, and play it
-                back on the keys from the note given.</p>
+                back on the keys from the note given, or tap each note's degree in the key.</p>
               <div class="solfege__asks">
                 <select id="solfege-dictation-key" class="solfege__ask" aria-label="Key"
                   title="The key, by its sharps or flats"></select>
@@ -577,6 +584,7 @@
                   title="How long each phrase is"></select>
                 <select id="solfege-dictation-rhythm" class="solfege__ask" aria-label="Rhythm"
                   title="Crotchets only, or some beats in two quavers"></select>
+                <button id="solfege-dictation-hear-name" type="button" class="button">Hear &amp; name</button>
                 <button id="solfege-dictation-open" type="button" class="button button--primary">Hear &amp; play back</button>
               </div>
             </section>

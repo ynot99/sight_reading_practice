@@ -40,7 +40,14 @@ import { theCadencesNamed } from '../domain/solfege/cadencesNamed.js';
 import { RHYTHM_LEVELS, theRhythmicDictation } from '../domain/solfege/rhythmicDictation.js';
 import { PROGRESSION_NAMES, theProgression, theProgressionNamed } from '../domain/solfege/progressions.js';
 import { TRANSPOSITION_NAMES, TRANSPOSITIONS, theTransposition } from '../domain/solfege/transposition.js';
-import { DICTATION_LENGTHS, DICTATION_RHYTHMS, theMelodicDictation, type DictationRhythm } from '../domain/solfege/melodicDictation.js';
+import {
+  DICTATION_LENGTHS,
+  DICTATION_RHYTHMS,
+  theMelodicDictation,
+  theMelodicDictationNamed,
+  type DictationAsked,
+  type DictationRhythm,
+} from '../domain/solfege/melodicDictation.js';
 import { barsOfThePicture, tiersOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
 import { FREE_PLAY_MODE_ID } from '../application/modes/FreePlayFrame.js';
@@ -2849,6 +2856,7 @@ export class AppView {
     scoreHearAgain: HTMLButtonElement;
     scoreAnswers: HTMLElement;
     scoreAnswersStreak: HTMLOutputElement;
+    scoreAnswersNext: HTMLButtonElement;
     scoreAnswersAsks: HTMLElement;
     scoreAnswersParts: HTMLElement;
     solfegeIntervalsNameThem: HTMLButtonElement;
@@ -2882,6 +2890,7 @@ export class AppView {
     solfegeDictationBars: HTMLSelectElement;
     solfegeDictationRhythm: HTMLSelectElement;
     solfegeDictationOpen: HTMLButtonElement;
+    solfegeDictationName: HTMLButtonElement;
     sketchesList: HTMLElement;
     sketchesEmpty: HTMLElement;
     sketchesNew: HTMLButtonElement;
@@ -3312,6 +3321,7 @@ export class AppView {
       scoreHearAgain: requireElement(doc, 'score-hear-again'),
       scoreAnswers: requireElement(doc, 'score-answers'),
       scoreAnswersStreak: requireElement(doc, 'score-answers-streak'),
+      scoreAnswersNext: requireElement(doc, 'score-answers-next'),
       scoreAnswersAsks: requireElement(doc, 'score-answers-asks'),
       scoreAnswersParts: requireElement(doc, 'score-answers-parts'),
       solfegeIntervalsNameThem: requireElement(doc, 'solfege-intervals-name-them'),
@@ -3345,6 +3355,7 @@ export class AppView {
       solfegeDictationBars: requireElement(doc, 'solfege-dictation-bars'),
       solfegeDictationRhythm: requireElement(doc, 'solfege-dictation-rhythm'),
       solfegeDictationOpen: requireElement(doc, 'solfege-dictation-open'),
+      solfegeDictationName: requireElement(doc, 'solfege-dictation-hear-name'),
       sketchesList: requireElement(doc, 'sketches-list'),
       sketchesEmpty: requireElement(doc, 'sketches-empty'),
       sketchesNew: requireElement(doc, 'sketches-new'),
@@ -10467,7 +10478,11 @@ export class AppView {
       this.showTheDictationAsked();
     });
     this.opensFromTheSolfegeList(this.el.solfegeDictationOpen, async () => {
-      await this.openTheMelodicDictation();
+      await this.openTheMelodicDictation(theMelodicDictation);
+      return true;
+    });
+    this.opensFromTheSolfegeList(this.el.solfegeDictationName, async () => {
+      await this.openTheMelodicDictation(theMelodicDictationNamed);
       return true;
     });
     this.listen(this.el.scoreHearAgain, 'click', () => {
@@ -11883,15 +11898,15 @@ export class AppView {
     list.value = String(fifths);
   }
 
-  /** Opens a round of melodic dictation as the sheet asks for it - another each time. */
-  private async openTheMelodicDictation(): Promise<void> {
+  /** Opens a round of melodic dictation as the sheet asks for it - played back or named, another each time. */
+  private async openTheMelodicDictation(round: (asked: DictationAsked) => Exercise): Promise<void> {
     const asked = {
       fifths: Number(this.el.solfegeDictationKey.value),
       minor: this.el.solfegeDictationMode.value === 'minor',
       bars: DICTATION_LENGTHS.find((bars) => String(bars) === this.el.solfegeDictationBars.value) ?? 2,
       rhythm: DICTATION_RHYTHMS.find((rhythm) => rhythm === this.el.solfegeDictationRhythm.value) ?? 'crotchets',
     };
-    await this.openTheRound(() => theMelodicDictation({ ...asked, seed: aFreshSeed() }));
+    await this.openTheRound(() => round({ ...asked, seed: aFreshSeed() }));
   }
 
   /**
@@ -12024,6 +12039,7 @@ export class AppView {
     this.el.scoreAnswers.hidden = round === null && playedBack === undefined;
     this.sayHowManyInARow();
     // The room the answers take at the top of the page, kept clear of the music.
+    this.el.scoreAnswersNext.hidden = true;
     if (round === null) {
       // Music played back is answered on the keys: the place says only how.
       if (playedBack === undefined) {
@@ -12104,15 +12120,8 @@ export class AppView {
       }
     });
     // Wrong, it waits to be moved on from: there is the right answer to see, and to hear.
-    if (answered !== null && !answered.right) {
-      const next = this.doc.createElement('button');
-      next.type = 'button';
-      next.className = 'button button--primary';
-      next.dataset['next'] = 'true';
-      next.textContent = 'Next';
-      given.append(next);
-    }
-    const rows: HTMLElement[] = given.childElementCount === 0 ? [] : [given];
+    this.el.scoreAnswersNext.hidden = answered === null || answered.right;
+    const rows: HTMLElement[] = [];
     if (part !== undefined) {
       const row = this.doc.createElement('div');
       row.className = 'score__answers-row';
@@ -12130,6 +12139,11 @@ export class AppView {
         }),
       );
       rows.push(row);
+    }
+    // The choices first, under the question, and what was picked under them:
+    // a phrase picks a note at a time, and its row grows past the strip.
+    if (given.childElementCount > 0) {
+      rows.push(given);
     }
     this.el.scoreAnswersParts.replaceChildren(...rows);
   }

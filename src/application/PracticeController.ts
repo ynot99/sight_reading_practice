@@ -3936,11 +3936,17 @@ export class PracticeController {
    */
   hearTheBarNamed(measureIndex: number): void {
     const steps = this.theStepsNamedByEar(measureIndex);
-    if (steps.length > 0) {
+    const exercise = this.exercise;
+    if (steps.length > 0 && exercise !== null) {
       const nowMs = this.deps.clock.now();
+      // After the key's cadence, where the question is heard in its key.
+      const keyFirst = exercise.byName?.find((question) => question.measureIndex === measureIndex)?.keyFirst === true;
       this.silenceWhatWasNamed(nowMs);
-      this.namedHeardWith = steps.flatMap((index) => (this.timeline?.at(index)?.notes ?? []).map((note) => note.midi));
-      this.soundTheSteps(steps, false, nowMs);
+      this.namedHeardWith = [
+        ...(keyFirst ? theCadenceOfTheKey(exercise.key).flat() : []),
+        ...steps.flatMap((index) => (this.timeline?.at(index)?.notes ?? []).map((note) => note.midi)),
+      ];
+      this.soundTheSteps(steps, keyFirst, nowMs);
     }
   }
 
@@ -4002,29 +4008,37 @@ export class PracticeController {
   }
 
   /**
-   * Plays a bar asked to be named as it would sound with an answer given to
-   * one part of it, every other part at its own - read or heard, so the
-   * answer picked can be heard beside the right one. Each moment for as long
-   * as half a bar of the round, the pace its questions are heard at.
+   * Plays a question asked to be named as it would sound with an answer
+   * given to one part of it, every other part at its own - read or heard, so
+   * the answer picked can be heard beside the right one. Each moment as the
+   * note of the question it stands for is written - when it falls and how
+   * long it sounds - so a phrase is heard in its own rhythm; where they are
+   * not one moment to a note, each for half a bar of the round.
    */
   hearTheAnswerAs(measureIndex: number, part: number, choice: string): void {
     const exercise = this.exercise;
+    const timeline = this.timeline;
     const moments = exercise?.byName?.find((question) => question.measureIndex === measureIndex)?.parts[part]?.heardAs?.[choice];
-    const from = this.timeline?.steps.find((step) => step.measureIndex === measureIndex)?.onsetTicks;
-    if (exercise === null || moments === undefined || from === undefined) {
+    const steps = this.theStepsOfTheQuestion(measureIndex).map((index) => timeline?.at(index) ?? null);
+    const first = steps[0];
+    if (exercise === null || moments === undefined || first === null || first === undefined) {
       return;
     }
-    const lastsMs = spanMs(exercise, from, from + Duration.HALF.ticks);
-    let atMs = this.deps.clock.now();
-    this.silenceWhatWasNamed(atMs);
+    const halfABarMs = spanMs(exercise, first.onsetTicks, first.onsetTicks + Duration.HALF.ticks);
+    const nowMs = this.deps.clock.now();
+    this.silenceWhatWasNamed(nowMs);
     this.namedHeardWith = moments.flat();
-    for (const keys of moments) {
+    moments.forEach((keys, at) => {
+      const step = moments.length === steps.length ? steps[at] : null;
+      const note = step?.notes[0];
+      const atMs = nowMs + (step === null || step === undefined ? at * halfABarMs : spanMs(exercise, first.onsetTicks, step.onsetTicks));
+      const lastsMs =
+        step === null || step === undefined || note === undefined ? halfABarMs : spanMs(exercise, step.onsetTicks, step.onsetTicks + soundsFor(note));
       for (const key of keys) {
         this.deps.instrument.play(key, QUESTION_VELOCITY, atMs);
         this.deps.instrument.stop(key, atMs + lastsMs);
       }
-      atMs += lastsMs;
-    }
+    });
   }
 
   /** Shows a bar named by ear on the page, now that it has been answered. */
@@ -4034,13 +4048,21 @@ export class PracticeController {
     }
   }
 
-  /** The steps of a bar asked to be named by ear that sound: none where it is read. */
+  /** The steps of a question asked to be named by ear that sound: none where it is read. */
   private theStepsNamedByEar(measureIndex: number): readonly number[] {
-    const exercise = this.exercise;
-    const asked = exercise?.namedByEar === true && exercise.byName?.some((question) => question.measureIndex === measureIndex) === true;
-    return asked
-      ? (this.timeline?.steps ?? []).filter((step) => step.measureIndex === measureIndex && step.notes.length > 0).map((step) => step.index)
-      : [];
+    return this.exercise?.namedByEar === true ? this.theStepsOfTheQuestion(measureIndex) : [];
+  }
+
+  /** The steps that sound of a question to be named, over every bar it runs over: none where no question begins there. */
+  private theStepsOfTheQuestion(measureIndex: number): readonly number[] {
+    const question = this.exercise?.byName?.find((each) => each.measureIndex === measureIndex);
+    if (question === undefined) {
+      return [];
+    }
+    const until = measureIndex + (question.bars ?? 1);
+    return (this.timeline?.steps ?? [])
+      .filter((step) => step.measureIndex >= measureIndex && step.measureIndex < until && step.notes.length > 0)
+      .map((step) => step.index);
   }
 
   /**

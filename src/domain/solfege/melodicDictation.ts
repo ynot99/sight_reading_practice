@@ -1,5 +1,5 @@
 import { Duration } from '../model/Duration.js';
-import type { Exercise } from '../model/Exercise.js';
+import type { Exercise, NamingPart } from '../model/Exercise.js';
 import { noteEntry } from '../model/Exercise.js';
 import { KeySignature } from '../model/KeySignature.js';
 import { Pitch } from '../model/Pitch.js';
@@ -70,13 +70,79 @@ const WIDEST_LEAP = 5;
  * The same request is the same round; another seed, another.
  */
 export function theMelodicDictation(asked: DictationAsked): Exercise {
+  const { exercise, phrases } = theDictationsWritten(asked);
+  return {
+    ...exercise,
+    playedBack: { questions: phrases.map((_, at) => ({ from: at * asked.bars, until: (at + 1) * asked.bars })), heard: true, keyFirst: true, inTime: false },
+  };
+}
+
+/** What a round of dictations named by the degrees of their notes is filed as. */
+export const MELODIC_DICTATION_NAMED_ID = 'solfege.melodic-dictation-named';
+
+/**
+ * The degrees a note of a dictation may be named by: of the scale the
+ * dictation is written in - in minor, harmonic minor's, its seventh raised -
+ * so a note is named by where it stands in the key, in any octave.
+ */
+export const DEGREES = ['1', '2', '3', '4', '5', '6', '7'] as const;
+
+/** The degree of the scale a step from the tonic is, in any octave. */
+function theDegreeOf(step: number): (typeof DEGREES)[number] {
+  return DEGREES[((step % OCTAVE) + OCTAVE) % OCTAVE] ?? '1';
+}
+
+/**
+ * A round of melodic dictations named by ear: the phrases of a round
+ * played back, each heard after the key's cadence and kept off the page
+ * until it is answered (see `Exercise.namedByEar`), each of its notes named
+ * in turn by its degree in the key - as a dictation is first taken down by
+ * the degrees of the scale. Each degree offered sounds as the phrase would
+ * with that note on it, in the octave nearest the one written.
+ */
+export function theMelodicDictationNamed(asked: DictationAsked): Exercise {
+  const { exercise, phrases, key, tonic } = theDictationsWritten(asked);
+  const keyOf = (step: number): number => aStepOfTheKey(key, tonic, step, asked.minor).midi;
+  return {
+    ...exercise,
+    id: `${MELODIC_DICTATION_NAMED_ID}:${String(asked.seed)}`,
+    title: 'Melodic dictation by degrees',
+    metadata: { generatorId: MELODIC_DICTATION_NAMED_ID, seed: asked.seed },
+    namedByEar: true,
+    byName: phrases.map((phrase, at) => ({
+      measureIndex: at * asked.bars,
+      bars: asked.bars,
+      keyFirst: true,
+      parts: phrase.map(({ step }, which): NamingPart => ({
+        asks: `Note ${String(which + 1)}`,
+        choices: [...DEGREES],
+        answer: theDegreeOf(step),
+        heardAs: Object.fromEntries(
+          DEGREES.map((degree, d) => {
+            // The same degree nearest the note written: down, here or up an octave.
+            const here = step - (((step % OCTAVE) + OCTAVE) % OCTAVE) + d;
+            const nearest = [here - OCTAVE, here, here + OCTAVE].reduce((best, each) => (Math.abs(each - step) < Math.abs(best - step) ? each : best));
+            return [degree, phrase.map((note, other) => [other === which ? keyOf(nearest) : keyOf(note.step)])];
+          }),
+        ),
+      })),
+    })),
+  };
+}
+
+/** The phrases of a round of dictations and the round written around them, as both kinds of round have it. */
+function theDictationsWritten(asked: DictationAsked): {
+  readonly exercise: Exercise;
+  readonly phrases: readonly NoteOfAPhrase[][];
+  readonly key: KeySignature;
+  readonly tonic: number;
+} {
   const rng = createRng(asked.seed);
   const key = asked.minor ? KeySignature.minor(asked.fifths) : KeySignature.major(asked.fifths);
   const tonic = key.tonicIndexAtOrAbove(Pitch.parse('C4').diatonicIndex);
-  const entries = Array.from({ length: DICTATIONS_IN_A_ROUND }, () =>
-    aPhrase(rng, asked).map(({ step, length }) => noteEntry(aStepOfTheKey(key, tonic, step, asked.minor), length)),
-  );
-  return {
+  const phrases = Array.from({ length: DICTATIONS_IN_A_ROUND }, () => aPhrase(rng, asked));
+  const entries = phrases.map((phrase) => phrase.map(({ step, length }) => noteEntry(aStepOfTheKey(key, tonic, step, asked.minor), length)));
+  const exercise: Exercise = {
     id: `${MELODIC_DICTATION_ID}:${String(asked.seed)}`,
     title: 'Melodic dictation',
     key,
@@ -94,8 +160,8 @@ export function theMelodicDictation(asked: DictationAsked): Exercise {
     barLabels: [],
     staves: [{ staffNumber: 1, voice: 1, clef: 'treble', clefChanges: [], measures: entries.flatMap((phrase) => intoBars(phrase, TIME)) }],
     metadata: { generatorId: MELODIC_DICTATION_ID, seed: asked.seed },
-    playedBack: { questions: entries.map((_, at) => ({ from: at * asked.bars, until: (at + 1) * asked.bars })), heard: true, keyFirst: true, inTime: false },
   };
+  return { exercise, phrases, key, tonic };
 }
 
 /** A note of a phrase: its step from the tonic, and how long it lasts. */

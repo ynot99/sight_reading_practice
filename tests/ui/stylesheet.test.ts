@@ -2575,6 +2575,9 @@ describe('searching the settings', () => {
     expect(body('.score__answers-head .score__answers-asks')).toMatch(/flex\s*:\s*1/);
     expect(body('.score__answers-hear')).toMatch(/flex\s*:\s*none/);
     expect(body('.score__answers-streak')).toMatch(/flex\s*:\s*none/);
+    expect(body('.score__answers-next')).toMatch(/flex\s*:\s*none/);
+    // What was picked and not judged yet, quieter than the choices pressed above it.
+    expect(body('.score__answers-given .solfege__chip:not([data-verdict])')).toMatch(/border-style\s*:\s*dashed/);
     // An answer judged in the verdict's colours, right or wrong.
     expect(body(".score__answers-row .solfege__chip[data-verdict='right']")).toMatch(/var\(--mark-perfect\)/);
     expect(body(".score__answers-row .solfege__chip[data-verdict='wrong']")).toMatch(/var\(--mark-wrong\)/);

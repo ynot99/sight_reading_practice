@@ -16,6 +16,19 @@ const chord: NamingQuestion = {
 };
 
 describe('a naming round', () => {
+  it('counts the questions answered right one after another, and the most of them in the round', () => {
+    // Every way a run of right answers can go: begun, broken, begun again, and longer the second time.
+    const answers = ['M3', 'M3', 'm3', 'M3', 'M3', 'M3'];
+    const round = new NamingRound(answers.map((_, at) => interval(at, 'M3')));
+    const said: string[] = [`${String(round.inARow)}/${String(round.mostInARow)}`];
+    for (const answer of answers) {
+      round.pick(0, answer);
+      said.push(`${String(round.inARow)}/${String(round.mostInARow)}`);
+      round.next();
+    }
+    expect(said).toEqual(['0/0', '1/1', '2/2', '0/2', '1/2', '2/2', '3/3']);
+  });
+
   it('judges a question once every part is picked, right only where every part is, and moves on only from one answered', () => {
     const round = new NamingRound([interval(0, 'M3'), chord, interval(3, 'P5')]);
     expect([round.place, round.asking?.measureIndex, round.answered, round.over]).toEqual([0, 0, null, false]);

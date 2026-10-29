@@ -2564,6 +2564,11 @@ describe('searching the settings', () => {
     expect(roomOf(".score[data-asking='played-back']")).toBeLessThan(roomOf('.score'));
     expect(body('.score__answers')).toMatch(/top\s*:\s*var\(--answers-from\)/);
     expect(body('.score__answers-row')).toMatch(/flex-wrap\s*:\s*wrap/);
+    // The question, the run of right answers and the button that hears it again on one line, the two beside it never squeezed.
+    expect(body('.score__answers-head')).toMatch(/display\s*:\s*flex/);
+    expect(body('.score__answers-head .score__answers-asks')).toMatch(/flex\s*:\s*1/);
+    expect(body('.score__answers-hear')).toMatch(/flex\s*:\s*none/);
+    expect(body('.score__answers-streak')).toMatch(/flex\s*:\s*none/);
     // An answer judged in the verdict's colours, right or wrong.
     expect(body(".score__answers-row .solfege__chip[data-verdict='right']")).toMatch(/var\(--mark-perfect\)/);
     expect(body(".score__answers-row .solfege__chip[data-verdict='wrong']")).toMatch(/var\(--mark-wrong\)/);

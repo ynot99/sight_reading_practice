@@ -89,6 +89,29 @@ export class NamingRound {
     return { right: this.named.filter((each) => each.right).length, of: this.named.length };
   }
 
+  /**
+   * How many of the questions answered last were right one after another,
+   * up to the one answered now: nought just after one that was not.
+   */
+  get inARow(): number {
+    let run = 0;
+    for (const each of this.named) {
+      run = each.right ? run + 1 : 0;
+    }
+    return run;
+  }
+
+  /** The most questions answered right one after another in the round so far. */
+  get mostInARow(): number {
+    let most = 0;
+    let run = 0;
+    for (const each of this.named) {
+      run = each.right ? run + 1 : 0;
+      most = Math.max(most, run);
+    }
+    return most;
+  }
+
   private nothingPicked(): (string | null)[] {
     return (this.questions[this.at]?.parts ?? []).map(() => null);
   }

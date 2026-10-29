@@ -2847,6 +2847,7 @@ export class AppView {
     solfegeIntervalsOpen: HTMLButtonElement;
     scoreHearAgain: HTMLButtonElement;
     scoreAnswers: HTMLElement;
+    scoreAnswersStreak: HTMLOutputElement;
     scoreAnswersAsks: HTMLElement;
     scoreAnswersParts: HTMLElement;
     solfegeIntervalsNameThem: HTMLButtonElement;
@@ -3308,6 +3309,7 @@ export class AppView {
       solfegeIntervalsOpen: requireElement(doc, 'solfege-intervals-open'),
       scoreHearAgain: requireElement(doc, 'score-hear-again'),
       scoreAnswers: requireElement(doc, 'score-answers'),
+      scoreAnswersStreak: requireElement(doc, 'score-answers-streak'),
       scoreAnswersAsks: requireElement(doc, 'score-answers-asks'),
       scoreAnswersParts: requireElement(doc, 'score-answers-parts'),
       solfegeIntervalsNameThem: requireElement(doc, 'solfege-intervals-name-them'),
@@ -10430,6 +10432,11 @@ export class AppView {
       });
     }
     this.listen(this.el.scoreAnswers, 'click', (event) => {
+      // The question heard again, which has a listener of its own: nothing moved on from.
+      const hearing = (event.target as Element | null)?.closest('#score-hear-again');
+      if (hearing !== null && hearing !== undefined) {
+        return;
+      }
       // An answer heard as it would sound: heard, and nothing moved on from.
       const heard = (event.target as Element | null)?.closest<HTMLElement>('[data-hear]');
       const asked = this.naming?.asking;
@@ -11999,6 +12006,7 @@ export class AppView {
     const exercise = this.runtime.controller.openedExercise;
     const playedBack = exercise?.playedBack;
     this.el.scoreAnswers.hidden = round === null && playedBack === undefined;
+    this.sayHowManyInARow(round);
     // The room the answers take at the top of the page, kept clear of the music.
     if (round === null) {
       // Music played back is answered on the keys: the place says only how.
@@ -12146,6 +12154,18 @@ export class AppView {
         }
       }, NEXT_QUESTION_AFTER_MS);
     }
+  }
+
+  /**
+   * How many questions of a round of naming have been answered right one
+   * after another, beside the question - nothing before the first right one -
+   * and at the end, the most there were.
+   */
+  private sayHowManyInARow(round: NamingRound | null): void {
+    const streak = this.el.scoreAnswersStreak;
+    const said = round === null ? '' : round.over ? (round.mostInARow > 1 ? `best ${String(round.mostInARow)} in a row` : '') : round.inARow > 0 ? `${String(round.inARow)} in a row` : '';
+    streak.value = said;
+    streak.hidden = said === '';
   }
 
   /**

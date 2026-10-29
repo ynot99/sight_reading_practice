@@ -5484,16 +5484,17 @@ body[data-playing='true'] .score__modes {
 
 /*
  * Music played back asks nothing on the page but how it is answered: a
- * sentence, so the room kept for it is one line - two on a phone, where
- * it was measured to wrap.
+ * sentence and the button that hears it again, so the room kept for them
+ * is what they were measured to wrap to - two lines on a tablet, three on
+ * a phone.
  */
 .score[data-asking='played-back'] {
-  --answers-room: 44px;
+  --answers-room: 64px;
 }
 
 @media (max-width: 600px) {
   .score[data-asking='played-back'] {
-    --answers-room: 64px;
+    --answers-room: 84px;
   }
 }
 
@@ -5505,6 +5506,47 @@ body[data-playing='true'] .score__modes {
   margin: 0;
   font-size: 14px;
   color: var(--text-muted);
+}
+
+/* The question, the run of right answers and the button to hear it again, on one line where they fit. */
+.score__answers-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.score__answers-head .score__answers-asks {
+  flex: 1;
+  min-width: 0;
+}
+
+.score__answers-streak {
+  flex: none;
+  font-size: 13px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.score__answers-hear {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.score__answers-hear svg {
+  width: 14px;
+  height: 14px;
+  fill: currentcolor;
 }
 
 .score__answers-parts {

@@ -8484,6 +8484,51 @@ describe('AppView', () => {
       expect(heard.mock.calls).toEqual([[0], [1]]);
     });
 
+    it('keeps the question heard again and the run of right answers in the strip over the music, moving nothing on', async () => {
+      // A pill in the corner, apart from the question it heard again.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      const heard = vi.spyOn(runtime.controller, 'hearTheBarNamed');
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      element<HTMLButtonElement>('solfege-intervals-hear-name').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise?.title).toBe('Intervals named by ear');
+      });
+      const round = runtime.controller.openedExercise;
+      const pad = element('score-answers');
+      const again = element<HTMLButtonElement>('score-hear-again');
+      const streak = element<HTMLOutputElement>('score-answers-streak');
+      const answer = (at: number): void => {
+        pad.querySelector<HTMLButtonElement>(`[data-choice="${round?.byName?.[at]?.parts[0]?.answer ?? ''}"]`)?.click();
+      };
+      const wrong = (at: number): void => {
+        pad.querySelector<HTMLButtonElement>(`[data-choice]:not([data-choice="${round?.byName?.[at]?.parts[0]?.answer ?? ''}"])`)?.click();
+      };
+      const shown = (): string => (streak.hidden ? '' : streak.value);
+      expect([pad.contains(again), again.hidden, shown()]).toEqual([true, false, '']);
+
+      answer(0);
+      // Heard again while it shows how it went: heard, and still that question.
+      again.click();
+      expect([heard.mock.calls.at(-1), element('score-answers-asks').textContent, shown()]).toEqual([[0], '1 of 10 · bar 1', '1 in a row']);
+      pad.click();
+      answer(1);
+      pad.click();
+      const two = shown();
+      wrong(2);
+      const broken = shown();
+      pad.querySelector<HTMLButtonElement>('[data-next]')?.click();
+      for (let at = 3; at < 9; at += 1) {
+        answer(at);
+        pad.click();
+      }
+      // The last wrong: the most there were, not the run it ended on.
+      wrong(9);
+      pad.querySelector<HTMLButtonElement>('[data-next]')?.click();
+      expect([two, broken, shown()]).toEqual(['2 in a row', '', 'best 6 in a row']);
+    });
+
     it('offers another round at the end of a round of naming: what was asked, other notes, asked from the first', async () => {
       // It ended with how it went and nowhere to go but back to the list.
       const { view, runtime } = createRig();

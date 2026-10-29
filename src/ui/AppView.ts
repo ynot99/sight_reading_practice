@@ -2771,6 +2771,7 @@ export class AppView {
     focusHealth: HTMLElement;
     focusPlayFrame: HTMLElement;
     focusHands: HTMLButtonElement;
+    focusPassage: HTMLElement;
     focusMetronome: HTMLButtonElement;
     freeBeatsFewer: HTMLButtonElement;
     freeBeatsMore: HTMLButtonElement;
@@ -3237,6 +3238,7 @@ export class AppView {
       focusHealth: requireElement(doc, 'focus-health'),
       focusPlayFrame: requireElement(doc, 'focus-play-frame'),
       focusHands: requireElement(doc, 'focus-hands'),
+      focusPassage: requireElement(doc, 'focus-passage'),
       focusMetronome: requireElement(doc, 'focus-metronome'),
       freeBeatsFewer: requireElement(doc, 'free-beats-fewer'),
       freeBeatsMore: requireElement(doc, 'free-beats-more'),
@@ -4747,7 +4749,7 @@ export class AppView {
   private placeNextMark(measureIndex: number): void {
     const controller = this.runtime.controller;
     const status = controller.session?.status;
-    if (status === 'running' || status === 'counting-in' || status === 'paused') {
+    if (status === 'running' || status === 'counting-in' || status === 'paused' || controller.isAnsweredByName) {
       return;
     }
     const exercise = controller.currentExercise;
@@ -4826,7 +4828,12 @@ export class AppView {
   private showPassageMarkers(): void {
     const bars = this.runtime.controller.currentExercise;
     this.showHandSwitches();
-    if (bars === null || !this.passageMarkersWanted) {
+    // Music answered by name is not played, so it has no passage to play and
+    // no hand to play it with: the drawer says neither, nor does the page.
+    const named = this.runtime.controller.isAnsweredByName;
+    this.el.focusPassage.hidden = named;
+    this.el.focusHands.hidden = named;
+    if (bars === null || !this.passageMarkersWanted || named) {
       this.runtime.renderer.hidePassage();
       this.runtime.renderer.showStart(null);
       return;
@@ -7913,7 +7920,9 @@ export class AppView {
    */
   private showHandSwitches(): void {
     this.runtime.renderer.showHands(
-      this.passageMarkersWanted ? handsPlaying(this.runtime.controller.settings.handStaff) : [],
+      this.passageMarkersWanted && !this.runtime.controller.isAnsweredByName
+        ? handsPlaying(this.runtime.controller.settings.handStaff)
+        : [],
     );
   }
 

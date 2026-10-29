@@ -3686,7 +3686,9 @@ export class PracticeController {
    * passage comes to. The view knows the setting; this knows the music.
    */
   private applyDimming(): void {
-    if (!this.currentSettings.dimUnplayed || this.timeline === null) {
+    // Music answered by name has no run to ask for anything, so nothing of
+    // it is the other hand's or outside the passage.
+    if (!this.currentSettings.dimUnplayed || this.timeline === null || this.isAnsweredByName) {
       this.deps.fade.dimUnplayed(null);
       return;
     }

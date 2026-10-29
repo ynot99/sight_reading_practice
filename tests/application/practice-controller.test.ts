@@ -4,7 +4,7 @@ import { CHORDS_IN_A_ROUND, theChordsNamed } from '../../src/domain/solfege/chor
 import { theTransposition } from '../../src/domain/solfege/transposition.js';
 import { theMelodicDictation, theMelodicDictationNamed } from '../../src/domain/solfege/melodicDictation.js';
 import { theCadenceOfTheKey } from '../../src/domain/solfege/cadence.js';
-import { QUESTIONS_IN_A_ROUND, theIntervalsByEar, theIntervalsNamed } from '../../src/domain/solfege/intervalsByEar.js';
+import { QUESTIONS_IN_A_ROUND, theIntervalsByEar, theIntervalsNamed, theIntervalsNamedByEar } from '../../src/domain/solfege/intervalsByEar.js';
 import {
   PracticeController,
   type PracticeControllerDependencies,
@@ -5538,6 +5538,20 @@ describe('the last run that reached an end', () => {
 
       controller.updateSettings({ rangeFromBar: 2, rangeToBar: null });
       expect(renderer.reading?.from).toBeGreaterThan(whole?.from ?? 0);
+    });
+
+    it('dims nothing of music answered by name, whatever the hand and the passage say', async () => {
+      // Nothing is played, so nothing is the other hand's or outside the
+      // passage - and a note kept off the page is not to be shown dimmed.
+      const { controller, renderer } = createController(false, undefined, { handStaff: 2 });
+      await controller.openScore(theIntervalsNamedByEar({ semitones: [3, 7], way: 'up', seed: 4 }));
+      expect(renderer.reading).toBeNull();
+      controller.updateSettings({ handStaff: 1, rangeFromBar: 2, rangeToBar: 3 });
+      expect(renderer.reading).toBeNull();
+      // And music that is played is dimmed again by the passage.
+      await controller.openScore(theIntervalsByEar({ semitones: [3, 7], way: 'up', seed: 4 }));
+      controller.updateSettings({ rangeFromBar: 2, rangeToBar: 3 });
+      expect(renderer.reading?.from).toBeGreaterThan(0);
     });
 
     it('says nothing at all when the reader has turned it off', async () => {

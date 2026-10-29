@@ -2555,6 +2555,8 @@ describe('searching the settings', () => {
     // An answer to be found by ear is off the page at once, never faded out where it could be glimpsed.
     expect(body('.note--concealed')).toMatch(/opacity\s*:\s*0\s*;/);
     expect(body('.note--concealed')).toMatch(/transition\s*:\s*none/);
+    // And it outranks the dimming, written after it: one class each, so the later wins.
+    expect(CSS.indexOf('\n.note--concealed {')).toBeGreaterThan(CSS.indexOf('\n.note--unplayed {'));
     // The answers of a naming exercise stand at the top of the page, the music moved down under them, and wrap.
     expect(body('.score__answers')).toMatch(/position\s*:\s*absolute/);
     expect(body('.score__answers')).toMatch(/max-height\s*:\s*var\(--answers-room\)/);

@@ -7403,15 +7403,6 @@ body[data-repeats='hidden'] .repeat-mark {
 }
 
 /*
- * A note to be found by ear, kept off the page until it is: gone at once,
- * so it is never glimpsed, and drawn in as it is found.
- */
-.note--concealed {
-  opacity: 0;
-  transition: none;
-}
-
-/*
  * Music the run will not ask for: the other hand, the bars outside the
  * passage.
  *
@@ -7423,6 +7414,19 @@ body[data-repeats='hidden'] .repeat-mark {
  */
 .note--unplayed {
   opacity: 0.32;
+}
+
+/*
+ * A note to be found by ear, kept off the page until it is: gone at once,
+ * so it is never glimpsed, and drawn in as it is found.
+ *
+ * After the dimming, which it outranks: a note kept off the page in the
+ * other hand or outside the passage is still to be found, and dimmed it
+ * would be read off the page at a third.
+ */
+.note--concealed {
+  opacity: 0;
+  transition: none;
 }
 
 /* ---- What you played --------------------------------------------------- */

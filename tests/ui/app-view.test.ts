@@ -8529,6 +8529,31 @@ describe('AppView', () => {
       expect(heard.mock.calls).toEqual([[0], [1]]);
     });
 
+    it('offers no passage and no hand for music answered by name, in the drawer or on the page', async () => {
+      // Nothing is played there: a passage would only dim what is still to be named.
+      const { view, runtime, renderer } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      element<HTMLButtonElement>('solfege-intervals-hear-name').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise?.title).toBe('Intervals named by ear');
+      });
+      const offered = (): unknown[] => [element('focus-passage').hidden, element('focus-hands').hidden, renderer.shownPassage, renderer.handsPlaying];
+      expect(offered()).toEqual([true, true, null, []]);
+      // Nor a bar held to begin a passage there.
+      renderer.holdBar(1);
+      expect([runtime.controller.settings.rangeFromBar, runtime.controller.beginsAt, offered()]).toEqual([null, 0, [true, true, null, []]]);
+      // Music that is played offers both again.
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      element<HTMLButtonElement>('solfege-intervals-open').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise?.title).toBe('Intervals played back');
+      });
+      expect([element('focus-passage').hidden, element('focus-hands').hidden, renderer.shownPassage !== null, renderer.handsPlaying.length > 0]).toEqual([false, false, true, true]);
+    });
+
     it('keeps the question heard again and the run of right answers in the strip over the music, moving nothing on', async () => {
       // A pill in the corner, apart from the question it heard again.
       const { view, runtime } = createRig();

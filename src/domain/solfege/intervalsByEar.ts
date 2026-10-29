@@ -110,6 +110,25 @@ export function theIntervalsNamed(asked: IntervalsAsked): Exercise {
   };
 }
 
+/** What a round of intervals heard and named is filed as. */
+export const INTERVALS_NAMED_BY_EAR_ID = 'solfege.intervals-named-by-ear';
+
+/**
+ * A round of intervals to be named by ear: the bars of a round named, heard
+ * and kept off the page until each is answered (see `Exercise.namedByEar`),
+ * as an interval is first named by ear - its name tapped, which is what it
+ * is whichever note it begins on.
+ */
+export function theIntervalsNamedByEar(asked: IntervalsAsked): Exercise {
+  return {
+    ...theIntervalsNamed(asked),
+    id: `${INTERVALS_NAMED_BY_EAR_ID}:${String(asked.seed)}`,
+    title: 'Intervals named by ear',
+    metadata: { generatorId: INTERVALS_NAMED_BY_EAR_ID, seed: asked.seed },
+    namedByEar: true,
+  };
+}
+
 type Interval = (typeof INTERVALS)[number];
 
 /**

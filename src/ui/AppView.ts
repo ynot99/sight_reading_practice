@@ -31,7 +31,7 @@ import {
   type ScaleName,
 } from '../domain/harmony/scales.js';
 import { SCALE_COMPLEX_SCALES, theScaleComplex, type ScaleOfTheComplex } from '../domain/solfege/scaleComplex.js';
-import { INTERVALS, INTERVAL_WAYS, theIntervalsByEar, theIntervalsNamed, type IntervalWay } from '../domain/solfege/intervalsByEar.js';
+import { INTERVALS, INTERVAL_WAYS, theIntervalsByEar, theIntervalsNamed, theIntervalsNamedByEar, type IntervalWay } from '../domain/solfege/intervalsByEar.js';
 import { NamingRound } from '../application/solfege/NamingRound.js';
 import { CHORDS_ASKS, theChordsNamed } from '../domain/solfege/chordsNamed.js';
 import { KEYS_ASKED, theKeysNamed } from '../domain/solfege/keysNamed.js';
@@ -2850,6 +2850,7 @@ export class AppView {
     scoreAnswersAsks: HTMLElement;
     scoreAnswersParts: HTMLElement;
     solfegeIntervalsNameThem: HTMLButtonElement;
+    solfegeIntervalsHearName: HTMLButtonElement;
     solfegeChordsAsks: HTMLSelectElement;
     solfegeChordsOpen: HTMLButtonElement;
     solfegeChordsByEar: HTMLButtonElement;
@@ -3310,6 +3311,7 @@ export class AppView {
       scoreAnswersAsks: requireElement(doc, 'score-answers-asks'),
       scoreAnswersParts: requireElement(doc, 'score-answers-parts'),
       solfegeIntervalsNameThem: requireElement(doc, 'solfege-intervals-name-them'),
+      solfegeIntervalsHearName: requireElement(doc, 'solfege-intervals-hear-name'),
       solfegeChordsAsks: requireElement(doc, 'solfege-chords-asks'),
       solfegeChordsOpen: requireElement(doc, 'solfege-chords-open'),
       solfegeChordsByEar: requireElement(doc, 'solfege-chords-by-ear'),
@@ -10354,6 +10356,7 @@ export class AppView {
     });
     this.opensFromTheSolfegeList(this.el.solfegeIntervalsOpen, () => this.openTheIntervals('by ear'));
     this.opensFromTheSolfegeList(this.el.solfegeIntervalsNameThem, () => this.openTheIntervals('by name'));
+    this.opensFromTheSolfegeList(this.el.solfegeIntervalsHearName, () => this.openTheIntervals('named by ear'));
     this.listen(this.el.solfegeTransposeMode, 'change', () => {
       this.nameTheKeysOfTheList(this.el.solfegeTransposeKey, this.el.solfegeTransposeMode.value === 'minor' ? 'minor' : 'major');
     });
@@ -11927,6 +11930,7 @@ export class AppView {
     // Named with the words on them, which are what a reader would say to ask for them.
     sayWhetherIdle(this.el.solfegeIntervalsOpen, none ? 'Hear & play back: choose an interval or more to be asked' : 'Hear & play back ten intervals', none);
     sayWhetherIdle(this.el.solfegeIntervalsNameThem, none ? 'Read & name: choose an interval or more to be asked' : 'Read & name ten intervals', none);
+    sayWhetherIdle(this.el.solfegeIntervalsHearName, none ? 'Hear & name: choose an interval or more to be asked' : 'Hear & name ten intervals', none);
   }
 
   /**
@@ -11934,13 +11938,13 @@ export class AppView {
    * played back by ear, or named - another round each time, as a dictation
    * is another each lesson.
    */
-  private async openTheIntervals(how: 'by ear' | 'by name'): Promise<boolean> {
+  private async openTheIntervals(how: 'by ear' | 'by name' | 'named by ear'): Promise<boolean> {
     if (this.intervalsAsked.size === 0) {
       return false;
     }
     const way = INTERVAL_WAYS.find((each) => each === this.el.solfegeIntervalsWay.value) ?? 'up';
     const asked = { semitones: [...this.intervalsAsked], way };
-    const round = how === 'by ear' ? theIntervalsByEar : theIntervalsNamed;
+    const round = how === 'by ear' ? theIntervalsByEar : how === 'by name' ? theIntervalsNamed : theIntervalsNamedByEar;
     await this.openTheRound(() => round({ ...asked, seed: aFreshSeed() }));
     return true;
   }

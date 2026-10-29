@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { validateExercise, type Exercise } from '../../src/domain/model/Exercise.js';
 import { Pitch } from '../../src/domain/model/Pitch.js';
-import { INTERVALS, INTERVAL_WAYS, QUESTIONS_IN_A_ROUND, theIntervalsByEar, theIntervalsNamed } from '../../src/domain/solfege/intervalsByEar.js';
+import { INTERVALS, INTERVAL_WAYS, QUESTIONS_IN_A_ROUND, theIntervalsByEar, theIntervalsNamed, theIntervalsNamedByEar } from '../../src/domain/solfege/intervalsByEar.js';
 
 /** Each bar's given note and its answer, as pitches. */
 function questions(exercise: Exercise): { readonly given: Pitch; readonly answer: readonly Pitch[]; readonly lengths: readonly number[] }[] {
@@ -102,6 +102,23 @@ describe('intervals by name', () => {
           }
         });
       }
+    }
+    // Heard rather than read: the same round, named by ear, filed apart.
+    for (const way of INTERVAL_WAYS) {
+      const asked = { semitones: [12, 3, 7], way, seed: 5 };
+      const read = theIntervalsNamed(asked);
+      const heard = theIntervalsNamedByEar(asked);
+      expect(() => {
+        validateExercise(heard);
+      }).not.toThrow();
+      expect([heard.title, heard.namedByEar, read.namedByEar, heard.staves, heard.byName, heard.metadata.generatorId === read.metadata.generatorId]).toEqual([
+        'Intervals named by ear',
+        true,
+        undefined,
+        read.staves,
+        read.byName,
+        false,
+      ]);
     }
     // Every one offered where none is chosen.
     expect(theIntervalsNamed({ semitones: [], way: 'up', seed: 1 }).byName?.[0]?.parts[0]?.choices).toEqual(INTERVALS.map((each) => each.short));

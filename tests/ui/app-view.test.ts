@@ -8458,9 +8458,30 @@ describe('AppView', () => {
       expect(said.filter((each) => each.shown !== each.how || !each.named)).toEqual([]);
       // Every way there is, so none of them was left out of the sweep.
       expect([said.length, [...new Set(said.map((each) => each.how))].sort()]).toEqual([
-        14,
+        15,
         ['Hear & name', 'Hear & play back', 'Hear & tap back', 'Open', 'Read & name'],
       ]);
+    });
+
+    it('asks the intervals chosen to be named by ear: each heard as it is asked, kept off the page until answered', async () => {
+      const { view, runtime, renderer } = createRig();
+      await view.initialize();
+      const heard = vi.spyOn(runtime.controller, 'hearTheBarNamed');
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      element<HTMLButtonElement>('solfege-intervals-hear-name').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise?.title).toBe('Intervals named by ear');
+      });
+      const round = runtime.controller.openedExercise;
+      const pad = element('score-answers');
+      const chips = (): string[] => [...pad.querySelectorAll<HTMLButtonElement>('[data-choice]')].map((chip) => chip.textContent);
+      // The intervals chosen offered, the first heard at once, every note of the round kept off the page.
+      expect([chips(), heard.mock.calls, renderer.concealed.size]).toEqual([['m3', 'M3', 'P4', 'P5', 'P8'], [[0]], (runtime.controller.currentTimeline?.steps ?? []).filter((step) => step.notes.length > 0).length]);
+      // Answered, the bar is shown and the next heard.
+      pad.querySelector<HTMLButtonElement>(`[data-choice="${round?.byName?.[0]?.parts[0]?.answer ?? ''}"]`)?.click();
+      pad.click();
+      expect(heard.mock.calls).toEqual([[0], [1]]);
     });
 
     it('offers another round at the end of a round of naming: what was asked, other notes, asked from the first', async () => {

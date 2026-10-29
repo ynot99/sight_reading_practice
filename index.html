@@ -448,12 +448,18 @@
             for chosen beside it, and opened as a score is, to be played in
             any of the ways a score is.
           -->
+          <!--
+            Every exercise says in one line what it is and how it is answered -
+            played from the page, played back on the keys, or named with the
+            buttons over the music - and where there are two ways, each button
+            says what it does. "By ear" was both of the last two, and nothing
+            said which.
+          -->
           <div id="solfege" class="solfege" hidden>
             <section class="solfege__section" aria-labelledby="solfege-complex-name">
               <strong id="solfege-complex-name" class="solfege__name">Scale complex</strong>
-              <p class="solfege__what">A key under the fingers: the scale two octaves up and down,
-                the arpeggio of its tonic, the tonic chord in its three positions, and the cadence
-                tonic, subdominant, dominant, tonic. Both hands.</p>
+              <p class="solfege__what">A key under the fingers - scale, arpeggio, tonic chord in
+                three positions, cadence - played from the page, both hands.</p>
               <div class="solfege__asks">
                 <select id="solfege-complex-key" class="solfege__ask" aria-label="Key"
                   title="The key, by its sharps or flats"></select>
@@ -464,8 +470,8 @@
             </section>
             <section class="solfege__section" aria-labelledby="solfege-progressions-name">
               <strong id="solfege-progressions-name" class="solfege__name">Progressions</strong>
-              <p class="solfege__what">A progression to play, three voices over the root, each chord
-                moving as little as it can to the next - in one key, or through every key round the circle.</p>
+              <p class="solfege__what">A progression, each chord moving as little as it can to the next,
+                in one key or round the circle - played from the page.</p>
               <div class="solfege__asks">
                 <select id="solfege-progressions-which" class="solfege__ask" aria-label="Progression"
                   title="Which progression"></select>
@@ -480,8 +486,8 @@
             </section>
             <section class="solfege__section" aria-labelledby="solfege-transpose-name">
               <strong id="solfege-transpose-name" class="solfege__name">Transposition</strong>
-              <p class="solfege__what">Three short phrases, each played as written and then in another
-                key, its notes found from the phrase before and shown as each is found.</p>
+              <p class="solfege__what">Three phrases, each played as written and then in another key
+                on the keys - the new key's notes show as you find them.</p>
               <div class="solfege__asks">
                 <select id="solfege-transpose-key" class="solfege__ask" aria-label="Key"
                   title="The key the phrases are written in"></select>
@@ -494,69 +500,68 @@
             </section>
             <section class="solfege__section" aria-labelledby="solfege-intervals-name">
               <strong id="solfege-intervals-name" class="solfege__name">Intervals</strong>
-              <p class="solfege__what">Ten intervals, by ear - each heard, then played back from
-                the note given and shown as it is found - or by name, each read and named.</p>
+              <p class="solfege__what">Ten intervals: hear one and play it back on the keys from the
+                note given, or read one and tap its name.</p>
               <div id="solfege-intervals-which" class="solfege__chips" role="group"
                 aria-label="Which intervals"></div>
               <div class="solfege__asks">
                 <select id="solfege-intervals-way" class="solfege__ask" aria-label="How they are heard"
                   title="The second note above the first, below it, or both at once"></select>
-                <button id="solfege-intervals-name-them" type="button" class="button">By name</button>
-                <button id="solfege-intervals-open" type="button" class="button button--primary">By ear</button>
+                <button id="solfege-intervals-name-them" type="button" class="button">Read &amp; name</button>
+                <button id="solfege-intervals-open" type="button" class="button button--primary">Hear &amp; play back</button>
               </div>
             </section>
             <section class="solfege__section" aria-labelledby="solfege-chords-name">
               <strong id="solfege-chords-name" class="solfege__name">Chords</strong>
-              <p class="solfege__what">Ten chords to name, read or heard: major, minor, diminished or
-                augmented - and, where asked, whether the root, the third or the fifth is at the bottom,
-                or the seventh chords among them.</p>
+              <p class="solfege__what">Ten chords - major, minor, diminished, augmented, and where asked
+                their position or sevenths: read or hear one, and tap its name.</p>
               <div class="solfege__asks">
                 <select id="solfege-chords-asks" class="solfege__ask" aria-label="What is asked"
                   title="Their quality, or their position too"></select>
-                <button id="solfege-chords-open" type="button" class="button">By name</button>
-                <button id="solfege-chords-by-ear" type="button" class="button button--primary">By ear</button>
+                <button id="solfege-chords-open" type="button" class="button">Read &amp; name</button>
+                <button id="solfege-chords-by-ear" type="button" class="button button--primary">Hear &amp; name</button>
               </div>
             </section>
             <section class="solfege__section" aria-labelledby="solfege-keys-name">
               <strong id="solfege-keys-name" class="solfege__name">Key signatures</strong>
-              <p class="solfege__what">Ten signatures to read and name: the major key each is,
-                the minor, or either - the question says which.</p>
+              <p class="solfege__what">Ten key signatures: read one, and tap the key it is - major,
+                minor, or either, as the question says.</p>
               <div class="solfege__asks">
                 <select id="solfege-keys-as" class="solfege__ask" aria-label="Named as"
                   title="Named as major keys, minor keys, or either"></select>
-                <button id="solfege-keys-open" type="button" class="button button--primary">By name</button>
+                <button id="solfege-keys-open" type="button" class="button button--primary">Read &amp; name</button>
               </div>
             </section>
             <section class="solfege__section" aria-labelledby="solfege-functions-name">
               <strong id="solfege-functions-name" class="solfege__name">Functions</strong>
-              <p class="solfege__what">Six progressions of four chords to name, read or heard, each chord
-                by the numeral of its root in the key - as the chart of chords numbers them.</p>
+              <p class="solfege__what">Six progressions of four chords: read or hear one, and tap each
+                chord's numeral in the key.</p>
               <div class="solfege__asks">
                 <select id="solfege-functions-key" class="solfege__ask" aria-label="Key"
                   title="The key, by its sharps or flats"></select>
                 <select id="solfege-functions-mode" class="solfege__ask" aria-label="Major or minor"
                   title="Major, or minor with its leading note raised"></select>
-                <button id="solfege-functions-open" type="button" class="button">By name</button>
-                <button id="solfege-functions-by-ear" type="button" class="button button--primary">By ear</button>
+                <button id="solfege-functions-open" type="button" class="button">Read &amp; name</button>
+                <button id="solfege-functions-by-ear" type="button" class="button button--primary">Hear &amp; name</button>
               </div>
             </section>
             <section class="solfege__section" aria-labelledby="solfege-cadences-name">
               <strong id="solfege-cadences-name" class="solfege__name">Cadences</strong>
-              <p class="solfege__what">Six phrases of four chords, heard or read: which cadence each
-                closes on - authentic, plagal, half or deceptive.</p>
+              <p class="solfege__what">Six phrases of four chords: read or hear one, and tap the cadence
+                it ends on - authentic, plagal, half or deceptive.</p>
               <div class="solfege__asks">
                 <select id="solfege-cadences-key" class="solfege__ask" aria-label="Key"
                   title="The key, by its sharps or flats"></select>
                 <select id="solfege-cadences-mode" class="solfege__ask" aria-label="Major or minor"
                   title="Major, or minor with its dominant major"></select>
-                <button id="solfege-cadences-open" type="button" class="button">By name</button>
-                <button id="solfege-cadences-by-ear" type="button" class="button button--primary">By ear</button>
+                <button id="solfege-cadences-open" type="button" class="button">Read &amp; name</button>
+                <button id="solfege-cadences-by-ear" type="button" class="button button--primary">Hear &amp; name</button>
               </div>
             </section>
             <section class="solfege__section" aria-labelledby="solfege-dictation-name">
               <strong id="solfege-dictation-name" class="solfege__name">Melodic dictation</strong>
-              <p class="solfege__what">Four phrases, each after its key's cadence: heard, then played back
-                from the note given, and shown on the staff as each note is found.</p>
+              <p class="solfege__what">Four phrases, each after its key's cadence: hear one, and play it
+                back on the keys from the note given.</p>
               <div class="solfege__asks">
                 <select id="solfege-dictation-key" class="solfege__ask" aria-label="Key"
                   title="The key, by its sharps or flats"></select>
@@ -566,17 +571,16 @@
                   title="How long each phrase is"></select>
                 <select id="solfege-dictation-rhythm" class="solfege__ask" aria-label="Rhythm"
                   title="Crotchets only, or some beats in two quavers"></select>
-                <button id="solfege-dictation-open" type="button" class="button button--primary">Open</button>
+                <button id="solfege-dictation-open" type="button" class="button button--primary">Hear &amp; play back</button>
               </div>
             </section>
             <section class="solfege__section" aria-labelledby="solfege-rhythm-name">
               <strong id="solfege-rhythm-name" class="solfege__name">Rhythmic dictation</strong>
-              <p class="solfege__what">Eight bars of rhythm, each heard and then tapped back in time on
-                any key, from the downbeat you give - shown as each note is played.</p>
+              <p class="solfege__what">Eight bars of rhythm: hear one, and tap it back in time on any key.</p>
               <div class="solfege__asks">
                 <select id="solfege-rhythm-level" class="solfege__ask" aria-label="Rhythms"
                   title="Which note values the rhythms are made of"></select>
-                <button id="solfege-rhythm-open" type="button" class="button button--primary">Open</button>
+                <button id="solfege-rhythm-open" type="button" class="button button--primary">Hear &amp; tap back</button>
               </div>
             </section>
           </div>

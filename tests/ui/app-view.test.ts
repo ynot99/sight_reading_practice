@@ -8169,7 +8169,7 @@ describe('AppView', () => {
       for (const short of ['m3', 'M3', 'P4', 'P5', 'P8']) {
         chip(short)?.click();
       }
-      expect([open.dataset['idle'], open.title]).toEqual(['true', 'Choose an interval or more to be asked']);
+      expect([open.dataset['idle'], open.title]).toEqual(['true', 'Hear & play back: choose an interval or more to be asked']);
       open.click();
       expect(element('sheet-scores').hidden).toBe(false);
       chip('TT')?.click();
@@ -8320,6 +8320,44 @@ describe('AppView', () => {
         expect(runtime.controller.openedExercise?.title).toBe('Intervals by ear');
       });
       expect([chips(), given(), element('score').dataset['asking']]).toEqual([[], [], 'played-back']);
+    });
+
+    it('names each button of the Solfege list by how what it opens is answered, and names it by its words', async () => {
+      // "By ear" opened intervals answered on the keys and chords answered on
+      // the screen, and nothing said which.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      const buttons = [...element('solfege').querySelectorAll<HTMLButtonElement>('.solfege__asks button')];
+      const said: { readonly id: string; readonly shown: string; readonly how: string; readonly named: boolean }[] = [];
+      for (const button of buttons) {
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-solfege').click();
+        const before = runtime.controller.openedExercise;
+        button.click();
+        await vi.waitFor(() => {
+          expect(runtime.controller.openedExercise).not.toBe(before);
+        });
+        const opened = runtime.controller.openedExercise;
+        const how =
+          opened?.byName !== undefined
+            ? opened.namedByEar === true
+              ? 'Hear & name'
+              : 'Read & name'
+            : opened?.playedBack?.heard === true
+              ? opened.playedBack.inTime
+                ? 'Hear & tap back'
+                : 'Hear & play back'
+              : 'Open';
+        // What a reader would say to ask for it is in what it is called.
+        const name = button.getAttribute('aria-label') ?? button.textContent;
+        said.push({ id: button.id, shown: button.textContent, how, named: name.includes(button.textContent) });
+      }
+      expect(said.filter((each) => each.shown !== each.how || !each.named)).toEqual([]);
+      // Every way there is, so none of them was left out of the sweep.
+      expect([said.length, [...new Set(said.map((each) => each.how))].sort()]).toEqual([
+        14,
+        ['Hear & name', 'Hear & play back', 'Hear & tap back', 'Open', 'Read & name'],
+      ]);
     });
 
     it('offers another round at the end of a round of naming: what was asked, other notes, asked from the first', async () => {

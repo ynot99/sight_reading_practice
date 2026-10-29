@@ -11794,8 +11794,9 @@ export class AppView {
       ways.replaceChildren(...INTERVAL_WAYS.map((way) => new Option(INTERVAL_WAY_NAMES[way], way)));
     }
     const none = this.intervalsAsked.size === 0;
-    sayWhetherIdle(this.el.solfegeIntervalsOpen, none ? 'Choose an interval or more to be asked' : 'Ten to play back by ear', none);
-    sayWhetherIdle(this.el.solfegeIntervalsNameThem, none ? 'Choose an interval or more to be asked' : 'Ten to read and name', none);
+    // Named with the words on them, which are what a reader would say to ask for them.
+    sayWhetherIdle(this.el.solfegeIntervalsOpen, none ? 'Hear & play back: choose an interval or more to be asked' : 'Hear & play back ten intervals', none);
+    sayWhetherIdle(this.el.solfegeIntervalsNameThem, none ? 'Read & name: choose an interval or more to be asked' : 'Read & name ten intervals', none);
   }
 
   /**

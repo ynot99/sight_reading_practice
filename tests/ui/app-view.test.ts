@@ -18545,6 +18545,10 @@ describe('AppView', () => {
       expect(element('roll-edit').getAttribute('aria-pressed')).toBe('true');
       element<HTMLButtonElement>('roll-close').click();
       expect(rig.runtime.controller.openedExercise?.title).toBe('My idea');
+      // The scores sheet opens on the sketches, the list it came from.
+      element<HTMLButtonElement>('focus-scores').click();
+      expect([element('scores-show-sketches').getAttribute('aria-pressed'), element('sketches-list').hidden, element('scores-list').hidden]).toEqual(['true', false, true]);
+      element<HTMLButtonElement>('scores-close').click();
       const options = [...element<HTMLSelectElement>('what-opens').options].map((option) => [option.value, option.textContent]);
       expect(options.slice(-2)).toEqual([
         ['lastSketch', 'The sketch I worked on last'],
@@ -18587,8 +18591,10 @@ describe('AppView', () => {
       later.runtime.controller.updateSettings({ whatOpens: 'lastOfAll' });
       await later.view.initialize();
       await waitFor(() => later.runtime.controller.openedExercise?.title === 'Read Since');
-      // A score is read on the page: no editor over it.
+      // A score is read on the page: no editor over it, and the sheet on the scores.
       expect(element('sheet-roll').hidden).toBe(true);
+      element<HTMLButtonElement>('focus-scores').click();
+      expect(element('scores-show-scores').getAttribute('aria-pressed')).toBe('true');
 
       // Only a score, it; only a sketch, it.
       mountRealMarkup();
@@ -18646,6 +18652,9 @@ describe('AppView', () => {
       await next.view.initialize();
       await waitFor(() => next.runtime.controller.openedExercise?.title === 'Melodic dictation');
       expect([next.runtime.controller.openedExercise?.key.fifths, next.runtime.controller.openedExercise?.key.mode]).toEqual([-2, 'minor']);
+      // The scores sheet opens on the Solfege list.
+      element<HTMLButtonElement>('focus-scores').click();
+      expect([element('scores-show-solfege').getAttribute('aria-pressed'), element('solfege').hidden]).toEqual(['true', false]);
 
       // Nor where a score was read since.
       mountRealMarkup();

@@ -3763,6 +3763,9 @@ export class AppView {
     ) {
       this.setTheSolfegeListAsItWasLeft();
       if (await solfege.open()) {
+        // And the scores sheet opens on the list it came from, as it would
+        // have had it been opened from there in this sitting.
+        this.scoresListShown = 'solfege';
         return;
       }
     }
@@ -3771,6 +3774,7 @@ export class AppView {
       (wanted === 'lastSketch' || (wanted === 'lastOfAll' && (lastRead === null || sketch.atMs > lastRead.openedAtMs)))
     ) {
       await this.openTheSketchToEdit(sketch.sketch.id);
+      this.scoresListShown = 'sketches';
       return;
     }
     const chosen =

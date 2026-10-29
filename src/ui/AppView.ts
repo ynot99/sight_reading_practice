@@ -1627,6 +1627,12 @@ function theChoiceOf(control: HTMLElement): string {
   return control.id.replace(/^solfege-/, '');
 }
 
+/**
+ * The key Tap presses: the one a rhythm is written on, the middle line of
+ * the treble staff - any key counting, it is the one the page shows.
+ */
+const TAPPED_ON = 71;
+
 /** A seed for a round of the solfege list: what is asked stays, the notes asking it change. */
 function aFreshSeed(): number {
   return Math.floor(Math.random() * 2 ** 31);
@@ -1643,7 +1649,7 @@ function aFreshSeed(): number {
  */
 function theTaskOfMusicPlayedBack(playedBack: PlayedBack): string {
   if (playedBack.inTime) {
-    return 'Press ▶ to hear each bar, then tap its rhythm back in time on any key.';
+    return 'Press ▶ to hear each bar, then tap its rhythm back in time - on any key, or on Tap.';
   }
   if (playedBack.heard) {
     return 'Press ▶ to hear it, then play it back on the keys from the note given.';
@@ -2857,6 +2863,7 @@ export class AppView {
     scoreAnswers: HTMLElement;
     scoreAnswersStreak: HTMLOutputElement;
     scoreAnswersNext: HTMLButtonElement;
+    scoreAnswersTap: HTMLButtonElement;
     scoreAnswersAsks: HTMLElement;
     scoreAnswersParts: HTMLElement;
     solfegeIntervalsNameThem: HTMLButtonElement;
@@ -3322,6 +3329,7 @@ export class AppView {
       scoreAnswers: requireElement(doc, 'score-answers'),
       scoreAnswersStreak: requireElement(doc, 'score-answers-streak'),
       scoreAnswersNext: requireElement(doc, 'score-answers-next'),
+      scoreAnswersTap: requireElement(doc, 'score-answers-tap'),
       scoreAnswersAsks: requireElement(doc, 'score-answers-asks'),
       scoreAnswersParts: requireElement(doc, 'score-answers-parts'),
       solfegeIntervalsNameThem: requireElement(doc, 'solfege-intervals-name-them'),
@@ -10485,6 +10493,17 @@ export class AppView {
       await this.openTheMelodicDictation(theMelodicDictationNamed);
       return true;
     });
+    // A key down as the finger goes down, which is when a tap is heard - a
+    // click is said as it comes up, a tap's length late - and up with it.
+    this.listen(this.el.scoreAnswersTap, 'pointerdown', (event) => {
+      event.preventDefault();
+      this.runtime.screenKeys.press(TAPPED_ON);
+    });
+    for (const up of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
+      this.listen(this.el.scoreAnswersTap, up, () => {
+        this.runtime.screenKeys.release(TAPPED_ON);
+      });
+    }
     this.listen(this.el.scoreHearAgain, 'click', () => {
       const named = this.naming?.asking ?? null;
       if (named !== null && this.runtime.controller.openedExercise?.namedByEar === true) {
@@ -12040,12 +12059,14 @@ export class AppView {
     this.sayHowManyInARow();
     // The room the answers take at the top of the page, kept clear of the music.
     this.el.scoreAnswersNext.hidden = true;
+    // A rhythm can be tapped on the screen as well as on the keys.
+    this.el.scoreAnswersTap.hidden = round !== null || playedBack?.inTime !== true;
     if (round === null) {
       // Music played back is answered on the keys: the place says only how.
       if (playedBack === undefined) {
         delete this.el.score.dataset['asking'];
       } else {
-        this.el.score.dataset['asking'] = 'played-back';
+        this.el.score.dataset['asking'] = playedBack.inTime ? 'tapped-back' : 'played-back';
         this.el.scoreAnswersAsks.textContent = theTaskOfMusicPlayedBack(playedBack);
         this.el.scoreAnswersParts.replaceChildren();
       }

@@ -5518,6 +5518,38 @@ body[data-playing='true'] .score__modes {
   }
 }
 
+/*
+ * A rhythm tapped back: the sentence, and under it the button to tap on -
+ * measured at 126px on a tablet and 147px on a phone, with room over.
+ */
+.score[data-asking='tapped-back'] {
+  --answers-room: 136px;
+}
+
+@media (max-width: 600px) {
+  .score[data-asking='tapped-back'] {
+    --answers-room: 160px;
+  }
+}
+
+.score__answers-tap {
+  min-height: 56px;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 600;
+  color: #ffffff;
+  background: var(--accent);
+  border: none;
+  border-radius: 12px;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.score__answers-tap:active {
+  filter: brightness(0.9);
+}
+
 .score[data-asking] .score__surface {
   padding-top: calc(var(--answers-from) + var(--answers-room));
 }

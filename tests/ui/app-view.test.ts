@@ -8761,6 +8761,37 @@ describe('AppView', () => {
       expect(start()).toEqual([undefined, 'Start', 'Start']);
     });
 
+    it('taps a rhythm back from the screen, a key down as the finger goes down and up as it comes up, on a rhythm alone', async () => {
+      // Where there is no keyboard, a rhythm had nothing to be tapped on.
+      const { view, runtime, metronome } = createRig();
+      await view.initialize();
+      const open = async (button: string, title: string): Promise<void> => {
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-solfege').click();
+        element<HTMLButtonElement>(button).click();
+        await vi.waitFor(() => {
+          expect(runtime.controller.openedExercise?.title).toBe(title);
+        });
+      };
+      const tap = element<HTMLButtonElement>('score-answers-tap');
+      await open('solfege-intervals-open', 'Intervals played back');
+      const onAnInterval = tap.hidden;
+      await open('solfege-rhythm-open', 'Rhythmic dictation');
+      const pressed = vi.spyOn(runtime.screenKeys, 'press');
+      const released = vi.spyOn(runtime.screenKeys, 'release');
+      element<HTMLButtonElement>('focus-play').click();
+      const waiting = runtime.controller.session?.status;
+      metronome.advanceSubdivisions(1);
+      tap.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1 }));
+      // The downbeat given, the bar under way.
+      const given = [runtime.controller.session?.status, pressed.mock.calls, released.mock.calls.length];
+      tap.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 }));
+      expect([onAnInterval, tap.hidden, waiting, given, released.mock.calls]).toEqual([true, false, 'counting-in', ['running', [[71]], 0], [[71]]]);
+      // Over music that is read, no Tap.
+      await open('solfege-complex-open', theScaleComplex({ fifths: 0, scale: 'major' }).title);
+      expect(tap.hidden).toBe(true);
+    });
+
     it('says nothing of the modes chosen on a page they do not play, on Start or in the corner, and dims them saying why', async () => {
       // A frame and a mode chosen for other music, shown over music played
       // back or answered by name, said this would be played by them.
@@ -8826,8 +8857,8 @@ describe('AppView', () => {
       expect([choicesOfTheRound, pad.querySelectorAll('[data-choice]').length]).toEqual([5, 0]);
       expect(await said('solfege-rhythm-open', 'Rhythmic dictation')).toEqual([
         false,
-        'played-back',
-        'Press ▶ to hear each bar, then tap its rhythm back in time on any key.',
+        'tapped-back',
+        'Press ▶ to hear each bar, then tap its rhythm back in time - on any key, or on Tap.',
       ]);
       expect(await said('solfege-transpose-open', 'major')).toEqual([
         false,

@@ -2568,6 +2568,9 @@ describe('searching the settings', () => {
           .find((room) => room !== undefined) ?? NaN,
       );
     expect(roomOf(".score[data-asking='played-back']")).toBeLessThan(roomOf('.score'));
+    // A rhythm keeps room for the button it is tapped on too, under the sentence; and the button takes no touch as a gesture.
+    expect(roomOf(".score[data-asking='tapped-back']")).toBeGreaterThan(roomOf(".score[data-asking='played-back']") + 50);
+    expect(body('.score__answers-tap')).toMatch(/touch-action\s*:\s*manipulation/);
     expect(body('.score__answers')).toMatch(/top\s*:\s*var\(--answers-from\)/);
     expect(body('.score__answers-row')).toMatch(/flex-wrap\s*:\s*wrap/);
     // The question, the run of right answers and the button that hears it again on one line, the two beside it never squeezed.

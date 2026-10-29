@@ -3419,28 +3419,35 @@ export class PracticeController {
         const picture = this.pictureOfTheReading(report, session.roll);
         const modes = modesOn(this.playedUnder);
         this.finishedPlayedWith = { modeId: this.playedUnder.modeId, modes };
-        this.deps.history?.record(this.practiceKey(), {
-          // The calendar, so a table of readings can say when. `IClock`
-          // counts from an arbitrary zero for measuring music.
-          atMs: Date.now(),
-          overall: score.overall,
-          grade: score.grade,
-          completed: report.completed,
-          notes: noteCountsOf(report.totals),
-          tempoPercent: Math.round(this.currentSettings.tempoPercent),
-          hand: this.playedUnder.handStaff,
-          stoppedAtBar: picture.stoppedAtBar,
-          startedAtBar,
-          modeId: this.playedUnder.modeId,
-          ...(modes.length > 0 ? { modes } : {}),
-          picture,
-          roll: session.roll,
-        });
-        this.considerLadderMove(score.overall, report.completed);
+        // A run nobody played a key of is no reading: a lap left going round
+        // on repeat, a Stop pressed late after the count-in. Kept, it was an
+        // F among the readings, to be found and deleted by hand - and, played
+        // to its end, a step down the ladder for music never played.
+        const played = session.roll.presses.length > 0;
+        if (played) {
+          this.deps.history?.record(this.practiceKey(), {
+            // The calendar, so a table of readings can say when. `IClock`
+            // counts from an arbitrary zero for measuring music.
+            atMs: Date.now(),
+            overall: score.overall,
+            grade: score.grade,
+            completed: report.completed,
+            notes: noteCountsOf(report.totals),
+            tempoPercent: Math.round(this.currentSettings.tempoPercent),
+            hand: this.playedUnder.handStaff,
+            stoppedAtBar: picture.stoppedAtBar,
+            startedAtBar,
+            modeId: this.playedUnder.modeId,
+            ...(modes.length > 0 ? { modes } : {}),
+            picture,
+            roll: session.roll,
+          });
+          this.considerLadderMove(score.overall, report.completed);
+        }
         // Known from here on, once anything was played on it - a run stopped
         // after a bar has still shown the reader the bar. A Start pressed and
         // stopped before a key was touched has shown them nothing new.
-        if (session.roll.presses.length > 0) {
+        if (played) {
           this.seedOfAPageKnown = this.lastSeed;
         }
         this.judgeTheDrill(report, score);

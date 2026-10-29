@@ -722,12 +722,13 @@ describe('PracticeController', () => {
 
   it('remembers how a reading went, and compares it with the last', async () => {
     const history = new PracticeHistory(new InMemorySettingsStore());
-    const { controller } = createController(true, undefined, {}, history);
+    const { controller, midi, clock } = createController(true, undefined, {}, history);
     await controller.loadNewExercise();
     expect(controller.passageHistory()).toBeNull();
 
     for (let run = 0; run < 2; run += 1) {
       const session = controller.start();
+      midi.noteOn(MIDI.C4, clock.now());
       session?.abort();
     }
 
@@ -741,7 +742,7 @@ describe('PracticeController', () => {
     // list the squares that are on are whatever is on now - and the picture
     // is read against this run's own timeline.
     const history = new PracticeHistory(new InMemorySettingsStore());
-    const { controller } = createController(
+    const { controller, midi, clock } = createController(
       true,
       undefined,
       { modeId: WAIT_MODE_ID, rhythmOnly: true },
@@ -749,7 +750,9 @@ describe('PracticeController', () => {
     );
     await controller.loadNewExercise();
 
-    controller.start()?.abort();
+    const session = controller.start();
+    midi.noteOn(MIDI.C4, clock.now());
+    session?.abort();
 
     const kept = history.lastReadings()[0];
     expect(kept?.modeId).toBe(WAIT_MODE_ID);
@@ -766,13 +769,18 @@ describe('PracticeController', () => {
     // Reaching the end is not reading the passage: begun from the marker at
     // bar three, a run that reaches the last bar has read the last six.
     const history = new PracticeHistory(new InMemorySettingsStore());
-    const { controller } = createController(true, undefined, {}, history);
+    const { controller, midi, clock } = createController(true, undefined, {}, history);
     await controller.openScore(longExercise());
+    const aKeyAndStop = (): void => {
+      const session = controller.start();
+      midi.noteOn(MIDI.C4, clock.now());
+      session?.abort();
+    };
 
     controller.beginAtBar(2);
-    controller.start()?.abort();
+    aKeyAndStop();
     controller.beginAtTheStart();
-    controller.start()?.abort();
+    aKeyAndStop();
 
     // Both runs can end in the same millisecond, so not by which is newer.
     const began = history.lastReadings().map((reading) => reading.startedAtBar);
@@ -826,6 +834,37 @@ describe('PracticeController', () => {
     expect(metronome.isRunning).toBe(false);
   });
 
+  it('keeps no reading of a run nobody played a key of: stopped, or played to its end', async () => {
+    // Left going round on repeat, or stopped late after the count-in: kept,
+    // it was an F among the readings to be deleted by hand.
+    const history = new PracticeHistory(new InMemorySettingsStore());
+    const { controller, midi, clock, metronome } = createController(true, undefined, { modeId: FLOW_MODE_ID, countInBars: 0 }, history);
+    await controller.loadNewExercise();
+    const finished = vi.fn();
+
+    // Stopped after the music began, no key touched.
+    let session = controller.start();
+    session?.events.on('finished', finished);
+    metronome.advanceBeats(3);
+    session?.abort();
+    // Played to its end, no key touched.
+    session = controller.start();
+    session?.events.on('finished', finished);
+    for (let guard = 0; guard < 400 && (session?.status === 'running' || session?.status === 'counting-in'); guard += 1) {
+      metronome.advanceBeats(1);
+    }
+    const nothingPlayed = [finished.mock.calls.length, history.lastReadings().length, session?.status];
+
+    // One key, right or wrong, is playing, and is a reading.
+    session = controller.start();
+    metronome.advanceBeats(1);
+    midi.noteOn(MIDI.C4 - 13, clock.now());
+    session?.abort();
+
+    expect(nothingPlayed).toEqual([2, 0, 'completed']);
+    expect(history.lastReadings().map((reading) => reading.completed)).toEqual([false]);
+  });
+
   it('keeps no reading of a run paused in its count-in and then stopped', async () => {
     // Paused before the music began is still before the music began.
     const history = new PracticeHistory(new InMemorySettingsStore());
@@ -851,7 +890,7 @@ describe('PracticeController', () => {
     // Counted back in after a pause, the run has bars behind it, and what
     // was played in them is still the reader's.
     const history = new PracticeHistory(new InMemorySettingsStore());
-    const { controller, metronome } = createController(
+    const { controller, metronome, midi, clock } = createController(
       true,
       undefined,
       { modeId: FLOW_MODE_ID, countInBars: 1 },
@@ -859,8 +898,10 @@ describe('PracticeController', () => {
     );
     await controller.loadNewExercise();
     const session = controller.start();
-    // The count, and on into the second bar.
-    metronome.advanceBeats(4 + 5);
+    // The count, a key in the first bar, and on into the second.
+    metronome.advanceBeats(4 + 1);
+    midi.noteOn(MIDI.C4, clock.now());
+    metronome.advanceBeats(4);
     expect(session?.status).toBe('running');
     session?.pause();
     session?.resume();
@@ -4496,6 +4537,27 @@ describe('climbing the ladder', () => {
     // Reading the same two bars until they are right is practice, but it is
     // not evidence about the next unseen page.
     expect(rig.controller.ladderStep?.id).toBe('grade-1.three');
+  });
+
+  it('takes no step for a page played to its end with no key touched, and one for a page played badly', async () => {
+    // A lap left going round on repeat is not the reader reading badly.
+    const rig = await onTheLadder();
+    rig.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
+    await rig.controller.loadNewExercise();
+    const session = rig.controller.start();
+    for (let guard = 0; guard < 400 && (session?.status === 'running' || session?.status === 'counting-in'); guard += 1) {
+      rig.metronome.advanceBeats(1);
+    }
+    const untouched = [session?.status, rig.controller.settings.ladderStreak];
+
+    await rig.controller.loadNewExercise();
+    const played = rig.controller.start();
+    for (let guard = 0; guard < 400 && (played?.status === 'running' || played?.status === 'counting-in'); guard += 1) {
+      rig.midi.noteOn(21, rig.clock.now());
+      rig.metronome.advanceBeats(1);
+    }
+
+    expect([untouched, played?.status, rig.controller.settings.ladderStreak]).toEqual([['completed', 0], 'completed', -1]);
   });
 
   it('keeps the streak in the settings, so a reload carries it on', async () => {

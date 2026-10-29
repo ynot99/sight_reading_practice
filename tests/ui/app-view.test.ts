@@ -8238,7 +8238,7 @@ describe('AppView', () => {
       way.value = 'down';
       open.click();
       await vi.waitFor(() => {
-        expect([runtime.controller.openedExercise?.title, runtime.controller.theScoreOpenStandsAlone]).toEqual(['Intervals by ear', true]);
+        expect([runtime.controller.openedExercise?.title, runtime.controller.theScoreOpenStandsAlone]).toEqual(['Intervals played back', true]);
       });
       const round = runtime.controller.openedExercise;
       expect([round?.playedBack?.heard, round?.playedBack?.keyFirst]).toEqual([true, false]);
@@ -8405,7 +8405,7 @@ describe('AppView', () => {
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('solfege-intervals-open').click();
       await vi.waitFor(() => {
-        expect(runtime.controller.openedExercise?.title).toBe('Intervals by ear');
+        expect(runtime.controller.openedExercise?.title).toBe('Intervals played back');
       });
       expect([chips(), given(), element('score').dataset['asking']]).toEqual([[], [], 'played-back']);
     });
@@ -8571,7 +8571,7 @@ describe('AppView', () => {
       element<HTMLButtonElement>('scores-show-solfege').click();
       element<HTMLButtonElement>('solfege-intervals-open').click();
       await vi.waitFor(() => {
-        expect(runtime.controller.openedExercise?.title).toBe('Intervals by ear');
+        expect(runtime.controller.openedExercise?.title).toBe('Intervals played back');
       });
       const streak = element<HTMLOutputElement>('score-answers-streak');
       const shown = (): string => (streak.hidden ? '' : streak.value);
@@ -8667,7 +8667,7 @@ describe('AppView', () => {
         document.getElementById('run-profile') !== null,
       ];
 
-      await open('solfege-intervals-open', 'Intervals by ear');
+      await open('solfege-intervals-open', 'Intervals played back');
       const first = runtime.controller.openedExercise;
       playItAll();
       expect(verdict()).toEqual(['completed', false, 'Another round', false]);
@@ -8675,7 +8675,7 @@ describe('AppView', () => {
       await vi.waitFor(() => {
         expect(runtime.controller.openedExercise).not.toBe(first);
       });
-      expect([runtime.controller.openedExercise?.title, runtime.controller.openedExercise?.metadata?.seed === first?.metadata?.seed]).toEqual(['Intervals by ear', false]);
+      expect([runtime.controller.openedExercise?.title, runtime.controller.openedExercise?.metadata?.seed === first?.metadata?.seed]).toEqual(['Intervals played back', false]);
       // Its verdict put away with the round it was of: it stood over the next.
       expect(element('score-verdict').hidden).toBe(true);
 
@@ -8712,7 +8712,7 @@ describe('AppView', () => {
       expect([element('score-count').hidden, runtime.controller.session?.status ?? null]).toEqual([true, null]);
 
       // Lit again on music that is played.
-      await open('solfege-intervals-open', 'Intervals by ear');
+      await open('solfege-intervals-open', 'Intervals played back');
       expect(start()).toEqual([undefined, 'Start', 'Start']);
     });
 
@@ -8773,7 +8773,7 @@ describe('AppView', () => {
       // From a round of naming left with its choices up, which the keys do not answer.
       await said('solfege-intervals-name-them', 'Intervals by name');
       const choicesOfTheRound = pad.querySelectorAll('[data-choice]').length;
-      expect(await said('solfege-intervals-open', 'Intervals by ear')).toEqual([
+      expect(await said('solfege-intervals-open', 'Intervals played back')).toEqual([
         false,
         'played-back',
         'Press ▶ to hear it, then play it back on the keys from the note given.',

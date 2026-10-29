@@ -72,7 +72,7 @@ export function theIntervalsByEar(asked: IntervalsAsked): Exercise {
   return {
     ...asking,
     id: `${INTERVALS_BY_EAR_ID}:${String(asked.seed)}`,
-    title: 'Intervals by ear',
+    title: 'Intervals played back',
     metadata: { generatorId: INTERVALS_BY_EAR_ID, seed: asked.seed },
     playedBack: { questions: measures.map((_, at) => ({ from: at, until: at + 1 })), heard: true, keyFirst: false, inTime: false },
   };

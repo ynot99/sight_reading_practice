@@ -6855,7 +6855,7 @@ describe('music played back by ear', () => {
       'Rhythmic dictation: true',
       'Melodic dictation: true',
       `${theTransposition({ fifths: 0, minor: false, by: 'upAFourth', seed: 6 }).title}: true`,
-      'Intervals by ear: false',
+      'Intervals played back: false',
       'Chords by ear: false',
       `${twoBarExercise().title}: false`,
     ]);

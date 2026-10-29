@@ -936,6 +936,13 @@ export class PracticeController {
   private stepsToFind: ReadonlySet<number> = new Set();
   /** The step whose question was last played as it was asked, so it is played once a run. */
   private questionAsked: number | null = null;
+  /**
+   * The keys a bar named was last heard by - its question, or an answer
+   * offered - so that the next heard is heard alone: two answers pressed
+   * one after the other rang together, two chords at once, which is the
+   * one thing a comparison of them must not be.
+   */
+  private namedHeardWith: readonly number[] = [];
   /** Every step kept off the page until it is found or answered: those to find, and those of bars to name by ear. */
   private stepsKeptOff: readonly number[] = [];
   /** The settings a run was last worked out to be played under: see `playedUnder`. */
@@ -3913,8 +3920,20 @@ export class PracticeController {
   hearTheBarNamed(measureIndex: number): void {
     const steps = this.theStepsNamedByEar(measureIndex);
     if (steps.length > 0) {
-      this.soundTheSteps(steps, false, this.deps.clock.now());
+      const nowMs = this.deps.clock.now();
+      this.silenceWhatWasNamed(nowMs);
+      this.namedHeardWith = steps.flatMap((index) => (this.timeline?.at(index)?.notes ?? []).map((note) => note.midi));
+      this.soundTheSteps(steps, false, nowMs);
     }
+  }
+
+  /** Puts out what a bar named was last heard by, and takes back what of it had yet to begin. */
+  private silenceWhatWasNamed(nowMs: number): void {
+    this.deps.instrument.takeBackFrom(nowMs);
+    for (const key of this.namedHeardWith) {
+      this.deps.instrument.stop(key, nowMs);
+    }
+    this.namedHeardWith = [];
   }
 
   /**
@@ -3947,6 +3966,8 @@ export class PracticeController {
     }
     const lastsMs = spanMs(exercise, from, from + Duration.HALF.ticks);
     let atMs = this.deps.clock.now();
+    this.silenceWhatWasNamed(atMs);
+    this.namedHeardWith = moments.flat();
     for (const keys of moments) {
       for (const key of keys) {
         this.deps.instrument.play(key, QUESTION_VELOCITY, atMs);

@@ -6702,6 +6702,39 @@ describe('music played back by ear', () => {
     expect(asked()).toEqual([]);
   });
 
+  it('hears each answer, and each question, of a bar named alone: what was sounding put out, what had yet to begin taken back', async () => {
+    // Two answers pressed one after the other rang together, two chords at once.
+    const { controller, instrument, clock } = createController(false, undefined, { modeId: new WaitMode().id });
+    const round = theIntervalsNamed({ semitones: [3, 7], way: 'up', seed: 4 });
+    await controller.openScore(round);
+    const as = (choice: string): readonly (readonly number[])[] => round.byName?.[3]?.parts[0]?.heardAs?.[choice] ?? [];
+    const [[given = 0] = [], [fifth = 0] = []] = as('P5');
+    const [, [third = 0] = []] = as('m3');
+    clock.advance(1_000);
+    controller.hearTheAnswerAs(3, 0, 'P5');
+    clock.advance(500);
+    const stopsBefore = instrument.stopped.length;
+    controller.hearTheAnswerAs(3, 0, 'm3');
+    const heard = instrument.heard.filter((note) => note.velocity === 0.7).map((note) => `${String(note.midi)}@${String(note.atMs)}`);
+    expect([heard, instrument.stopped.slice(stopsBefore, stopsBefore + 2).map((note) => `${String(note.midi)}@${String(note.atMs)}`)]).toEqual([
+      // The fifth that had yet to sound never does; the third sounds after the note given again.
+      [`${String(given)}@1000`, `${String(given)}@1500`, `${String(third)}@3500`],
+      [`${String(given)}@1500`, `${String(fifth)}@1500`],
+    ]);
+
+    // And a question heard puts out an answer still sounding, as an answer puts out a question.
+    await controller.openScore(theChordsNamed({ asks: 'quality', heard: true, seed: 2 }));
+    clock.advance(1_000);
+    controller.hearTheBarNamed(0);
+    const questionKeys = instrument.played.slice(-3).map((note) => note.midi);
+    clock.advance(300);
+    const before = instrument.stopped.length;
+    controller.hearTheAnswerAs(0, 0, 'Minor');
+    expect(instrument.stopped.slice(before, before + questionKeys.length).map((note) => `${String(note.midi)}@${String(note.atMs)}`)).toEqual(
+      questionKeys.map((key) => `${String(key)}@${String(clock.now())}`),
+    );
+  });
+
   it('asks for bars laid out by their time where a question has several notes to find, and of no other music', async () => {
     // How many notes a bar hides is part of finding them; one note says nothing by it.
     const { controller, renderer } = createController(false, undefined, { modeId: new WaitMode().id });

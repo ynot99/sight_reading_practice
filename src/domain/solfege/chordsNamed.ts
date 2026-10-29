@@ -96,9 +96,27 @@ export function theChordsNamed(asked: ChordsAsked): Exercise {
     const up = (pitch: Pitch): Pitch => Pitch.writtenAt(pitch.diatonicIndex + OCTAVE_LETTERS, pitch.midi + OCTAVE_SEMITONES);
     const seventh = triad.seventh === undefined ? [] : [Pitch.writtenAt(root.diatonicIndex + LETTERS.seventh, root.midi + triad.seventh)];
     const notes = position === 0 ? [root, third, fifth, ...seventh] : position === 1 ? [third, fifth, up(root)] : [fifth, up(root), up(third)];
-    const parts: NamingPart[] = [{ asks: 'Quality', choices: kinds.map((each) => each.called), answer: triad.called }];
+    // The keys of a chord of any kind and position over this root, as the one written is voiced.
+    const voiced = (kind: (typeof kinds)[number], at: number): readonly (readonly number[])[] => {
+      const [r, t, f] = [root.midi, root.midi + kind.third, root.midi + kind.fifth];
+      const seventhOf = kind.seventh === undefined ? [] : [root.midi + kind.seventh];
+      return [at === 0 ? [r, t, f, ...seventhOf] : at === 1 ? [t, f, r + OCTAVE_SEMITONES] : [f, r + OCTAVE_SEMITONES, t + OCTAVE_SEMITONES]];
+    };
+    const parts: NamingPart[] = [
+      {
+        asks: 'Quality',
+        choices: kinds.map((each) => each.called),
+        answer: triad.called,
+        heardAs: Object.fromEntries(kinds.map((each) => [each.called, voiced(each, position)])),
+      },
+    ];
     if (inversions) {
-      parts.push({ asks: 'Position', choices: [...POSITIONS], answer: POSITIONS[position] ?? 'Root position' });
+      parts.push({
+        asks: 'Position',
+        choices: [...POSITIONS],
+        answer: POSITIONS[position] ?? 'Root position',
+        heardAs: Object.fromEntries(POSITIONS.map((each, at) => [each, voiced(triad, at)])),
+      });
     }
     return { measure: measureOf([noteEntry(notes, Duration.WHOLE)]), parts };
   });

@@ -4,7 +4,7 @@ import { CHORDS_IN_A_ROUND, theChordsNamed } from '../../src/domain/solfege/chor
 import { theTransposition } from '../../src/domain/solfege/transposition.js';
 import { theMelodicDictation } from '../../src/domain/solfege/melodicDictation.js';
 import { theCadenceOfTheKey } from '../../src/domain/solfege/cadence.js';
-import { QUESTIONS_IN_A_ROUND, theIntervalsByEar } from '../../src/domain/solfege/intervalsByEar.js';
+import { QUESTIONS_IN_A_ROUND, theIntervalsByEar, theIntervalsNamed } from '../../src/domain/solfege/intervalsByEar.js';
 import {
   PracticeController,
   type PracticeControllerDependencies,
@@ -6663,6 +6663,30 @@ describe('music played back by ear', () => {
     controller.updateSettings({ modeId: LISTEN_MODE_ID });
     controller.listen();
     expect(controller.isListening).toBe(true);
+  });
+
+  it('plays a bar named as an answer offered would have it, each moment for half a bar of the round, and nothing for an answer that is no sound', async () => {
+    const { controller, instrument, clock } = createController(false, undefined, { modeId: new WaitMode().id });
+    const round = theIntervalsNamed({ semitones: [3, 7], way: 'up', seed: 4 });
+    await controller.openScore(round);
+    clock.advance(2_500);
+    const now = clock.now();
+    const asked = (): string[] => instrument.played.filter((note) => note.velocity === 0.7).map((note) => `${String(note.midi)}@${String(note.atMs)}`);
+    const stopped = (): string[] => instrument.stopped.map((note) => `${String(note.midi)}@${String(note.atMs)}`);
+    const [[given = 0] = [], [other = 0] = []] = round.byName?.[3]?.parts[0]?.heardAs?.['P5'] ?? [];
+    // Half a bar of four crotchets at sixty: two seconds.
+    controller.hearTheAnswerAs(3, 0, 'P5');
+    expect([asked(), stopped()]).toEqual([
+      [`${String(given)}@${String(now)}`, `${String(other)}@${String(now + 2_000)}`],
+      [`${String(given)}@${String(now + 2_000)}`, `${String(other)}@${String(now + 4_000)}`],
+    ]);
+    expect(other - given).toBe(7);
+    // No such answer, no such part, no such bar: nothing.
+    instrument.played.length = 0;
+    controller.hearTheAnswerAs(3, 0, 'M7');
+    controller.hearTheAnswerAs(3, 1, 'P5');
+    controller.hearTheAnswerAs(30, 0, 'P5');
+    expect(asked()).toEqual([]);
   });
 
   it('asks nothing of music that is read', async () => {

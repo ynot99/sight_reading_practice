@@ -580,6 +580,13 @@ export interface NamingPart {
   readonly asks: string;
   readonly choices: readonly string[];
   readonly answer: string;
+  /**
+   * How the question sounds with each answer offered for this part, every
+   * other part at its own: moments struck in turn, each the keys struck
+   * together in it - so an answer picked can be heard beside the right one.
+   * None where an answer is not a sound, as a key signature is not.
+   */
+  readonly heardAs?: Readonly<Record<string, readonly (readonly number[])[]>>;
 }
 
 /** How music played back is asked: see `Exercise.playedBack`. */

@@ -8264,7 +8264,7 @@ describe('AppView', () => {
     });
 
     it('asks the intervals chosen to be named on the page, bar by bar, says which were right, moves on, and says how the round went', async () => {
-      const { view, runtime } = createRig();
+      const { view, runtime, instrument } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-solfege').click();
@@ -8298,16 +8298,33 @@ describe('AppView', () => {
       pad.click();
       expect(element('score-answers-asks').textContent).toBe('2 of 10 · bar 2: interval?');
       expect(runtime.controller.barARunBeginsAt).toBe(1);
-      // Wrong: said so on the one picked, and the right one shown beside it; moved on from a moment later.
+      // Wrong: said so on the one picked, and the right one shown beside it;
+      // each heard as its bar would sound with it, and waited on to be moved on from.
       press(wrongFor(1));
       expect(given()).toEqual([`${wrongFor(1)}|wrong`, `${answerOf(1)}|right`]);
+      const heard = (): number[] => instrument.played.filter((note) => note.velocity === 0.7).map((note) => note.midi);
+      instrument.played.length = 0;
+      pad.querySelector<HTMLButtonElement>(`[data-hear="${wrongFor(1)}"]`)?.click();
+      const asWrong = heard();
+      instrument.played.length = 0;
+      pad.querySelector<HTMLButtonElement>(`[data-hear="${answerOf(1)}"]`)?.click();
+      expect([asWrong, heard()]).toEqual(
+        [wrongFor(1), answerOf(1)].map((choice) => (round?.byName?.[1]?.parts[0]?.heardAs?.[choice] ?? []).flat()),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 1_400));
+      expect(element('score-answers-asks').textContent).toBe('2 of 10 · bar 2');
+      pad.querySelector<HTMLButtonElement>('[data-next]')?.click();
+      expect(element('score-answers-asks').textContent).toBe('3 of 10 · bar 3: interval?');
+      // Right: moved on from by itself a moment later, with nothing to wait for.
+      press(answerOf(2));
+      expect(pad.querySelector('[data-next]')).toBeNull();
       await vi.waitFor(
         () => {
-          expect(element('score-answers-asks').textContent).toBe('3 of 10 · bar 3: interval?');
+          expect(element('score-answers-asks').textContent).toBe('4 of 10 · bar 4: interval?');
         },
         { timeout: 3_000 },
       );
-      for (let at = 2; at < 10; at += 1) {
+      for (let at = 3; at < 10; at += 1) {
         press(answerOf(at));
         pad.click();
       }

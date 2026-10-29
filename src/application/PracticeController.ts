@@ -3912,6 +3912,30 @@ export class PracticeController {
     }
   }
 
+  /**
+   * Plays a bar asked to be named as it would sound with an answer given to
+   * one part of it, every other part at its own - read or heard, so the
+   * answer picked can be heard beside the right one. Each moment for as long
+   * as half a bar of the round, the pace its questions are heard at.
+   */
+  hearTheAnswerAs(measureIndex: number, part: number, choice: string): void {
+    const exercise = this.exercise;
+    const moments = exercise?.byName?.find((question) => question.measureIndex === measureIndex)?.parts[part]?.heardAs?.[choice];
+    const from = this.timeline?.steps.find((step) => step.measureIndex === measureIndex)?.onsetTicks;
+    if (exercise === null || moments === undefined || from === undefined) {
+      return;
+    }
+    const lastsMs = spanMs(exercise, from, from + Duration.HALF.ticks);
+    let atMs = this.deps.clock.now();
+    for (const keys of moments) {
+      for (const key of keys) {
+        this.deps.instrument.play(key, QUESTION_VELOCITY, atMs);
+        this.deps.instrument.stop(key, atMs + lastsMs);
+      }
+      atMs += lastsMs;
+    }
+  }
+
   /** Shows a bar named by ear on the page, now that it has been answered. */
   showTheBarNamed(measureIndex: number): void {
     for (const index of this.theStepsNamedByEar(measureIndex)) {

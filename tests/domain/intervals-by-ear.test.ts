@@ -86,9 +86,20 @@ describe('intervals by name', () => {
         expect(named.byName?.map((question) => question.measureIndex)).toEqual(Array.from({ length: QUESTIONS_IN_A_ROUND }, (_, at) => at));
         questions(named).forEach(({ given, answer }, at) => {
           const span = Math.abs((answer.at(-1)?.midi ?? 0) - given.midi);
-          expect(named.byName?.[at]?.parts).toEqual([
-            { asks: 'Interval', choices: ['m3', 'P5', 'P8'], answer: INTERVALS.find((each) => each.semitones === span)?.short },
+          const part = named.byName?.[at]?.parts[0];
+          expect([named.byName?.[at]?.parts.length, part?.asks, part?.choices, part?.answer]).toEqual([
+            1,
+            'Interval',
+            ['m3', 'P5', 'P8'],
+            INTERVALS.find((each) => each.semitones === span)?.short,
           ]);
+          // Heard as its answer, it is its bar as written; as another, the
+          // note given and then the one that far from it, the way the bar goes.
+          expect(part?.heardAs?.[part.answer]).toEqual([[given.midi], answer.map((pitch) => pitch.midi)]);
+          for (const choice of part?.choices ?? []) {
+            const other = given.midi + (way === 'down' ? -1 : 1) * (INTERVALS.find((each) => each.short === choice)?.semitones ?? 0);
+            expect(part?.heardAs?.[choice]).toEqual([[given.midi], way === 'together' ? [given.midi, other] : [other]]);
+          }
         });
       }
     }

@@ -75,6 +75,48 @@ describe('chords by name', () => {
     expect(asked.size).toBe(TRIADS.length * POSITIONS.length);
   });
 
+  it('says how each answer offered would sound: its own as written, every other the chord it names over the same root, in the same position', () => {
+    const broken: string[] = [];
+    for (const asks of ['quality', 'positions', 'sevenths'] as const) {
+      for (const seed of SEEDS.slice(0, 30)) {
+        const round = theChordsNamed({ asks, heard: false, seed });
+        round.staves[0]?.measures.forEach((measure, at) => {
+          const entry = measure.entries[0];
+          const written = entry?.kind === 'note' ? entry.pitches.map((pitch) => pitch.midi) : [];
+          const parts = round.byName?.[at]?.parts ?? [];
+          // The root by the major chord over it, which names no other: an augmented one written names any of its notes.
+          const root = theChordTheKeysMake(parts[0]?.heardAs?.['Major']?.[0] ?? [])?.root ?? -1;
+          const position = parts[1]?.answer ?? 'Root position';
+          parts.forEach((part, which) => {
+            // Its own answer is the bar as it is written.
+            if (JSON.stringify(part.heardAs?.[part.answer]) !== JSON.stringify([written])) {
+              broken.push(`${asks} ${String(seed)} bar ${String(at)}: ${part.asks} heard as written ${JSON.stringify(part.heardAs?.[part.answer])}`);
+            }
+            for (const choice of part.choices) {
+              const [keys = [], ...more] = part.heardAs?.[choice] ?? [];
+              const named = theChordTheKeysMake(keys);
+              const quality = which === 0 ? choice : (parts[0]?.answer ?? '');
+              const at_ = POSITIONS.indexOf((which === 1 ? choice : position) as (typeof POSITIONS)[number]);
+              const triad = TRIADS.find((each) => each.called === quality);
+              const lowest = Math.min(...keys);
+              const said = [
+                more.length === 0,
+                named?.kind.suffix === SUFFIXES[quality],
+                // Over the same root, however the chord is spelled: an augmented triad names any of its notes its root.
+                quality === 'Augmented' || quality === 'Diminished seventh' || named?.root === root,
+                quality === 'Augmented' || (((lowest - root) % 12) + 12) % 12 === [0, triad?.third ?? 0, triad?.fifth ?? 0][at_],
+              ];
+              if (said.includes(false)) {
+                broken.push(`${asks} ${String(seed)} bar ${String(at)}: ${part.asks} ${choice} ${JSON.stringify(keys)} ${String(said)}`);
+              }
+            }
+          });
+        });
+      }
+    }
+    expect(broken).toEqual([]);
+  });
+
   it('roots its chords on flats as often as on sharps', () => {
     const roots = SEEDS.flatMap((seed) =>
       (theChordsNamed({ asks: 'quality', heard: false, seed }).staves[0]?.measures ?? []).map((measure) => {

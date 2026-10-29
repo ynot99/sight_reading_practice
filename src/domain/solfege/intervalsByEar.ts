@@ -87,14 +87,26 @@ export const INTERVALS_BY_NAME_ID = 'solfege.intervals-by-name';
  * choices are those chosen, smallest first - as every one, where none is.
  */
 export function theIntervalsNamed(asked: IntervalsAsked): Exercise {
-  const { asking, named, intervals } = theIntervalsWritten(asked);
+  const { asking, named, given, intervals } = theIntervalsWritten(asked);
   const choices = intervals.map((interval) => interval.short);
+  const by = asked.way === 'down' ? -1 : 1;
+  // Each as its bar is: the note given, and then the other - or the two together.
+  const heardAs = (from: number): Record<string, readonly (readonly number[])[]> =>
+    Object.fromEntries(
+      intervals.map((interval) => {
+        const other = from + by * interval.semitones;
+        return [interval.short, [[from], asked.way === 'together' ? [from, other] : [other]]];
+      }),
+    );
   return {
     ...asking,
     id: `${INTERVALS_BY_NAME_ID}:${String(asked.seed)}`,
     title: 'Intervals by name',
     metadata: { generatorId: INTERVALS_BY_NAME_ID, seed: asked.seed },
-    byName: named.map((interval, measureIndex) => ({ measureIndex, parts: [{ asks: 'Interval', choices, answer: interval.short }] })),
+    byName: named.map((interval, measureIndex) => ({
+      measureIndex,
+      parts: [{ asks: 'Interval', choices, answer: interval.short, heardAs: heardAs(given[measureIndex] ?? 0) }],
+    })),
   };
 }
 
@@ -113,12 +125,15 @@ function theIntervalsWritten(asked: IntervalsAsked): {
   readonly measures: readonly Measure[];
   readonly asking: Exercise;
   readonly named: readonly Interval[];
+  /** The key each bar begins on. */
+  readonly given: readonly number[];
   readonly intervals: readonly Interval[];
 } {
   const rng = createRng(asked.seed);
   const chosen = INTERVALS.filter((interval) => asked.semitones.includes(interval.semitones));
   const intervals = chosen.length === 0 ? INTERVALS : chosen;
   const named: Interval[] = [];
+  const givens: number[] = [];
   const measures = Array.from({ length: QUESTIONS_IN_A_ROUND }, () => {
     const interval = rng.pick(intervals);
     named.push(interval);
@@ -126,6 +141,7 @@ function theIntervalsWritten(asked: IntervalsAsked): {
     const lowestGiven = down ? LOWEST + interval.semitones : LOWEST;
     const highestGiven = down ? HIGHEST : HIGHEST - interval.semitones;
     const given = Pitch.fromMidi(rng.int(lowestGiven, highestGiven), rng.next() < 0.5);
+    givens.push(given.midi);
     const by = down ? -1 : 1;
     const other = Pitch.writtenAt(given.diatonicIndex + by * interval.letters, given.midi + by * interval.semitones);
     return measureOf([
@@ -152,5 +168,5 @@ function theIntervalsWritten(asked: IntervalsAsked): {
     staves: [{ staffNumber: 1, voice: 1, clef: 'treble', clefChanges: [], measures }],
     metadata: { generatorId: '', seed: asked.seed },
   };
-  return { measures, asking, named, intervals };
+  return { measures, asking, named, given: givens, intervals };
 }

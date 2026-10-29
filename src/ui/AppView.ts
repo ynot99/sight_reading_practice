@@ -10386,6 +10386,13 @@ export class AppView {
       });
     }
     this.listen(this.el.scoreAnswers, 'click', (event) => {
+      // An answer heard as it would sound: heard, and nothing moved on from.
+      const heard = (event.target as Element | null)?.closest<HTMLElement>('[data-hear]');
+      const asked = this.naming?.asking;
+      if (heard !== null && heard !== undefined && asked !== null && asked !== undefined) {
+        this.runtime.controller.hearTheAnswerAs(asked.measureIndex, Number(heard.dataset['part']), heard.dataset['hear'] ?? '');
+        return;
+      }
       const again = (event.target as Element | null)?.closest('[data-another-round]');
       if (again !== null && again !== undefined) {
         void this.openAnotherRound();
@@ -11959,31 +11966,53 @@ export class AppView {
     const part = question.parts[asking];
     const where = `${String(round.place + 1)} of ${String(round.questions.length)} · bar ${String(barNumberOf(exercise, question.measureIndex))}`;
     this.el.scoreAnswersAsks.textContent = part === undefined ? where : `${where}: ${part.asks.toLowerCase()}?`;
-    // What was picked, part by part - judged, once it all is.
+    // What was picked, part by part - judged, once it all is, and then each
+    // a button that plays the question as that answer would have it, where
+    // an answer is a sound: the one picked heard beside the right one.
     const given = this.doc.createElement('div');
     given.className = 'score__answers-row score__answers-given';
+    const chipOf = (part: number, choice: string, title: string): HTMLElement => {
+      if (answered === null || question.parts[part]?.heardAs?.[choice] === undefined) {
+        const chip = this.doc.createElement('span');
+        chip.className = 'solfege__chip';
+        chip.textContent = choice;
+        chip.title = title;
+        return chip;
+      }
+      const chip = this.doc.createElement('button');
+      chip.type = 'button';
+      chip.className = 'solfege__chip';
+      chip.textContent = choice;
+      chip.title = `${title} - hear it`;
+      chip.dataset['hear'] = choice;
+      chip.dataset['part'] = String(part);
+      return chip;
+    };
     question.parts.forEach((each, at) => {
       const choice = picked[at];
       if (choice === null || choice === undefined) {
         return;
       }
-      const said = this.doc.createElement('span');
-      said.className = 'solfege__chip';
-      said.textContent = choice;
-      said.title = each.asks;
+      const said = chipOf(at, choice, each.asks);
       if (answered !== null) {
         said.dataset['verdict'] = choice === each.answer ? 'right' : 'wrong';
       }
       given.append(said);
       if (answered !== null && choice !== each.answer) {
-        const right = this.doc.createElement('span');
-        right.className = 'solfege__chip';
-        right.textContent = each.answer;
-        right.title = `${each.asks}: the right answer`;
+        const right = chipOf(at, each.answer, `${each.asks}: the right answer`);
         right.dataset['verdict'] = 'right';
         given.append(right);
       }
     });
+    // Wrong, it waits to be moved on from: there is the right answer to see, and to hear.
+    if (answered !== null && !answered.right) {
+      const next = this.doc.createElement('button');
+      next.type = 'button';
+      next.className = 'button button--primary';
+      next.dataset['next'] = 'true';
+      next.textContent = 'Next';
+      given.append(next);
+    }
     const rows: HTMLElement[] = given.childElementCount === 0 ? [] : [given];
     if (part !== undefined) {
       const row = this.doc.createElement('div');
@@ -12034,7 +12063,9 @@ export class AppView {
       this.runtime.controller.showTheBarNamed(asked.measureIndex);
     }
     this.showTheQuestion();
-    if (round.answered !== null) {
+    // Moved on from by itself only where it was right: a wrong answer waits,
+    // there being the right one to see and to hear.
+    if (round.answered !== null && round.answers.at(-1)?.right === true) {
       this.nextQuestionTimer = setTimeout(() => {
         if (this.naming === round && round.next()) {
           this.showTheQuestion();

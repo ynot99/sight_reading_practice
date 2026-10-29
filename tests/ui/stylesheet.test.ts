@@ -2578,6 +2578,11 @@ describe('searching the settings', () => {
     // The question, the run of right answers and the button that hears it again on one line, the two beside it never squeezed.
     expect(body('.score__answers-head')).toMatch(/display\s*:\s*flex/);
     expect(body('.score__answers-head .score__answers-asks')).toMatch(/flex\s*:\s*1/);
+    // Wrapping, so a sentence beside two buttons on a phone keeps a line rather than a word.
+    expect(body('.score__answers-head')).toMatch(/flex-wrap\s*:\s*wrap/);
+    expect(body('.score__answers-head .score__answers-asks')).toMatch(/flex\s*:\s*1 1 10em/);
+    // What the middle of the page says stands under the strip too, as the music does.
+    expect(body('.score[data-asking] .score-card')).toMatch(/padding-top\s*:\s*calc\(var\(--answers-from\) \+ var\(--answers-room\) \+ 8px\)/);
     expect(body('.score__answers-hear')).toMatch(/flex\s*:\s*none/);
     expect(body('.score__answers-streak')).toMatch(/flex\s*:\s*none/);
     expect(body('.score__answers-next')).toMatch(/flex\s*:\s*none/);

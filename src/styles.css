@@ -5554,6 +5554,15 @@ body[data-playing='true'] .score__modes {
   padding-top: calc(var(--answers-from) + var(--answers-room));
 }
 
+/*
+ * And what the page says in its middle - how a run went above all - is
+ * said under them too: the strip stands over the card, and a card centred
+ * on the whole page ran up under it.
+ */
+.score[data-asking] .score-card {
+  padding-top: calc(var(--answers-from) + var(--answers-room) + 8px);
+}
+
 .score__answers-asks {
   margin: 0;
   font-size: 14px;
@@ -5561,14 +5570,20 @@ body[data-playing='true'] .score__modes {
 }
 
 /* The question, the run of right answers and the button to hear it again, on one line where they fit. */
+/*
+ * Wrapping, so the sentence keeps a line of its own: squeezed by the buttons
+ * beside it on a phone, a sentence a word wide ran down the strip and out of
+ * its room.
+ */
 .score__answers-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
 
 .score__answers-head .score__answers-asks {
-  flex: 1;
+  flex: 1 1 10em;
   min-width: 0;
 }
 

@@ -8678,7 +8678,7 @@ describe('AppView', () => {
       });
       const first = runtime.controller.openedExercise;
       const pad = element('score-answers');
-      const again = (): HTMLButtonElement | null => pad.querySelector<HTMLButtonElement>('[data-another-round]');
+      const again = (): HTMLButtonElement | null => pad.querySelector<HTMLButtonElement>('[data-another-round]:not([hidden])');
       const offeredAsked = again();
       const kept = vi.spyOn(runtime.controller, 'recordTheRoundNamed');
       for (let at = 0; at < 10; at += 1) {
@@ -8757,6 +8757,65 @@ describe('AppView', () => {
       // Music read after it: the shape of the reading, and no other round of anything.
       playItAll();
       expect(verdict()).toEqual(['completed', true, 'A fresh exercise', true]);
+    });
+
+    it('offers another round in the strip once music played back is played through, the verdict put away or not, until a run begins', async () => {
+      const { view, runtime, midi, clock, metronome } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ previewSeconds: 0 });
+      const play = (keys: number): void => {
+        element<HTMLButtonElement>('focus-play').click();
+        for (let guard = 0; guard < 400 && keys > 0; guard += 1) {
+          const session = runtime.controller.session;
+          if (session?.status === 'counting-in') {
+            metronome.advanceSubdivisions(1);
+            continue;
+          }
+          if (session?.status !== 'running') {
+            break;
+          }
+          for (const key of session.currentStep?.expectedMidi ?? []) {
+            midi.noteOn(key, clock.now());
+          }
+          // In time: the beat moves the run on.
+          metronome.advanceSubdivisions(1);
+          keys -= 1;
+        }
+      };
+      const strip = (): (boolean | string)[] => [
+        element('score-answers-again').hidden,
+        element('score-answers-tap').hidden,
+        element('score-answers-asks').textContent.startsWith('Played through'),
+      ];
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      element<HTMLButtonElement>('solfege-rhythm-open').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise?.playedBack?.inTime).toBe(true);
+      });
+      const first = runtime.controller.openedExercise;
+      // Before a run and in one: the task, and Tap.
+      expect(strip()).toEqual([true, false, false]);
+      play(2);
+      expect([runtime.controller.session?.status, strip()]).toEqual(['running', [true, false, false]]);
+      // Stopped with keys played, and judged: another round offered, and kept when the verdict is put away.
+      element<HTMLButtonElement>('focus-stop').click();
+      expect([element('score-verdict').hidden, strip()]).toEqual([false, [false, true, true]]);
+      element('score-verdict').click();
+      expect([element('score-verdict').hidden, strip()]).toEqual([true, [false, true, true]]);
+      // Begun again, the task again; stopped with nothing played, nothing judged and nothing offered.
+      element<HTMLButtonElement>('focus-play').click();
+      expect(strip()).toEqual([true, false, false]);
+      element<HTMLButtonElement>('focus-stop').click();
+      expect(strip()).toEqual([true, false, false]);
+      // Played through again, and pressed: another round of the same.
+      play(400);
+      expect([runtime.controller.session?.status, strip()]).toEqual(['completed', [false, true, true]]);
+      element<HTMLButtonElement>('score-answers-again').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise).not.toBe(first);
+      });
+      expect([runtime.controller.openedExercise?.title, strip()]).toEqual([first?.title, [true, false, false]]);
     });
 
     it('dims Start on a page answered by name, saying why, and counts down to nothing when it or the space bar is pressed', async () => {

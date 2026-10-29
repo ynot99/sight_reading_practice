@@ -2238,6 +2238,12 @@ export class AppView {
    */
   private roundAgain: { readonly of: Exercise; readonly make: () => Exercise } | null = null;
   /**
+   * The music played back that a run has just been played through and
+   * judged, until the next run begins: there the strip offers another round,
+   * which the verdict offers too until it is put away.
+   */
+  private playedThrough: Exercise | null = null;
+  /**
    * What each button of the Solfege list opens, by its name: so that the
    * one opened last can be opened again as the app starts, asked by the
    * list as it was left. Each says whether it opened anything - a round of
@@ -2864,6 +2870,7 @@ export class AppView {
     scoreAnswers: HTMLElement;
     scoreAnswersStreak: HTMLOutputElement;
     scoreAnswersNext: HTMLButtonElement;
+    scoreAnswersAgain: HTMLButtonElement;
     scoreAnswersTap: HTMLButtonElement;
     scoreAnswersAsks: HTMLElement;
     scoreAnswersParts: HTMLElement;
@@ -3331,6 +3338,7 @@ export class AppView {
       scoreAnswers: requireElement(doc, 'score-answers'),
       scoreAnswersStreak: requireElement(doc, 'score-answers-streak'),
       scoreAnswersNext: requireElement(doc, 'score-answers-next'),
+      scoreAnswersAgain: requireElement(doc, 'score-answers-again'),
       scoreAnswersTap: requireElement(doc, 'score-answers-tap'),
       scoreAnswersAsks: requireElement(doc, 'score-answers-asks'),
       scoreAnswersParts: requireElement(doc, 'score-answers-parts'),
@@ -8258,6 +8266,11 @@ export class AppView {
         this.letTheCursorsClose();
         // Begun, the run of answers found starts again; over, it says the most there were.
         this.sayHowManyInARow();
+        // And begun, it is no longer the one played through.
+        if (status !== 'completed' && status !== 'aborted' && this.playedThrough !== null) {
+          this.playedThrough = null;
+          this.showTheQuestion();
+        }
         if (status === 'completed' || status === 'aborted') {
           this.stopTheOtherHandsMarker();
         }
@@ -8323,6 +8336,8 @@ export class AppView {
         // Before the render, which empties the ladder move as it uses it.
         this.lastReading = { score, report, move: this.lastLadderMove };
         this.renderResult(score, report);
+        this.playedThrough = this.runtime.controller.openedExercise;
+        this.showTheQuestion();
         // The run just measured what it measured; the delay control can say
         // so, and offer to settle itself from it.
         this.describeLatency();
@@ -12072,15 +12087,24 @@ export class AppView {
     this.sayHowManyInARow();
     // The room the answers take at the top of the page, kept clear of the music.
     this.el.scoreAnswersNext.hidden = true;
-    // A rhythm can be tapped on the screen as well as on the keys.
-    this.el.scoreAnswersTap.hidden = round !== null || playedBack?.inTime !== true;
+    // Another round, once this one is over: every question answered, or the
+    // music played back played through.
+    const over = round === null ? exercise !== null && this.playedThrough === exercise : round.asking === null;
+    this.el.scoreAnswersAgain.hidden = !over;
+    // A rhythm can be tapped on the screen as well as on the keys - while
+    // there is a run to tap it into: played through, it is begun again by ▶.
+    this.el.scoreAnswersTap.hidden = round !== null || playedBack?.inTime !== true || !this.el.scoreAnswersAgain.hidden;
     if (round === null) {
       // Music played back is answered on the keys: the place says only how.
       if (playedBack === undefined) {
         delete this.el.score.dataset['asking'];
       } else {
         this.el.score.dataset['asking'] = playedBack.inTime ? 'tapped-back' : 'played-back';
-        this.el.scoreAnswersAsks.textContent = theTaskOfMusicPlayedBack(playedBack);
+        // Played through, how it is played is known: what is left is what next,
+        // short enough to stand beside the button that offers it.
+        this.el.scoreAnswersAsks.textContent = this.el.scoreAnswersAgain.hidden
+          ? theTaskOfMusicPlayedBack(playedBack)
+          : 'Played through: ▶ to play it again, or another round.';
         this.el.scoreAnswersParts.replaceChildren();
       }
       return;
@@ -12090,15 +12114,7 @@ export class AppView {
     if (question === null || exercise === null) {
       const { right, of } = round.score;
       this.el.scoreAnswersAsks.textContent = `${String(right)} of ${String(of)} right.`;
-      const again = this.doc.createElement('button');
-      again.type = 'button';
-      again.className = 'button button--primary';
-      again.dataset['anotherRound'] = 'true';
-      again.textContent = 'Another round';
-      const row = this.doc.createElement('div');
-      row.className = 'score__answers-row';
-      row.append(again);
-      this.el.scoreAnswersParts.replaceChildren(row);
+      this.el.scoreAnswersParts.replaceChildren();
       return;
     }
     if (this.placedOnBar !== question.measureIndex) {

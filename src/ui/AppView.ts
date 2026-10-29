@@ -7922,6 +7922,11 @@ export class AppView {
       controller.events.on('exerciseLoaded', ({ exercise }) => {
         this.hasLooked = false;
         this.placedOnBar = null;
+        // The verdict is of a run of the music as it was, and stood over
+        // whatever was opened after it - another round of the Solfege list
+        // from its own button, another piece from the list - where only the
+        // music drawn again had put it away.
+        this.showVerdict(false);
         // Its place is a step of the piece it walked, and on another piece
         // the same number is some other step that nothing is playing.
         this.stopTheOtherHandsMarker();
@@ -8479,7 +8484,6 @@ export class AppView {
       // New material clears the practised bars, and a box still showing the
       // old ones would name a passage of a piece that is no longer open.
       this.syncControlsFromSettings();
-      this.showVerdict(false);
     } catch (error) {
       this.sayInTheMiddle(
         error instanceof Error ? error.message : 'Failed to build an exercise.',

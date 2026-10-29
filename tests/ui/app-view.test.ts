@@ -8520,9 +8520,15 @@ describe('AppView', () => {
         expect(runtime.controller.openedExercise).not.toBe(first);
       });
       expect([runtime.controller.openedExercise?.title, runtime.controller.openedExercise?.metadata?.seed === first?.metadata?.seed]).toEqual(['Intervals by ear', false]);
+      // Its verdict put away with the round it was of: it stood over the next.
+      expect(element('score-verdict').hidden).toBe(true);
 
-      // Music read after it: the shape of the reading, and no other round of anything.
+      // Nor over another piece opened from the list.
+      playItAll();
+      const overTheRound = element('score-verdict').hidden;
       await open('solfege-complex-open', 'major');
+      expect([overTheRound, element('score-verdict').hidden]).toEqual([false, true]);
+      // Music read after it: the shape of the reading, and no other round of anything.
       playItAll();
       expect(verdict()).toEqual(['completed', true, 'A fresh exercise', true]);
     });

@@ -2689,6 +2689,32 @@
           </button>
 
           <!--
+            In free play only: whether the chord the keys held make is named
+            at the top of the screen. The same answer the circle of fifths
+            gives for its middle - one question, the chord sounding named -
+            asked where the keys are played.
+          -->
+          <button id="focus-chord-names" type="button" aria-pressed="true"
+            class="focus-bar__button focus-bar__button--icon"
+            title="The chord held is named: press to hide it"
+            aria-label="The chord held is named: press to hide it">
+            <!-- A chord, three heads on a stem: not the eye of the takes beside it. -->
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="chord-names__on">
+              <ellipse cx="9.5" cy="18" rx="3.4" ry="2.4" transform="rotate(-20 9.5 18)" />
+              <ellipse cx="9.5" cy="12.5" rx="3.4" ry="2.4" transform="rotate(-20 9.5 12.5)" />
+              <ellipse cx="9.5" cy="7" rx="3.4" ry="2.4" transform="rotate(-20 9.5 7)" />
+              <rect x="12.3" y="2" width="1.6" height="16" rx="0.8" />
+            </svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="chord-names__off">
+              <ellipse cx="9.5" cy="18" rx="3.4" ry="2.4" transform="rotate(-20 9.5 18)" opacity="0.45" />
+              <ellipse cx="9.5" cy="12.5" rx="3.4" ry="2.4" transform="rotate(-20 9.5 12.5)" opacity="0.45" />
+              <ellipse cx="9.5" cy="7" rx="3.4" ry="2.4" transform="rotate(-20 9.5 7)" opacity="0.45" />
+              <rect x="12.3" y="2" width="1.6" height="16" rx="0.8" opacity="0.45" />
+              <rect x="11" y="0.5" width="2" height="23" rx="1" transform="rotate(-45 12 12)" />
+            </svg>
+          </button>
+
+          <!--
             Moved into the drawer on a narrow screen, where the row has room
             for five buttons and no more. One element with two homes rather
             than two copies: a second pair of buttons would be a second

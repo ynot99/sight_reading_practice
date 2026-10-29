@@ -2768,6 +2768,7 @@ export class AppView {
     metronomeOn: HTMLButtonElement;
     scoreListening: HTMLButtonElement;
     freeChord: HTMLOutputElement;
+    focusChordNames: HTMLButtonElement;
     scoreListeningText: HTMLElement;
     focusRepeat: HTMLButtonElement;
     focusBare: HTMLButtonElement;
@@ -3230,6 +3231,7 @@ export class AppView {
       metronomeOn: requireElement(doc, 'metronome-on'),
       scoreListening: requireElement(doc, 'score-listening'),
       freeChord: requireElement(doc, 'free-chord'),
+      focusChordNames: requireElement(doc, 'focus-chord-names'),
       scoreListeningText: requireElement(doc, 'score-listening-text'),
       focusRepeat: requireElement(doc, 'focus-repeat'),
       focusBare: requireElement(doc, 'focus-bare'),
@@ -7944,6 +7946,8 @@ export class AppView {
       // and a run beginning or ending changes it without any control at all.
       controller.events.on('settingsChanged', () => {
         this.showTheListening();
+        // Asked from the circle of fifths as well: the button in free play says so.
+        this.showWhetherTheChordIsNamed();
         // The rung and the readings in a row at it are both settings.
         this.showTheRung();
         // A shared setting changed is something the drive has not had.
@@ -9445,6 +9449,7 @@ export class AppView {
     this.runtime.renderer.turnPagesWithTheMusic(settings.pageTurns !== 'manual');
     this.showThePages();
     this.el.hearOtherHand.checked = settings.hearTheOtherHand;
+    this.showWhetherTheChordIsNamed();
     this.el.rushingCounts.checked = settings.rushingCounts;
     this.el.markListening.checked = settings.markWhileListening;
     this.showTheModes();
@@ -10708,6 +10713,10 @@ export class AppView {
     });
     this.listen(this.el.rollCircle, 'pointerdown', (event) => {
       this.holdTheChord(event);
+    });
+    this.listen(this.el.focusChordNames, 'click', () => {
+      this.runtime.controller.updateSettings({ circleNamesTheChord: !this.runtime.controller.settings.circleNamesTheChord });
+      this.lightTheFreePlay();
     });
     this.listen(this.el.rollCircleNames, 'click', () => {
       this.runtime.controller.updateSettings({ circleNamesTheChord: !this.runtime.controller.settings.circleNamesTheChord });
@@ -13288,14 +13297,26 @@ export class AppView {
     );
   }
 
+  /** Says on its button in free play whether the chord held is named, and what a press does. */
+  private showWhetherTheChordIsNamed(): void {
+    const named = this.runtime.controller.settings.circleNamesTheChord;
+    const button = this.el.focusChordNames;
+    button.setAttribute('aria-pressed', String(named));
+    button.title = named ? 'The chord held is named: press to hide it' : 'The chord held is not named: press to name it';
+    button.setAttribute('aria-label', button.title);
+  }
+
   /** Lights the keys down in free play, and the pedal, as heard: nobody judged them. */
   private lightTheFreePlay(): void {
     const controller = this.runtime.controller;
-    // And the chord they make, while they make one. Only here: during a run
-    // the name would be the score read out for the reader.
-    const chord = controller.freePlayChord;
+    // And the chord they make, while they make one, where it is asked for.
+    // Only here: during a run the name would be the score read out for the
+    // reader.
+    const named = controller.settings.circleNamesTheChord;
+    const chord = named ? controller.freePlayChord : null;
     this.el.freeChord.textContent = chord ?? '';
     this.el.freeChord.hidden = chord === null;
+    this.showWhetherTheChordIsNamed();
     const down = controller.freePlayKeysDown;
     lightTheKeys(
       this.replayKeyboard,

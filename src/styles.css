@@ -4561,6 +4561,24 @@ body[data-take-on-keys='true'] #focus-keyboard {
 }
 
 /*
+ * Whether the chord held is named, in free play alone, where it is named:
+ * one of the two buttons that come in for the three that go, the row no
+ * longer than it is between runs. Its eye shut while the name is hidden.
+ */
+#focus-chord-names {
+  display: none;
+}
+
+body[data-free-play='true'] #focus-chord-names {
+  display: inline-flex;
+}
+
+#focus-chord-names[aria-pressed='true'] .chord-names__off,
+#focus-chord-names[aria-pressed='false'] .chord-names__on {
+  display: none;
+}
+
+/*
  * The chord held in free play: large, at the top of the screen and over the
  * lane, and nothing to press, so a touch goes through to what is under it.
  */

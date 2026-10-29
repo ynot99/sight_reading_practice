@@ -389,9 +389,10 @@ export interface PracticeSettings {
    */
   readonly rollSounds: boolean;
   /**
-   * Whether the middle of the circle of fifths names the chord sounding, with
-   * its numeral: worth seeing at times, and a distraction at others. The
-   * slice of the chord is lit either way.
+   * Whether the chord sounding is named: in the middle of the circle of
+   * fifths, with its numeral, and at the top of the screen over free play -
+   * worth seeing at times, and a distraction at others. One question asked in
+   * two places. The slice of the chord is lit either way.
    */
   readonly circleNamesTheChord: boolean;
   /** Whether the octave of keys under the circle of fifths shows the chord sounding, or is hidden. */

@@ -1135,6 +1135,28 @@ describe('AppView', () => {
     expect(chord.hidden).toBe(true);
     midi.noteOn(60, clock.now());
     expect(chord.textContent).toBe('C');
+    // Not named, from the button in the bar: the one question the circle of fifths asks for its middle.
+    const names = element<HTMLButtonElement>('focus-chord-names');
+    const before = [names.getAttribute('aria-pressed'), names.title];
+    names.click();
+    const hidden = [chord.hidden, names.getAttribute('aria-pressed'), names.title, runtime.controller.settings.circleNamesTheChord];
+    // Struck again while it is hidden: still not named.
+    midi.noteOff(60, clock.now());
+    midi.noteOn(60, clock.now());
+    const stillHidden = chord.hidden;
+    names.click();
+    expect([before, hidden, stillHidden, chord.hidden, chord.textContent]).toEqual([
+      ['true', 'The chord held is named: press to hide it'],
+      [true, 'false', 'The chord held is not named: press to name it', false],
+      true,
+      false,
+      'C',
+    ]);
+    // Asked from anywhere else, the button says so too.
+    runtime.controller.updateSettings({ circleNamesTheChord: false });
+    const fromElsewhere = names.getAttribute('aria-pressed');
+    runtime.controller.updateSettings({ circleNamesTheChord: true });
+    expect(fromElsewhere).toBe('false');
 
     // Out of free play, the keyboard goes with it and no key stays lit.
     frameButton('free').click();
@@ -1146,6 +1168,19 @@ describe('AppView', () => {
     expect(chord.hidden).toBe(true);
     midi.noteOn(72, clock.now());
     expect(chord.hidden).toBe(true);
+  });
+
+  it('says on its button in free play that the chord held is not named, kept so, before a key is played', async () => {
+    const store = new InMemorySettingsStore();
+    const first = createRig(undefined, store);
+    await first.view.initialize();
+    first.runtime.controller.updateSettings({ circleNamesTheChord: false });
+
+    mountRealMarkup();
+    const next = createRig(undefined, store);
+    await next.view.initialize();
+
+    expect(element('focus-chord-names').getAttribute('aria-pressed')).toBe('false');
   });
 
   it('plays the keys on the screen in free play, and nowhere else', async () => {

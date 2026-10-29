@@ -450,6 +450,10 @@ describe('the stylesheet', () => {
       rules().find((rule) => rule.selector === selector)?.body ?? '';
 
     expect(body('#focus-keyboard')).toMatch(/display\s*:\s*none/);
+    // Whether the chord held is named: in free play alone, its eye shut while it is not.
+    expect(body('#focus-chord-names')).toMatch(/display\s*:\s*none/);
+    expect(body("body[data-free-play='true'] #focus-chord-names")).toMatch(/display\s*:\s*inline-flex/);
+    expect(body("#focus-chord-names[aria-pressed='true'] .chord-names__off, #focus-chord-names[aria-pressed='false'] .chord-names__on")).toMatch(/display\s*:\s*none/);
     expect(
       body(
         "body[data-replaying='true'] .focus-bar[data-playing='true'] #focus-keyboard, body[data-listening='true'] .focus-bar[data-playing='true'] #focus-keyboard, body[data-free-play='true'] #focus-keyboard, body[data-take-on-keys='true'] #focus-keyboard",

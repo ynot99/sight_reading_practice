@@ -1362,8 +1362,9 @@ const OPENING_DESCRIPTIONS: Readonly<Record<WhatOpens, string>> = {
     'The sketch you last edited or wrote down, open in the editor, and written down as a score ' +
     'under it. Falls back to a new exercise while there is none.',
   lastOfAll:
-    'The score you read last, or the sketch you worked on last, whichever was later. ' +
-    'Falls back to a new exercise while there is neither.',
+    'The score you read last, the sketch you worked on last, or the Solfege exercise you opened last, ' +
+    'whichever was latest - a Solfege one asked as it was, with other notes. ' +
+    'Falls back to a new exercise while there is none of them.',
 };
 
 const RULER_DESCRIPTIONS: Readonly<Record<RulerDivision, string>> = {
@@ -1614,9 +1615,9 @@ function thePlayingAsAFile(
 /** How long a question answered shows how it went before the next is asked. */
 const NEXT_QUESTION_AFTER_MS = 1_200;
 
-/** What a list of the Solfege list is kept by: its id without the list's own name. */
-function theChoiceOf(list: HTMLSelectElement): string {
-  return list.id.replace(/^solfege-/, '');
+/** What a list or a button of the Solfege list is kept by: its id without the list's own name. */
+function theChoiceOf(control: HTMLElement): string {
+  return control.id.replace(/^solfege-/, '');
 }
 
 /** A seed for a round of the solfege list: what is asked stays, the notes asking it change. */
@@ -2223,6 +2224,13 @@ export class AppView {
    * any other piece opened since has none.
    */
   private roundAgain: { readonly of: Exercise; readonly make: () => Exercise } | null = null;
+  /**
+   * What each button of the Solfege list opens, by its name: so that the
+   * one opened last can be opened again as the app starts, asked by the
+   * list as it was left. Each says whether it opened anything - a round of
+   * intervals with none of them chosen does not.
+   */
+  private readonly solfegeOpens = new Map<string, () => Promise<boolean>>();
   /** The question named by ear last played as it was asked, so it is played once and not at every drawing. */
   private questionHeard: NamingQuestion | null = null;
   /** The moment a question answered is moved on from, while one waits to be. */
@@ -3716,6 +3724,21 @@ export class AppView {
     // whatever was open last, where it was opened after the score read last.
     const sketch = this.runtime.sketches.openedLast;
     const lastRead = this.runtime.scores.lastRead;
+    const solfege = this.theSolfegeOpenedLast;
+    // An exercise of the Solfege list, asked for whatever was open last and
+    // opened after both: asked as the list was left, with other notes - it
+    // is on no shelf, so there is no keeping the one that was open.
+    if (
+      wanted === 'lastOfAll' &&
+      solfege !== null &&
+      solfege.atMs > (lastRead?.openedAtMs ?? Number.NEGATIVE_INFINITY) &&
+      solfege.atMs > (sketch?.atMs ?? Number.NEGATIVE_INFINITY)
+    ) {
+      this.setTheSolfegeListAsItWasLeft();
+      if (await solfege.open()) {
+        return;
+      }
+    }
     if (
       sketch !== null &&
       (wanted === 'lastSketch' || (wanted === 'lastOfAll' && (lastRead === null || sketch.atMs > lastRead.openedAtMs)))
@@ -10305,8 +10328,9 @@ export class AppView {
     this.listen(this.el.solfegeComplexScale, 'change', () => {
       this.nameTheKeysOfTheScaleComplex();
     });
-    this.listen(this.el.solfegeComplexOpen, 'click', () => {
-      void this.openTheScaleComplex();
+    this.opensFromTheSolfegeList(this.el.solfegeComplexOpen, async () => {
+      await this.openTheScaleComplex();
+      return true;
     });
     this.listen(this.el.solfegeIntervalsWhich, 'click', (event) => {
       const chip = (event.target as Element | null)?.closest<HTMLElement>('[data-semitones]');
@@ -10328,28 +10352,25 @@ export class AppView {
         this.keepWhatTheSolfegeListAsks({ [theChoiceOf(list)]: list.value });
       }
     });
-    this.listen(this.el.solfegeIntervalsOpen, 'click', () => {
-      void this.openTheIntervals('by ear');
-    });
-    this.listen(this.el.solfegeIntervalsNameThem, 'click', () => {
-      void this.openTheIntervals('by name');
-    });
+    this.opensFromTheSolfegeList(this.el.solfegeIntervalsOpen, () => this.openTheIntervals('by ear'));
+    this.opensFromTheSolfegeList(this.el.solfegeIntervalsNameThem, () => this.openTheIntervals('by name'));
     this.listen(this.el.solfegeTransposeMode, 'change', () => {
       this.nameTheKeysOfTheList(this.el.solfegeTransposeKey, this.el.solfegeTransposeMode.value === 'minor' ? 'minor' : 'major');
     });
-    this.listen(this.el.solfegeTransposeOpen, 'click', () => {
+    this.opensFromTheSolfegeList(this.el.solfegeTransposeOpen, async () => {
       const asked = {
         fifths: Number(this.el.solfegeTransposeKey.value),
         minor: this.el.solfegeTransposeMode.value === 'minor',
         by: TRANSPOSITION_NAMES.find((name) => name === this.el.solfegeTransposeBy.value) ?? 'upASecond',
       };
-      void this.openTheRound(() => theTransposition({ ...asked, seed: aFreshSeed() }));
+      await this.openTheRound(() => theTransposition({ ...asked, seed: aFreshSeed() }));
+      return true;
     });
     this.listen(this.el.solfegeProgressionsMode, 'change', () => {
       this.showTheProgressionsAsked();
     });
-    this.listen(this.el.solfegeProgressionsOpen, 'click', () => {
-      void this.openTheExercise(
+    this.opensFromTheSolfegeList(this.el.solfegeProgressionsOpen, async () => {
+      await this.openTheExercise(
         theProgression({
           progression: PROGRESSION_NAMES.find((name) => name === this.el.solfegeProgressionsWhich.value) ?? 'cadence',
           fifths: Number(this.el.solfegeProgressionsKey.value),
@@ -10357,13 +10378,15 @@ export class AppView {
           throughEveryKey: this.el.solfegeProgressionsWhere.value === 'every',
         }),
       );
+      return true;
     });
     this.listen(this.el.solfegeFunctionsMode, 'change', () => {
       this.nameTheKeysOfTheList(this.el.solfegeFunctionsKey, this.el.solfegeFunctionsMode.value === 'minor' ? 'minor' : 'major');
     });
-    this.listen(this.el.solfegeRhythmOpen, 'click', () => {
+    this.opensFromTheSolfegeList(this.el.solfegeRhythmOpen, async () => {
       const level = RHYTHM_LEVELS.find((each) => each === this.el.solfegeRhythmLevel.value) ?? 'simple';
-      void this.openTheRound(() => theRhythmicDictation({ level, seed: aFreshSeed() }));
+      await this.openTheRound(() => theRhythmicDictation({ level, seed: aFreshSeed() }));
+      return true;
     });
     this.listen(this.el.solfegeCadencesMode, 'change', () => {
       this.nameTheKeysOfTheList(this.el.solfegeCadencesKey, this.el.solfegeCadencesMode.value === 'minor' ? 'minor' : 'major');
@@ -10372,31 +10395,35 @@ export class AppView {
       [this.el.solfegeCadencesOpen, false],
       [this.el.solfegeCadencesByEar, true],
     ] as const) {
-      this.listen(button, 'click', () => {
+      this.opensFromTheSolfegeList(button, async () => {
         const asked = { fifths: Number(this.el.solfegeCadencesKey.value), minor: this.el.solfegeCadencesMode.value === 'minor', heard };
-        void this.openTheRound(() => theCadencesNamed({ ...asked, seed: aFreshSeed() }));
+        await this.openTheRound(() => theCadencesNamed({ ...asked, seed: aFreshSeed() }));
+        return true;
       });
     }
     for (const [button, heard] of [
       [this.el.solfegeFunctionsOpen, false],
       [this.el.solfegeFunctionsByEar, true],
     ] as const) {
-      this.listen(button, 'click', () => {
+      this.opensFromTheSolfegeList(button, async () => {
         const asked = { fifths: Number(this.el.solfegeFunctionsKey.value), minor: this.el.solfegeFunctionsMode.value === 'minor', heard };
-        void this.openTheRound(() => theFunctionsNamed({ ...asked, seed: aFreshSeed() }));
+        await this.openTheRound(() => theFunctionsNamed({ ...asked, seed: aFreshSeed() }));
+        return true;
       });
     }
-    this.listen(this.el.solfegeKeysOpen, 'click', () => {
+    this.opensFromTheSolfegeList(this.el.solfegeKeysOpen, async () => {
       const as = KEYS_ASKED.find((each) => each === this.el.solfegeKeysAs.value) ?? 'major';
-      void this.openTheRound(() => theKeysNamed({ as, seed: aFreshSeed() }));
+      await this.openTheRound(() => theKeysNamed({ as, seed: aFreshSeed() }));
+      return true;
     });
     for (const [button, heard] of [
       [this.el.solfegeChordsOpen, false],
       [this.el.solfegeChordsByEar, true],
     ] as const) {
-      this.listen(button, 'click', () => {
+      this.opensFromTheSolfegeList(button, async () => {
         const asks = CHORDS_ASKS.find((each) => each === this.el.solfegeChordsAsks.value) ?? 'quality';
-        void this.openTheRound(() => theChordsNamed({ asks, heard, seed: aFreshSeed() }));
+        await this.openTheRound(() => theChordsNamed({ asks, heard, seed: aFreshSeed() }));
+        return true;
       });
     }
     this.listen(this.el.scoreAnswers, 'click', (event) => {
@@ -10417,8 +10444,9 @@ export class AppView {
     this.listen(this.el.solfegeDictationMode, 'change', () => {
       this.showTheDictationAsked();
     });
-    this.listen(this.el.solfegeDictationOpen, 'click', () => {
-      void this.openTheMelodicDictation();
+    this.opensFromTheSolfegeList(this.el.solfegeDictationOpen, async () => {
+      await this.openTheMelodicDictation();
+      return true;
     });
     this.listen(this.el.scoreHearAgain, 'click', () => {
       const named = this.naming?.asking ?? null;
@@ -11665,11 +11693,7 @@ export class AppView {
     } else if (sketches) {
       this.renderSketches();
     } else {
-      // Filled, set as it was left, and filled again: a list of keys is
-      // named in the scale or mode beside it, which may have been set.
-      this.fillTheSolfegeLists();
-      this.putBackWhatTheSolfegeListAsked();
-      this.fillTheSolfegeLists();
+      this.setTheSolfegeListAsItWasLeft();
     }
   }
 
@@ -11695,6 +11719,38 @@ export class AppView {
         this.intervalsAsked.add(semitones);
       }
     }
+  }
+
+  /** The Solfege list as it was left: filled, set, and filled again, since a list of keys is named in the mode or scale beside it. */
+  private setTheSolfegeListAsItWasLeft(): void {
+    this.fillTheSolfegeLists();
+    this.putBackWhatTheSolfegeListAsked();
+    this.fillTheSolfegeLists();
+  }
+
+  /**
+   * A button of the Solfege list: opens what it opens and, where something
+   * opened, keeps which it was and when - what "whatever I had open last"
+   * asks of the list as the app starts.
+   */
+  private opensFromTheSolfegeList(button: HTMLButtonElement, open: () => Promise<boolean>): void {
+    const name = theChoiceOf(button);
+    this.solfegeOpens.set(name, open);
+    this.listen(button, 'click', () => {
+      void open().then((opened) => {
+        if (opened) {
+          this.keepWhatTheSolfegeListAsks({ opened: name, 'opened-at': String(Date.now()) });
+        }
+      });
+    });
+  }
+
+  /** The exercise of the Solfege list opened last, and when, where one was and its button is still there. */
+  private get theSolfegeOpenedLast(): { readonly open: () => Promise<boolean>; readonly atMs: number } | null {
+    const asked = this.runtime.controller.settings.solfegeAsked;
+    const open = this.solfegeOpens.get(asked['opened'] ?? '');
+    const atMs = Number(asked['opened-at']);
+    return open === undefined || !Number.isFinite(atMs) ? null : { open, atMs };
   }
 
   /** Keeps a choice of the Solfege list, with the rest of what it asks. */
@@ -11878,14 +11934,15 @@ export class AppView {
    * played back by ear, or named - another round each time, as a dictation
    * is another each lesson.
    */
-  private async openTheIntervals(how: 'by ear' | 'by name'): Promise<void> {
+  private async openTheIntervals(how: 'by ear' | 'by name'): Promise<boolean> {
     if (this.intervalsAsked.size === 0) {
-      return;
+      return false;
     }
     const way = INTERVAL_WAYS.find((each) => each === this.el.solfegeIntervalsWay.value) ?? 'up';
     const asked = { semitones: [...this.intervalsAsked], way };
     const round = how === 'by ear' ? theIntervalsByEar : theIntervalsNamed;
     await this.openTheRound(() => round({ ...asked, seed: aFreshSeed() }));
+    return true;
   }
 
   /**

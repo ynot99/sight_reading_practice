@@ -18373,6 +18373,74 @@ describe('AppView', () => {
       expect(element('roll-title').textContent).toBe('Only Sketched');
     });
 
+    it('puts back the Solfege exercise opened last, asked as the list was left, where it was opened after the score and the sketch', async () => {
+      // It opened the sketch instead: the list is on no shelf, and nothing
+      // it opened was kept as having been opened.
+      const store = new InMemorySettingsStore();
+      const first = createRig(undefined, store);
+      await first.view.initialize();
+      first.runtime.controller.updateSettings({ whatOpens: 'lastOfAll' });
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      const choose = (id: string, value: string): void => {
+        const list = element<HTMLSelectElement>(id);
+        list.value = value;
+        list.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      choose('solfege-dictation-mode', 'minor');
+      choose('solfege-dictation-key', '-2');
+      const before = Date.now();
+      element<HTMLButtonElement>('solfege-dictation-open').click();
+      await waitFor(() => first.runtime.controller.settings.solfegeAsked['opened'] === 'dictation-open');
+      const openedAt = Number(first.runtime.controller.settings.solfegeAsked['opened-at']);
+      expect(openedAt >= before && openedAt <= Date.now()).toBe(true);
+      // A button that opened nothing is not what was opened last.
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      for (const chip of element('solfege-intervals-which').querySelectorAll<HTMLButtonElement>('[aria-pressed="true"]')) {
+        chip.click();
+      }
+      element<HTMLButtonElement>('solfege-intervals-open').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(first.runtime.controller.settings.solfegeAsked['opened']).toBe('dictation-open');
+
+      // Opened again as the app starts, after a score read before it: a round asked as the list was left.
+      mountRealMarkup();
+      const next = createRig(undefined, store);
+      await next.runtime.scores.keep(twoBarExercise({ title: 'Read Before' }), 1_000);
+      await next.runtime.scores.markRead('Read Before', before - 60_000);
+      await next.view.initialize();
+      await waitFor(() => next.runtime.controller.openedExercise?.title === 'Melodic dictation');
+      expect([next.runtime.controller.openedExercise?.key.fifths, next.runtime.controller.openedExercise?.key.mode]).toEqual([-2, 'minor']);
+
+      // Nor where a score was read since.
+      mountRealMarkup();
+      const read = createRig(undefined, store);
+      await read.runtime.scores.keep(twoBarExercise({ title: 'Read Since' }), 1_000);
+      await read.runtime.scores.markRead('Read Since', Date.now() + 60_000);
+      await read.view.initialize();
+      await waitFor(() => read.runtime.controller.openedExercise?.title === 'Read Since');
+
+      // And not where a sketch was worked on since.
+      mountRealMarkup();
+      const sketched = createRig(undefined, store);
+      sketched.sketches.opened(
+        sketched.sketches.begin(
+          {
+            events: [
+              { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+              { kind: 'noteOff' as const, atMs: 400, midi: 60 },
+            ],
+            beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+          },
+          'Worked on since',
+          1,
+        ).id,
+      );
+      await sketched.view.initialize();
+      await waitFor(() => sketched.runtime.controller.openedExercise?.title === 'Worked on since');
+    });
+
     it('counts a sketch opened in the editor or written down as the one worked on last', async () => {
       const rig = createRig();
       await rig.view.initialize();

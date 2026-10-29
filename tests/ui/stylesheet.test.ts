@@ -1043,6 +1043,8 @@ describe('the stylesheet', () => {
     );
     expect(hidden?.body).toMatch(/display\s*:\s*none/);
     expect(hidden?.selector).toContain('.score__today');
+    // And the word that playing begins the run.
+    expect(hidden?.selector).toContain('.score__listening');
     // The modes standing in the same corner go with it. A reader who asked
     // for the page alone did not mean "except those".
     expect(hidden?.selector).toContain('.score__modes');

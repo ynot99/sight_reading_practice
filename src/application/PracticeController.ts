@@ -1999,7 +1999,7 @@ export class PracticeController {
   listen(fromStepIndex?: number): void {
     timeTheStart('playback asked for');
     const timeline = this.timeline;
-    if (timeline === null) {
+    if (timeline === null || this.isAnsweredByName) {
       return;
     }
     this.disposeSession();
@@ -3024,6 +3024,9 @@ export class PracticeController {
       // the opening chord reached for a practice mode the frame is not.
       !this.playsFreely &&
       !this.machinePlays &&
+      // Music answered by name has no run for a key to begin: the keys are
+      // the reader working out what was heard, which is half of answering.
+      !this.isAnsweredByName &&
       this.timeline !== null &&
       // A session that has *ended* is not something happening: it is the
       // report of the last run, and it stays around to be read. Asked whether
@@ -3128,6 +3131,9 @@ export class PracticeController {
    * setting, and a passage that goes round without a break is the other.
    */
   start(options: { readonly countIn?: boolean } = {}): PracticeSession | null {
+    if (this.isAnsweredByName) {
+      return null;
+    }
     // His: one button. In the listening frame there is no run to begin - the
     // machine plays and the reader watches - so Start reaches for the
     // performance that has always existed rather than for a session.
@@ -3968,6 +3974,17 @@ export class PracticeController {
       : settings;
     this.playedUnderLast = { settings, playedBack, under };
     return under;
+  }
+
+  /**
+   * Whether the music open is answered by name, on the page, rather than
+   * played: it has no run to begin and no performance to give. A run asked
+   * the reader to play bars whose question is what they are - hidden, where
+   * they are heard - and a performance played every answer of the round.
+   * The question is heard where it is asked, and again when asked.
+   */
+  get isAnsweredByName(): boolean {
+    return this.exercise?.byName !== undefined;
   }
 
   /** Whether the frame now chosen is the one the machine plays. */

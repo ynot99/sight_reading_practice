@@ -6633,6 +6633,38 @@ describe('music played back by ear', () => {
     expect(controller.lastPlayedWith).toEqual({ modeId: BAR_MODE_ID, modes: ['rhythm'] });
   });
 
+  it('begins no run and gives no performance of music answered by name, the keys beginning nothing either; music read begins as ever', async () => {
+    // A run asked the reader to play bars whose question is what they are -
+    // hidden, where heard - and a performance played every answer of the round.
+    const { controller, midi, clock } = createController(false, undefined, { modeId: new WaitMode().id, immediateStart: true });
+    await controller.openScore(theChordsNamed({ asks: 'quality', heard: true, seed: 2 }));
+    const firstChord = controller.currentTimeline?.at(0)?.expectedMidi ?? [];
+    expect([controller.isAnsweredByName, firstChord.length > 0]).toEqual([true, true]);
+    // The chord asked, struck while working it out: nothing begun.
+    for (const key of firstChord) {
+      midi.noteOn(key, clock.now());
+    }
+    const byKeys = controller.session?.status ?? null;
+    const byStart = controller.start();
+    controller.updateSettings({ modeId: LISTEN_MODE_ID });
+    controller.listen();
+    expect([byKeys, byStart, controller.isListening]).toEqual([null, null, false]);
+
+    // Music that is read: the keys and Start begin it, and it is heard.
+    controller.updateSettings({ modeId: new WaitMode().id });
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    for (const key of controller.currentTimeline?.at(0)?.expectedMidi ?? []) {
+      midi.noteOn(key, clock.now());
+    }
+    expect([controller.isAnsweredByName, controller.session?.status]).toEqual([false, 'running']);
+    controller.stop();
+    expect(controller.start()).not.toBeNull();
+    controller.stop();
+    controller.updateSettings({ modeId: LISTEN_MODE_ID });
+    controller.listen();
+    expect(controller.isListening).toBe(true);
+  });
+
   it('asks nothing of music that is read', async () => {
     const { controller, instrument } = createController(false, undefined, { modeId: new WaitMode().id });
     await controller.openScore(twoBarExercise());

@@ -8322,6 +8322,33 @@ describe('AppView', () => {
       expect([chips(), given(), element('score').dataset['asking']]).toEqual([[], [], 'played-back']);
     });
 
+    it('dims Start on a page answered by name, saying why, and counts down to nothing when it or the space bar is pressed', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ previewSeconds: 3 });
+      const play = element<HTMLButtonElement>('focus-play');
+      const open = async (button: string, title: string): Promise<void> => {
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-solfege').click();
+        element<HTMLButtonElement>(button).click();
+        await vi.waitFor(() => {
+          expect(runtime.controller.openedExercise?.title).toContain(title);
+        });
+      };
+      const start = (): (string | boolean | undefined)[] => [play.dataset['idle'], play.getAttribute('aria-label') ?? undefined, play.title];
+
+      await open('solfege-chords-by-ear', 'Chords by ear');
+      const dimmed = start();
+      play.click();
+      document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', key: ' ', bubbles: true, cancelable: true }));
+      expect(dimmed).toEqual(['true', 'Start: this page is answered with the buttons above, not played', 'Start: this page is answered with the buttons above, not played']);
+      expect([element('score-count').hidden, runtime.controller.session?.status ?? null]).toEqual([true, null]);
+
+      // Lit again on music that is played.
+      await open('solfege-intervals-open', 'Intervals by ear');
+      expect(start()).toEqual([undefined, 'Start', 'Start']);
+    });
+
     it('says on a page of music played back that Play sounds it and the keys answer it, and nothing on music that is read', async () => {
       // Such a page looked like any score with notes missing: nothing on it
       // said what sounds the question, nor that it is answered on the

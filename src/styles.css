@@ -4482,6 +4482,11 @@ body[data-replaying='true'] .focus-bar[data-playing='true'] .focus-bar__row > #f
   position: relative;
 }
 
+/* On a page answered with the buttons above the music, with nothing to begin. */
+#focus-play[data-idle='true'] {
+  opacity: 0.45;
+}
+
 /*
  * While a run is shown again, Start plays that run whatever frame is chosen:
  * the replay's mark stands where the frame's would, and the frame's gives way.

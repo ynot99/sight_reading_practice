@@ -6366,6 +6366,11 @@ export class AppView {
    */
   private togglePlayback(): void {
     const { controller } = this.runtime;
+    // Answered with the buttons above the music: nothing here to begin, and
+    // nor the look before a run, which would count down to nothing.
+    if (controller.isAnsweredByName) {
+      return;
+    }
     // A run being shown again has the transport until it is stopped.
     if (controller.replaying) {
       this.toggleTheReplay();
@@ -12339,8 +12344,8 @@ export class AppView {
     // One button for all three, as a transport has: an icon says which of
     // them it is now, and the accessible name says it in words.
     const label = running ? 'Pause' : paused ? 'Resume' : 'Start';
-    this.el.focusPlay.setAttribute('aria-label', label);
-    this.el.focusPlay.title = label;
+    const named = controller.isAnsweredByName;
+    sayWhetherIdle(this.el.focusPlay, named ? 'Start: this page is answered with the buttons above, not played' : label, named);
     this.el.focusPlayIcon.setAttribute('d', running ? PAUSE_ICON : PLAY_ICON);
     this.describeStopping();
     this.applyPlayingChrome();

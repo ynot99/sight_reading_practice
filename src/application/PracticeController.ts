@@ -4060,6 +4060,15 @@ export class PracticeController {
     return this.exercise?.byName !== undefined;
   }
 
+  /**
+   * Whether what the Modes sheet chooses is what the music open is played
+   * with: not music played back, played as it is answered whatever they say
+   * (see `playedUnder`), nor music answered by name, which is not played.
+   */
+  get theModesApply(): boolean {
+    return this.exercise?.playedBack === undefined && !this.isAnsweredByName;
+  }
+
   /** Whether the frame now chosen is the one the machine plays. */
   get machinePlays(): boolean {
     return machineIsPlaying(this.playedUnder.modeId);

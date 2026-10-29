@@ -8560,6 +8560,43 @@ describe('AppView', () => {
       expect(start()).toEqual([undefined, 'Start', 'Start']);
     });
 
+    it('says nothing of the modes chosen on a page they do not play, on Start or in the corner, and dims them saying why', async () => {
+      // A frame and a mode chosen for other music, shown over music played
+      // back or answered by name, said this would be played by them.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ modeId: LISTEN_MODE_ID, readAheadSteps: 1 });
+      const said = async (button: string, title: string): Promise<(string | boolean | undefined)[]> => {
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-solfege').click();
+        element<HTMLButtonElement>(button).click();
+        await vi.waitFor(() => {
+          expect(runtime.controller.openedExercise?.title).toContain(title);
+        });
+        return [
+          element('focus-play-frame').hidden,
+          element('score-modes').hidden,
+          element('focus-modes').dataset['idle'],
+          element('focus-modes').title,
+        ];
+      };
+
+      expect(await said('solfege-complex-open', 'major')).toEqual([false, false, undefined, 'Modes']);
+      expect(await said('solfege-rhythm-open', 'Rhythmic dictation')).toEqual([
+        true,
+        true,
+        'true',
+        'Modes: music played back waits for each note, whatever they say for music that is read',
+      ]);
+      expect(await said('solfege-chords-by-ear', 'Chords by ear')).toEqual([true, true, 'true', 'Modes: this page is answered with the buttons above, not played']);
+      // Changed while there, still nothing said of them.
+      runtime.controller.updateSettings({ readAheadSteps: null });
+      runtime.controller.updateSettings({ readAheadSteps: 1 });
+      expect([element('focus-play-frame').hidden, element('score-modes').hidden]).toEqual([true, true]);
+      // And back on music they play, said again.
+      expect(await said('solfege-progressions-open', '')).toEqual([false, false, undefined, 'Modes']);
+    });
+
     it('says on a page of music played back that Play sounds it and the keys answer it, and nothing on music that is read', async () => {
       // Such a page looked like any score with notes missing: nothing on it
       // said what sounds the question, nor that it is answered on the
@@ -8764,9 +8801,9 @@ describe('AppView', () => {
       });
       const pad = element('score-answers');
       const answer = runtime.controller.openedExercise?.byName?.[0]?.parts[0]?.answer ?? '';
-      // Heard as it is asked, once; the button to hear it again on the page; the modes left as they are.
+      // Heard as it is asked, once; the button to hear it again on the page; the modes dimmed, nothing being played.
       expect(heard.mock.calls).toEqual([[0]]);
-      expect([element('score-hear-again').hidden, element('focus-modes').dataset['idle']]).toEqual([false, undefined]);
+      expect([element('score-hear-again').hidden, element('focus-modes').dataset['idle']]).toEqual([false, 'true']);
       element<HTMLButtonElement>('score-hear-again').click();
       expect(heard.mock.calls).toEqual([[0], [0]]);
       // Answered: shown on the page; moved on, the next heard.

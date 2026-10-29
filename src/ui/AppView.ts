@@ -6076,8 +6076,12 @@ export class AppView {
     // And on the button that acts on it. The reader presses Start without
     // looking; what it will start is the one thing it may need to say, and
     // only where the answer is not the plain one.
+    // Neither where the music open is not played by them: a frame or a mode
+    // shown there is one chosen for other music, and says this will be
+    // played by it.
+    const apply = this.runtime.controller.theModesApply;
     this.el.focusPlayFrame.replaceChildren();
-    const badge = chosen?.querySelector('svg') ?? null;
+    const badge = apply ? (chosen?.querySelector('svg') ?? null) : null;
     if (badge !== null) {
       this.el.focusPlayFrame.append(badge.cloneNode(true));
     }
@@ -6093,9 +6097,9 @@ export class AppView {
     // with what it was played with, whatever has been chosen since, and the
     // page is that run's until it is over.
     this.showWhichModesAreOn(
-      this.cardsOf(
-        this.runtime.controller.replayPlayedWith ?? { modeId: settings.modeId, modes: modesOn(settings) },
-      ),
+      apply
+        ? this.cardsOf(this.runtime.controller.replayPlayedWith ?? { modeId: settings.modeId, modes: modesOn(settings) })
+        : [],
     );
   }
 
@@ -12099,9 +12103,15 @@ export class AppView {
     this.el.scoreHearAgain.hidden = exercise.playedBack?.heard !== true && exercise.namedByEar !== true;
     sayWhetherIdle(
       this.el.focusModes,
-      playedBack ? 'Modes: music played back waits for each note, whatever they say for music that is read' : 'Modes',
-      playedBack,
+      playedBack
+        ? 'Modes: music played back waits for each note, whatever they say for music that is read'
+        : exercise.byName !== undefined
+          ? 'Modes: this page is answered with the buttons above, not played'
+          : 'Modes',
+      !this.runtime.controller.theModesApply,
     );
+    // And what they would play it with, said on Start and in the corner, only where they do.
+    this.showTheModes();
   }
 
   /**

@@ -5477,7 +5477,22 @@ body[data-playing='true'] .score__modes {
   }
 }
 
-.score[data-naming='true'] .score__surface {
+/*
+ * Music played back asks nothing on the page but how it is answered: a
+ * sentence, so the room kept for it is one line - two on a phone, where
+ * it was measured to wrap.
+ */
+.score[data-asking='played-back'] {
+  --answers-room: 44px;
+}
+
+@media (max-width: 600px) {
+  .score[data-asking='played-back'] {
+    --answers-room: 64px;
+  }
+}
+
+.score[data-asking] .score__surface {
   padding-top: calc(var(--answers-from) + var(--answers-room));
 }
 
@@ -5491,6 +5506,11 @@ body[data-playing='true'] .score__modes {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* Nothing to pick - music played back - and so no gap kept under the sentence for it. */
+.score__answers-parts:empty {
+  display: none;
 }
 
 .score__answers-row {

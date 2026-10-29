@@ -2552,7 +2552,16 @@ describe('searching the settings', () => {
     // The answers of a naming exercise stand at the top of the page, the music moved down under them, and wrap.
     expect(body('.score__answers')).toMatch(/position\s*:\s*absolute/);
     expect(body('.score__answers')).toMatch(/max-height\s*:\s*var\(--answers-room\)/);
-    expect(body(".score[data-naming='true'] .score__surface")).toMatch(/padding-top\s*:\s*calc\(var\(--answers-from\) \+ var\(--answers-room\)\)/);
+    expect(body('.score[data-asking] .score__surface')).toMatch(/padding-top\s*:\s*calc\(var\(--answers-from\) \+ var\(--answers-room\)\)/);
+    // Music played back is told in a sentence, and keeps room for that and no more: less than a round of naming keeps.
+    const roomOf = (selector: string): number =>
+      Number(
+        rules()
+          .filter((rule) => rule.selector === selector)
+          .map((rule) => /--answers-room\s*:\s*(\d+)px/.exec(rule.body)?.[1])
+          .find((room) => room !== undefined) ?? NaN,
+      );
+    expect(roomOf(".score[data-asking='played-back']")).toBeLessThan(roomOf('.score'));
     expect(body('.score__answers')).toMatch(/top\s*:\s*var\(--answers-from\)/);
     expect(body('.score__answers-row')).toMatch(/flex-wrap\s*:\s*wrap/);
     // An answer judged in the verdict's colours, right or wrong.

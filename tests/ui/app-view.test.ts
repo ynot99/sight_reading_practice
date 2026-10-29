@@ -8287,7 +8287,7 @@ describe('AppView', () => {
       const wrongFor = (at: number): string => ['m3', 'M3', 'P4', 'P5', 'P8'].find((each) => each !== answerOf(at)) ?? '';
 
       // On the page, the room it takes kept clear of the music, the first bar asked, the intervals chosen offered.
-      expect([pad.hidden, element('score').dataset['naming']]).toEqual([false, 'true']);
+      expect([pad.hidden, element('score').dataset['asking']]).toEqual([false, 'named']);
       expect(element('score-answers-asks').textContent).toBe('1 of 10 · bar 1: interval?');
       expect(chips()).toEqual(['m3', 'M3', 'P4', 'P5', 'P8']);
       // Right: said so on the one picked, and nothing more to pick.
@@ -8319,7 +8319,47 @@ describe('AppView', () => {
       await vi.waitFor(() => {
         expect(runtime.controller.openedExercise?.title).toBe('Intervals by ear');
       });
-      expect([pad.hidden, element('score').dataset['naming']]).toEqual([true, undefined]);
+      expect([chips(), given(), element('score').dataset['asking']]).toEqual([[], [], 'played-back']);
+    });
+
+    it('says on a page of music played back that Play sounds it and the keys answer it, and nothing on music that is read', async () => {
+      // Such a page looked like any score with notes missing: nothing on it
+      // said what sounds the question, nor that it is answered on the
+      // keyboard rather than on the screen as a round of naming is.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      const pad = element('score-answers');
+      const said = async (button: string, title: string): Promise<(string | boolean | undefined)[]> => {
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-solfege').click();
+        element<HTMLButtonElement>(button).click();
+        await vi.waitFor(() => {
+          expect(runtime.controller.openedExercise?.title).toContain(title);
+        });
+        return [pad.hidden, element('score').dataset['asking'], pad.hidden ? undefined : element('score-answers-asks').textContent];
+      };
+
+      // From a round of naming left with its choices up, which the keys do not answer.
+      await said('solfege-intervals-name-them', 'Intervals by name');
+      const choicesOfTheRound = pad.querySelectorAll('[data-choice]').length;
+      expect(await said('solfege-intervals-open', 'Intervals by ear')).toEqual([
+        false,
+        'played-back',
+        'Press ▶ to hear it, then play it back on the keys from the note given.',
+      ]);
+      expect([choicesOfTheRound, pad.querySelectorAll('[data-choice]').length]).toEqual([5, 0]);
+      expect(await said('solfege-rhythm-open', 'Rhythmic dictation')).toEqual([
+        false,
+        'played-back',
+        'Press ▶ to hear each bar, then tap its rhythm back in time on any key.',
+      ]);
+      expect(await said('solfege-transpose-open', 'major')).toEqual([
+        false,
+        'played-back',
+        'Press ▶ and play each phrase as written, then again in the new key.',
+      ]);
+      // Music that is read is played as it is written, and asks nothing.
+      expect(await said('solfege-complex-open', 'major')).toEqual([true, undefined, undefined]);
     });
 
     it('asks chords to be named by their quality and their position, judged once both are picked', async () => {

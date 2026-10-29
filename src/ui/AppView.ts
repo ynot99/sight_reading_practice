@@ -201,7 +201,7 @@ import type { StoredScoreSummary } from '../application/ports/IScoreStore.js';
 import { replayFits } from '../application/runReplay.js';
 import type { NoteCounts } from '../domain/scoring/PerformanceReport.js';
 import type { ClosingCue, DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
-import { barLines, barNumberOf, measureCount, measureIndexAt, pedalHeldUntil, type Exercise, type NamingQuestion } from '../domain/model/Exercise.js';
+import { barLines, barNumberOf, measureCount, measureIndexAt, pedalHeldUntil, type Exercise, type NamingQuestion, type PlayedBack } from '../domain/model/Exercise.js';
 import type { ImportedScore, ImportWarning } from '../domain/notation/MusicXmlParser.js';
 import { theHitErrors } from '../domain/scoring/theHitErrors.js';
 import { theProfile } from '../domain/scoring/theProfile.js';
@@ -1612,6 +1612,25 @@ function thePlayingAsAFile(
 
 /** How long a question answered shows how it went before the next is asked. */
 const NEXT_QUESTION_AFTER_MS = 1_200;
+
+/**
+ * What music played back asks of the reader, in a sentence: where the answer
+ * goes - the keys - and what begins it. Such a page looks like any score with
+ * notes missing, and nothing on it said that Play is what sounds the question,
+ * nor that it is answered on the keyboard and not on the screen, as a round
+ * of naming is. Play is named and not the first key, which also begins it
+ * where play-to-start is on: Play begins it everywhere, so the sentence is
+ * true whatever the settings.
+ */
+function theTaskOfMusicPlayedBack(playedBack: PlayedBack): string {
+  if (playedBack.inTime) {
+    return 'Press ▶ to hear each bar, then tap its rhythm back in time on any key.';
+  }
+  if (playedBack.heard) {
+    return 'Press ▶ to hear it, then play it back on the keys from the note given.';
+  }
+  return 'Press ▶ and play each phrase as written, then again in the new key.';
+}
 
 /** What each rhythm of a dictation is called in the list. */
 const DICTATION_RHYTHM_NAMES: Readonly<Record<DictationRhythm, string>> = {
@@ -11812,18 +11831,28 @@ export class AppView {
    * takes no more room than one of an interval. Answered, the row of what
    * was picked says which were right, the right answer beside each that
    * was not, until it is moved on from. Over, the round says how it went.
+   * For music played back, in the same place, what it asks and where it is
+   * answered.
    */
   private showTheQuestion(): void {
     const round = this.naming;
-    this.el.scoreAnswers.hidden = round === null;
+    const exercise = this.runtime.controller.openedExercise;
+    const playedBack = exercise?.playedBack;
+    this.el.scoreAnswers.hidden = round === null && playedBack === undefined;
     // The room the answers take at the top of the page, kept clear of the music.
     if (round === null) {
-      delete this.el.score.dataset['naming'];
+      // Music played back is answered on the keys: the place says only how.
+      if (playedBack === undefined) {
+        delete this.el.score.dataset['asking'];
+      } else {
+        this.el.score.dataset['asking'] = 'played-back';
+        this.el.scoreAnswersAsks.textContent = theTaskOfMusicPlayedBack(playedBack);
+        this.el.scoreAnswersParts.replaceChildren();
+      }
       return;
     }
-    this.el.score.dataset['naming'] = 'true';
+    this.el.score.dataset['asking'] = 'named';
     const question = round.asking;
-    const exercise = this.runtime.controller.openedExercise;
     if (question === null || exercise === null) {
       const { right, of } = round.score;
       this.el.scoreAnswersAsks.textContent = `${String(right)} of ${String(of)} right.`;

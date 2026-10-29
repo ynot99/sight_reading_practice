@@ -6700,13 +6700,81 @@ describe('music played back by ear', () => {
     // The question heard at once, once, with no bar counted in before it: the run waiting for the downbeat the reader gives.
     const first = asked(instrument);
     expect([session?.status, first.length > 0]).toEqual(['counting-in', true]);
-    // Any key is the downbeat; the bar it begins, asked already, not asked again.
+    // Any key is the downbeat, once the bar is heard; the bar it begins, asked already, not asked again.
+    const began: number[] = [];
+    session?.events.on('barBegan', ({ stepIndex }) => {
+      began.push(stepIndex);
+    });
     metronome.advanceSubdivisions(1);
+    clock.advance(Math.max(...instrument.stopped.map((note) => note.atMs ?? 0)) - clock.now());
     midi.noteOn(30, clock.now());
-    expect([session?.status, asked(instrument)]).toEqual(['running', first]);
+    expect([session?.status, began, asked(instrument)]).toEqual(['running', [0], first]);
     // Played in time from the bar line, any key counting, whatever was chosen.
     controller.stop();
     expect(controller.lastPlayedWith).toEqual({ modeId: BAR_MODE_ID, modes: ['rhythm'] });
+  });
+
+  it('begins no bar of a rhythm while it is being played: not on the press that began the run, nor on a late tap of the bar before', async () => {
+    const { controller, instrument, midi, metronome, clock } = createController(false, undefined, { modeId: new WaitMode().id, clickOn: true });
+    await controller.openScore(theRhythmicDictation({ level: 'simple', seed: 3 }));
+    const heard: number[] = [];
+    controller.events.on('listeningUntil', ({ atMs }) => {
+      heard.push(atMs);
+    });
+    const lastHeard = (): number => Math.max(...instrument.stopped.map((note) => note.atMs ?? 0));
+    const session = controller.start();
+    const began: number[] = [];
+    session?.events.on('barBegan', ({ stepIndex }) => {
+      began.push(stepIndex);
+    });
+    // Heard until its last note stops; a press before then, the one the run began on, begins nothing.
+    expect(heard).toEqual([lastHeard()]);
+    midi.noteOn(30, clock.now());
+    metronome.advanceSubdivisions(1);
+    midi.noteOn(30, (heard[0] ?? 0) - 1);
+    expect([session?.status, began]).toEqual(['running', []]);
+    // Heard, the next press is the downbeat.
+    clock.advance((heard[0] ?? 0) - clock.now());
+    midi.noteOn(30, clock.now());
+    expect(began).toEqual([0]);
+    // Through the bar, every note of it tapped: a tap after, late, takes the reader to the next bar, heard from now, and does not begin it.
+    for (let guard = 0; guard < 40 && session?.currentStep?.measureIndex === 0; guard += 1) {
+      const step = session.currentStep;
+      const next = controller.currentTimeline?.at(step.index + 1) ?? null;
+      for (const key of step.expectedMidi) {
+        midi.noteOn(key, clock.now());
+      }
+      if (next !== null && next.measureIndex !== 0) {
+        break;
+      }
+      metronome.advanceSubdivisions(1);
+    }
+    midi.noteOn(30, clock.now());
+    expect([session?.currentStep?.measureIndex, heard.length, heard[1] === lastHeard(), began.length]).toEqual([1, 2, true, 1]);
+    // Heard, it is.
+    clock.advance((heard[1] ?? 0) - clock.now());
+    midi.noteOn(30, clock.now());
+    expect(began.length).toBe(2);
+  });
+
+  it('waits for no question of music played back note by note to be heard: an answer given early is the answer', async () => {
+    const { controller, midi, clock } = createController(false, undefined, { modeId: new WaitMode().id });
+    await controller.openScore(theIntervalsByEar({ semitones: [7], way: 'up', seed: 4 }));
+    const heard: number[] = [];
+    controller.events.on('listeningUntil', ({ atMs }) => {
+      heard.push(atMs);
+    });
+    const session = controller.start();
+    for (let guard = 0; guard < 10 && session?.currentStep?.index === 0; guard += 1) {
+      for (const key of session.currentStep.expectedMidi) {
+        midi.noteOn(key, clock.now());
+      }
+    }
+    const answer = session?.currentStep;
+    for (const key of answer?.expectedMidi ?? []) {
+      midi.noteOn(key, clock.now());
+    }
+    expect([heard, session?.currentStep?.index]).toEqual([[], (answer?.index ?? 0) + 1]);
   });
 
   it('begins no run and gives no performance of music answered by name, the keys beginning nothing either; music read begins as ever', async () => {

@@ -886,6 +886,8 @@ export interface ControllerEventMap {
   };
   /** A question of music played back answered, its last note found: right where no key of it was wrong and nothing of it missed. */
   questionFound: { readonly right: boolean };
+  /** A bar of a rhythm played back being played to the reader, until then: no press before it begins the bar. */
+  listeningUntil: { readonly atMs: number };
   error: { readonly error: Error; readonly context: string };
 }
 
@@ -3890,7 +3892,15 @@ export class PracticeController {
    * question as written, from the note given, each for as long as it sounds.
    */
   private soundTheQuestion(question: QuestionPlayedBack, nowMs = this.deps.clock.now()): void {
-    this.soundTheSteps([question.given, ...question.found], this.exercise?.playedBack?.keyFirst === true, nowMs);
+    const playedBack = this.exercise?.playedBack;
+    const endsAtMs = this.soundTheSteps([question.given, ...question.found], playedBack?.keyFirst === true, nowMs);
+    // A rhythm is begun by its downbeat, so a bar is not begun until it has
+    // been heard. Played back note by note, an answer given early is still
+    // the answer, and nothing waits for it.
+    if (playedBack?.inTime === true && endsAtMs !== null) {
+      this.currentSession?.listenUntil(endsAtMs);
+      this.emitter.emit('listeningUntil', { atMs: endsAtMs });
+    }
   }
 
   /**
@@ -3899,13 +3909,14 @@ export class PracticeController {
    * key of the steps as written, from the first, each for as long as it
    * sounds.
    */
-  private soundTheSteps(indexes: readonly number[], keyFirst: boolean, nowMs: number): void {
+  private soundTheSteps(indexes: readonly number[], keyFirst: boolean, nowMs: number): number | null {
     const exercise = this.exercise;
     const timeline = this.timeline;
     const given = indexes[0] === undefined ? null : (timeline?.at(indexes[0]) ?? null);
     if (exercise === null || timeline === null || given === null) {
-      return;
+      return null;
     }
+    let endsAtMs = nowMs;
     const beatMs = spanMs(exercise, given.onsetTicks, given.onsetTicks + Duration.QUARTER.ticks);
     let fromMs = nowMs;
     if (keyFirst) {
@@ -3925,10 +3936,13 @@ export class PracticeController {
       }
       const atMs = fromMs + spanMs(exercise, given.onsetTicks, each.onsetTicks);
       for (const note of each.notes) {
+        const stopsAtMs = atMs + spanMs(exercise, each.onsetTicks, each.onsetTicks + soundsFor(note));
         this.deps.instrument.play(note.midi, QUESTION_VELOCITY, atMs);
-        this.deps.instrument.stop(note.midi, atMs + spanMs(exercise, each.onsetTicks, each.onsetTicks + soundsFor(note)));
+        this.deps.instrument.stop(note.midi, stopsAtMs);
+        endsAtMs = Math.max(endsAtMs, stopsAtMs);
       }
     }
+    return endsAtMs;
   }
 
   /**

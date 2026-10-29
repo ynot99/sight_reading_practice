@@ -168,6 +168,12 @@ export class BarMode extends FlowMode {
   }
 
   private openTheGateWith(context: PracticeContext, event: MidiNoteOnEvent): void {
+    // The bar is still being played to the reader: a press now is not its
+    // downbeat - a late tap of the bar before, or the one that began the run,
+    // would begin a bar not yet heard - and it is no answer to anything.
+    if (event.timestampMs < context.heardUntilMs) {
+      return;
+    }
     const matcher = context.matcher;
     if (matcher === null) {
       // Nothing is owed here, so there is nothing for the gate to open on.

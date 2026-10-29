@@ -2254,6 +2254,8 @@ export class AppView {
   private questionHeard: NamingQuestion | null = null;
   /** The moment a question answered is moved on from, while one waits to be. */
   private nextQuestionTimer: ReturnType<typeof setTimeout> | undefined = undefined;
+  /** When the bar being played to the reader has been heard, and the marker is theirs again. */
+  private heardTimer: ReturnType<typeof setTimeout> | undefined = undefined;
   /** How tall a row is, and the ruler and the pedal lane, as last measured. */
   private rollLook = { rowPx: 13, rulerTallPx: 0, chordsTallPx: 0, pedalTallPx: 0 };
   /** The frame a fling is going on in, if one is. */
@@ -3802,6 +3804,7 @@ export class AppView {
   }
 
   dispose(): void {
+    clearTimeout(this.heardTimer);
     this.forgetTheBeats();
     this.cancelPreview();
     if (this.tempoRedraw !== null) {
@@ -8000,6 +8003,11 @@ export class AppView {
       }),
     );
     this.subscriptions.push(
+      controller.events.on('listeningUntil', ({ atMs }) => {
+        this.showTheBarBeingHeard(atMs);
+      }),
+    );
+    this.subscriptions.push(
       controller.events.on('exerciseLoaded', ({ exercise }) => {
         this.hasLooked = false;
         this.placedOnBar = null;
@@ -8266,6 +8274,9 @@ export class AppView {
         this.letTheCursorsClose();
         // Begun, the run of answers found starts again; over, it says the most there were.
         this.sayHowManyInARow();
+        if (status === 'completed' || status === 'aborted') {
+          this.showTheBarBeingHeard(null);
+        }
         // And begun, it is no longer the one played through.
         if (status !== 'completed' && status !== 'aborted' && this.playedThrough !== null) {
           this.playedThrough = null;
@@ -12067,6 +12078,23 @@ export class AppView {
     this.questionHeard = null;
     this.naming = exercise.byName === undefined ? null : new NamingRound(exercise.byName);
     this.showTheQuestion();
+  }
+
+  /**
+   * Greys the marker while the bar it stands on is played to the reader, a
+   * rhythm to tap back: until then no press begins it, and the marker in its
+   * own colour would say it was waiting for one. `null` gives it back now.
+   */
+  private showTheBarBeingHeard(untilMs: number | null): void {
+    clearTimeout(this.heardTimer);
+    if (untilMs === null) {
+      delete this.el.score.dataset['hearing'];
+      return;
+    }
+    this.el.score.dataset['hearing'] = 'true';
+    this.heardTimer = setTimeout(() => {
+      delete this.el.score.dataset['hearing'];
+    }, Math.max(0, untilMs - this.runtime.clock.now()));
   }
 
   /**

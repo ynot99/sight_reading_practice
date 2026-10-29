@@ -8759,10 +8759,52 @@ describe('AppView', () => {
       expect(verdict()).toEqual(['completed', true, 'A fresh exercise', true]);
     });
 
+    it('greys the marker while the bar of a rhythm is played to the reader, and gives it back once heard or the run stopped', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ previewSeconds: 0 });
+      let heardUntil = 0;
+      runtime.controller.events.on('listeningUntil', ({ atMs }) => {
+        heardUntil = atMs;
+      });
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      element<HTMLButtonElement>('solfege-rhythm-open').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise?.playedBack?.inTime).toBe(true);
+      });
+      const listening = (): string | undefined => element('score').dataset['hearing'];
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        expect(listening()).toBeUndefined();
+        element<HTMLButtonElement>('focus-play').click();
+        const lasts = heardUntil - runtime.clock.now();
+        expect([listening(), lasts > 0]).toEqual(['true', true]);
+        // Grey until the bar has been heard, and its own colour from then.
+        vi.advanceTimersByTime(lasts - 1);
+        expect(listening()).toBe('true');
+        vi.advanceTimersByTime(1);
+        expect(listening()).toBeUndefined();
+        // Stopped while it is heard: given back at once.
+        element<HTMLButtonElement>('focus-stop').click();
+        element<HTMLButtonElement>('focus-play').click();
+        expect(listening()).toBe('true');
+        element<HTMLButtonElement>('focus-stop').click();
+        expect(listening()).toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('offers another round in the strip once music played back is played through, the verdict put away or not, until a run begins', async () => {
       const { view, runtime, midi, clock, metronome } = createRig();
       await view.initialize();
       runtime.controller.updateSettings({ previewSeconds: 0 });
+      // Each bar heard before it is tapped.
+      let heardUntil = 0;
+      runtime.controller.events.on('listeningUntil', ({ atMs }) => {
+        heardUntil = atMs;
+      });
       const play = (keys: number): void => {
         element<HTMLButtonElement>('focus-play').click();
         for (let guard = 0; guard < 400 && keys > 0; guard += 1) {
@@ -8774,6 +8816,7 @@ describe('AppView', () => {
           if (session?.status !== 'running') {
             break;
           }
+          clock.advance(Math.max(0, heardUntil - clock.now()));
           for (const key of session.currentStep?.expectedMidi ?? []) {
             midi.noteOn(key, clock.now());
           }

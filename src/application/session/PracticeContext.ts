@@ -201,6 +201,13 @@ export interface PracticeContext {
   readonly holdingAtBarLine: boolean;
 
   /**
+   * Until when the reader is listening to the bar asked of them, played back
+   * in time: no press before it gives the bar its downbeat. Long past where
+   * nothing is being played to them.
+   */
+  readonly heardUntilMs: number;
+
+  /**
    * The moment a gate that holds past its note stops the music, or `null`.
    *
    * The end of the note's Perfect window on the late side. A press up to then

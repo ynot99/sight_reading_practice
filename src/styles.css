@@ -536,6 +536,15 @@ textarea {
 }
 
 /*
+ * Grey while the bar it stands on is played to the reader: a rhythm played
+ * back is listened to before it is tapped, and nothing pressed until it has
+ * been heard begins it.
+ */
+.score[data-hearing] .score__cursor {
+  --marker-wash: rgb(148 163 184 / 45%);
+}
+
+/*
  * The marker reddens where the reader keeps missing.
  *
  * Practising with every colour turned off is reading blind on purpose, and

@@ -120,6 +120,8 @@ export class PracticeSession {
    * arriving at it is what releases the hold.
    */
   private heldAtBarTicks: number | null = null;
+  /** Until when the reader is listening to the bar asked of them; see `listenUntil`. */
+  private heardUntilMs = Number.NEGATIVE_INFINITY;
   /**
    * Bumped whenever the pulse is restarted under a run already going.
    *
@@ -335,6 +337,14 @@ export class PracticeSession {
    * real timestamps and graded as early - so the reader does not have to play
    * the first chord twice.
    */
+  /**
+   * Says the reader is listening until a moment: the bar the run waits at is
+   * being played to them, and no press before then is its downbeat.
+   */
+  listenUntil(atMs: number): void {
+    this.heardUntilMs = atMs;
+  }
+
   start(opening: readonly MidiNoteOnEvent[] = [], pedalWasDown = false): void {
     const previous = this.machine.state;
     this.machine.dispatch('start');
@@ -1958,6 +1968,9 @@ export class PracticeSession {
       },
       get holdingAtBarLine() {
         return session.heldAtBarTicks !== null;
+      },
+      get heardUntilMs() {
+        return session.heardUntilMs;
       },
       get gateClosesAtMs() {
         const step = session.currentStep;

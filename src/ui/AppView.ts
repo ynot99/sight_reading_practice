@@ -12047,8 +12047,7 @@ export class AppView {
     }
     if (round.answered !== null) {
       clearTimeout(this.nextQuestionTimer);
-      round.next();
-      this.showTheQuestion();
+      this.moveOnFrom(round);
       return;
     }
     const chip = (event.target as Element | null)?.closest<HTMLElement>('[data-choice]');
@@ -12067,11 +12066,22 @@ export class AppView {
     // there being the right one to see and to hear.
     if (round.answered !== null && round.answers.at(-1)?.right === true) {
       this.nextQuestionTimer = setTimeout(() => {
-        if (this.naming === round && round.next()) {
-          this.showTheQuestion();
+        if (this.naming === round) {
+          this.moveOnFrom(round);
         }
       }, NEXT_QUESTION_AFTER_MS);
     }
+  }
+
+  /**
+   * Moves a round of naming on from the question answered - and, where that
+   * was its last, keeps how the round went among the readings.
+   */
+  private moveOnFrom(round: NamingRound): void {
+    if (round.next() && round.over) {
+      this.runtime.controller.recordTheRoundNamed(round.score);
+    }
+    this.showTheQuestion();
   }
 
   /**

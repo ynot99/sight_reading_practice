@@ -6665,6 +6665,19 @@ describe('music played back by ear', () => {
     expect(controller.isListening).toBe(true);
   });
 
+  it('keeps a round of naming among the readings of its music by the share answered right, and nothing for music that is read', async () => {
+    const history = new PracticeHistory(new InMemorySettingsStore());
+    const { controller } = createController(false, undefined, { modeId: new WaitMode().id }, history);
+    await controller.openScore(theChordsNamed({ asks: 'quality', heard: true, seed: 2 }));
+    controller.recordTheRoundNamed({ right: 7, of: 10 });
+    controller.recordTheRoundNamed({ right: 0, of: 0 });
+    await controller.openScore(twoBarExercise());
+    controller.recordTheRoundNamed({ right: 10, of: 10 });
+    expect(
+      history.lastReadings(5).map((reading) => [reading.key, reading.overall, reading.grade, reading.completed, reading.notes, reading.picture]),
+    ).toEqual([['score:Chords by ear', 0.7, 'C', true, undefined, undefined]]);
+  });
+
   it('plays a bar named as an answer offered would have it, each moment for half a bar of the round, and nothing for an answer that is no sound', async () => {
     const { controller, instrument, clock } = createController(false, undefined, { modeId: new WaitMode().id });
     const round = theIntervalsNamed({ semitones: [3, 7], way: 'up', seed: 4 });

@@ -2,6 +2,7 @@ import type { ExercisePresetRegistry } from '../domain/generation/ExercisePreset
 import type { ExerciseRequest, IExerciseGenerator } from '../domain/generation/IExerciseGenerator.js';
 import type { RhythmProfileRegistry } from '../domain/generation/RhythmProfile.js';
 import type { Exercise, PlayedBack } from '../domain/model/Exercise.js';
+import { gradeFor } from '../domain/scoring/IScoringStrategy.js';
 import type { PlayingAhead } from './session/PracticeContext.js';
 import type { KeySignature } from '../domain/model/KeySignature.js';
 import { TimeSignature } from '../domain/model/TimeSignature.js';
@@ -3910,6 +3911,21 @@ export class PracticeController {
     if (steps.length > 0) {
       this.soundTheSteps(steps, false, this.deps.clock.now());
     }
+  }
+
+  /**
+   * Keeps a round of naming answered to its end among the readings of its
+   * music, as a run is kept: the share of its questions answered right, and
+   * the grade that share earns. Its notes are not counted - nothing was
+   * played - so its reading says how it went and nothing about touch.
+   */
+  recordTheRoundNamed(score: { readonly right: number; readonly of: number }): void {
+    if (!this.isAnsweredByName || score.of === 0) {
+      return;
+    }
+    const overall = score.right / score.of;
+    // The calendar, as a run's reading is kept by.
+    this.deps.history?.record(this.practiceKey(), { atMs: Date.now(), overall, grade: gradeFor(overall), completed: true });
   }
 
   /**

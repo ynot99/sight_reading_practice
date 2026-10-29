@@ -8324,11 +8324,24 @@ describe('AppView', () => {
         },
         { timeout: 3_000 },
       );
-      for (let at = 3; at < 10; at += 1) {
+      // Kept among the readings once it is over, and once only: a press on how it went keeps nothing more.
+      const kept = vi.spyOn(runtime.controller, 'recordTheRoundNamed');
+      for (let at = 3; at < 9; at += 1) {
         press(answerOf(at));
         pad.click();
       }
-      expect([element('score-answers-asks').textContent, chips(), given()]).toEqual(['9 of 10 right.', [], []]);
+      // The last moved on from by itself, as a right answer is.
+      press(answerOf(9));
+      const keptBeforeTheEnd = kept.mock.calls.length;
+      await vi.waitFor(
+        () => {
+          expect(element('score-answers-asks').textContent).toBe('9 of 10 right.');
+        },
+        { timeout: 3_000 },
+      );
+      expect([chips(), given()]).toEqual([[], []]);
+      pad.click();
+      expect([keptBeforeTheEnd, kept.mock.calls]).toEqual([0, [[{ right: 9, of: 10 }]]]);
 
       // Music that is played puts the answers away.
       element<HTMLButtonElement>('focus-scores').click();
@@ -8441,11 +8454,14 @@ describe('AppView', () => {
       const pad = element('score-answers');
       const again = (): HTMLButtonElement | null => pad.querySelector<HTMLButtonElement>('[data-another-round]');
       const offeredAsked = again();
+      const kept = vi.spyOn(runtime.controller, 'recordTheRoundNamed');
       for (let at = 0; at < 10; at += 1) {
         pad.querySelector<HTMLButtonElement>(`[data-choice="${first?.byName?.[at]?.parts[0]?.answer ?? ''}"]`)?.click();
         pad.click();
       }
       expect([offeredAsked, element('score-answers-asks').textContent, again()?.textContent]).toEqual([null, '10 of 10 right.', 'Another round']);
+      // Moved on from its last by a press, it is kept as one moved on from by itself is.
+      expect(kept.mock.calls).toEqual([[{ right: 10, of: 10 }]]);
 
       again()?.click();
       await vi.waitFor(() => {

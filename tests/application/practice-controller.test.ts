@@ -6727,6 +6727,45 @@ describe('music played back by ear', () => {
     expect(controller.isListening).toBe(true);
   });
 
+  it('counts the questions of music played back found with no key wrong, one after another, a run at a time', async () => {
+    const { controller, midi, clock } = createController(false, undefined, { modeId: new WaitMode().id });
+    await controller.openScore(round());
+    const timeline = controller.currentTimeline;
+    const found = vi.fn();
+    controller.events.on('questionFound', found);
+    const play = (bar: number, wrongFirst: boolean): void => {
+      for (const step of [timeline?.at(bar * 2), timeline?.at(bar * 2 + 1)]) {
+        if (wrongFirst && step === timeline?.at(bar * 2 + 1)) {
+          midi.noteOn((step?.expectedMidi[0] ?? 60) + 1, clock.now());
+        }
+        for (const key of step?.expectedMidi ?? []) {
+          midi.noteOn(key, clock.now());
+        }
+      }
+    };
+    controller.start();
+    const before = controller.questionsFoundInARow;
+    play(0, false);
+    const one = controller.questionsFoundInARow;
+    play(1, false);
+    play(2, true);
+    const broken = controller.questionsFoundInARow;
+    play(3, false);
+    expect([before, one, broken, controller.questionsFoundInARow]).toEqual([null, { inARow: 1, most: 1 }, { inARow: 0, most: 2 }, { inARow: 1, most: 2 }]);
+    expect(found.mock.calls.map(([event]) => (event as { right: boolean }).right)).toEqual([true, true, false, true]);
+    // Begun again, counted again; music that is read asks none.
+    controller.stop();
+    controller.start();
+    expect(controller.questionsFoundInARow).toBeNull();
+    controller.stop();
+    await controller.openScore(twoBarExercise());
+    controller.start();
+    for (const key of controller.currentTimeline?.at(0)?.expectedMidi ?? []) {
+      midi.noteOn(key, clock.now());
+    }
+    expect([controller.questionsFoundInARow, found.mock.calls.length]).toEqual([null, 4]);
+  });
+
   it('keeps a round of naming among the readings of its music by the share answered right, and nothing for music that is read', async () => {
     const history = new PracticeHistory(new InMemorySettingsStore());
     const { controller } = createController(false, undefined, { modeId: new WaitMode().id }, history);

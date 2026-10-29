@@ -3,12 +3,13 @@ import type { ExerciseRequest, IExerciseGenerator } from '../domain/generation/I
 import type { RhythmProfileRegistry } from '../domain/generation/RhythmProfile.js';
 import type { Exercise, PlayedBack } from '../domain/model/Exercise.js';
 import { gradeFor } from '../domain/scoring/IScoringStrategy.js';
+import { mostRightInARow, rightInARowAtTheEnd } from './solfege/inARow.js';
 import type { PlayingAhead } from './session/PracticeContext.js';
 import type { KeySignature } from '../domain/model/KeySignature.js';
 import { TimeSignature } from '../domain/model/TimeSignature.js';
 import type { IMusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.js';
 import { printedAtEachStep } from '../domain/notation/printedIds.js';
-import { noteCountsOf, type PerformanceReport, type StepStatus } from '../domain/scoring/PerformanceReport.js';
+import { noteCountsOf, type PerformanceReport, type StepResult, type StepStatus } from '../domain/scoring/PerformanceReport.js';
 import { theReadingPicture, type ReadingPicture } from '../domain/scoring/ReadingPicture.js';
 import { modesOn, type PlayedWith } from './modes/challengeModes.js';
 import { pieceOfKey } from './PracticeHistory.js';
@@ -882,6 +883,8 @@ export interface ControllerEventMap {
     readonly to: LadderStep;
     readonly direction: 'up' | 'down';
   };
+  /** A question of music played back answered, its last note found: right where no key of it was wrong and nothing of it missed. */
+  questionFound: { readonly right: boolean };
   error: { readonly error: Error; readonly context: string };
 }
 
@@ -936,6 +939,10 @@ export class PracticeController {
   private stepsToFind: ReadonlySet<number> = new Set();
   /** The step whose question was last played as it was asked, so it is played once a run. */
   private questionAsked: number | null = null;
+  /** The questions of music played back answered in the run, in order: whether each was found with no key wrong. */
+  private questionsFound: boolean[] = [];
+  /** The questions of the run going with a key played wrong at one of their steps, or a note of one missed, by their note given. */
+  private questionsFumbled = new Set<number>();
   /**
    * The keys a bar named was last heard by - its question, or an answer
    * offered - so that the next heard is heard alone: two answers pressed
@@ -3253,6 +3260,7 @@ export class PracticeController {
       // well, badly or not at all: the page empties as the music passes.
       session.events.on('stepCompleted', ({ result, atMs }) => {
         this.readerReaches(result.index, result.status, atMs);
+        this.judgeTheQuestionAt(result);
         // Found by ear, it goes on the page.
         if (this.stepsToFind.has(result.index)) {
           this.deps.fade.reveal(result.index);
@@ -3521,6 +3529,8 @@ export class PracticeController {
     // finishes long before it.
     timeTheStart('pulse about to start');
     this.questionAsked = null;
+    this.questionsFound = [];
+    this.questionsFumbled = new Set();
     session.start(opening, this.pedalIsDown);
     timeTheStart('pulse started');
     // A question heard is heard before it is answered - before the downbeat
@@ -3940,6 +3950,39 @@ export class PracticeController {
       this.deps.instrument.stop(key, nowMs);
     }
     this.namedHeardWith = [];
+  }
+
+  /**
+   * Counts a step of music played back towards its question: a key played
+   * wrong at it or a note of it missed, and the question is not found right;
+   * its last note done with, the question is answered, and said so.
+   */
+  private judgeTheQuestionAt(result: StepResult): void {
+    const question = [...this.questionsPlayedBack.values()].find(
+      (each) => each.given === result.index || each.found.includes(result.index),
+    );
+    if (question === undefined) {
+      return;
+    }
+    if (result.wrong.length > 0 || result.missing.length > 0) {
+      this.questionsFumbled.add(question.given);
+    }
+    if (result.index === question.found.at(-1)) {
+      const right = !this.questionsFumbled.has(question.given);
+      this.questionsFound.push(right);
+      this.emitter.emit('questionFound', { right });
+    }
+  }
+
+  /**
+   * How many questions of music played back the run going, or the last,
+   * found right one after another to the last answered, and the most it
+   * found so; `null` before any was answered.
+   */
+  get questionsFoundInARow(): { readonly inARow: number; readonly most: number } | null {
+    return this.questionsFound.length === 0
+      ? null
+      : { inARow: rightInARowAtTheEnd(this.questionsFound), most: mostRightInARow(this.questionsFound) };
   }
 
   /**

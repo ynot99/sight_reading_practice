@@ -7951,6 +7951,11 @@ export class AppView {
       }),
     );
     this.subscriptions.push(
+      controller.events.on('questionFound', () => {
+        this.sayHowManyInARow();
+      }),
+    );
+    this.subscriptions.push(
       controller.events.on('exerciseLoaded', ({ exercise }) => {
         this.hasLooked = false;
         this.placedOnBar = null;
@@ -8215,6 +8220,8 @@ export class AppView {
         this.updateButtons(status);
         this.keepDrainingWhileWaiting(status === 'running');
         this.letTheCursorsClose();
+        // Begun, the run of answers found starts again; over, it says the most there were.
+        this.sayHowManyInARow();
         if (status === 'completed' || status === 'aborted') {
           this.stopTheOtherHandsMarker();
         }
@@ -12006,7 +12013,7 @@ export class AppView {
     const exercise = this.runtime.controller.openedExercise;
     const playedBack = exercise?.playedBack;
     this.el.scoreAnswers.hidden = round === null && playedBack === undefined;
-    this.sayHowManyInARow(round);
+    this.sayHowManyInARow();
     // The room the answers take at the top of the page, kept clear of the music.
     if (round === null) {
       // Music played back is answered on the keys: the place says only how.
@@ -12157,13 +12164,25 @@ export class AppView {
   }
 
   /**
-   * How many questions of a round of naming have been answered right one
-   * after another, beside the question - nothing before the first right one -
-   * and at the end, the most there were.
+   * How many questions have been answered right one after another, beside
+   * the question - nothing before the first right one - and once they are
+   * over, the most there were: a round of naming's, or the questions of
+   * music played back that the run found with no key wrong.
    */
-  private sayHowManyInARow(round: NamingRound | null): void {
+  private sayHowManyInARow(): void {
+    const round = this.naming;
+    const controller = this.runtime.controller;
+    const found = controller.openedExercise?.playedBack === undefined ? null : controller.questionsFoundInARow;
+    const status = controller.session?.status;
+    const run =
+      round !== null
+        ? { inARow: round.inARow, most: round.mostInARow, over: round.over }
+        : found === null
+          ? null
+          : { ...found, over: status === 'completed' || status === 'aborted' };
+    const said =
+      run === null ? '' : run.over ? (run.most > 1 ? `best ${String(run.most)} in a row` : '') : run.inARow > 0 ? `${String(run.inARow)} in a row` : '';
     const streak = this.el.scoreAnswersStreak;
-    const said = round === null ? '' : round.over ? (round.mostInARow > 1 ? `best ${String(round.mostInARow)} in a row` : '') : round.inARow > 0 ? `${String(round.inARow)} in a row` : '';
     streak.value = said;
     streak.hidden = said === '';
   }

@@ -8529,6 +8529,38 @@ describe('AppView', () => {
       expect([two, broken, shown()]).toEqual(['2 in a row', '', 'best 6 in a row']);
     });
 
+    it('says in the strip how many questions played back were found with no key wrong, and the most once the run is over', async () => {
+      const { view, runtime, midi, clock } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      element<HTMLButtonElement>('solfege-intervals-open').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise?.title).toBe('Intervals by ear');
+      });
+      const streak = element<HTMLOutputElement>('score-answers-streak');
+      const shown = (): string => (streak.hidden ? '' : streak.value);
+      const timeline = runtime.controller.currentTimeline;
+      const play = (bar: number): void => {
+        for (const step of [timeline?.at(bar * 2), timeline?.at(bar * 2 + 1)]) {
+          for (const key of step?.expectedMidi ?? []) {
+            midi.noteOn(key, clock.now());
+          }
+        }
+      };
+      element<HTMLButtonElement>('focus-play').click();
+      const begun = shown();
+      play(0);
+      const one = shown();
+      play(1);
+      const two = shown();
+      element<HTMLButtonElement>('focus-stop').click();
+      expect([begun, one, two, shown()]).toEqual(['', '1 in a row', '2 in a row', 'best 2 in a row']);
+      // Begun again, nothing yet.
+      element<HTMLButtonElement>('focus-play').click();
+      expect(shown()).toBe('');
+    });
+
     it('offers another round at the end of a round of naming: what was asked, other notes, asked from the first', async () => {
       // It ended with how it went and nowhere to go but back to the list.
       const { view, runtime } = createRig();

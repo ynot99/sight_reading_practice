@@ -1,4 +1,5 @@
 import type { NamingQuestion } from '../../domain/model/Exercise.js';
+import { mostRightInARow, rightInARowAtTheEnd } from './inARow.js';
 
 /** A question of a naming round as it was answered: what was picked for each part, and whether all were right. */
 export interface QuestionNamed {
@@ -94,22 +95,12 @@ export class NamingRound {
    * up to the one answered now: nought just after one that was not.
    */
   get inARow(): number {
-    let run = 0;
-    for (const each of this.named) {
-      run = each.right ? run + 1 : 0;
-    }
-    return run;
+    return rightInARowAtTheEnd(this.named.map((each) => each.right));
   }
 
   /** The most questions answered right one after another in the round so far. */
   get mostInARow(): number {
-    let most = 0;
-    let run = 0;
-    for (const each of this.named) {
-      run = each.right ? run + 1 : 0;
-      most = Math.max(most, run);
-    }
-    return most;
+    return mostRightInARow(this.named.map((each) => each.right));
   }
 
   private nothingPicked(): (string | null)[] {

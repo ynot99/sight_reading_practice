@@ -228,6 +228,22 @@ function readBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
 
+/**
+ * The choices of the Solfege list: a name of a few words for each, and a
+ * short value. Whether the list still offers that value is the list's to
+ * say, so anything else of the right shape is kept rather than judged here.
+ */
+function readSolfegeAsked(value: unknown): Readonly<Record<string, string>> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, string] => /^[a-z]+(-[a-z]+)*$/.test(entry[0]) && typeof entry[1] === 'string' && entry[1].length <= 40,
+    ),
+  );
+}
+
 /** A name as it was written, its ends trimmed; nothing that is not a name. */
 function readName(value: unknown): string | undefined {
   return typeof value === 'string' ? value.trim() : undefined;
@@ -443,6 +459,7 @@ export function decodePracticeSettings(
     rollSounds: readBoolean(value['rollSounds']),
     circleNamesTheChord: readBoolean(value['circleNamesTheChord']),
     circleShowsTheKeys: readBoolean(value['circleShowsTheKeys']),
+    solfegeAsked: readSolfegeAsked(value['solfegeAsked']),
     velocityAsDynamics: readBoolean(value['velocityAsDynamics']),
     rangeFromBar: readBar(value['rangeFromBar']),
     rangeToBar: readBar(value['rangeToBar']),
@@ -531,6 +548,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     rollSounds: settings.rollSounds,
     circleNamesTheChord: settings.circleNamesTheChord,
     circleShowsTheKeys: settings.circleShowsTheKeys,
+    solfegeAsked: settings.solfegeAsked,
     velocityAsDynamics: settings.velocityAsDynamics,
     rangeFromBar: settings.rangeFromBar,
     rangeToBar: settings.rangeToBar,

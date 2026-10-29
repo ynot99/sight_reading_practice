@@ -8322,6 +8322,56 @@ describe('AppView', () => {
       expect([chips(), given(), element('score').dataset['asking']]).toEqual([[], [], 'played-back']);
     });
 
+    it('opens the Solfege list as it was left after a reload, and asks a round by what it remembers', async () => {
+      // Every reload put each list back at its first choice, and the intervals
+      // at the five a round begins with.
+      const store = new InMemorySettingsStore();
+      const first = createRig(undefined, store);
+      await first.view.initialize();
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      const choose = (id: string, value: string): void => {
+        const list = element<HTMLSelectElement>(id);
+        list.value = value;
+        list.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      choose('solfege-dictation-mode', 'minor');
+      choose('solfege-dictation-key', '-2');
+      choose('solfege-dictation-bars', '4');
+      choose('solfege-complex-scale', 'harmonicMinor');
+      choose('solfege-complex-key', '3');
+      choose('solfege-intervals-way', 'together');
+      const chip = (short: string): HTMLButtonElement | undefined =>
+        [...element('solfege-intervals-which').querySelectorAll<HTMLButtonElement>('[data-semitones]')].find((each) => each.textContent === short);
+      for (const short of ['m3', 'M3', 'P4', 'P5', 'TT']) {
+        chip(short)?.click();
+      }
+      const chosen = (): string[] =>
+        [...element('solfege-intervals-which').querySelectorAll<HTMLButtonElement>('[aria-pressed="true"]')].map((each) => each.textContent);
+      const left = chosen();
+      // A choice the list no longer offers, as an older version may have kept.
+      first.runtime.controller.updateSettings({ solfegeAsked: { ...first.runtime.controller.settings.solfegeAsked, 'rhythm-level': 'triplets' } });
+
+      mountRealMarkup();
+      const next = createRig(undefined, store);
+      await next.view.initialize();
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      const shown = (id: string): string => `${element<HTMLSelectElement>(id).value} ${element<HTMLSelectElement>(id).selectedOptions[0]?.label ?? ''}`;
+
+      expect(left).toEqual(['TT', 'P8']);
+      expect([chosen(), shown('solfege-intervals-way')]).toEqual([['TT', 'P8'], 'together Together']);
+      // Each list of keys named in the mode or scale it was left with.
+      expect([shown('solfege-dictation-mode'), shown('solfege-dictation-key'), shown('solfege-dictation-bars')]).toEqual(['minor Minor', '-2 G minor', '4 4 bars']);
+      expect([shown('solfege-complex-scale'), shown('solfege-complex-key')]).toEqual(['harmonicMinor Harmonic minor', '3 F♯ harmonic minor']);
+      expect(shown('solfege-rhythm-level')).toBe('simple Crotchets, quavers and minims');
+      element<HTMLButtonElement>('solfege-dictation-open').click();
+      await vi.waitFor(() => {
+        expect(next.runtime.controller.openedExercise?.title).toBe('Melodic dictation');
+      });
+      expect([next.runtime.controller.openedExercise?.key.fifths, next.runtime.controller.openedExercise?.key.mode, next.runtime.controller.openedExercise?.staves[0]?.measures.length]).toEqual([-2, 'minor', 16]);
+    });
+
     it('names each button of the Solfege list by how what it opens is answered, and names it by its words', async () => {
       // "By ear" opened intervals answered on the keys and chords answered on
       // the screen, and nothing said which.

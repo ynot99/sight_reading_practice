@@ -1613,6 +1613,11 @@ function thePlayingAsAFile(
 /** How long a question answered shows how it went before the next is asked. */
 const NEXT_QUESTION_AFTER_MS = 1_200;
 
+/** What a list of the Solfege list is kept by: its id without the list's own name. */
+function theChoiceOf(list: HTMLSelectElement): string {
+  return list.id.replace(/^solfege-/, '');
+}
+
 /** A seed for a round of the solfege list: what is asked stays, the notes asking it change. */
 function aFreshSeed(): number {
   return Math.floor(Math.random() * 2 ** 31);
@@ -10299,6 +10304,15 @@ export class AppView {
         this.intervalsAsked.add(semitones);
       }
       this.showTheIntervalsAsked();
+      this.keepWhatTheSolfegeListAsks({ 'intervals-which': [...this.intervalsAsked].sort((one, other) => one - other).join(',') });
+    });
+    // Every list of it, kept as it is changed - after its own listener, so a
+    // list of keys renamed for another mode is kept by the key it still is.
+    this.listen(this.el.solfege, 'change', (event) => {
+      const list = (event.target as Element | null)?.closest('select');
+      if (list !== null && list !== undefined) {
+        this.keepWhatTheSolfegeListAsks({ [theChoiceOf(list)]: list.value });
+      }
     });
     this.listen(this.el.solfegeIntervalsOpen, 'click', () => {
       void this.openTheIntervals('by ear');
@@ -11630,37 +11644,76 @@ export class AppView {
     } else if (sketches) {
       this.renderSketches();
     } else {
-      this.nameTheKeysOfTheScaleComplex();
-      this.showTheIntervalsAsked();
-      this.showTheDictationAsked();
-      if (this.el.solfegeChordsAsks.options.length === 0) {
-        this.el.solfegeChordsAsks.replaceChildren(
-          new Option('Their quality', 'quality'),
-          new Option('Their quality and position', 'positions'),
-          new Option('Triads and sevenths', 'sevenths'),
-        );
-      }
-      if (this.el.solfegeKeysAs.options.length === 0) {
-        this.el.solfegeKeysAs.replaceChildren(new Option('Major keys', 'major'), new Option('Minor keys', 'minor'), new Option('Either', 'either'));
-      }
-      if (this.el.solfegeFunctionsMode.options.length === 0) {
-        this.el.solfegeFunctionsMode.replaceChildren(new Option('Major', 'major'), new Option('Minor', 'minor'));
-      }
-      this.nameTheKeysOfTheList(this.el.solfegeFunctionsKey, this.el.solfegeFunctionsMode.value === 'minor' ? 'minor' : 'major');
-      this.showTheProgressionsAsked();
-      if (this.el.solfegeRhythmLevel.options.length === 0) {
-        this.el.solfegeRhythmLevel.replaceChildren(new Option('Crotchets, quavers and minims', 'simple'), new Option('Dotted notes and semiquavers too', 'dotted'));
-      }
-      if (this.el.solfegeCadencesMode.options.length === 0) {
-        this.el.solfegeCadencesMode.replaceChildren(new Option('Major', 'major'), new Option('Minor', 'minor'));
-      }
-      this.nameTheKeysOfTheList(this.el.solfegeCadencesKey, this.el.solfegeCadencesMode.value === 'minor' ? 'minor' : 'major');
-      if (this.el.solfegeTransposeMode.options.length === 0) {
-        this.el.solfegeTransposeMode.replaceChildren(new Option('Major', 'major'), new Option('Minor', 'minor'));
-        this.el.solfegeTransposeBy.replaceChildren(...TRANSPOSITION_NAMES.map((name) => new Option(TRANSPOSITIONS[name].called, name)));
-      }
-      this.nameTheKeysOfTheList(this.el.solfegeTransposeKey, this.el.solfegeTransposeMode.value === 'minor' ? 'minor' : 'major');
+      // Filled, set as it was left, and filled again: a list of keys is
+      // named in the scale or mode beside it, which may have been set.
+      this.fillTheSolfegeLists();
+      this.putBackWhatTheSolfegeListAsked();
+      this.fillTheSolfegeLists();
     }
+  }
+
+  /**
+   * Sets the Solfege list as it was left: each choice it still offers, and
+   * the intervals a round asks where any of them is still one there is.
+   */
+  private putBackWhatTheSolfegeListAsked(): void {
+    const asked = this.runtime.controller.settings.solfegeAsked;
+    for (const list of this.el.solfege.querySelectorAll<HTMLSelectElement>('select')) {
+      const was = asked[theChoiceOf(list)];
+      if (was !== undefined && [...list.options].some((option) => option.value === was)) {
+        list.value = was;
+      }
+    }
+    const intervals = (asked['intervals-which'] ?? '')
+      .split(',')
+      .map(Number)
+      .filter((semitones) => INTERVALS.some((interval) => interval.semitones === semitones));
+    if (intervals.length > 0) {
+      this.intervalsAsked.clear();
+      for (const semitones of intervals) {
+        this.intervalsAsked.add(semitones);
+      }
+    }
+  }
+
+  /** Keeps a choice of the Solfege list, with the rest of what it asks. */
+  private keepWhatTheSolfegeListAsks(changes: Readonly<Record<string, string>>): void {
+    const { controller } = this.runtime;
+    controller.updateSettings({ solfegeAsked: { ...controller.settings.solfegeAsked, ...changes } });
+  }
+
+  /** Fills every list of the Solfege list that is empty, and names its keys in the scale or mode chosen beside them. */
+  private fillTheSolfegeLists(): void {
+    this.nameTheKeysOfTheScaleComplex();
+    this.showTheIntervalsAsked();
+    this.showTheDictationAsked();
+    if (this.el.solfegeChordsAsks.options.length === 0) {
+      this.el.solfegeChordsAsks.replaceChildren(
+        new Option('Their quality', 'quality'),
+        new Option('Their quality and position', 'positions'),
+        new Option('Triads and sevenths', 'sevenths'),
+      );
+    }
+    if (this.el.solfegeKeysAs.options.length === 0) {
+      this.el.solfegeKeysAs.replaceChildren(new Option('Major keys', 'major'), new Option('Minor keys', 'minor'), new Option('Either', 'either'));
+    }
+    if (this.el.solfegeFunctionsMode.options.length === 0) {
+      this.el.solfegeFunctionsMode.replaceChildren(new Option('Major', 'major'), new Option('Minor', 'minor'));
+    }
+    this.nameTheKeysOfTheList(this.el.solfegeFunctionsKey, this.el.solfegeFunctionsMode.value === 'minor' ? 'minor' : 'major');
+    this.showTheProgressionsAsked();
+    if (this.el.solfegeRhythmLevel.options.length === 0) {
+      this.el.solfegeRhythmLevel.replaceChildren(new Option('Crotchets, quavers and minims', 'simple'), new Option('Dotted notes and semiquavers too', 'dotted'));
+    }
+    if (this.el.solfegeCadencesMode.options.length === 0) {
+      this.el.solfegeCadencesMode.replaceChildren(new Option('Major', 'major'), new Option('Minor', 'minor'));
+    }
+    this.nameTheKeysOfTheList(this.el.solfegeCadencesKey, this.el.solfegeCadencesMode.value === 'minor' ? 'minor' : 'major');
+    if (this.el.solfegeTransposeMode.options.length === 0) {
+      this.el.solfegeTransposeMode.replaceChildren(new Option('Major', 'major'), new Option('Minor', 'minor'));
+      this.el.solfegeTransposeBy.replaceChildren(...TRANSPOSITION_NAMES.map((name) => new Option(TRANSPOSITIONS[name].called, name)));
+    }
+    this.nameTheKeysOfTheList(this.el.solfegeTransposeKey, this.el.solfegeTransposeMode.value === 'minor' ? 'minor' : 'major');
   }
 
   /**

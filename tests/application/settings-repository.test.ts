@@ -71,6 +71,7 @@ const SETTINGS: PracticeSettings = {
   rollSounds: false,
   circleNamesTheChord: false,
   circleShowsTheKeys: false,
+  solfegeAsked: { 'complex-key': '3', 'intervals-which': '1,6,12' },
   yourName: 'A. Writer',
   velocityAsDynamics: true,
   rhythmRuler: 'eighth',
@@ -130,6 +131,17 @@ describe('practice settings codec', () => {
     expect(restored.clickWhen).toBe('cycle-2');
     expect(restored.theme).toBe('dark');
     expect(restored.darkSystemTheme).toBe('light-dark-dialogs');
+  });
+
+  it('keeps the choices of the Solfege list by their names, and drops what is not one', () => {
+    const restored = decodePracticeSettings(
+      { solfegeAsked: { 'complex-key': '3', 'Not A Name': '1', 'rhythm-level': 7, 'keys-as': 'x'.repeat(41), 'chords-asks': 'sevenths' } },
+      KNOWN,
+    );
+    expect([restored.solfegeAsked, decodePracticeSettings({ solfegeAsked: 'complex-key' }, KNOWN).solfegeAsked]).toEqual([
+      { 'complex-key': '3', 'chords-asks': 'sevenths' },
+      undefined,
+    ]);
   });
 
   it('keeps a ruler that follows the metronome', () => {

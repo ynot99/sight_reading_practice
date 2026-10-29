@@ -21,6 +21,7 @@ import type {
   ScorePageState,
   ScoreReading,
 } from '../../../application/ports/IScoreRenderer.js';
+import { AS_ITS_NOTES_ARE, type ScoreLayout } from '../../../application/ports/IScoreRenderer.js';
 import type { RulerMark } from '../../../application/rhythmRuler.js';
 import { barId, measureIndexOfBar, type PrintedStep } from '../../../domain/notation/printedIds.js';
 import {
@@ -266,6 +267,8 @@ export class VerovioScoreRenderer
   private measureShown: number | null = null;
   /** Whether the engraver has music to lay out again; true from the moment it is sent. */
   private hasMusic = false;
+  /** How the music sent is laid out, beyond the page: asked again of every layout of it. */
+  private laidOutAs: ScoreLayout = AS_ITS_NOTES_ARE;
   /** The piece's name, for the corner of its pages. */
   private title = '';
   private laidOutWidth = 0;
@@ -354,9 +357,10 @@ export class VerovioScoreRenderer
     this.inTheBackground(this.layOutAgain());
   }
 
-  async load(musicXml: string, printed: readonly PrintedStep[]): Promise<void> {
+  async load(musicXml: string, printed: readonly PrintedStep[], laidOut: ScoreLayout = AS_ITS_NOTES_ARE): Promise<void> {
     const layout = this.beginALayout();
     this.hasMusic = true;
+    this.laidOutAs = laidOut;
     this.title = titleOf(musicXml);
     this.printed = printed;
     this.stepsOfBar = stepsByBar(printed);
@@ -1085,6 +1089,7 @@ export class VerovioScoreRenderer
       pageMarginLeft: Math.ceil(
         BRACE_REACH + ((HAND_ROOM_PX - HAND_SWITCH_GAP + BRACE_GAP_PX) * 100) / scale,
       ),
+      barsByTheirTime: this.laidOutAs.barsByTheirTime,
     };
   }
 

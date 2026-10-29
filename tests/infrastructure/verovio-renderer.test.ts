@@ -9,6 +9,8 @@ import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { noteEntry, restEntry } from '../../src/domain/model/Exercise.js';
 import { bar, beamedSixteenths, longExercise, p, twoBarExercise } from '../support/fixtures.js';
 import { laidOutAt, printed, sheets, verovioStages, whenDrawn, type Stage } from '../support/verovioStage.js';
+import { theRhythmicDictation } from '../../src/domain/solfege/rhythmicDictation.js';
+import { theMelodicDictation } from '../../src/domain/solfege/melodicDictation.js';
 
 const { aStage } = verovioStages();
 
@@ -65,6 +67,58 @@ describe('the trail an opening leaves', () => {
       keepTheTrail(null);
       traceTheStart(false);
     }
+  });
+});
+
+describe('bars laid out by their time', () => {
+  /**
+   * How far apart the widest and the narrowest bar of the first page are, as
+   * a share of their mean: those that do not begin a line, which also carry
+   * the clef and the signature.
+   */
+  const spreadOfTheBars = (surface: HTMLElement): number => {
+    const drawing = sheets(surface)[0]?.querySelector('svg') as SVGSVGElement;
+    const widths = readThePage(drawing).systems.flatMap((system) => system.bars.slice(1).map((bar) => bar.right - bar.left));
+    const mean = widths.reduce((sum, each) => sum + each, 0) / widths.length;
+    return widths.length < 4 ? Number.NaN : (Math.max(...widths) - Math.min(...widths)) / mean;
+  };
+
+  it('lays every bar of rhythms out as wide as its time, kept so when laid out again, and no other music after them', async () => {
+    // Spaced by its notes, a bar of a rhythmic dictation is as wide as the
+    // notes hidden in it ask for: how many there are, said by the width.
+    const { renderer, surface } = aStage();
+    const rhythms = printed(theRhythmicDictation({ level: 'dotted', seed: 5 }));
+    await renderer.load(rhythms.xml, rhythms.steps, { barsByTheirTime: true });
+    await whenDrawn(() => {
+      expect(sheets(surface)[0]?.querySelector('svg')).not.toBeNull();
+    });
+    const byTime = spreadOfTheBars(surface);
+    await laidOutAt(renderer, surface, 0.8);
+    const laidOutAgain = spreadOfTheBars(surface);
+    const byNotes = printed(theRhythmicDictation({ level: 'dotted', seed: 5 }));
+    await renderer.load(`${byNotes.xml}
+`, byNotes.steps);
+    await whenDrawn(() => {
+      expect(Number.isNaN(spreadOfTheBars(surface))).toBe(false);
+    });
+    const afterThem = spreadOfTheBars(surface);
+    expect([byTime < 0.08, laidOutAgain < 0.08, afterThem > 0.5]).toEqual([true, true, true]);
+  });
+
+  it('lays the bars of a melodic dictation out by their time as well, which by their notes say how many', async () => {
+    const { renderer, surface } = aStage();
+    const melody = printed(theMelodicDictation({ fifths: 2, minor: false, bars: 2, rhythm: 'quavers', seed: 5 }));
+    const spreadAs = async (layout: { readonly barsByTheirTime: boolean }, xml: string): Promise<number> => {
+      await renderer.load(xml, melody.steps, layout);
+      await whenDrawn(() => {
+        expect(Number.isNaN(spreadOfTheBars(surface))).toBe(false);
+      });
+      return spreadOfTheBars(surface);
+    };
+    const byNotes = await spreadAs({ barsByTheirTime: false }, melody.xml);
+    const byTime = await spreadAs({ barsByTheirTime: true }, `${melody.xml}
+`);
+    expect([byNotes > 0.15, byTime < 0.08]).toEqual([true, true]);
   });
 });
 

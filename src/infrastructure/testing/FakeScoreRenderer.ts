@@ -22,6 +22,7 @@ import type {
   IPageRung,
   RungOnThePage,
 } from '../../application/ports/IScoreRenderer.js';
+import { AS_ITS_NOTES_ARE, type ScoreLayout } from '../../application/ports/IScoreRenderer.js';
 
 /** In-memory cursor that records every move. */
 export class FakeScoreCursor implements IScoreCursor {
@@ -79,6 +80,8 @@ export class FakeScoreRenderer
   loadedXml: string | null = null;
   /** Where each step was said to be printed, with the score last loaded. */
   loadedSteps: readonly PrintedStep[] = [];
+  /** How the last score was asked to be laid out. */
+  loadedLayout: ScoreLayout = AS_ITS_NOTES_ARE;
   loadCount = 0;
   refreshCount = 0;
   clearCount = 0;
@@ -207,9 +210,10 @@ export class FakeScoreRenderer
     this.zoom = zoom;
   }
 
-  load(musicXml: string, printed: readonly PrintedStep[]): Promise<void> {
+  load(musicXml: string, printed: readonly PrintedStep[], layout: ScoreLayout = AS_ITS_NOTES_ARE): Promise<void> {
     this.loadedXml = musicXml;
     this.loadedSteps = printed;
+    this.loadedLayout = layout;
     this.loadCount += 1;
     return Promise.resolve();
   }

@@ -6702,6 +6702,31 @@ describe('music played back by ear', () => {
     expect(asked()).toEqual([]);
   });
 
+  it('asks for bars laid out by their time where a question has several notes to find, and of no other music', async () => {
+    // How many notes a bar hides is part of finding them; one note says nothing by it.
+    const { controller, renderer } = createController(false, undefined, { modeId: new WaitMode().id });
+    const asked: string[] = [];
+    for (const music of [
+      theRhythmicDictation({ level: 'simple', seed: 3 }),
+      theMelodicDictation({ fifths: -1, minor: true, bars: 2, rhythm: 'crotchets', seed: 4 }),
+      theTransposition({ fifths: 0, minor: false, by: 'upAFourth', seed: 6 }),
+      round(),
+      theChordsNamed({ asks: 'quality', heard: true, seed: 2 }),
+      twoBarExercise(),
+    ]) {
+      await controller.openScore(music);
+      asked.push(`${music.title}: ${String(renderer.loadedLayout.barsByTheirTime)}`);
+    }
+    expect(asked).toEqual([
+      'Rhythmic dictation: true',
+      'Melodic dictation: true',
+      `${theTransposition({ fifths: 0, minor: false, by: 'upAFourth', seed: 6 }).title}: true`,
+      'Intervals by ear: false',
+      'Chords by ear: false',
+      `${twoBarExercise().title}: false`,
+    ]);
+  });
+
   it('asks nothing of music that is read', async () => {
     const { controller, instrument } = createController(false, undefined, { modeId: new WaitMode().id });
     await controller.openScore(twoBarExercise());

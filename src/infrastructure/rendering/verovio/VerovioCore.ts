@@ -19,6 +19,29 @@ export interface PageShape {
   readonly pageMarginLeft?: number;
   /** Room right of the music, in the page's units; Verovio's own where not said. */
   readonly pageMarginRight?: number;
+  /** Every bar as wide as its time, whatever its notes: see `ScoreLayout`. */
+  readonly barsByTheirTime?: boolean;
+}
+
+/**
+ * How far apart the notes are put, by how long each lasts: Verovio's own,
+ * which gives a short note more than its share of the bar so it can be read;
+ * and spacing by time alone, in which a bar is as wide as the time it takes.
+ * Said every time, or one piece's spacing is left for the next.
+ *
+ * How much the linear part is was measured on rhythmic and melodic
+ * dictations of twelve seeds each, at a tablet's width and its print: by
+ * Verovio's own spacing the widths of their bars ran 53% to 89% apart, the
+ * wider the more notes; at 0.07 they were 3% apart and did not follow the
+ * notes, two bars to a line; below it the bars of more notes still came out
+ * the wider, and above it every bar took a line of its own.
+ */
+const SPACED_BY_NOTES = { spacingLinear: 0.25, spacingNonLinear: 0.6 } as const;
+const SPACED_BY_TIME = { spacingLinear: 0.07, spacingNonLinear: 1 } as const;
+
+/** What Verovio is told of a page: the page, and the spacing it asks for. */
+function optionsFor({ barsByTheirTime, ...page }: PageShape): object {
+  return { ...page, ...(barsByTheirTime === true ? SPACED_BY_TIME : SPACED_BY_NOTES) };
 }
 
 /**
@@ -127,7 +150,7 @@ export class VerovioCore {
   load(musicXml: string, shape: PageShape, roomMade?: (heapBytes: number) => void): number {
     this.makeRoomFor(musicXml.length);
     roomMade?.(this.heapBytes);
-    this.toolkit.setOptions({ ...EVERY_LAYOUT, ...shape });
+    this.toolkit.setOptions({ ...EVERY_LAYOUT, ...optionsFor(shape) });
     if (!this.toolkit.loadData(musicXml)) {
       throw new Error(`Verovio could not read the score. ${this.toolkit.getLog()}`.trim());
     }
@@ -145,7 +168,7 @@ export class VerovioCore {
 
   /** Lays the same score out again on another page; the pages it came to. */
   relayout(shape: PageShape): number {
-    this.toolkit.setOptions(shape);
+    this.toolkit.setOptions(optionsFor(shape));
     this.toolkit.redoLayout();
     return this.toolkit.getPageCount();
   }

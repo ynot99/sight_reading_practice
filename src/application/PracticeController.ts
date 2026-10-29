@@ -1956,7 +1956,11 @@ export class PracticeController {
       this.printedXml = printed;
       this.emitter.emit('engraving', { busy: true });
       try {
-        await this.deps.renderer.load(printed, printedAtEachStep(this.timeline));
+        await this.deps.renderer.load(printed, printedAtEachStep(this.timeline), {
+          // Where a question has several notes to find, how many is part of
+          // the answer; a single note, as an interval's, says nothing by it.
+          barsByTheirTime: questions.some((question) => question.found.length > 1),
+        });
       } finally {
         // Said even where the drawing threw: a page that failed to appear is
         // still a page nobody is waiting for any more.

@@ -4,6 +4,21 @@ import type { KeySignature } from '../../domain/model/KeySignature.js';
 import type { PrintedStep } from '../../domain/notation/printedIds.js';
 import type { NoteTier } from '../../domain/scoring/noteTiers.js';
 
+/** How a score is laid out, beyond the page it is laid out on. */
+export interface ScoreLayout {
+  /**
+   * Every bar as wide as the time it takes, whatever notes are in it: for
+   * music whose notes are kept off the page until found, several to a
+   * question. Spaced by its notes, a bar of a rhythmic dictation with three
+   * was measured at little over half the width of one with ten, the hidden
+   * notes laid out all the same - how many there were, said by the width.
+   */
+  readonly barsByTheirTime: boolean;
+}
+
+/** The layout of a score that asks nothing of its own. */
+export const AS_ITS_NOTES_ARE: ScoreLayout = { barsByTheirTime: false };
+
 /**
  * Engraves notation into whatever surface the host provides.
  *
@@ -18,7 +33,7 @@ export interface IScoreRenderer {
    * that keeps them finds a step's notes by name and needs no map from time to
    * notes of its own making. One that does not is free to ignore them.
    */
-  load(musicXml: string, printed: readonly PrintedStep[]): Promise<void>;
+  load(musicXml: string, printed: readonly PrintedStep[], layout?: ScoreLayout): Promise<void>;
   /** Re-layout after a container resize. */
   refresh(): void;
   /**

@@ -1613,6 +1613,11 @@ function thePlayingAsAFile(
 /** How long a question answered shows how it went before the next is asked. */
 const NEXT_QUESTION_AFTER_MS = 1_200;
 
+/** A seed for a round of the solfege list: what is asked stays, the notes asking it change. */
+function aFreshSeed(): number {
+  return Math.floor(Math.random() * 2 ** 31);
+}
+
 /**
  * What music played back asks of the reader, in a sentence: where the answer
  * goes - the keys - and what begins it. Such a page looks like any score with
@@ -2206,6 +2211,12 @@ export class AppView {
   private readonly intervalsAsked = new Set<number>([3, 4, 5, 7, 12]);
   /** The questions of the exercise of naming on the page, as they are answered; none for music that is played. */
   private naming: NamingRound | null = null;
+  /**
+   * How the round of the solfege list open was made, for another round of
+   * it: the same asked, other notes. Kept with the music it made, so that
+   * any other piece opened since has none.
+   */
+  private roundAgain: { readonly of: Exercise; readonly make: () => Exercise } | null = null;
   /** The question named by ear last played as it was asked, so it is played once and not at every drawing. */
   private questionHeard: NamingQuestion | null = null;
   /** The moment a question answered is moved on from, while one waits to be. */
@@ -5361,6 +5372,10 @@ export class AppView {
     });
 
     this.listen(this.el.verdictFresh, 'click', () => {
+      if (this.anotherRound !== null) {
+        void this.openAnotherRound();
+        return;
+      }
       void this.reload(true);
     });
 
@@ -10295,14 +10310,12 @@ export class AppView {
       this.nameTheKeysOfTheList(this.el.solfegeTransposeKey, this.el.solfegeTransposeMode.value === 'minor' ? 'minor' : 'major');
     });
     this.listen(this.el.solfegeTransposeOpen, 'click', () => {
-      void this.openTheExercise(
-        theTransposition({
-          fifths: Number(this.el.solfegeTransposeKey.value),
-          minor: this.el.solfegeTransposeMode.value === 'minor',
-          by: TRANSPOSITION_NAMES.find((name) => name === this.el.solfegeTransposeBy.value) ?? 'upASecond',
-          seed: Math.floor(Math.random() * 2 ** 31),
-        }),
-      );
+      const asked = {
+        fifths: Number(this.el.solfegeTransposeKey.value),
+        minor: this.el.solfegeTransposeMode.value === 'minor',
+        by: TRANSPOSITION_NAMES.find((name) => name === this.el.solfegeTransposeBy.value) ?? 'upASecond',
+      };
+      void this.openTheRound(() => theTransposition({ ...asked, seed: aFreshSeed() }));
     });
     this.listen(this.el.solfegeProgressionsMode, 'change', () => {
       this.showTheProgressionsAsked();
@@ -10321,12 +10334,8 @@ export class AppView {
       this.nameTheKeysOfTheList(this.el.solfegeFunctionsKey, this.el.solfegeFunctionsMode.value === 'minor' ? 'minor' : 'major');
     });
     this.listen(this.el.solfegeRhythmOpen, 'click', () => {
-      void this.openTheExercise(
-        theRhythmicDictation({
-          level: RHYTHM_LEVELS.find((level) => level === this.el.solfegeRhythmLevel.value) ?? 'simple',
-          seed: Math.floor(Math.random() * 2 ** 31),
-        }),
-      );
+      const level = RHYTHM_LEVELS.find((each) => each === this.el.solfegeRhythmLevel.value) ?? 'simple';
+      void this.openTheRound(() => theRhythmicDictation({ level, seed: aFreshSeed() }));
     });
     this.listen(this.el.solfegeCadencesMode, 'change', () => {
       this.nameTheKeysOfTheList(this.el.solfegeCadencesKey, this.el.solfegeCadencesMode.value === 'minor' ? 'minor' : 'major');
@@ -10336,14 +10345,8 @@ export class AppView {
       [this.el.solfegeCadencesByEar, true],
     ] as const) {
       this.listen(button, 'click', () => {
-        void this.openTheExercise(
-          theCadencesNamed({
-            fifths: Number(this.el.solfegeCadencesKey.value),
-            minor: this.el.solfegeCadencesMode.value === 'minor',
-            heard,
-            seed: Math.floor(Math.random() * 2 ** 31),
-          }),
-        );
+        const asked = { fifths: Number(this.el.solfegeCadencesKey.value), minor: this.el.solfegeCadencesMode.value === 'minor', heard };
+        void this.openTheRound(() => theCadencesNamed({ ...asked, seed: aFreshSeed() }));
       });
     }
     for (const [button, heard] of [
@@ -10351,39 +10354,29 @@ export class AppView {
       [this.el.solfegeFunctionsByEar, true],
     ] as const) {
       this.listen(button, 'click', () => {
-        void this.openTheExercise(
-          theFunctionsNamed({
-            fifths: Number(this.el.solfegeFunctionsKey.value),
-            minor: this.el.solfegeFunctionsMode.value === 'minor',
-            heard,
-            seed: Math.floor(Math.random() * 2 ** 31),
-          }),
-        );
+        const asked = { fifths: Number(this.el.solfegeFunctionsKey.value), minor: this.el.solfegeFunctionsMode.value === 'minor', heard };
+        void this.openTheRound(() => theFunctionsNamed({ ...asked, seed: aFreshSeed() }));
       });
     }
     this.listen(this.el.solfegeKeysOpen, 'click', () => {
-      void this.openTheExercise(
-        theKeysNamed({
-          as: KEYS_ASKED.find((as) => as === this.el.solfegeKeysAs.value) ?? 'major',
-          seed: Math.floor(Math.random() * 2 ** 31),
-        }),
-      );
+      const as = KEYS_ASKED.find((each) => each === this.el.solfegeKeysAs.value) ?? 'major';
+      void this.openTheRound(() => theKeysNamed({ as, seed: aFreshSeed() }));
     });
     for (const [button, heard] of [
       [this.el.solfegeChordsOpen, false],
       [this.el.solfegeChordsByEar, true],
     ] as const) {
       this.listen(button, 'click', () => {
-        void this.openTheExercise(
-          theChordsNamed({
-            asks: CHORDS_ASKS.find((asks) => asks === this.el.solfegeChordsAsks.value) ?? 'quality',
-            heard,
-            seed: Math.floor(Math.random() * 2 ** 31),
-          }),
-        );
+        const asks = CHORDS_ASKS.find((each) => each === this.el.solfegeChordsAsks.value) ?? 'quality';
+        void this.openTheRound(() => theChordsNamed({ asks, heard, seed: aFreshSeed() }));
       });
     }
     this.listen(this.el.scoreAnswers, 'click', (event) => {
+      const again = (event.target as Element | null)?.closest('[data-another-round]');
+      if (again !== null && again !== undefined) {
+        void this.openAnotherRound();
+        return;
+      }
       this.answerTheQuestion(event);
     });
     this.listen(this.el.solfegeDictationMode, 'change', () => {
@@ -11736,14 +11729,40 @@ export class AppView {
 
   /** Opens a round of melodic dictation as the sheet asks for it - another each time. */
   private async openTheMelodicDictation(): Promise<void> {
-    const exercise = theMelodicDictation({
+    const asked = {
       fifths: Number(this.el.solfegeDictationKey.value),
       minor: this.el.solfegeDictationMode.value === 'minor',
       bars: DICTATION_LENGTHS.find((bars) => String(bars) === this.el.solfegeDictationBars.value) ?? 2,
       rhythm: DICTATION_RHYTHMS.find((rhythm) => rhythm === this.el.solfegeDictationRhythm.value) ?? 'crotchets',
-      seed: Math.floor(Math.random() * 2 ** 31),
-    });
-    await this.openTheExercise(exercise);
+    };
+    await this.openTheRound(() => theMelodicDictation({ ...asked, seed: aFreshSeed() }));
+  }
+
+  /**
+   * Opens a round of the solfege list, keeping how it was made: the end of
+   * the round offers another, the same asked with other notes, where it
+   * used to end with nowhere to go but back to the list.
+   */
+  private async openTheRound(make: () => Exercise): Promise<void> {
+    const round = make();
+    // Kept before it is opened, being the music the controller is handed:
+    // the page is up and answered while the opening still finishes.
+    this.roundAgain = { of: round, make };
+    await this.openTheExercise(round);
+  }
+
+  /** How another round of the music open is made, where it is a round of the solfege list. */
+  private get anotherRound(): (() => Exercise) | null {
+    const again = this.roundAgain;
+    return again !== null && again.of === this.runtime.controller.openedExercise ? again.make : null;
+  }
+
+  /** Opens another round of the one open, where it is a round of the solfege list. */
+  private async openAnotherRound(): Promise<void> {
+    const make = this.anotherRound;
+    if (make !== null) {
+      await this.openTheRound(make);
+    }
   }
 
   /**
@@ -11789,9 +11808,9 @@ export class AppView {
       return;
     }
     const way = INTERVAL_WAYS.find((each) => each === this.el.solfegeIntervalsWay.value) ?? 'up';
-    const asked = { semitones: [...this.intervalsAsked], way, seed: Math.floor(Math.random() * 2 ** 31) };
-    const exercise = how === 'by ear' ? theIntervalsByEar(asked) : theIntervalsNamed(asked);
-    await this.openTheExercise(exercise);
+    const asked = { semitones: [...this.intervalsAsked], way };
+    const round = how === 'by ear' ? theIntervalsByEar : theIntervalsNamed;
+    await this.openTheRound(() => round({ ...asked, seed: aFreshSeed() }));
   }
 
   /**
@@ -11861,7 +11880,15 @@ export class AppView {
     if (question === null || exercise === null) {
       const { right, of } = round.score;
       this.el.scoreAnswersAsks.textContent = `${String(right)} of ${String(of)} right.`;
-      this.el.scoreAnswersParts.replaceChildren();
+      const again = this.doc.createElement('button');
+      again.type = 'button';
+      again.className = 'button button--primary';
+      again.dataset['anotherRound'] = 'true';
+      again.textContent = 'Another round';
+      const row = this.doc.createElement('div');
+      row.className = 'score__answers-row';
+      row.append(again);
+      this.el.scoreAnswersParts.replaceChildren(row);
       return;
     }
     if (this.placedOnBar !== question.measureIndex) {
@@ -12440,8 +12467,11 @@ export class AppView {
     // reading has no worst bars, and a button that says otherwise is noise.
     this.el.drill.hidden = worstPassage(report) === null;
     // A score is the same score however often it is opened; only a generated
-    // page has another one behind it.
-    this.el.verdictFresh.hidden = !this.aGeneratedPageIsOpen();
+    // page has another one behind it - and a round of the solfege list another
+    // round, which is what the button offers there.
+    const again = this.anotherRound !== null;
+    this.el.verdictFresh.hidden = !again && !this.aGeneratedPageIsOpen();
+    this.el.verdictFresh.textContent = again ? 'Another round' : 'A fresh exercise';
     this.el.result.replaceChildren();
 
     const gradeElement = this.doc.createElement('div');
@@ -12486,7 +12516,12 @@ export class AppView {
     // Said once, about the run that caused it.
     this.lastLadderMove = null;
     this.drawTheBars(report);
-    this.drawTheProfileOf(report);
+    // The shape of a reading - how it flowed, how steady its pace, how evenly
+    // the keys were struck - is the shape of music read. Of music found by
+    // ear the reader is waited for while they find it, and it says nothing.
+    if (this.runtime.controller.openedExercise?.playedBack === undefined) {
+      this.drawTheProfileOf(report);
+    }
     this.drawTheHitErrorsOf(report);
     this.offerTheRoll();
     for (const [label, value] of rows) {

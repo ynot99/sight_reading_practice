@@ -8322,6 +8322,90 @@ describe('AppView', () => {
       expect([chips(), given(), element('score').dataset['asking']]).toEqual([[], [], 'played-back']);
     });
 
+    it('offers another round at the end of a round of naming: what was asked, other notes, asked from the first', async () => {
+      // It ended with how it went and nowhere to go but back to the list.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      element<HTMLButtonElement>('solfege-intervals-name-them').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise?.title).toBe('Intervals by name');
+      });
+      const first = runtime.controller.openedExercise;
+      const pad = element('score-answers');
+      const again = (): HTMLButtonElement | null => pad.querySelector<HTMLButtonElement>('[data-another-round]');
+      const offeredAsked = again();
+      for (let at = 0; at < 10; at += 1) {
+        pad.querySelector<HTMLButtonElement>(`[data-choice="${first?.byName?.[at]?.parts[0]?.answer ?? ''}"]`)?.click();
+        pad.click();
+      }
+      expect([offeredAsked, element('score-answers-asks').textContent, again()?.textContent]).toEqual([null, '10 of 10 right.', 'Another round']);
+
+      again()?.click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise).not.toBe(first);
+      });
+      const next = runtime.controller.openedExercise;
+      const choices = [...pad.querySelectorAll<HTMLButtonElement>('[data-choice]')].map((chip) => chip.textContent);
+      expect([next?.title, next?.metadata?.generatorId, next?.metadata?.seed === first?.metadata?.seed]).toEqual(['Intervals by name', first?.metadata?.generatorId, false]);
+      expect([element('score-answers-asks').textContent, choices]).toEqual(['1 of 10 · bar 1: interval?', ['m3', 'M3', 'P4', 'P5', 'P8']]);
+    });
+
+    it('offers another round on the verdict of music played back, with no shape of a reading, and keeps both for music read', async () => {
+      const { view, runtime, midi, clock, metronome } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ previewSeconds: 0 });
+      const open = async (button: string, title: string): Promise<void> => {
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-solfege').click();
+        const before = runtime.controller.openedExercise;
+        element<HTMLButtonElement>(button).click();
+        await vi.waitFor(() => {
+          expect(runtime.controller.openedExercise).not.toBe(before);
+        });
+        expect(runtime.controller.openedExercise?.title).toContain(title);
+      };
+      const playItAll = (): void => {
+        element<HTMLButtonElement>('focus-play').click();
+        for (let guard = 0; guard < 400; guard += 1) {
+          const session = runtime.controller.session;
+          if (session?.status === 'counting-in') {
+            metronome.advanceSubdivisions(1);
+            continue;
+          }
+          if (session?.status !== 'running') {
+            break;
+          }
+          clock.advance(500);
+          for (const key of session.currentStep?.expectedMidi ?? []) {
+            midi.noteOn(key, clock.now());
+          }
+        }
+      };
+      const verdict = (): (string | boolean | null)[] => [
+        runtime.controller.session?.status ?? null,
+        element('verdict-fresh').hidden,
+        element('verdict-fresh').textContent,
+        document.getElementById('run-profile') !== null,
+      ];
+
+      await open('solfege-intervals-open', 'Intervals by ear');
+      const first = runtime.controller.openedExercise;
+      playItAll();
+      expect(verdict()).toEqual(['completed', false, 'Another round', false]);
+      element<HTMLButtonElement>('verdict-fresh').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise).not.toBe(first);
+      });
+      expect([runtime.controller.openedExercise?.title, runtime.controller.openedExercise?.metadata?.seed === first?.metadata?.seed]).toEqual(['Intervals by ear', false]);
+
+      // Music read after it: the shape of the reading, and no other round of anything.
+      await open('solfege-complex-open', 'major');
+      playItAll();
+      expect(verdict()).toEqual(['completed', true, 'A fresh exercise', true]);
+    });
+
     it('dims Start on a page answered by name, saying why, and counts down to nothing when it or the space bar is pressed', async () => {
       const { view, runtime } = createRig();
       await view.initialize();

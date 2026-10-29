@@ -490,6 +490,15 @@ export function emptyRoll(): RunRoll {
 }
 
 /**
+ * Whether a key was played in a run, right or wrong: a run with none - a
+ * lap left going round on repeat, a Stop pressed late after the count-in -
+ * is no reading of anything, to keep, to judge, or to report.
+ */
+export function aKeyWasPlayedIn(roll: RunRoll): boolean {
+  return roll.presses.length > 0;
+}
+
+/**
  * Where the roll's nought is: the first thing that happened, whatever it was.
  *
  * Asked here rather than worked out by whoever needs it, because two answers

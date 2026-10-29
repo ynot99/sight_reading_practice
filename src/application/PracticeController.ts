@@ -79,7 +79,7 @@ import {
 } from '../domain/model/Exercise.js';
 import { worstPassage, type Passage } from '../domain/scoring/troubleSpots.js';
 import { PracticeSession, type NotesComing } from './session/PracticeSession.js';
-import { ONE_BREATH_MS } from './session/RunRoll.js';
+import { aKeyWasPlayedIn, ONE_BREATH_MS } from './session/RunRoll.js';
 import type { RunRoll } from './session/RunRoll.js';
 import {
   replayFits,
@@ -3419,11 +3419,10 @@ export class PracticeController {
         const picture = this.pictureOfTheReading(report, session.roll);
         const modes = modesOn(this.playedUnder);
         this.finishedPlayedWith = { modeId: this.playedUnder.modeId, modes };
-        // A run nobody played a key of is no reading: a lap left going round
-        // on repeat, a Stop pressed late after the count-in. Kept, it was an
-        // F among the readings, to be found and deleted by hand - and, played
-        // to its end, a step down the ladder for music never played.
-        const played = session.roll.presses.length > 0;
+        // Kept, a run nobody played a key of was an F among the readings, to
+        // be found and deleted by hand - and, played to its end, a step down
+        // the ladder for music never played.
+        const played = aKeyWasPlayedIn(session.roll);
         if (played) {
           this.deps.history?.record(this.practiceKey(), {
             // The calendar, so a table of readings can say when. `IClock`

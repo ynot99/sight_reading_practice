@@ -3083,10 +3083,11 @@ describe('AppView', () => {
   });
 
   it('shows the final report when a run is stopped', async () => {
-    const { view } = createRig();
+    const { view, midi, clock } = createRig();
     await view.initialize();
     element<HTMLButtonElement>('focus-play').click();
 
+    midi.noteOn(MIDI.C4, clock.now());
     element<HTMLButtonElement>('focus-stop').click();
 
     expect(element('score-verdict').hidden).toBe(false);
@@ -3098,10 +3099,27 @@ describe('AppView', () => {
     // The pill carries the verdict once there is one; the status it was
   });
 
-  it('reports which way a run leaned, not only how far off it was', async () => {
-    const { view } = createRig();
+  it('puts up no verdict, and offers no last reading, for a run nobody played a key of', async () => {
+    // A Stop pressed late after the count-in, or a lap left going round on
+    // repeat: an F over a run nobody played says nothing.
+    const { view, midi, clock } = createRig();
     await view.initialize();
     element<HTMLButtonElement>('focus-play').click();
+    element<HTMLButtonElement>('focus-stop').click();
+    const untouched = [element('score-verdict').hidden, element('score-reading').hidden, element('score-card').hidden];
+
+    element<HTMLButtonElement>('focus-play').click();
+    midi.noteOn(MIDI.C4, clock.now());
+    element<HTMLButtonElement>('focus-stop').click();
+
+    expect([untouched, element('score-verdict').hidden]).toEqual([[true, true, true], false]);
+  });
+
+  it('reports which way a run leaned, not only how far off it was', async () => {
+    const { view, midi, clock } = createRig();
+    await view.initialize();
+    element<HTMLButtonElement>('focus-play').click();
+    midi.noteOn(MIDI.C4, clock.now());
     element<HTMLButtonElement>('focus-stop').click();
 
     expect(element('result').textContent).toContain('Tendency');
@@ -3119,10 +3137,11 @@ describe('AppView', () => {
     });
 
     it('gives the verdict there, where a panel fullscreen hides cannot', async () => {
-      const { view } = createRig();
+      const { view, midi, clock } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-play').click();
 
+      midi.noteOn(MIDI.C4, clock.now());
       element<HTMLButtonElement>('focus-stop').click();
 
       expect(element('score-card').hidden).toBe(false);
@@ -3183,9 +3202,10 @@ describe('AppView', () => {
       // The drill button means "practise the worst bars", not "I have read
       // this" - and a dismissal riding on top of it would take the verdict
       // away from under a reader who was answering it.
-      const { view } = createRig();
+      const { view, midi, clock } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-play').click();
+      midi.noteOn(MIDI.C4, clock.now());
       element<HTMLButtonElement>('focus-stop').click();
 
       element<HTMLButtonElement>('drill').click();
@@ -3194,9 +3214,10 @@ describe('AppView', () => {
     });
 
     it('offers the next page from the verdict on a generated one, and never on a score', async () => {
-      const { view, runtime } = createRig();
+      const { view, runtime, midi, clock } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-play').click();
+      midi.noteOn(MIDI.C4, clock.now());
       element<HTMLButtonElement>('focus-stop').click();
       const read = runtime.controller.currentExercise;
       expect(element('verdict-fresh').hidden).toBe(false);
@@ -3213,15 +3234,17 @@ describe('AppView', () => {
       // A score opened has no other page behind it.
       await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
       element<HTMLButtonElement>('focus-play').click();
+      midi.noteOn(MIDI.C4, clock.now());
       element<HTMLButtonElement>('focus-stop').click();
       expect(element('score-verdict').hidden).toBe(false);
       expect(element('verdict-fresh').hidden).toBe(true);
     });
 
     it('takes the verdict away when the music starts again', async () => {
-      const { view } = createRig();
+      const { view, midi, clock } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-play').click();
+      midi.noteOn(MIDI.C4, clock.now());
       element<HTMLButtonElement>('focus-stop').click();
       expect(element('score-verdict').hidden).toBe(false);
 
@@ -16220,7 +16243,7 @@ describe('AppView', () => {
       // та дуже швидко зникає - тому я пропустив всю статистику". Starting a run
       // is what puts the verdict away, and with repeat on that happens in the
       // same frame it went up - so there has to be a way back to it.
-      const { view } = createRig();
+      const { view, midi, clock } = createRig();
       await view.initialize();
       expect(element('score-reading').hidden).toBe(true);
 
@@ -16229,6 +16252,7 @@ describe('AppView', () => {
       element<HTMLButtonElement>('focus-play').click();
       expect(element('score-reading').hidden).toBe(true);
 
+      midi.noteOn(MIDI.C4, clock.now());
       element<HTMLButtonElement>('focus-stop').click();
 
       // On screen, so the button for it would be a button for what is already
@@ -16245,6 +16269,7 @@ describe('AppView', () => {
       expect(element('score-reading').hidden).toBe(true);
 
       // Stopped, and the verdict put away by hand: now it is the only way back.
+      midi.noteOn(MIDI.C4, clock.now());
       element<HTMLButtonElement>('focus-stop').click();
       element('score-verdict').dispatchEvent(new Event('click', { bubbles: true }));
 
@@ -16253,11 +16278,13 @@ describe('AppView', () => {
     });
 
     it('puts the last reading back whole, strip and all', async () => {
-      const { view } = createRig();
+      const { view, midi, clock } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-play').click();
+      midi.noteOn(MIDI.C4, clock.now());
       element<HTMLButtonElement>('focus-stop').click();
       element<HTMLButtonElement>('focus-play').click();
+      midi.noteOn(MIDI.C4, clock.now());
       element<HTMLButtonElement>('focus-stop').click();
       element<HTMLButtonElement>('focus-play').click();
       // The panel is where messages go too, so what is in it may be anything.
@@ -16280,9 +16307,10 @@ describe('AppView', () => {
       // His: "цифрами іноді мій мозок просто йде у loading". A row of numbers
       // answers "how well"; the strip answers "where", and answers it without
       // being read. It stands first in the card for the same reason.
-      const { view } = createRig();
+      const { view, midi, clock } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-play').click();
+      midi.noteOn(MIDI.C4, clock.now());
       element<HTMLButtonElement>('focus-stop').click();
 
       const strip = element('result').querySelector('.run-strip');
@@ -16399,7 +16427,7 @@ describe('AppView', () => {
       // as a fraction of the bars read, because three in four bars and three
       // in forty are opposite readings - and said at nought too, since that is
       // the reading worth arriving at.
-      const { view, runtime, metronome } = createRig();
+      const { view, runtime, metronome, midi, clock } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-modes').click();
       frameButton('bar').click();
@@ -16413,6 +16441,7 @@ describe('AppView', () => {
       // The music begins on the pulse's first tick; stopped before it, the
       // run would have nothing to report.
       metronome.advanceBeats(1);
+      midi.noteOn(MIDI.C4, clock.now());
       element<HTMLButtonElement>('focus-stop').click();
 
       expect(element('result').textContent).toContain('Bars it waited at');
@@ -16424,7 +16453,7 @@ describe('AppView', () => {
     it('says how many notes the music waited at, where every note waits', async () => {
       // The bar line's number, a note at a time, and a fraction for the same
       // reason: of the notes the reader was asked for.
-      const { view, runtime, metronome } = createRig();
+      const { view, runtime, metronome, midi, clock } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-modes').click();
       frameButton('note').click();
@@ -16436,6 +16465,7 @@ describe('AppView', () => {
       );
       element<HTMLButtonElement>('focus-play').click();
       metronome.advanceBeats(1);
+      midi.noteOn(MIDI.C4, clock.now());
       element<HTMLButtonElement>('focus-stop').click();
 
       expect(element('result').textContent).toMatch(/Notes it waited at\s*\d+ of \d+/);
@@ -21264,6 +21294,7 @@ describe('AppView', () => {
       expect(from).toBeGreaterThan(0);
       pressSpace();
       expect(rig.runtime.controller.session?.status).toBe('running');
+      rig.midi.noteOn(MIDI.C4, rig.clock.now());
 
       expect(pressHeldSpace()).toBe(true);
 

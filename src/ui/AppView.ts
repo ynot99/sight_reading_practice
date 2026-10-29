@@ -261,6 +261,7 @@ import {
   type RolledPress,
   takeOfTheRun,
   type RunRoll,
+  aKeyWasPlayedIn,
   theBeatNearest,
   theNextLineOfTheGrid,
   theEndNearest,
@@ -8244,6 +8245,11 @@ export class AppView {
         this.followMusic(at);
       }),
       session.events.on('finished', ({ report, score }) => {
+        // Nothing played, nothing to say: a verdict of F over a run nobody
+        // played, and the last reading become that one.
+        if (!aKeyWasPlayedIn(session.roll)) {
+          return;
+        }
         // Before the render, which empties the ladder move as it uses it.
         this.lastReading = { score, report, move: this.lastLadderMove };
         this.renderResult(score, report);

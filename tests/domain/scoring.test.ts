@@ -3,6 +3,7 @@ import { gradeFor } from '../../src/domain/scoring/IScoringStrategy.js';
 import {
   buildPerformanceReport,
   noteCountsOf,
+  type PerformanceReport,
   type StepResult,
 } from '../../src/domain/scoring/PerformanceReport.js';
 import {
@@ -276,14 +277,28 @@ describe('a Good note in the grade', () => {
     step({ index: 1, status: 'correct', expected: [62], hits: [good] }),
   ]);
 
-  it('counts for half a note where the grade has no timing part to charge it', () => {
-    // Waiting for the notes: a Good one there was struck ahead of the hand
-    // being heard, and counted whole it would cost nothing at all.
+  it('counts for half a note, waiting for the notes or keeping time', () => {
+    // Waiting, a Good note was struck ahead of the hand being heard; keeping
+    // time, it landed outside its window. Counted whole under a pulse it cost
+    // nothing, the timing part forgiving an average miss of 100 ms.
     expect(new AccuracyScoringStrategy().score(report).accuracy).toBeCloseTo(0.75, 9);
+    expect(new TimingWeightedScoringStrategy().score(report).accuracy).toBeCloseTo(0.75, 9);
   });
 
-  it('counts whole where the timing part charges for where it landed', () => {
-    expect(new TimingWeightedScoringStrategy().score(report).accuracy).toBe(1);
+  it('grades a piece played with every note Good a D, and one with every note Perfect an A', () => {
+    // Every note 70 ms from its moment: outside a Perfect window, inside the
+    // timing part's forgiveness. It came out at 100% and an A.
+    const notes = Array.from({ length: 8 }, (_, index) => index);
+    const played = (tier: 'perfect' | 'good', deviationMs: number): PerformanceReport =>
+      reportOf(notes.map((index) => step({ index, status: 'correct', deviationMs, hits: [{ midi: 60, deviationMs, tier }] })));
+    const graded = (report: PerformanceReport): [number, string] => {
+      const score = new TimingWeightedScoringStrategy().score(report);
+      return [Math.round(score.overall * 1000) / 1000, score.grade];
+    };
+    expect([graded(played('good', 70)), graded(played('perfect', 20))]).toEqual([
+      [0.65, 'D'],
+      [1, 'A'],
+    ]);
   });
 });
 

@@ -252,7 +252,8 @@ describe('end-to-end practice loop', () => {
 
     expect(captured.report?.totals.correctNotes).toBe(timeline.noteCount);
     expect(captured.report?.timing.meanAbsoluteDeviationMs).toBe(180);
-    expect(captured.score?.accuracy).toBe(1);
+    // Every note right and every one outside its window: each Good, worth half.
+    expect(captured.score?.accuracy).toBe(0.5);
     expect(captured.score?.timing).toBeLessThan(1);
     expect(captured.score?.overall).toBeLessThan(1);
   });

@@ -37,7 +37,7 @@ import { CHORDS_ASKS, theChordsNamed } from '../domain/solfege/chordsNamed.js';
 import { KEYS_ASKED, theKeysNamed } from '../domain/solfege/keysNamed.js';
 import { theFunctionsNamed } from '../domain/solfege/functionsNamed.js';
 import { theCadencesNamed } from '../domain/solfege/cadencesNamed.js';
-import { RHYTHM_LEVELS, theRhythmicDictation } from '../domain/solfege/rhythmicDictation.js';
+import { RHYTHM_LEVELS, theRhythmicDictation, theRhythmsRead } from '../domain/solfege/rhythmicDictation.js';
 import { PROGRESSION_NAMES, theProgression, theProgressionNamed } from '../domain/solfege/progressions.js';
 import { TRANSPOSITION_NAMES, TRANSPOSITIONS, theTransposition } from '../domain/solfege/transposition.js';
 import {
@@ -1648,7 +1648,10 @@ function aFreshSeed(): number {
  * true whatever the settings.
  */
 function theTaskOfMusicPlayedBack(playedBack: PlayedBack): string {
-  if (playedBack.inTime) {
+  if (playedBack.inTime === 'throughout') {
+    return 'Press ▶ and, after a bar counted in, tap the rhythm through in time - on any key, or on Tap.';
+  }
+  if (playedBack.inTime === 'each-bar') {
     return 'Press ▶ to hear each bar, then tap its rhythm back in time - on any key, or on Tap.';
   }
   if (playedBack.heard) {
@@ -2888,6 +2891,7 @@ export class AppView {
     solfegeCadencesByEar: HTMLButtonElement;
     solfegeRhythmLevel: HTMLSelectElement;
     solfegeRhythmOpen: HTMLButtonElement;
+    solfegeRhythmRead: HTMLButtonElement;
     solfegeKeysAs: HTMLSelectElement;
     solfegeKeysOpen: HTMLButtonElement;
     solfegeFunctionsKey: HTMLSelectElement;
@@ -3356,6 +3360,7 @@ export class AppView {
       solfegeCadencesByEar: requireElement(doc, 'solfege-cadences-by-ear'),
       solfegeRhythmLevel: requireElement(doc, 'solfege-rhythm-level'),
       solfegeRhythmOpen: requireElement(doc, 'solfege-rhythm-open'),
+      solfegeRhythmRead: requireElement(doc, 'solfege-rhythm-read'),
       solfegeKeysAs: requireElement(doc, 'solfege-keys-as'),
       solfegeKeysOpen: requireElement(doc, 'solfege-keys-open'),
       solfegeFunctionsKey: requireElement(doc, 'solfege-functions-key'),
@@ -10458,11 +10463,16 @@ export class AppView {
     this.listen(this.el.solfegeFunctionsMode, 'change', () => {
       this.nameTheKeysOfTheList(this.el.solfegeFunctionsKey, this.el.solfegeFunctionsMode.value === 'minor' ? 'minor' : 'major');
     });
-    this.opensFromTheSolfegeList(this.el.solfegeRhythmOpen, async () => {
-      const level = RHYTHM_LEVELS.find((each) => each === this.el.solfegeRhythmLevel.value) ?? 'simple';
-      await this.openTheRound(() => theRhythmicDictation({ level, seed: aFreshSeed() }));
-      return true;
-    });
+    for (const [button, round] of [
+      [this.el.solfegeRhythmOpen, theRhythmicDictation],
+      [this.el.solfegeRhythmRead, theRhythmsRead],
+    ] as const) {
+      this.opensFromTheSolfegeList(button, async () => {
+        const level = RHYTHM_LEVELS.find((each) => each === this.el.solfegeRhythmLevel.value) ?? 'simple';
+        await this.openTheRound(() => round({ level, seed: aFreshSeed() }));
+        return true;
+      });
+    }
     this.listen(this.el.solfegeCadencesMode, 'change', () => {
       this.nameTheKeysOfTheList(this.el.solfegeCadencesKey, this.el.solfegeCadencesMode.value === 'minor' ? 'minor' : 'major');
     });
@@ -12121,13 +12131,13 @@ export class AppView {
     this.el.scoreAnswersAgain.hidden = !over;
     // A rhythm can be tapped on the screen as well as on the keys - while
     // there is a run to tap it into: played through, it is begun again by ▶.
-    this.el.scoreAnswersTap.hidden = round !== null || playedBack?.inTime !== true || !this.el.scoreAnswersAgain.hidden;
+    this.el.scoreAnswersTap.hidden = round !== null || (playedBack?.inTime ?? false) === false || !this.el.scoreAnswersAgain.hidden;
     if (round === null) {
       // Music played back is answered on the keys: the place says only how.
       if (playedBack === undefined) {
         delete this.el.score.dataset['asking'];
       } else {
-        this.el.score.dataset['asking'] = playedBack.inTime ? 'tapped-back' : 'played-back';
+        this.el.score.dataset['asking'] = playedBack.inTime === false ? 'played-back' : 'tapped-back';
         // Played through, how it is played is known: what is left is what next,
         // short enough to stand beside the button that offers it.
         this.el.scoreAnswersAsks.textContent = this.el.scoreAnswersAgain.hidden
@@ -12311,7 +12321,7 @@ export class AppView {
     sayWhetherIdle(
       this.el.focusModes,
       playedBack
-        ? 'Modes: music played back waits for each note, whatever they say for music that is read'
+        ? 'Modes: this page is answered on the keys as it asks, whatever they say for music that is read'
         : exercise.byName !== undefined
           ? 'Modes: this page is answered with the buttons above, not played'
           : 'Modes',

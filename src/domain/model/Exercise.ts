@@ -610,11 +610,12 @@ export interface PlayedBack {
    */
   readonly keyFirst: boolean;
   /**
-   * Whether each question is answered in time - its rhythm judged against
-   * the pulse from the downbeat the reader gives, any key counting, as a
-   * rhythm is dictated - or note by note, waiting for each.
+   * Whether it is answered in time, any key counting, and how: each bar from
+   * the downbeat the reader gives, as a rhythm is dictated a bar at a time;
+   * or throughout, counted in and not waiting at a bar line, as a rhythm is
+   * read. `false` is note by note, waiting for each.
    */
-  readonly inTime: boolean;
+  readonly inTime: false | 'each-bar' | 'throughout';
 }
 
 export interface ExerciseMetadata {

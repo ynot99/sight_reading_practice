@@ -8265,7 +8265,7 @@ describe('AppView', () => {
       const modes = element<HTMLButtonElement>('focus-modes');
       expect([modes.dataset['idle'], modes.title]).toEqual([
         'true',
-        'Modes: music played back waits for each note, whatever they say for music that is read',
+        'Modes: this page is answered on the keys as it asks, whatever they say for music that is read',
       ]);
 
       // Music that is read again: neither.
@@ -8495,7 +8495,9 @@ describe('AppView', () => {
               ? opened.playedBack.inTime
                 ? 'Hear & tap back'
                 : 'Hear & play back'
-              : 'Open';
+              : opened?.playedBack?.inTime === 'throughout'
+                ? 'Read & tap'
+                : 'Open';
         // What a reader would say to ask for it is in what it is called.
         const name = button.getAttribute('aria-label') ?? button.textContent;
         said.push({ id: button.id, shown: button.textContent, how, named: name.includes(button.textContent) });
@@ -8503,8 +8505,8 @@ describe('AppView', () => {
       expect(said.filter((each) => each.shown !== each.how || !each.named)).toEqual([]);
       // Every way there is, so none of them was left out of the sweep.
       expect([said.length, [...new Set(said.map((each) => each.how))].sort()]).toEqual([
-        16,
-        ['Hear & name', 'Hear & play back', 'Hear & tap back', 'Open', 'Read & name'],
+        17,
+        ['Hear & name', 'Hear & play back', 'Hear & tap back', 'Open', 'Read & name', 'Read & tap'],
       ]);
     });
 
@@ -8771,7 +8773,7 @@ describe('AppView', () => {
       element<HTMLButtonElement>('scores-show-solfege').click();
       element<HTMLButtonElement>('solfege-rhythm-open').click();
       await vi.waitFor(() => {
-        expect(runtime.controller.openedExercise?.playedBack?.inTime).toBe(true);
+        expect(runtime.controller.openedExercise?.playedBack?.inTime).toBe('each-bar');
       });
       const listening = (): string | undefined => element('score').dataset['hearing'];
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
@@ -8834,7 +8836,7 @@ describe('AppView', () => {
       element<HTMLButtonElement>('scores-show-solfege').click();
       element<HTMLButtonElement>('solfege-rhythm-open').click();
       await vi.waitFor(() => {
-        expect(runtime.controller.openedExercise?.playedBack?.inTime).toBe(true);
+        expect(runtime.controller.openedExercise?.playedBack?.inTime).toBe('each-bar');
       });
       const first = runtime.controller.openedExercise;
       // Before a run and in one: the task, and Tap.
@@ -8945,7 +8947,7 @@ describe('AppView', () => {
         true,
         true,
         'true',
-        'Modes: music played back waits for each note, whatever they say for music that is read',
+        'Modes: this page is answered on the keys as it asks, whatever they say for music that is read',
       ]);
       expect(await said('solfege-chords-by-ear', 'Chords by ear')).toEqual([true, true, 'true', 'Modes: this page is answered with the buttons above, not played']);
       // Changed while there, still nothing said of them.
@@ -9218,8 +9220,52 @@ describe('AppView', () => {
       expect([element('score-hear-again').hidden, element('focus-modes').dataset['idle'], runtime.controller.openedExercise?.playedBack?.inTime]).toEqual([
         false,
         'true',
-        true,
+        'each-bar',
       ]);
+    });
+
+    it('opens rhythms to read from the Solfege list, at the level chosen, on the page from the first and tapped through after a bar counted in', async () => {
+      const { view, runtime, renderer, metronome, midi, clock } = createRig();
+      await view.initialize();
+      // The click off: the count-in is heard all the same, being the one place the tempo is given.
+      runtime.controller.updateSettings({ clickOn: false, countInBars: 0, previewSeconds: 0 });
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      element<HTMLSelectElement>('solfege-rhythm-level').value = 'dotted';
+      element<HTMLButtonElement>('solfege-rhythm-read').click();
+      await vi.waitFor(() => {
+        expect([runtime.controller.openedExercise?.title, runtime.controller.theScoreOpenStandsAlone]).toEqual(['Rhythm reading', true]);
+      });
+      const lengths = new Set(
+        (runtime.controller.openedExercise?.staves[0]?.measures ?? []).flatMap((measure) => measure.entries.map((entry) => entry.duration.ticks)),
+      );
+      expect([...lengths].some((ticks) => ticks === Duration.SIXTEENTH.ticks || ticks === Duration.DOTTED_QUARTER.ticks || ticks === Duration.DOTTED_HALF.ticks)).toBe(true);
+      // Nothing heard and nothing kept off the page; answered on the keys or on Tap, the modes dimmed.
+      expect([
+        element('score-hear-again').hidden,
+        renderer.concealed.size,
+        element('focus-modes').dataset['idle'],
+        element('score-answers-tap').hidden,
+        element('score-answers-asks').textContent,
+      ]).toEqual([true, 0, 'true', false, 'Press ▶ and, after a bar counted in, tap the rhythm through in time - on any key, or on Tap.']);
+      // Begun: a bar counted in, and then the music goes on by the pulse, through the bar line, whatever is tapped.
+      const session = runtime.controller.start();
+      // Counted in, and heard: a click the reader turned off is silent from the music on, not before it.
+      expect([session?.status, metronome.currentConfig.muted, metronome.currentConfig.bars.length > 0]).toEqual(['counting-in', false, true]);
+      let counted = 0;
+      for (; counted < 64 && session?.status === 'counting-in'; counted += 1) {
+        metronome.advanceSubdivisions(1);
+      }
+      // The four beats of a bar counted, and the music begun on the next.
+      const beatsCounted = metronome.currentConfig.subdivisionsPerPulse * 4;
+      expect([session?.status, counted]).toEqual(['running', beatsCounted + 1]);
+      midi.noteOn(MIDI.G2, clock.now());
+      for (let guard = 0; guard < 200 && (session?.currentStep?.measureIndex ?? 0) < 2; guard += 1) {
+        metronome.advanceSubdivisions(1);
+      }
+      expect([session?.status, session?.currentStep?.measureIndex]).toEqual(['running', 2]);
+      runtime.controller.stop();
+      expect(runtime.controller.lastPlayedWith).toEqual({ modeId: FLOW_MODE_ID, modes: ['rhythm'] });
     });
 
     it('names the sections of a sketch written down as a score where they begin', async () => {

@@ -102,6 +102,7 @@ import { machineIsPlaying } from './modes/ListenFrame.js';
 import { playsFreely } from './modes/FreePlayFrame.js';
 import { WAIT_MODE_ID } from './modes/WaitMode.js';
 import { BAR_MODE_ID } from './modes/BarMode.js';
+import { FLOW_MODE_ID } from './modes/FlowMode.js';
 import { theQuestionsPlayedBack, type QuestionPlayedBack } from '../domain/solfege/playedBack.js';
 import { theCadenceOfTheKey } from '../domain/solfege/cadence.js';
 import { tapsWith, tempoOfTaps } from './tapTempo.js';
@@ -3897,7 +3898,7 @@ export class PracticeController {
     // A rhythm is begun by its downbeat, so a bar is not begun until it has
     // been heard. Played back note by note, an answer given early is still
     // the answer, and nothing waits for it.
-    if (playedBack?.inTime === true && endsAtMs !== null) {
+    if (playedBack?.inTime === 'each-bar' && endsAtMs !== null) {
       this.currentSession?.listenUntil(endsAtMs);
       this.emitter.emit('listeningUntil', { atMs: endsAtMs });
     }
@@ -4119,13 +4120,16 @@ export class PracticeController {
       playedBack !== undefined
       ? {
           ...settings,
-          // In time from the downbeat the reader gives, any key counting, for a rhythm; else note by note.
-          modeId: playedBack.inTime ? BAR_MODE_ID : WAIT_MODE_ID,
-          // The question is the count-in.
-          countInBars: 0,
+          // In time, any key counting, for a rhythm: through, as one is read, or
+          // from the downbeat the reader gives, as one is heard a bar at a
+          // time. Else note by note.
+          modeId: playedBack.inTime === 'throughout' ? FLOW_MODE_ID : playedBack.inTime === 'each-bar' ? BAR_MODE_ID : WAIT_MODE_ID,
+          // Read through, it is counted in, a bar at least: nothing else
+          // gives the tempo. Heard, the question is the count-in.
+          countInBars: playedBack.inTime === 'throughout' ? Math.max(1, settings.countInBars) : 0,
           survival: false,
           readAheadSteps: null,
-          rhythmOnly: playedBack.inTime,
+          rhythmOnly: playedBack.inTime !== false,
           stopAtAMistake: false,
           cursorWhileRunning: true,
           closingCursors: false,
@@ -4862,9 +4866,14 @@ export class PracticeController {
     return !clickIsSilent(this.clickWhenHeard);
   }
 
-  /** When the click sounds: the switch and the choice, taken together. */
+  /**
+   * When the click sounds: the switch and the choice, taken together - and a
+   * rhythm read through counted in whatever they say, the count-in being the
+   * one place its tempo is given.
+   */
   private get clickWhenHeard(): ClickWhen {
-    return this.currentSettings.clickOn ? this.currentSettings.clickWhen : 'never';
+    const asked = this.currentSettings.clickOn ? this.currentSettings.clickWhen : 'never';
+    return this.exercise?.playedBack?.inTime === 'throughout' && clickIsSilent(asked) ? 'count-in-only' : asked;
   }
 
   /** Whether this step is one the reader has to play. */

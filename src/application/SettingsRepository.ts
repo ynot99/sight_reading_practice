@@ -114,9 +114,16 @@ const STORAGE_VERSION = 1;
  *
  * And whether the click is heard at all, for the same reason: it is turned
  * off and on between runs, for the run about to be played here. What it
- * sounds like when it is on is shared.
+ * sounds like when it is on is shared. So is everything else the bar and
+ * the drawer change between runs: the hand being read, how fast, whether
+ * the passage goes round, free play's own click; and what the Solfege list
+ * last asked, which changed with every round opened. Each was a change to
+ * carry, and the offer to sync came up for it.
  *
- * And the theme, which answers the room the screen is in.
+ * And the theme, which answers the room the screen is in; and what stands
+ * over the foot of the screen - the keys or the notes falling onto them,
+ * the pedal falling with them, the slider through a run - which a phone and
+ * a tablet answer differently.
  */
 export const SETTINGS_KEPT_ON_THE_DEVICE: readonly string[] = [
   'inputLatencyMs',
@@ -127,6 +134,15 @@ export const SETTINGS_KEPT_ON_THE_DEVICE: readonly string[] = [
   'rangeFromBar',
   'rangeToBar',
   'clickOn',
+  'handStaff',
+  'tempoPercent',
+  'repeatRange',
+  'freePlayBpm',
+  'freePlayBeats',
+  'solfegeAsked',
+  'keysShown',
+  'pedalFalls',
+  'sliderShown',
   ...SETTINGS_THE_MODES_WRITE,
 ];
 

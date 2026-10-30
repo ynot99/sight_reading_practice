@@ -549,7 +549,7 @@ describe('settings shared between devices', () => {
     kept.savePractice({ ...SETTINGS, zoom: 2 }, 3_000);
     expect(kept.sharedSettings().changedAtMs).toBe(1_000);
 
-    kept.savePractice({ ...SETTINGS, zoom: 2, tempoPercent: 90 }, 4_000);
+    kept.savePractice({ ...SETTINGS, zoom: 2, restEveryMinutes: 90 }, 4_000);
 
     expect(kept.sharedSettings().changedAtMs).toBe(4_000);
   });
@@ -575,7 +575,7 @@ describe('settings shared between devices', () => {
     for (const own of ['inputLatencyMs', 'zoom', 'traceTheStart', 'rangeFromBar', 'rangeToBar']) {
       expect(values).not.toHaveProperty(own);
     }
-    expect(values['tempoPercent']).toBe(84);
+    expect(values['clickPattern']).toBe(SETTINGS.clickPattern);
     // With the rung it belongs to, so another device carries on the streak.
     expect(values['ladderStreak']).toBe(-1);
     expect(values['ladderStepId']).toBe('rung.2b');
@@ -609,6 +609,36 @@ describe('settings shared between devices', () => {
     });
     expect(now.modeId).toBe('mode.wait');
     expect(now.survival).toBe(changed.survival);
+  });
+
+  it('keeps what the bar and the drawer change between runs to this device, and what stands over the keys', () => {
+    // Pressed at the instrument, for the run about to be played: shared, each
+    // was a change to carry, and the offer to sync came up for it.
+    const kept = repository();
+    kept.savePractice(SETTINGS, 1_000);
+    const changed: Partial<PracticeSettings> = {
+      handStaff: SETTINGS.handStaff === 1 ? 2 : 1,
+      tempoPercent: SETTINGS.tempoPercent + 10,
+      repeatRange: !SETTINGS.repeatRange,
+      freePlayBpm: SETTINGS.freePlayBpm + 10,
+      freePlayBeats: ['accent', 'beat', 'beat'],
+      solfegeAsked: { ...SETTINGS.solfegeAsked, 'rhythm-level': 'dotted' },
+      keysShown: SETTINGS.keysShown === 'none' ? 'keys' : 'none',
+      pedalFalls: !SETTINGS.pedalFalls,
+      sliderShown: !SETTINGS.sliderShown,
+    };
+    for (const [setting, value] of Object.entries(changed)) {
+      kept.savePractice({ ...SETTINGS, [setting]: value }, 2_000);
+      expect(kept.sharedSettings().changedAtMs, setting).toBe(1_000);
+      expect(kept.sharedSettings().values, setting).not.toHaveProperty(setting);
+    }
+
+    // And another device's are not taken over this one's.
+    kept.savePractice({ ...SETTINGS, ...changed }, 3_000);
+    const now = kept.adoptSettings({ values: { ...kept.sharedSettings().values, ...encodePracticeSettings(SETTINGS) }, changedAtMs: 7_000 });
+    for (const [setting, value] of Object.entries(changed)) {
+      expect(now[setting as keyof PracticeSettings], setting).toEqual(value);
+    }
   });
 
   it('keeps the theme to this device', () => {
@@ -663,12 +693,12 @@ describe('settings shared between devices', () => {
     kept.savePractice(SETTINGS, 1_000);
 
     const now = kept.adoptSettings({
-      values: { ...kept.sharedSettings().values, tempoPercent: 50, zoom: 2.5 },
+      values: { ...kept.sharedSettings().values, restEveryMinutes: 50, zoom: 2.5 },
       changedAtMs: 7_000,
     });
     kept.savePractice({ ...SETTINGS, ...now }, 9_000);
 
-    expect(now.tempoPercent).toBe(50);
+    expect(now.restEveryMinutes).toBe(50);
     expect(now.zoom).toBe(SETTINGS.zoom);
     expect(kept.sharedSettings().changedAtMs).toBe(7_000);
   });
@@ -688,29 +718,29 @@ describe('syncing the settings through the drive', () => {
 
   it('sends them where the drive has none', async () => {
     const drive = new FolderDrive();
-    const pc = device(drive, { tempoPercent: 70 }, 1_000);
+    const pc = device(drive, { restEveryMinutes: 70 }, 1_000);
 
     expect(await pc.sync.sync()).toBe('sent');
     expect(JSON.parse(drive.files.get('settings.json')?.content ?? '{}')).toMatchObject({
       changedAtMs: 1_000,
-      practice: { tempoPercent: 70 },
+      practice: { restEveryMinutes: 70 },
     });
   });
 
   it('brings newer ones here and puts them in front of the reader', async () => {
     const drive = new FolderDrive();
-    await device(drive, { tempoPercent: 70 }, 5_000).sync.sync();
-    const ipad = device(drive, { tempoPercent: 100, zoom: 2 }, 1_000);
+    await device(drive, { restEveryMinutes: 70 }, 5_000).sync.sync();
+    const ipad = device(drive, { restEveryMinutes: 100, zoom: 2 }, 1_000);
 
     expect(await ipad.sync.sync()).toBe('brought');
-    expect(ipad.applied[0]?.tempoPercent).toBe(70);
+    expect(ipad.applied[0]?.restEveryMinutes).toBe(70);
     expect(ipad.applied[0]?.zoom).toBe(2);
   });
 
   it('sends newer ones from here over older ones on the drive', async () => {
     const drive = new FolderDrive();
-    await device(drive, { tempoPercent: 70 }, 1_000).sync.sync();
-    const pc = device(drive, { tempoPercent: 90 }, 5_000);
+    await device(drive, { restEveryMinutes: 70 }, 1_000).sync.sync();
+    const pc = device(drive, { restEveryMinutes: 90 }, 5_000);
 
     expect(await pc.sync.sync()).toBe('sent');
     expect(pc.applied).toEqual([]);
@@ -721,18 +751,18 @@ describe('syncing the settings through the drive', () => {
     const drive = new FolderDrive();
     await drive.write(
       'settings.json',
-      JSON.stringify({ version: 1, changedAtMs: 0, practice: { tempoPercent: 70 } }),
+      JSON.stringify({ version: 1, changedAtMs: 0, practice: { restEveryMinutes: 70 } }),
       null,
     );
     const ipad = device(drive, {}, 0);
 
     expect(await ipad.sync.sync()).toBe('brought');
-    expect(ipad.applied[0]?.tempoPercent).toBe(70);
+    expect(ipad.applied[0]?.restEveryMinutes).toBe(70);
   });
 
   it('says so when both already agree', async () => {
     const drive = new FolderDrive();
-    const pc = device(drive, { tempoPercent: 70 }, 1_000);
+    const pc = device(drive, { restEveryMinutes: 70 }, 1_000);
     await pc.sync.sync();
 
     expect(await pc.sync.sync()).toBe('same');
@@ -742,6 +772,6 @@ describe('syncing the settings through the drive', () => {
     const drive = new FolderDrive();
     await drive.write('settings.json', 'not json', null);
 
-    expect(await device(drive, { tempoPercent: 70 }, 1_000).sync.sync()).toBe('sent');
+    expect(await device(drive, { restEveryMinutes: 70 }, 1_000).sync.sync()).toBe('sent');
   });
 });

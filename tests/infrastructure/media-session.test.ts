@@ -217,13 +217,13 @@ describe('the platform transport keys', () => {
     // Put away while the music plays, or is held, it stays: the panel's keys
     // are wanted then.
     keys.sounding(performanceOf(true));
-    keys.pageHidden();
+    keys.pageLeft();
     keys.sounding(performanceOf(false));
-    keys.pageHidden();
+    keys.pageLeft();
     expect(silence.released).toBe(0);
     // With the music over, it goes.
     keys.sounding(null);
-    keys.pageHidden();
+    keys.pageLeft();
     expect(silence.released).toBe(1);
 
     // No platform to hand keys to, nothing begun.

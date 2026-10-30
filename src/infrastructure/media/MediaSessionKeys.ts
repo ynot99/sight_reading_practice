@@ -87,12 +87,14 @@ export class MediaSessionKeys implements IMediaKeys {
   }
 
   /**
-   * The page put away. With no music going the silence is let go of, so the
-   * platform's panel stops showing a player of it for a page nobody is at;
-   * with music going, or held, it stays - that is when the panel's keys are
-   * wanted.
+   * The page put away, or its window left for another. With no music going
+   * the silence is let go of, so the platform's panel stops showing a player
+   * of it for a page nobody is at - a window open beside the one being
+   * worked in kept a paused player ten seconds long there, and the media
+   * keys with it; with music going, or held, it stays - that is when the
+   * panel's keys are wanted. The next touch of the page begins it again.
    */
-  pageHidden(): void {
+  pageLeft(): void {
     if (!this.held) {
       this.silence?.release();
     }
@@ -253,8 +255,8 @@ const SILENCE_SECONDS = 10;
  * device standing 212 ms just after - under the first notes, when it was
  * begun with the music. Begun at a touch, it costs that while nothing
  * plays; and kept, every start after is one that already has it. Let go of
- * only where the page is put away with no music going (see
- * `MediaSessionKeys.pageHidden`), so the platform's panel does not go on
+ * only where the page is put away or its window left with no music going
+ * (see `MediaSessionKeys.pageLeft`), so the platform's panel does not go on
  * showing a player of silence for a page nobody is at.
  */
 export class LoopedSilence implements SilentPlayer {
@@ -381,8 +383,11 @@ export function theMediaSession(): MediaSessionKeys {
   );
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
-      keys.pageHidden();
+      keys.pageLeft();
     }
+  });
+  window.addEventListener('blur', () => {
+    keys.pageLeft();
   });
   return keys;
 }

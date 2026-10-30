@@ -156,7 +156,7 @@ describe('the silence that makes the page a player', () => {
     expect(theLatestPlayback(thePlaybackTimingsText('')).happened).toEqual(["the media keys' silence asked to play"]);
   });
 
-  it('is let go of by the page\'s own media session when the page is put away with nothing playing', () => {
+  it('is let go of by the page\'s own media session when the page is put away or its window left with nothing playing', () => {
     const browser = stubTheBrowser();
     Object.defineProperty(navigator, 'mediaSession', {
       configurable: true,
@@ -175,6 +175,14 @@ describe('the silence that makes the page a player', () => {
       Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
       document.dispatchEvent(new Event('visibilitychange'));
       expect(browser.loaded).toEqual([element]);
+
+      // And its window left for another, the page still showing: begun again by a touch, and let go of.
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+      keys.prime();
+      const again = browser.played.at(-1);
+      expect([again === element, browser.loaded]).toEqual([false, [element]]);
+      window.dispatchEvent(new Event('blur'));
+      expect(browser.loaded).toEqual([element, again]);
     } finally {
       Reflect.deleteProperty(navigator, 'mediaSession');
       Reflect.deleteProperty(document, 'visibilityState');

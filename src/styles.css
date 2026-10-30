@@ -597,12 +597,18 @@ textarea {
  * it. The frame is the height of the window and the bar floats over its foot,
  * so a verdict centred in the whole frame and taller than the room above the
  * bar ran on underneath it.
+ *
+ * Over what else stands on the page - the strip of an exercise's answers,
+ * the corner, the page arrows - which a tall verdict reaches: what the
+ * middle of the page says is the thing being read when it is up, and under
+ * the strip its top was cut off. Taking no touch but its boxes', it covers
+ * nothing that is not under them.
  */
 .score-card {
   --score-card-foot: calc(var(--focus-bar-foot) + var(--focus-bar-height) + 16px);
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 7;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -5561,15 +5567,6 @@ body[data-playing='true'] .score__modes {
 
 .score[data-asking] .score__surface {
   padding-top: calc(var(--answers-from) + var(--answers-room));
-}
-
-/*
- * And what the page says in its middle - how a run went above all - is
- * said under them too: the strip stands over the card, and a card centred
- * on the whole page ran up under it.
- */
-.score[data-asking] .score-card {
-  padding-top: calc(var(--answers-from) + var(--answers-room) + 8px);
 }
 
 .score__answers-asks {

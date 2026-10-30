@@ -2583,8 +2583,9 @@ describe('searching the settings', () => {
     expect(body('.score__answers-head .score__answers-asks')).toMatch(/flex\s*:\s*1 1 10em/);
     // The marker grey while a bar is played to the reader, the other hand's grey.
     expect(body('.score[data-hearing] .score__cursor')).toMatch(/--marker-wash\s*:\s*rgb\(148 163 184 \/ 45%\)/);
-    // What the middle of the page says stands under the strip too, as the music does.
-    expect(body('.score[data-asking] .score-card')).toMatch(/padding-top\s*:\s*calc\(var\(--answers-from\) \+ var\(--answers-room\) \+ 8px\)/);
+    // What the middle of the page says stands over the strip, the corner and the page arrows, where a tall verdict reaches them.
+    const layer = (selector: string): number => Number(/z-index\s*:\s*(\d+)/.exec(body(selector))?.[1] ?? NaN);
+    expect(Math.min(...['.score__answers', '.score__corner', '.score__pages'].map((each) => layer('.score-card') - layer(each)))).toBeGreaterThan(0);
     expect(body('.score__answers-hear')).toMatch(/flex\s*:\s*none/);
     expect(body('.score__answers-streak')).toMatch(/flex\s*:\s*none/);
     expect(body('.score__answers-next')).toMatch(/flex\s*:\s*none/);

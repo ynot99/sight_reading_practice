@@ -955,6 +955,12 @@ export class PracticeSession {
       : this.options.clickWhen;
   }
 
+  /** Whether the pulse is heard once the music has begun: neither off, nor only the count-in's. */
+  private theClickIsHeardInTheMusic(): boolean {
+    const when = this.clickForThePulse();
+    return !clickIsSilent(when) && when !== 'count-in-only';
+  }
+
   private usesPulse(): boolean {
     return this.thePulseGoesOn() || this.options.countInBars > 0;
   }
@@ -1325,7 +1331,12 @@ export class PracticeSession {
       // the one their own press starts.
       this.configureThePulse(0, this.barEndAfter(step));
       this.pulseGeneration += 1;
-      this.anchorOnTheNextTick = true;
+      // Measured from the click that answers the press, a moment behind it,
+      // where that click is heard: it is what the reader plays the bar with.
+      // Where none is, they play it from their own downbeat, and measured
+      // from a tick nobody heard every note after it read early by the
+      // moment between.
+      this.anchorOnTheNextTick = this.theClickIsHeardInTheMusic();
       this.metronome.start();
     }
     this.emitter.emit('barBegan', { stepIndex: step.index, atMs });

@@ -121,7 +121,8 @@ describe('Bar mode', () => {
       scoring: new TimingWeightedScoringStrategy(),
       options: {
         countInBars: 1,
-        clickWhen: 'never',
+        // A click heard, to play with.
+        clickWhen: 'always',
         click: 'subdivision',
         matchPolicy: { toleranceMs: 250, pitchClassOnly: false, anyPitch: true },
       },
@@ -491,6 +492,45 @@ describe('Bar mode', () => {
 
     expect(harness.metronome.isRunning).toBe(false);
     expect(harness.of('noteJudged').at(-1)?.verdict).toBe('wrong');
+  });
+
+  it('measures a bar from the press that gave it where no click is heard, the clock answering it a moment behind', () => {
+    // The click that answers a press is heard a moment after it, and a bar
+    // measured from that click is right for a reader playing with it. With
+    // the click off there is nothing to play with but their own downbeat:
+    // measured from the unheard tick, every note after it in the bar read
+    // early by the moment between, and on a short note out of its Perfect
+    // window.
+    const measuredWith = (clickWhen: 'never' | 'count-in-only' | 'always'): number | null | undefined => {
+      const clock = new ManualClock();
+      const midi = new MockMidiAdapter({ clock });
+      const metronome = new ManualMetronome(clock, CLICK_LEAD_MS);
+      const session = new PracticeSession({
+        timeline: buildTimeline(twoBarExercise({ tempoBpm: 60 })),
+        mode: new BarMode(),
+        midi,
+        metronome,
+        clock,
+        scoring: new TimingWeightedScoringStrategy(),
+        options: {
+          countInBars: 1,
+          clickWhen,
+          click: 'subdivision',
+          matchPolicy: { toleranceMs: 250, pitchClassOnly: false, anyPitch: true },
+        },
+      });
+      const judged: NoteJudgedEvent[] = [];
+      session.events.on('noteJudged', (event) => judged.push(event));
+      session.start();
+      metronome.advanceSubdivisions(TICKS_TO_START);
+      const gaveAt = clock.now();
+      midi.noteOn(MIDI.C4, gaveAt);
+      metronome.advanceSubdivisions(1 + SUBDIVISIONS_PER_BEAT);
+      // A beat after the press, or after the click, whichever the reader had to play with.
+      midi.noteOn(MIDI.C4, clickWhen === 'always' ? clock.now() : gaveAt + 1_000);
+      return judged.at(-1)?.deviationMs;
+    };
+    expect([measuredWith('never'), measuredWith('count-in-only'), measuredWith('always')]).toEqual([0, 0, 0]);
   });
 
   it('gives the bar its downbeat where the reader put it', () => {

@@ -9224,6 +9224,51 @@ describe('AppView', () => {
       ]);
     });
 
+    it('begins a rhythm read through counted in at the first tap, where a key begins a run, the tap sounding for as long as it is held', async () => {
+      const { view, runtime, instrument, metronome } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ immediateStart: true, countInBars: 0, previewSeconds: 0 });
+      // The ticks before the music begins: one where nothing is counted in, a bar's more where it is.
+      const ticksToTheMusic = (): number => {
+        let ticks = 0;
+        for (; ticks < 64 && runtime.controller.session?.status === 'counting-in'; ticks += 1) {
+          metronome.advanceSubdivisions(1);
+        }
+        return ticks;
+      };
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      element<HTMLButtonElement>('solfege-rhythm-read').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise?.title).toBe('Rhythm reading');
+      });
+      const tap = element<HTMLButtonElement>('score-answers-tap');
+      // The tap's own note let go of, not the notes a question was played with, which are let go of at a moment of their own.
+      const stopped = (): number => instrument.stopped.filter((note) => note.midi === 71 && note.atMs === undefined).length;
+      tap.dispatchEvent(new Event('pointerdown'));
+      // Begun, and counted in: one tap gives no tempo. Its note sounds on as the run comes in.
+      expect([instrument.played.some((note) => note.midi === 71), stopped(), ticksToTheMusic()]).toEqual([
+        true,
+        0,
+        metronome.currentConfig.subdivisionsPerPulse * 4 + 1,
+      ]);
+      tap.dispatchEvent(new Event('pointerup'));
+      expect(stopped()).toBe(1);
+      runtime.controller.stop();
+
+      // Heard a bar at a time, the first tap begins the run as ever, its note sounding on too.
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-solfege').click();
+      element<HTMLButtonElement>('solfege-rhythm-open').click();
+      await vi.waitFor(() => {
+        expect(runtime.controller.openedExercise?.title).toBe('Rhythmic dictation');
+      });
+      tap.dispatchEvent(new Event('pointerdown'));
+      expect([stopped(), ticksToTheMusic()]).toEqual([1, 1]);
+      tap.dispatchEvent(new Event('pointerup'));
+      expect(stopped()).toBe(2);
+    });
+
     it('opens rhythms to read from the Solfege list, at the level chosen, on the page from the first and tapped through after a bar counted in', async () => {
       const { view, runtime, renderer, metronome, midi, clock } = createRig();
       await view.initialize();

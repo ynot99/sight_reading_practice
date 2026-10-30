@@ -2257,6 +2257,8 @@ export class AppView {
   private questionHeard: NamingQuestion | null = null;
   /** The moment a question answered is moved on from, while one waits to be. */
   private nextQuestionTimer: ReturnType<typeof setTimeout> | undefined = undefined;
+  /** Whether the keys on the screen were free play's, when last shown: see `applyKeyboardVisibility`. */
+  private keysWereInFreePlay = false;
   /** When the bar being played to the reader has been heard, and the marker is theirs again. */
   private heardTimer: ReturnType<typeof setTimeout> | undefined = undefined;
   /** How tall a row is, and the ruler and the pedal lane, as last measured. */
@@ -13248,9 +13250,14 @@ export class AppView {
     }
     if (!inFreePlay) {
       this.el.freeChord.hidden = true;
-      // A key held on the screen as free play ended is let go of with it.
+    }
+    // A key held on the screen as free play ended is let go of with it - as
+    // it ends, and only then: asked whenever this is, the key Tap holds was
+    // let go of as the run its press began came in, its note cut short.
+    if (this.keysWereInFreePlay && !inFreePlay) {
       this.runtime.screenKeys.releaseAll();
     }
+    this.keysWereInFreePlay = inFreePlay;
     if (!active || shows !== 'falling-notes') {
       // Nothing is falling, and the picture of what was is let go of with
       // the memory it holds - the height of the screen of it. Painting sizes

@@ -3147,6 +3147,13 @@ export class PracticeController {
     if (!outcome.completed) {
       return;
     }
+    // Except a rhythm read through: one tap gives no tempo, and the count-in
+    // is the one place it is given. There the press is the reader asking to
+    // begin, as Start is, and the run is counted in from it.
+    if (this.exercise?.playedBack?.inTime === 'throughout') {
+      this.beginRun(this.playedUnder.countInBars, [], this.openingBeginsAt ?? undefined);
+      return;
+    }
     // No count-in: the reader has just played the tempo themselves, and
     // counting them in after that is asking them to wait for a bar they have
     // already begun. And from the chord they actually played, which is not

@@ -14496,6 +14496,38 @@ describe('AppView', () => {
         }
       });
 
+      it('sounds a run tapped in rhythm only on the drum its keys were, and any other on the instrument', async () => {
+        const heardOn = async (rhythmOnly: boolean): Promise<[number, number]> => {
+          const rig = createRig();
+          await rig.view.initialize();
+          await rig.runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+          rig.runtime.controller.updateSettings({ rhythmOnly, hearTheOtherHand: false });
+          element<HTMLButtonElement>('focus-play').click();
+          for (const _ of [1, 2]) {
+            rig.clock.advance(1_000);
+            for (const midi of rig.runtime.controller.session?.currentStep?.expectedMidi ?? []) {
+              rig.midi.noteOn(midi, rig.clock.now());
+            }
+          }
+          element<HTMLButtonElement>('focus-stop').click();
+          // Only what the replay hands over, not what the keys sounded as they were played.
+          const drum = rig.hitSound.heardAt.length;
+          const piano = rig.instrument.played.length;
+          vi.useFakeTimers();
+          try {
+            element<HTMLButtonElement>('run-replay').click();
+            rig.clock.advance(2_100);
+            vi.advanceTimersByTime(100);
+          } finally {
+            vi.useRealTimers();
+          }
+          return [rig.hitSound.heardAt.slice(drum).filter((at) => at !== undefined).length, rig.instrument.played.length - piano];
+        };
+        const [tappedDrum, tappedPiano] = await heardOn(true);
+        const [playedDrum, playedPiano] = await heardOn(false);
+        expect([tappedDrum > 0, tappedPiano, playedDrum, playedPiano > 0]).toEqual([true, 0, 0, true]);
+      });
+
       it('ends by itself once it has played out, and gives the page back', async () => {
         const { runtime, renderer, clock } = await aRunPlayed();
         const left = renderer.played.length;

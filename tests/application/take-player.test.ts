@@ -596,3 +596,27 @@ describe('playing a stretch of a take round and round', () => {
     expect(instrument.played.at(-1)?.midi).toBe(65);
   });
 });
+
+describe('playing a take through something other than the instrument', () => {
+  it('sounds it through what it was handed, silences that when it stops, and plays the next take on the instrument', () => {
+    const { clock, instrument, player } = rig();
+    const drum = new RecordingPitchPlayer();
+
+    player.play('a run tapped', TAKE, 0, null, drum);
+    clock.advance(900);
+    player.pump();
+    expect([drum.played.map((note) => [note.midi, note.atMs]), instrument.played]).toEqual([
+      [
+        [60, 0],
+        [64, 1_000],
+      ],
+      [],
+    ]);
+    const instrumentSilenced = instrument.stopAllCount;
+    player.stop();
+    expect([drum.stopAllCount, instrument.stopAllCount - instrumentSilenced]).toEqual([1, 0]);
+
+    player.play('take-1', TAKE);
+    expect([drum.played.length, instrument.played.map((note) => note.midi)]).toEqual([2, [60]]);
+  });
+});

@@ -17,7 +17,6 @@ import type {
   ISampleLibrary,
   ISustainPedal,
 } from '../application/ports/IPitchPlayer.js';
-import type { IHitSound } from '../application/ports/IHitSound.js';
 import type {
   IMidiConnection,
   IMidiDeviceDirectory,
@@ -262,8 +261,11 @@ export interface AppRuntime {
   /** The keys drawn on the screen, which play where the reader plays freely. */
   readonly screenKeys: IMidiSource & IPlayableKeys;
   readonly pitchPlayer: IPitchPlayer;
-  /** What a key sounds as where only its moment is judged: see `IHitSound`. */
-  readonly hitSound: IHitSound;
+  /**
+   * The drum a key is heard as where only its moment is judged, and a run
+   * tapped that way plays back through: see `WebAudioHitSound`.
+   */
+  readonly hitSound: IPitchPlayer;
   /** Keeps the screen up while the reader is playing. */
   readonly screenWake: IScreenWake;
   /** The audio device, and whether it can sound anything yet. */
@@ -378,7 +380,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     fallback: new WebAudioPitchPlayer(audioContextFactory, { reading }),
     reading,
   });
-  const hitSound = new WebAudioHitSound(audioContextFactory, () => pitchPlayer.volume);
+  const hitSound = new WebAudioHitSound(audioContextFactory, () => pitchPlayer.volume, { reading });
 
   const webMidi = new WebMidiAdapter(browserMidiAccessProvider(), clock);
   const computerKeyboard = new ComputerKeyboardMidiSource(options.keyboardTarget, clock);

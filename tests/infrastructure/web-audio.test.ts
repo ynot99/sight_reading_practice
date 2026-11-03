@@ -1231,7 +1231,7 @@ describe('WebAudioHitSound', () => {
   it('strikes at once, a falling body under a short snap, and lets both go', () => {
     const context = new FakeAudioContext();
     context.advance(2);
-    new WebAudioHitSound(contextFactory(context), () => 1).hit(0.8);
+    new WebAudioHitSound(contextFactory(context), () => 1).play(60, 0.8);
 
     const [body, snap] = context.oscillators;
     expect([body?.type, snap?.type, body?.startedAt, snap?.startedAt]).toEqual(['sine', 'triangle', 2, 2]);
@@ -1244,10 +1244,62 @@ describe('WebAudioHitSound', () => {
     expect([body?.unplugged, snap?.unplugged]).toEqual([true, true]);
   });
 
+  it('strikes at a moment handed over ahead, whichever key, and a key coming up cuts nothing', () => {
+    const context = new FakeAudioContext();
+    const drum = new WebAudioHitSound(contextFactory(context), () => 1);
+    withTheClockStill((now) => {
+      drum.play(60, 0.5);
+      drum.play(84, 0.5, now + 500);
+      drum.stop(60, now + 10);
+    });
+    const [nowBody, , laterBody, laterSnap] = context.oscillators;
+    expect((laterBody?.startedAt ?? 0) - (nowBody?.startedAt ?? 0)).toBeCloseTo(0.5, 3);
+    expect(laterSnap?.startedAt).toBe(laterBody?.startedAt);
+    expect(laterBody?.frequency.ramps[0]?.value).toBe(nowBody?.frequency.ramps[0]?.value);
+    expect(nowBody?.stoppedAt).toBeCloseTo((nowBody?.startedAt ?? 0) + 0.15, 6);
+  });
+
+  it('takes back the hits handed over to begin later, and every one when told to stop', () => {
+    const context = new FakeAudioContext();
+    const drum = new WebAudioHitSound(contextFactory(context), () => 1);
+    const takenBack = (index: number): boolean => {
+      const node = context.oscillators[index];
+      return (node?.stoppedAt ?? Number.POSITIVE_INFINITY) <= (node?.startedAt ?? 0);
+    };
+    withTheClockStill((now) => {
+      drum.play(60, 0.5);
+      drum.play(60, 0.5, now + 500);
+      drum.takeBackFrom(now + 100);
+    });
+    expect([takenBack(0), takenBack(1), takenBack(2), takenBack(3)]).toEqual([false, false, true, true]);
+
+    withTheClockStill((now) => {
+      drum.play(60, 0.5, now + 800);
+    });
+    drum.stopAll();
+    expect([takenBack(4), takenBack(5)]).toEqual([true, true]);
+    // What was taken back is not reached again, nor one that has finished.
+    drum.stopAll();
+    expect([context.gains[2]?.gain.cancelled, context.gains[4]?.gain.cancelled]).toEqual([1, 1]);
+    drum.play(60, 0.5);
+    context.oscillators[6]?.onended?.();
+    drum.stopAll();
+    expect(context.gains[6]?.gain.cancelled).toBe(0);
+  });
+
+  it('sounds nothing handed over for a moment long gone', () => {
+    const context = new FakeAudioContext();
+    const drum = new WebAudioHitSound(contextFactory(context), () => 1);
+    withTheClockStill((now) => {
+      drum.play(60, 0.5, now - 5_000);
+    });
+    expect(context.oscillators).toEqual([]);
+  });
+
   it('is as loud as it was struck and as the instrument is, and silent where the instrument is', () => {
     const peaks = (velocity: number, volume: number): number[] => {
       const context = new FakeAudioContext();
-      new WebAudioHitSound(contextFactory(context), () => volume).hit(velocity);
+      new WebAudioHitSound(contextFactory(context), () => volume).play(60, velocity);
       return peaksOf(context);
     };
     const [loudBody = 0, loudSnap = 0] = peaks(1, 1);

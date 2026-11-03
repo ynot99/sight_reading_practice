@@ -8525,7 +8525,7 @@ export class AppView {
           // Which key it was is nobody's question in rhythm only, and sounded
           // as itself it plays a tune nobody wrote: the press is a hit.
           if (this.runtime.controller.keysAreTaps) {
-            this.runtime.hitSound.hit(event.velocity);
+            this.runtime.hitSound.play(event.midi, event.velocity);
             return;
           }
           this.runtime.pitchPlayer.play(event.midi, event.velocity);
@@ -13064,7 +13064,9 @@ export class AppView {
     }
     const from = this.replayAtMs;
     player.setSpeed(this.theRollsSpeed());
-    player.play(RUN_REPLAY_ID, rollAsEvents(roll), from);
+    // As it was heard: a run tapped in rhythm only, on the drum its keys were.
+    const through = this.runtime.controller.replayWasTapped ? this.runtime.hitSound : undefined;
+    player.play(RUN_REPLAY_ID, rollAsEvents(roll), from, null, through);
     // Those due at once handed over at once, as the notes are: see `clickAheadOfTheRoll`.
     this.replayClicksSent = this.clickTheRunsBeats(roll, clicksBefore(roll, from, this.theRollsGrid()), from);
     this.runtime.controller.replayAt(from);

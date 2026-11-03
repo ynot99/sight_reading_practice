@@ -2470,6 +2470,14 @@ export class PracticeController {
     return this.finishedPlayedWith;
   }
 
+  /**
+   * Whether the run being shown again was tapped: played in rhythm only, so
+   * that its keys were taps, drawn as strokes and heard as a drum.
+   */
+  get replayWasTapped(): boolean {
+    return this.replay?.judging.taps === true;
+  }
+
   /** What the run being shown again was played with, or `null` where none is. */
   get replayPlayedWith(): PlayedWith | null {
     return this.replay?.playedWith ?? null;

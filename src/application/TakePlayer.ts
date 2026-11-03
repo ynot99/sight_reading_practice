@@ -50,6 +50,8 @@ export interface TakeLoop {
  */
 export class TakePlayer {
   private readonly instrument: IPitchPlayer;
+  /** What the take being played sounds through: the instrument, unless it was handed another. */
+  private voice: IPitchPlayer;
   private readonly clock: IClock;
   private readonly sustain: ISustainPedal | null;
 
@@ -82,6 +84,7 @@ export class TakePlayer {
 
   constructor(dependencies: TakePlayerDependencies) {
     this.instrument = dependencies.instrument;
+    this.voice = dependencies.instrument;
     this.clock = dependencies.clock;
     this.sustain = dependencies.sustain ?? null;
   }
@@ -204,9 +207,20 @@ export class TakePlayer {
    * A stretch of it may be played round and round: see {@link setLoop}. It
    * is the caller's, and goes with what is played - a take played after it
    * goes round nothing unless it is told.
+   *
+   * And it may be played through something other than the instrument - a
+   * run whose keys were heard as a drum, through the drum. That too goes
+   * with what is played: the next take sounds as the instrument again.
    */
-  play(id: string, events: readonly MidiFileEvent[], fromMs = 0, loop: TakeLoop | null = null): void {
+  play(
+    id: string,
+    events: readonly MidiFileEvent[],
+    fromMs = 0,
+    loop: TakeLoop | null = null,
+    through: IPitchPlayer = this.instrument,
+  ): void {
     this.stop();
+    this.voice = through;
     this.lengthMs = events.reduce((longest, event) => Math.max(longest, event.atMs), 0);
     this.notes = soundingNotes(events, this.lengthMs);
     this.playingId = id;
@@ -290,8 +304,8 @@ export class TakePlayer {
       // chord, not the silence between its attack and its release.
       const startsAt = Math.max(note.startMs, begins);
       const endsAt = loop === null ? note.endMs : Math.min(note.endMs, loop.toMs);
-      this.instrument.play(note.midi, note.velocity, this.whenHeard(startsAt + shift));
-      this.instrument.stop(note.midi, this.whenHeard(Math.max(endsAt, startsAt) + shift));
+      this.voice.play(note.midi, note.velocity, this.whenHeard(startsAt + shift));
+      this.voice.stop(note.midi, this.whenHeard(Math.max(endsAt, startsAt) + shift));
       this.handed.add(index);
     }
 
@@ -356,7 +370,7 @@ export class TakePlayer {
   }
 
   private silence(): void {
-    this.instrument.stopAll();
+    this.voice.stopAll();
     this.sustain?.setSustain(false);
   }
 }

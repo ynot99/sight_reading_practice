@@ -443,7 +443,7 @@ rather than a mode of its own, so it composes with either — nothing about when
 the cursor moves changes. Where the page sounds the keys, a press in it is
 heard as a drum's hit rather than as the key: which key it was is nobody's
 question, and on a computer's keyboard it played whichever letters were
-nearest as a tune. For the same reason a tap is drawn as one stroke down the
+nearest as a tune. A run played so is shown again on the same drum. For the same reason a tap is drawn as one stroke down the
 system where it landed, in its verdict's colour, rather than as a ring on
 every note of the chord it answered. A tap the note it fell to already had is
 drawn too, in grey and exactly where it landed: a key that reached the run is

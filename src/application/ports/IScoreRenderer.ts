@@ -409,6 +409,12 @@ export interface PlayedNote {
    * one tap.
    */
   readonly tap?: boolean;
+  /**
+   * A press heard and judged for nothing: a tap the note it fell to already
+   * had. Drawn in grey where it landed, which is no verdict's colour, so a
+   * key that reached the run is never missing from the page.
+   */
+  readonly extra?: boolean;
 }
 
 /** What the overlay needs in order to spell and place a press. */

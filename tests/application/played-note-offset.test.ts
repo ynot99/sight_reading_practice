@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { playedNoteOffset } from '../../src/application/playedNoteOffset.js';
+import { playedNoteOffset, WHERE_IT_LANDED } from '../../src/application/playedNoteOffset.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { twoBarExercise } from '../support/fixtures.js';
@@ -61,5 +61,13 @@ describe('playedNoteOffset', () => {
   it('falls back to its own gap at the very first step', () => {
     // Nothing behind step 0 to measure against, so its own length stands in.
     expect(playedNoteOffset(timeline, 0, -500, 60)).toBeCloseTo(-0.5, 10);
+  });
+});
+
+describe('a tap judged for nothing, where it landed', () => {
+  it('is drawn off its note however near it, and as far past the next as it went, a sweep across two gaps', () => {
+    for (let deviationMs = -1900; deviationMs <= 1900; deviationMs += 100) {
+      expect(playedNoteOffset(timeline, 1, deviationMs, 60, WHERE_IT_LANDED), String(deviationMs)).toBeCloseTo(deviationMs / 1000, 10);
+    }
   });
 });

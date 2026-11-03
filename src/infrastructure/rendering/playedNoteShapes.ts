@@ -27,6 +27,8 @@ export interface PlayedMark {
   readonly tier?: NoteTier;
   /** A press judged for its moment alone; see `PlayedNote.tap`. */
   readonly tap?: boolean;
+  /** A press judged for nothing; see `PlayedNote.extra`. */
+  readonly extra?: boolean;
 }
 
 export interface OverlayLayout {
@@ -91,6 +93,8 @@ export interface TickShape {
   readonly correct: boolean;
   readonly looseTiming: boolean;
   readonly sounding?: boolean;
+  /** Judged for nothing, and drawn in no verdict's colour. */
+  readonly extra?: boolean;
 }
 
 export type OverlayShape = NoteheadShape | LedgerShape | AccidentalShape | TickShape;
@@ -178,6 +182,7 @@ export function buildTapShape(
     y2: system.bottom,
     correct: mark.correct,
     looseTiming: mark.tier === 'good',
+    ...(mark.extra === true ? { extra: true } : {}),
   };
 }
 

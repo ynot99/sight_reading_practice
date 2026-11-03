@@ -871,14 +871,18 @@ export class VerovioScoreRenderer
   }
 
   /**
-   * Draws a tap onto its page: once a step, however many notes it asks for.
+   * Draws a tap onto its page: once a step, however many notes it answers.
    *
    * One tap answers the whole chord, and each of its notes is announced as
-   * played; strokes drawn over one another would only darken the line.
+   * played; strokes drawn over one another would only darken the line. A tap
+   * judged for nothing is a press of its own, every one drawn - and under
+   * the others, so one landing on a verdict's stroke never puts its colour
+   * out.
    */
   private drawTheTap(mark: PlayedMark, overlay: PageOverlay): void {
     const step = String(mark.stepIndex);
-    if (overlay.layer.querySelector(`[data-tap="${step}"]`) !== null) {
+    const extra = mark.extra === true;
+    if (!extra && overlay.layer.querySelector(`[data-tap="${step}"]`) !== null) {
       return;
     }
     const system = this.theSystemOf(mark.stepIndex);
@@ -892,7 +896,11 @@ export class VerovioScoreRenderer
     if (mark.settled === false) {
       drawn.classList.add('played--unsettled');
     }
-    overlay.layer.append(drawn);
+    if (extra) {
+      overlay.layer.prepend(drawn);
+    } else {
+      overlay.layer.append(drawn);
+    }
   }
 
   /**
@@ -1812,6 +1820,7 @@ export class VerovioScoreRenderer
       settled: note.settled,
       ...(note.tier === undefined ? {} : { tier: note.tier }),
       ...(note.tap === true ? { tap: true } : {}),
+      ...(note.extra === true ? { extra: true } : {}),
     };
     this.marks.push(mark);
     this.drawTheMark(mark);

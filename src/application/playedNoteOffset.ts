@@ -18,6 +18,19 @@ const DEFAULT_DEAD_ZONE = 0.12;
 const DEFAULT_LIMIT = 0.85;
 
 /**
+ * Where a tap judged for nothing is drawn: exactly where it landed.
+ *
+ * It says that a key reached the run, and nothing else - so it neither snaps
+ * onto its note nor stops short of the next. Snapped, a second tap a moment
+ * after the first was drawn on top of it and could not be seen; stopped
+ * short, every tap through the back half of a long note was one stroke.
+ */
+export const WHERE_IT_LANDED: PlayedNoteOffsetOptions = {
+  deadZone: 0,
+  limit: Number.POSITIVE_INFINITY,
+};
+
+/**
  * Where a press belongs horizontally, as a fraction of the gap to its
  * neighbour: `-0.3` is three tenths of the way back towards the previous note,
  * `+0.7` seven tenths of the way towards the next.

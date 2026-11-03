@@ -4,7 +4,7 @@ import type { BarStart, PedalDown } from './ExercisePlayer.js';
 import type { RuledMoment, RulerMark } from './rhythmRuler.js';
 import { landing, type NoteTier } from '../domain/scoring/noteTiers.js';
 import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
-import { playedNoteOffset } from './playedNoteOffset.js';
+import { playedNoteOffset, WHERE_IT_LANDED } from './playedNoteOffset.js';
 import type { PlayedNote } from './ports/IScoreRenderer.js';
 import { rollBeganAtMs, theMusicsPlaceAt, type RunRoll } from './session/RunRoll.js';
 
@@ -65,7 +65,10 @@ export function theMarksOfTheRun(
   const marks: ReplayMark[] = [];
   for (const press of roll.presses) {
     const { stepIndex, verdict } = press;
-    if (stepIndex === null || verdict === null || verdict === 'duplicate') {
+    // A tap with no note left for it was drawn, in grey, where it landed;
+    // anywhere else a press struck again in a chord drew nothing.
+    const extra = verdict === 'duplicate';
+    if (stepIndex === null || verdict === null || (extra && judging.taps !== true)) {
       continue;
     }
     const tier = tierOf(verdict, stepIndex, press.deviationMs, timeline, judging);
@@ -77,10 +80,11 @@ export function theMarksOfTheRun(
         correct: verdict !== 'wrong',
         settled: true,
         offset: judging.keepsTime
-          ? playedNoteOffset(timeline, stepIndex, press.deviationMs, judging.tempoBpm)
+          ? playedNoteOffset(timeline, stepIndex, press.deviationMs, judging.tempoBpm, extra ? WHERE_IT_LANDED : undefined)
           : 0,
         ...(tier === undefined ? {} : { tier }),
         ...(judging.taps === true ? { tap: true } : {}),
+        ...(extra ? { extra: true } : {}),
       },
     });
   }

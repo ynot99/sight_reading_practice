@@ -11,7 +11,9 @@ const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
  * and the stylesheet says what colour that is.
  */
 export function drawShape(shape: OverlayShape, doc: Document): SVGElement {
-  const colourClass = shape.sounding
+  const colourClass = shape.kind === 'tick' && shape.extra === true
+    ? 'played--extra'
+    : shape.sounding
     ? 'played--sounding'
     : !shape.correct
       ? 'played--wrong'

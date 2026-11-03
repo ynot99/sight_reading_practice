@@ -41,6 +41,7 @@
   --mark-good: #22c55e;
   --mark-wrong: #b91c1c;
   --mark-sounding: #7c3aed;
+  --mark-extra: #6b7280;
   --radius: 10px;
   --shadow: 0 1px 2px rgb(16 24 40 / 8%), 0 8px 24px rgb(16 24 40 / 6%);
   /*
@@ -168,6 +169,7 @@
     --mark-good: #16a34a;
     --mark-wrong: #f87171;
     --mark-sounding: #a78bfa;
+    --mark-extra: #9ca3af;
   }
 }
 
@@ -220,6 +222,7 @@
   --mark-good: #16a34a;
   --mark-wrong: #f87171;
   --mark-sounding: #a78bfa;
+  --mark-extra: #9ca3af;
 }
 
 /*
@@ -7610,6 +7613,15 @@ body[data-repeats='hidden'] .repeat-mark {
 
 .played--wrong {
   stroke: var(--mark-wrong);
+  fill: none;
+}
+
+/*
+ * A tap heard and judged for nothing - the note it fell to already had one.
+ * Grey, which is no verdict: it says only that the key reached the run.
+ */
+.played--extra {
+  stroke: var(--mark-extra);
   fill: none;
 }
 

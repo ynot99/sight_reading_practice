@@ -23,7 +23,7 @@ import {
   type ExerciseTimeline,
   type TimelineStep,
 } from '../domain/timeline/Timeline.js';
-import { playedNoteOffset } from './playedNoteOffset.js';
+import { playedNoteOffset, WHERE_IT_LANDED, type PlayedNoteOffsetOptions } from './playedNoteOffset.js';
 import { DEFAULT_SECTION_BARS, drillTaskPassed, planTheDrill, type DrillTask } from './drill/SectionDrill.js';
 import type { DrillProgress } from './drill/DrillProgress.js';
 import type { ScoreOrder, WhatOpens } from './ScoreLibrary.js';
@@ -3311,25 +3311,33 @@ export class PracticeController {
     );
 
     this.sessionSubscriptions.push(
-      // Every press is drawn where it was actually struck, right or wrong. A
-      // repeat of a note already collected adds nothing to look at.
+      // Every press is drawn where it was actually struck, right or wrong -
+      // and a tap with no note left for it too. Left off the page, a key the
+      // run heard looked like a key that had not worked.
       session.events.on('noteJudged', ({ midi, verdict, stepIndex, deviationMs, tier }) => {
         const held = this.currentSettings.playedNotes === 'at-end';
         const why =
           this.currentSettings.playedNotes === 'hidden'
             ? 'marks are turned off'
-            : verdict === 'duplicate'
-              ? 'a note of this chord already collected'
-              : held
-                ? 'held back until the run ends'
-                : '';
+            : held
+              ? 'held back until the run ends'
+              : '';
+        // A tap the note it fell to already had: heard, and judged for
+        // nothing, and drawn exactly where it landed.
+        const extra = verdict === 'duplicate';
+        // Measured now, not at the end: the offset is a fraction of the gap
+        // to the neighbouring note, and it is only known while the run
+        // still knows the tempo it was played at. It says where the key
+        // landed; the tier says whether that was in its window. Once, for
+        // the log and the page alike.
+        const offset = this.timingOffsetFor(stepIndex, deviationMs, session.tempoBpm, extra ? WHERE_IT_LANDED : undefined);
         this.remember({
           midi,
           verdict,
           stepIndex,
           onsetTicks: this.timeline?.at(stepIndex)?.onsetTicks ?? -1,
           deviationMs,
-          offset: this.timingOffsetFor(stepIndex, deviationMs, session.tempoBpm),
+          offset,
           drawn: why === '',
           why,
         });
@@ -3344,7 +3352,7 @@ export class PracticeController {
           // so the note that ended it is on the page with the rest.
           this.currentSession?.abort();
         }
-        if (this.currentSettings.playedNotes === 'hidden' || verdict === 'duplicate') {
+        if (this.currentSettings.playedNotes === 'hidden') {
           return;
         }
         const mark = {
@@ -3358,13 +3366,10 @@ export class PracticeController {
           // the other hand was going to play was read correctly, and one
           // struck ahead of it was the right key.
           correct: verdict !== 'wrong',
-          // Measured now, not at the end: the offset is a fraction of the gap
-          // to the neighbouring note, and it is only known while the run
-          // still knows the tempo it was played at. It says where the key
-          // landed; the tier says whether that was in its window.
-          offset: this.timingOffsetFor(stepIndex, deviationMs, session.tempoBpm),
+          offset,
           ...(tier === undefined ? {} : { tier }),
           ...(taps ? { tap: true } : {}),
+          ...(extra ? { extra: true } : {}),
         };
         if (this.currentSettings.playedNotes === 'at-end') {
           this.heldMarks.push(mark);
@@ -3654,12 +3659,13 @@ export class PracticeController {
     stepIndex: number,
     deviationMs: number | null,
     tempoBpm: number,
+    options?: PlayedNoteOffsetOptions,
   ): number {
     const timeline = this.timeline;
     if (timeline === null || !this.keepsTime) {
       return 0;
     }
-    return playedNoteOffset(timeline, stepIndex, deviationMs, tempoBpm);
+    return playedNoteOffset(timeline, stepIndex, deviationMs, tempoBpm, options);
   }
 
   /**

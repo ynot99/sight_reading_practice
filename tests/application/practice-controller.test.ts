@@ -6103,6 +6103,52 @@ describe('a run shown again on the page', () => {
     expect(taps()).toEqual([undefined]);
   });
 
+  it('draws a tap with no note left for it in grey where it landed, live and shown again', async () => {
+    const rig = createController(true, undefined, { matchToleranceMs: 250 });
+    const { controller, renderer, midi, metronome, clock } = rig;
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0, rhythmOnly: true });
+    controller.start();
+    const steps = controller.currentTimeline?.playableSteps ?? [];
+    const tap = (): void => {
+      midi.noteOn(MIDI.G4, clock.now());
+      midi.noteOff(MIDI.G4, clock.now() + 20);
+    };
+    for (const step of steps.slice(0, 4)) {
+      metronome.advanceToTicks(step.onsetTicks);
+      tap();
+    }
+    // Nearer the fourth note than the fifth: that note had its tap, and these are heard all the same -
+    // the first a moment after it, which a judged tap would be drawn on its note for.
+    clock.advance(100);
+    tap();
+    clock.advance(300);
+    tap();
+    metronome.advanceToTicks((steps[4]?.onsetTicks ?? 0) + Duration.QUARTER.ticks / 2);
+    const extras = (): unknown[] =>
+      renderer.played.filter((mark) => mark.extra === true).map((mark) => [mark.stepIndex, mark.tap, mark.settled, mark.offset.toFixed(2)]);
+    expect(extras()).toEqual([[3, true, true, '0.10'], [3, true, true, '0.40']]);
+    // The log says where each was drawn: the same place.
+    expect(controller.judgingLog.filter((press) => press.verdict === 'duplicate').map((press) => [press.drawn, press.why, press.offset.toFixed(2)])).toEqual([
+      [true, '', '0.10'],
+      [true, '', '0.40'],
+    ]);
+    controller.stop();
+
+    const roll = controller.lastRoll;
+    if (roll === null) {
+      throw new Error('expected the run to have been written down');
+    }
+    renderer.played.length = 0;
+    controller.beginReplay(roll, { modeId: FLOW_MODE_ID, modes: ['rhythm'] });
+    controller.endReplay();
+    expect(extras()).toEqual([[3, true, true, '0.10'], [3, true, true, '0.40']]);
+    renderer.played.length = 0;
+    controller.beginReplay(roll, { modeId: FLOW_MODE_ID, modes: [] });
+    controller.endReplay();
+    expect([extras(), renderer.played.length]).toEqual([[], 4]);
+  });
+
   it('keeps what a run was played with, as it was, for showing it again', async () => {
     const rig = createController(true);
     const { controller } = rig;

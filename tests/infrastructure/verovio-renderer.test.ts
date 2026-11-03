@@ -867,6 +867,29 @@ describe('what was played', () => {
     expect(ticks().length).toBe(2);
   });
 
+  it('strokes every tap judged for nothing in grey where it landed, under the verdicts', async () => {
+    const { renderer, surface } = await twoBarsOpen();
+    const ticks = (): [string | null, number][] =>
+      [...(sheets(surface)[0]?.querySelectorAll('.played-overlay line.played-tick') ?? [])].map((tick) => [
+        tick.getAttribute('class'),
+        Number(tick.getAttribute('x1')),
+      ]);
+
+    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0, tier: 'perfect', tap: true });
+    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0, settled: true, tap: true, extra: true });
+    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0.4, settled: true, tap: true, extra: true });
+
+    // Every one, the one at the very moment of the tap beneath it rather than over its colour.
+    const [later, atOnce, judged] = ticks();
+    expect([later?.[0], atOnce?.[0], judged?.[0], ticks().length]).toEqual([
+      'played-tick played--extra',
+      'played-tick played--extra',
+      'played-tick played--correct',
+      3,
+    ]);
+    expect([atOnce?.[1] === judged?.[1], (later?.[1] ?? 0) > (judged?.[1] ?? Infinity)]).toEqual([true, true]);
+  });
+
   it('rings a right note round the note where it is printed', async () => {
     const { renderer, surface } = await twoBarsOpen();
 

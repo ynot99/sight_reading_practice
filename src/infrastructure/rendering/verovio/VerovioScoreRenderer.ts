@@ -892,7 +892,11 @@ export class VerovioScoreRenderer
     }
     const drawn = drawShape(shape, overlay.layer.ownerDocument);
     drawn.setAttribute('data-mark', `${step}:${String(mark.midi)}`);
-    drawn.setAttribute('data-tap', step);
+    // Only a verdict's stroke stands for its step's chord: a tap judged for
+    // nothing may come before the step's own, on the beat before the music.
+    if (!extra) {
+      drawn.setAttribute('data-tap', step);
+    }
     if (mark.settled === false) {
       drawn.classList.add('played--unsettled');
     }

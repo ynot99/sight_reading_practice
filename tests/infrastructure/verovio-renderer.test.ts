@@ -890,6 +890,18 @@ describe('what was played', () => {
     expect([atOnce?.[1] === judged?.[1], (later?.[1] ?? 0) > (judged?.[1] ?? Infinity)]).toEqual([true, true]);
   });
 
+  it('strokes the verdict of a step after a tap judged for nothing came before it, on the beat before the music', async () => {
+    const { renderer, surface } = await twoBarsOpen();
+
+    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: -0.5, tap: true, extra: true });
+    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0, tier: 'perfect', tap: true });
+
+    const ticks = [...(sheets(surface)[0]?.querySelectorAll('.played-overlay line.played-tick') ?? [])];
+    expect(ticks.map((tick) => tick.getAttribute('class'))).toEqual(['played-tick played--extra', 'played-tick played--correct']);
+    // Before the first note, by half the gap after it.
+    expect(Number(ticks[0]?.getAttribute('x1'))).toBeLessThan(Number(ticks[1]?.getAttribute('x1')));
+  });
+
   it('rings a right note round the note where it is printed', async () => {
     const { renderer, surface } = await twoBarsOpen();
 

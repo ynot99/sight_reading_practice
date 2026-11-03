@@ -447,7 +447,9 @@ nearest as a tune. For the same reason a tap is drawn as one stroke down the
 system where it landed, in its verdict's colour, rather than as a ring on
 every note of the chord it answered. A tap the note it fell to already had is
 drawn too, in grey and exactly where it landed: a key that reached the run is
-never missing from the page.
+never missing from the page. So is a tap on the last beat of the count-in,
+before the first note; the beats of the count before that are the reader
+keeping time with the click, and are only heard.
 
 Everything about the click lives behind one button on the transport bar —
 what it marks, how much of the run it sounds for, how many bars it counts in,

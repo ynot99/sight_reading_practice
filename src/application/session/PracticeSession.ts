@@ -1178,11 +1178,27 @@ export class PracticeSession {
       this.roller.keyDown(struck);
       this.mode.onNoteOn(this.context, struck);
     }
+    const aBeat = this.aBeatBeforeTheMusicMs();
     for (const event of held) {
-      if (runStartedAtMs - event.timestampMs <= this.options.earlyWindowMs) {
+      const early = runStartedAtMs - event.timestampMs;
+      if (early <= this.options.earlyWindowMs) {
         this.mode.onNoteOn(this.context, event);
+      } else if (this.options.matchPolicy.anyPitch === true && early <= aBeat) {
+        // A tap on the last beat of the count, too early for the first note:
+        // judged for nothing, as a tap the note already had is, and so drawn
+        // where it landed rather than left out. Not the count before it,
+        // which is the reader keeping time with the click rather than
+        // reaching for the music.
+        this.judgeNote(event.midi, 'duplicate', -early, event.timestampMs);
       }
     }
+  }
+
+  /** How long the beat the count-in ends on lasts: the metre and tempo the music opens in. */
+  private aBeatBeforeTheMusicMs(): number {
+    const metre = timeAtMeasure(this.timeline.exercise, this.timeline.at(this.resumeAtIndex)?.measureIndex ?? 0);
+    const bpm = this.temposToBeat(this.pulseCountInBars)[0]?.bpm ?? this.tempoBpm;
+    return ticksToMilliseconds(metre.ticksPerPulse, bpm);
   }
 
   private enterStep(index: number): void {

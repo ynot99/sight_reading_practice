@@ -400,6 +400,48 @@ describe('Flow mode', () => {
       expect(judged?.deviationMs).toBe(-40);
     });
 
+    it('judges a tap on the beat before the music for nothing, only in rhythm only, and none before that beat, swept across the count', () => {
+      const judgedAt = (earlyMs: number, anyPitch: boolean): string => {
+        const harness = createHarness({
+          exercise: twoBarExercise({ tempoBpm: 60 }),
+          mode: new FlowMode(),
+          options: {
+            countInBars: COUNT_IN_BARS,
+            clickWhen: 'never',
+            click: 'subdivision',
+            matchPolicy: { toleranceMs: 250, pitchClassOnly: false, anyPitch },
+          },
+        });
+        harness.session.start();
+        harness.metronome.advanceToTicks(-1);
+        let guard = 64;
+        while (harness.clock.now() + SUBDIVISION_MS <= RUN_STARTS_AT_MS - earlyMs && guard > 0) {
+          harness.metronome.advanceSubdivisions(1);
+          guard -= 1;
+        }
+        harness.clock.set(RUN_STARTS_AT_MS - earlyMs);
+        // The first note's own key, so that without rhythm only it is the right one.
+        harness.midi.noteOn(MIDI.C4);
+        while (harness.session.status === 'counting-in' && guard > 0) {
+          harness.metronome.advanceSubdivisions(1);
+          guard -= 1;
+        }
+        return harness.of('noteJudged').map((event) => `${event.verdict}@${String(event.stepIndex)}${String(event.deviationMs)}`).join(' ');
+      };
+      const swept = [1500, 1100, 1000, 900, 500, 200, 130, 120, 40].map((earlyMs) => [earlyMs, judgedAt(earlyMs, true), judgedAt(earlyMs, false)]);
+      expect(swept).toEqual([
+        [1500, '', ''],
+        [1100, '', ''],
+        [1000, 'duplicate@0-1000', ''],
+        [900, 'duplicate@0-900', ''],
+        [500, 'duplicate@0-500', ''],
+        [200, 'duplicate@0-200', ''],
+        [130, 'duplicate@0-130', ''],
+        [120, 'correct@0-120', 'correct@0-120'],
+        [40, 'correct@0-40', 'correct@0-40'],
+      ]);
+    });
+
     it('takes a whole chord anticipated at the downbeat', () => {
       const harness = flowHarness();
       harness.session.start();

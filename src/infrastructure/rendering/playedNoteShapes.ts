@@ -160,6 +160,24 @@ function markX(
 }
 
 /**
+ * Where an early tap stands on a note nothing is drawn before.
+ *
+ * The first note of a page, where a tap on the beat before the music lands.
+ * A ring there stays on its note, there being nothing to lean towards; a tap
+ * judged for nothing would then be drawn over the tap that was judged. So the
+ * gap behind is taken to be the one ahead - the length its offset was
+ * measured against - and where there is none ahead either, it stays.
+ */
+function beforeTheFirst(stepX: ReadonlyMap<number, number>, stepIndex: number, offset: number): number | undefined {
+  const base = stepX.get(stepIndex);
+  const ahead = stepX.get(stepIndex + 1);
+  if (base === undefined || ahead === undefined || ahead <= base) {
+    return base;
+  }
+  return base + offset * (ahead - base);
+}
+
+/**
  * The stroke a tap is drawn as, from the top of the system to its foot.
  *
  * Where the step stands, shifted by how early or late the tap was exactly as
@@ -171,7 +189,9 @@ export function buildTapShape(
   stepX: ReadonlyMap<number, number>,
   system: { readonly top: number; readonly bottom: number },
 ): TickShape | null {
-  const x = markX(stepX, mark.stepIndex, mark.offset, null);
+  const x = stepX.has(mark.stepIndex - 1) || mark.offset >= 0
+    ? markX(stepX, mark.stepIndex, mark.offset, null)
+    : beforeTheFirst(stepX, mark.stepIndex, mark.offset);
   if (x === undefined) {
     return null;
   }

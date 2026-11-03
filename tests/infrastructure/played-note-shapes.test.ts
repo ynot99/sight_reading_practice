@@ -377,7 +377,17 @@ describe('a tap, drawn as a stroke', () => {
     const tap = (stepIndex: number, offset: number) =>
       buildTapShape({ stepIndex, midi: 60, correct: true, offset, tap: true }, stepX, system);
     expect(tap(1, 0)).toEqual({ kind: 'tick', x: 200, y1: 100, y2: 240, correct: true, looseTiming: false });
-    expect([tap(1, 0.5)?.x, tap(1, -0.5)?.x, tap(0, -0.5)?.x]).toEqual([230, 160, 120]);
+    expect([tap(1, 0.5)?.x, tap(1, -0.5)?.x]).toEqual([230, 160]);
+  });
+
+  it('leans before the first note by the gap after it, where nothing is drawn before, and stays with nothing after either', () => {
+    // A tap on the beat before the music: a ring would stay on the note, and
+    // this one would then be drawn over the tap that was judged there.
+    const early = (offset: number, at: ReadonlyMap<number, number> = stepX) =>
+      buildTapShape({ stepIndex: 0, midi: 60, correct: true, offset, extra: true }, at, system)?.x;
+    expect([early(-0.5), early(-1), early(0.5)]).toEqual([80, 40, 160]);
+    expect(early(-0.5, new Map([[0, 120]]))).toBe(120);
+    expect(early(-0.5, new Map([[0, 120], [1, 40]]))).toBe(120);
   });
 
   it('is in the paler colour where it was Good, and nowhere where its step was not drawn', () => {

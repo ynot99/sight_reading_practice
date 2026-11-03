@@ -6186,6 +6186,49 @@ describe('a run shown again on the page', () => {
     expect((await drawn({ playedNotes: 'at-end' })).slice(0, 2)).toEqual([[], []]);
   });
 
+  it('judges the chord that begins a run as on the beat in every frame that keeps time, however long the first click took, and the music after it from the click heard or from the chord', async () => {
+    // The device takes 300 ms to sound the pulse's first tick after the chord that began the run.
+    const judged = async (modeId: string, clickOn: boolean): Promise<unknown[]> => {
+      const rig = createController(true, undefined, { matchToleranceMs: 250 });
+      const { controller, midi, metronome, clock } = rig;
+      await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+      controller.updateSettings({ modeId, countInBars: 0, immediateStart: true, clickOn, hearTheOtherHand: false });
+      const steps = controller.currentTimeline?.playableSteps ?? [];
+      clock.advance(500);
+      const chordAt = clock.now();
+      // Its notes 15 ms apart, as a hand plays a chord.
+      for (const [at, key] of (steps[0]?.expectedMidi ?? []).entries()) {
+        midi.noteOn(key, chordAt + at * 15);
+      }
+      metronome.delayBy(300);
+      metronome.advanceSubdivisions(1);
+      // The next note a beat on: from the click heard, or from the chord where none is.
+      const nextAt = (clickOn ? chordAt + 300 : chordAt) + 1_000;
+      while (clock.now() + metronome.subdivisionMs <= nextAt) {
+        metronome.advanceSubdivisions(1);
+      }
+      clock.set(nextAt);
+      for (const key of steps[1]?.expectedMidi ?? []) {
+        midi.noteOn(key, nextAt);
+      }
+      metronome.advanceToTicks((steps[1]?.onsetTicks ?? 0) + Duration.QUARTER.ticks / 2);
+      return controller.judgingLog.map((press) => [press.verdict, press.stepIndex, press.deviationMs]);
+    };
+    for (const modeId of [FLOW_MODE_ID, BAR_MODE_ID, NOTE_MODE_ID]) {
+      for (const clickOn of [true, false]) {
+        const log = await judged(modeId, clickOn);
+        // On the beat, its notes as far apart as they were played - but where the frame waits at the
+        // bar line, whose gate the chord opens and which judges its notes as one - and the next dead on.
+        const spread = modeId === BAR_MODE_ID ? 0 : 15;
+        expect(log, `${modeId} ${String(clickOn)}`).toEqual([
+          ['correct', 0, 0],
+          ['correct', 0, spread],
+          ['correct', 1, 0],
+        ]);
+      }
+    }
+  });
+
   it('keeps what a run was played with, as it was, for showing it again', async () => {
     const rig = createController(true);
     const { controller } = rig;

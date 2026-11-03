@@ -1166,6 +1166,7 @@ export class PracticeSession {
     // Corrected here, because these are the only presses that did not come
     // through the door where that is done - the run had no ears yet when they
     // were played.
+    const onTheBeat = this.theOpeningChordsBeat(opening);
     for (const event of opening) {
       const struck = this.struckAt(event);
       // Written down as well as judged, and written first so the verdict has a
@@ -1176,7 +1177,7 @@ export class PracticeSession {
       // it began. His: "є інша бага при стартових нотах: їх просто нема у MIDI
       // viewer коли я починаю гру".
       this.roller.keyDown(struck);
-      this.mode.onNoteOn(this.context, struck);
+      this.mode.onNoteOn(this.context, onTheBeat(struck));
     }
     const aBeat = this.aBeatBeforeTheMusicMs();
     for (const event of held) {
@@ -1192,6 +1193,39 @@ export class PracticeSession {
         this.judgeNote(event.midi, 'duplicate', -early, event.timestampMs);
       }
     }
+  }
+
+  /**
+   * The chord that began a run under a pulse, as it is judged: on the beat.
+   *
+   * It is the beat - the music began because it was played - and there is
+   * nothing earlier to have been late or early against. Judged against the
+   * pulse's first tick instead, it was early by however long the device took
+   * to sound that tick: measured in Chrome on the first start after a quiet
+   * spell, 94 and 436 ms, and never Perfect. Where no click is heard the run
+   * is taken from the chord itself, as a bar the reader begins is, and the
+   * music after it is measured from their own downbeat. Where one is heard
+   * the run stays on it, since that click is what the rest is played with,
+   * and the chord is judged as on the beat, its notes as far apart as they
+   * were played.
+   *
+   * In every frame. Measured with the first tick 300 ms late, a frame that
+   * waits at the bar line took its downbeat from the chord but then measured
+   * the next note, played a beat after the chord with no click, 300 ms early;
+   * and one that waits at every note judged the chord itself 300 ms early.
+   */
+  private theOpeningChordsBeat(opening: readonly MidiNoteOnEvent[]): (struck: MidiNoteOnEvent) => MidiNoteOnEvent {
+    const as = (struck: MidiNoteOnEvent): MidiNoteOnEvent => struck;
+    if (opening.length === 0) {
+      return as;
+    }
+    const first = Math.min(...opening.map((event) => this.struckAt(event).timestampMs));
+    if (!this.theClickIsHeardInTheMusic()) {
+      this.runStartedAt = first - this.elapsedTo(this.resumeAtTicks);
+      return as;
+    }
+    const beat = this.runStartedAt + this.elapsedTo(this.resumeAtTicks);
+    return (struck) => ({ ...struck, timestampMs: beat + (struck.timestampMs - first) });
   }
 
   /** How long the beat the count-in ends on lasts: the metre and tempo the music opens in. */

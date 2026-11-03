@@ -970,6 +970,8 @@ export class PracticeController {
   private openingBeginsAt: number | null = null;
   /** The opening chord, while it is being waited for; see {@link watchForTheOpening}. */
   private opening: ChordMatcher | null = null;
+  /** Whether the run last begun is judged for its taps: see `theRunIsTapped`. */
+  private tappedRun = false;
   private openingPresses: MidiNoteOnEvent[] = [];
   private listeningForTheOpening: Unsubscribe | null = null;
   private openedScore: Exercise | null = null;
@@ -2471,6 +2473,15 @@ export class PracticeController {
   }
 
   /**
+   * Whether the run last begun is judged in rhythm only, as it was begun:
+   * its keys taps, drawn as strokes, and how they land shown as they land.
+   * Fixed for the run, as its judging is, whatever is chosen during it.
+   */
+  get theRunIsTapped(): boolean {
+    return this.tappedRun;
+  }
+
+  /**
    * Whether the run being shown again was tapped: played in rhythm only, so
    * that its keys were taps, drawn as strokes and heard as a drum.
    */
@@ -3228,6 +3239,7 @@ export class PracticeController {
     const startedAtBar = beginsAt <= firstOwed ? null : (timeline.at(beginsAt)?.measureIndex ?? 0) + 1;
     // What the run is judged on, kept for its marks: a tap is drawn as one.
     const taps = this.playedUnder.rhythmOnly;
+    this.tappedRun = taps;
     const session = new PracticeSession({
       timeline,
       mode,

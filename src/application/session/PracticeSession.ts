@@ -1843,6 +1843,7 @@ export class PracticeSession {
       deviationMs: owed === null ? deviationMs : this.lateBy(owed, deviationMs),
       remaining: this.matcher?.remaining ?? [],
       ...(landed === null ? {} : { tier: landed.tier }),
+      ...(landed?.windowMs === undefined ? {} : { windowMs: landed.windowMs }),
       atMs,
     };
     // Written down and announced from one object, so the picture of the run

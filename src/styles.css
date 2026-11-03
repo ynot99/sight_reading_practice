@@ -1169,6 +1169,35 @@ textarea {
 }
 
 /*
+ * The same strip as the run goes, in rhythm only: over the bar and out of its
+ * flow, so the bar keeps its size and nothing under a thumb moves; following
+ * the bar wherever the keys put it, and taking no touch. Only the strip -
+ * the words under it would change with every tap, and the run's own strip
+ * says them when it ends.
+ */
+.live-hits {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  width: min(260px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.live-hits .hit-bar {
+  margin-top: 0;
+}
+
+.live-hits .hit-bar__strip {
+  height: 18px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+}
+
+.live-hits .hit-bar__ends {
+  display: none;
+}
+
+/*
  * How hard a piece is, on its row in the shelf.
  *
  * Quiet, and the same width whatever the number, so a column of rows does not

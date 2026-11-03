@@ -65,6 +65,11 @@ export interface NoteJudgedEvent {
   /** How well a right key landed; absent for every other press. See `noteTiers`. */
   readonly tier?: NoteTier;
   /**
+   * How far off it could have landed and still been Perfect, on the side it
+   * fell; with the tier, and only where the run keeps time.
+   */
+  readonly windowMs?: number;
+  /**
    * When the key went down, on this page's clock.
    *
    * Not when it was judged: a press reaching for the next beat is kept until

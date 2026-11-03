@@ -24738,6 +24738,70 @@ describe('a key in rhythm only', () => {
   });
 });
 
+describe('the strip of the last taps, as a run in rhythm only goes', () => {
+  beforeEach(() => {
+    mountRealMarkup();
+  });
+
+  /** Taps the steps from one to another, each this many milliseconds off its beat. */
+  const tapThrough = (rig: Rig, from: number, until: number, offMs: (index: number) => number): void => {
+    const steps = rig.runtime.controller.currentTimeline?.playableSteps ?? [];
+    for (const step of steps.slice(from, until)) {
+      rig.metronome.advanceToTicks(step.onsetTicks);
+      const at = rig.clock.now() + offMs(step.index);
+      rig.midi.noteOn(MIDI.G4, at);
+      rig.midi.noteOff(MIDI.G4, at + 30);
+    }
+  };
+  const marks = (): string[] =>
+    [...element('live-hits').querySelectorAll('.hit-bar__tick')].map((tick) => tick.getAttribute('title') ?? '');
+
+  it('shows how the last sixteen taps landed once there are enough to make a shape, and goes when the run does', async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+    await rig.runtime.controller.openScore(longExercise({ tempoBpm: 60, bars: 6 }));
+    rig.runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, rhythmOnly: true, countInBars: 0, matchToleranceMs: 250, hearTheOtherHand: false });
+    rig.runtime.controller.start();
+    const strip = element('live-hits');
+
+    tapThrough(rig, 0, 3, () => 0);
+    expect([strip.hidden, marks().length]).toEqual([true, 0]);
+    tapThrough(rig, 3, 20, (index) => (index % 2 === 0 ? 30 : -10));
+    // Each tap where it landed, the last sixteen of twenty; the Perfect window behind them.
+    expect([strip.hidden, marks().length, marks()[0], marks().at(-1), marks().at(-2)]).toEqual([false, 16, '30 ms', '-10 ms', '30 ms']);
+    expect(strip.querySelector('.hit-bar__perfect')).not.toBeNull();
+
+    rig.runtime.controller.stop();
+    expect([strip.hidden, marks().length]).toEqual([true, 0]);
+  });
+
+  it('starts again with each run, and is not there on a run that asks for the keys', async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+    await rig.runtime.controller.openScore(longExercise({ tempoBpm: 60, bars: 6 }));
+    rig.runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, rhythmOnly: true, countInBars: 0, matchToleranceMs: 250, hearTheOtherHand: false });
+    rig.runtime.controller.start();
+    tapThrough(rig, 0, 6, () => 0);
+    expect(marks().length).toBe(6);
+    // Begun again, from nothing.
+    rig.runtime.controller.stop();
+    rig.runtime.controller.start();
+    tapThrough(rig, 0, 2, () => 0);
+    expect([element('live-hits').hidden, marks().length]).toEqual([true, 0]);
+
+    // The keys asked for: the run's own strip says it when it is over, and nothing as it goes.
+    rig.runtime.controller.stop();
+    rig.runtime.controller.updateSettings({ rhythmOnly: false });
+    rig.runtime.controller.start();
+    const steps = rig.runtime.controller.currentTimeline?.playableSteps ?? [];
+    for (const step of steps.slice(0, 8)) {
+      rig.metronome.advanceToTicks(step.onsetTicks);
+      rig.midi.playChord(step.expectedMidi, rig.clock.now(), 20);
+    }
+    expect([element('live-hits').hidden, marks().length]).toEqual([true, 0]);
+  });
+});
+
 describe('the library on Google Drive', () => {
   beforeEach(() => {
     mountRealMarkup();

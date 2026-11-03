@@ -6,6 +6,7 @@ import { Duration } from '../../src/domain/model/Duration.js';
 import { noteEntry } from '../../src/domain/model/Exercise.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { createHarness, type Harness } from '../support/harness.js';
+import { landing } from '../../src/domain/scoring/noteTiers.js';
 
 /** Bar of 4/4 at 60 bpm: one quarter note lasts 1000 ms, one subdivision 250 ms. */
 const SUBDIVISION_MS = 250;
@@ -481,6 +482,9 @@ describe('Flow mode', () => {
       expect(judged?.verdict).toBe('correct');
       expect(judged?.stepIndex).toBe(0);
       expect(judged?.deviationMs).toBe(-40);
+      // And the Perfect window it was judged in, which the strip of taps is drawn behind.
+      expect(judged?.windowMs).toBe(landing(harness.timeline, 0, -40).windowMs);
+      expect(judged?.windowMs).toBeGreaterThan(0);
     });
 
     it('judges a tap on the beat before the music for nothing, only in rhythm only, and none before that beat, swept across the count', () => {

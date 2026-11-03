@@ -75,6 +75,22 @@ describe('the stylesheet', () => {
     expect(CSS).toMatch(/@keyframes ring-breathes/);
   });
 
+  it('stands the strip of the last taps over the bar and out of its flow, taking no touch, the strip alone', () => {
+    const live = rules().find((rule) => rule.selector === '.live-hits')?.body ?? '';
+    expect(live).toMatch(/position\s*:\s*absolute/);
+    expect(live).toMatch(/bottom\s*:\s*calc\(100% \+ 8px\)/);
+    expect(live).toMatch(/pointer-events\s*:\s*none/);
+    expect(live).toMatch(/width\s*:\s*min\(260px, calc\(100vw - 32px\)\)/);
+    // The bar is what it stands over: positioned, so the strip rides with it.
+    expect(rules().find((rule) => rule.selector === '.focus-bar')?.body).toMatch(/position\s*:\s*fixed/);
+    expect(rules().find((rule) => rule.selector === '.live-hits .hit-bar__ends')?.body).toMatch(/display\s*:\s*none/);
+    // Over the strip after a run's own rule, which it narrows.
+    const own = rules().find((rule) => rule.selector === '.hit-bar__strip');
+    const narrowed = rules().find((rule) => rule.selector === '.live-hits .hit-bar__strip');
+    expect(narrowed?.body).toMatch(/height\s*:\s*18px/);
+    expect(narrowed?.at ?? 0).toBeGreaterThan(own?.at ?? Infinity);
+  });
+
   it('flashes a tap as it lands, thick and at full strength, once and only where motion is welcome', () => {
     const landing = rules().find((rule) => rule.selector === '.played-tick--landing');
     expect(inWhichMedia(landing?.at ?? 0)).toBe('@media (prefers-reduced-motion: no-preference)');

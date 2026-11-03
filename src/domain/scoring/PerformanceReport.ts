@@ -183,8 +183,16 @@ function mean(values: readonly number[]): number {
     : values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-/** The middle one, or the mean of the middle two; `null` of none. */
-function middleOf(values: readonly number[]): number | null {
+/**
+ * The Perfect window of a typical note, from the windows its presses had.
+ *
+ * The middle one, or the mean of the middle two; `null` of none. A run's
+ * notes do not share one window - it narrows with the gap to the next note -
+ * so the strip a run's presses are drawn across shows the one most of them
+ * had. Its own export, so the strip drawn as a run goes says what the one
+ * drawn after it does.
+ */
+export function thePerfectWindowOf(values: readonly number[]): number | null {
   if (values.length === 0) {
     return null;
   }
@@ -241,7 +249,7 @@ export function buildPerformanceReport(input: PerformanceReportInput): Performan
     timing: {
       deviations,
       tiers: timed.map((hit) => hit.tier),
-      perfectMs: middleOf(windows),
+      perfectMs: thePerfectWindowOf(windows),
       meanDeviationMs: centre,
       meanAbsoluteDeviationMs: mean(absolute),
       maxAbsoluteDeviationMs: absolute.length === 0 ? 0 : Math.max(...absolute),

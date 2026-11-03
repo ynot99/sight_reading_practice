@@ -18,6 +18,7 @@ import {
 } from '../../src/infrastructure/storage/LocalStorageSettingsStore.js';
 import { FLOW_MODE_ID, FlowMode } from '../../src/application/modes/FlowMode.js';
 import { WAIT_MODE_ID } from '../../src/application/modes/WaitMode.js';
+import { FREE_PLAY_MODE_ID } from '../../src/application/modes/FreePlayFrame.js';
 import { PracticeModeRegistry } from '../../src/application/modes/PracticeModeRegistry.js';
 import { BarMode, BAR_MODE_ID } from '../../src/application/modes/BarMode.js';
 import { NoteMode, NOTE_MODE_ID } from '../../src/application/modes/NoteMode.js';
@@ -86,6 +87,7 @@ import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
 import { ManualMetronome } from '../../src/infrastructure/testing/ManualMetronome.js';
 import { MockMidiAdapter } from '../../src/infrastructure/testing/MockMidiAdapter.js';
 import { RecordingPitchPlayer } from '../../src/infrastructure/testing/RecordingPitchPlayer.js';
+import { RecordingHitSound } from '../../src/infrastructure/testing/RecordingHitSound.js';
 
 /** Remembers whether the screen was asked to stay up, and how often. */
 /** A device that starts asleep only when a test says so, and can be woken. */
@@ -234,6 +236,7 @@ interface Rig {
   readonly mediaKeys: RecordingMediaKeys;
   readonly view: AppView;
   readonly instrument: RecordingPitchPlayer;
+  readonly hitSound: RecordingHitSound;
   readonly metronome: ManualMetronome;
   readonly midi: MockMidiAdapter;
   readonly renderer: FakeScoreRenderer;
@@ -366,6 +369,7 @@ function createRig(
   ]);
   const rhythms = new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES);
   const instrument = new RecordingPitchPlayer();
+  const hitSound = new RecordingHitSound();
   const screenWake = new CountingScreenWake();
   // Awake unless a test says otherwise, which is what a desk browser is.
   const audioWaking = new TestAudioWaking();
@@ -531,6 +535,7 @@ function createRig(
     // instrument stands behind the reader's keys, the playback and the rest's
     // chime, and splitting it here hid a note that was left ringing.
     pitchPlayer: instrument,
+    hitSound,
     screenWake,
     audio: audioWaking,
     mediaKeys,
@@ -554,6 +559,7 @@ function createRig(
     audioWaking,
     mediaKeys,
     instrument,
+    hitSound,
     metronome,
     midi,
     renderer,
@@ -9224,8 +9230,8 @@ describe('AppView', () => {
       ]);
     });
 
-    it('begins a rhythm read through counted in at the first tap, where a key begins a run, the tap sounding for as long as it is held', async () => {
-      const { view, runtime, instrument, metronome } = createRig();
+    it('begins a rhythm read through counted in at the first tap, where a key begins a run, the tap a hit and its key let go of only when lifted', async () => {
+      const { view, runtime, instrument, hitSound, metronome } = createRig();
       await view.initialize();
       runtime.controller.updateSettings({ immediateStart: true, countInBars: 0, previewSeconds: 0 });
       // The ticks before the music begins: one where nothing is counted in, a bar's more where it is.
@@ -9246,9 +9252,10 @@ describe('AppView', () => {
       // The tap's own note let go of, not the notes a question was played with, which are let go of at a moment of their own.
       const stopped = (): number => instrument.stopped.filter((note) => note.midi === 71 && note.atMs === undefined).length;
       tap.dispatchEvent(new Event('pointerdown'));
-      // Begun, and counted in: one tap gives no tempo. Its note sounds on as the run comes in.
-      expect([instrument.played.some((note) => note.midi === 71), stopped(), ticksToTheMusic()]).toEqual([
-        true,
+      // Begun, and counted in: one tap gives no tempo. A hit, its key still down as the run comes in.
+      expect([hitSound.hits.length, instrument.played.some((note) => note.midi === 71), stopped(), ticksToTheMusic()]).toEqual([
+        1,
+        false,
         0,
         metronome.currentConfig.subdivisionsPerPulse * 4 + 1,
       ]);
@@ -9256,7 +9263,7 @@ describe('AppView', () => {
       expect(stopped()).toBe(1);
       runtime.controller.stop();
 
-      // Heard a bar at a time, the first tap begins the run as ever, its note sounding on too.
+      // Heard a bar at a time, the first tap begins the run as ever, a hit as well.
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-solfege').click();
       element<HTMLButtonElement>('solfege-rhythm-open').click();
@@ -9264,7 +9271,7 @@ describe('AppView', () => {
         expect(runtime.controller.openedExercise?.title).toBe('Rhythmic dictation');
       });
       tap.dispatchEvent(new Event('pointerdown'));
-      expect([stopped(), ticksToTheMusic()]).toEqual([1, 1]);
+      expect([hitSound.hits.length, stopped(), ticksToTheMusic()]).toEqual([2, 1, 1]);
       tap.dispatchEvent(new Event('pointerup'));
       expect(stopped()).toBe(2);
     });
@@ -24612,19 +24619,90 @@ describe('a key in rhythm only', () => {
     mountRealMarkup();
   });
 
-  it('sounds as itself, the written notes being nobody else to sound', async () => {
-    // A run could once sound the notes written at the beat in place of the
-    // key tapped; that is gone, and the key is heard as on any other run.
+  const tapped = (rig: Rig, key: number): void => {
+    rig.clock.advance(400);
+    rig.midi.noteOn(key, rig.clock.now(), 0.6);
+    rig.midi.noteOff(key, rig.clock.now() + 50);
+  };
+
+  it('is a hit before a run, through it, and after it, on the music it is played on', async () => {
     const rig = createRig();
     await rig.view.initialize();
     await rig.runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
     rig.runtime.controller.updateSettings({ rhythmOnly: true, hearTheOtherHand: false });
+    tapped(rig, MIDI.G4);
     rig.runtime.controller.start();
+    const steps = rig.runtime.controller.currentTimeline?.playableSteps.length ?? 0;
 
-    rig.midi.noteOn(MIDI.G4);
+    for (let step = 0; step < steps; step += 1) {
+      tapped(rig, MIDI.G4);
+    }
+    expect([rig.runtime.controller.session?.status, rig.hitSound.hits.length]).toEqual(['completed', steps + 1]);
+    tapped(rig, MIDI.G4);
+    expect([rig.hitSound.hits, rig.instrument.played]).toEqual([Array.from({ length: steps + 2 }, () => 0.6), []]);
+  });
 
-    const heard = rig.instrument.played.map((note) => note.midi);
-    expect(heard).toEqual([MIDI.G4]);
+  it('is a hit from the first, where a key begins the run, while one is counted in, and while one is paused', async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+    await rig.runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    rig.runtime.controller.updateSettings({ rhythmOnly: true, hearTheOtherHand: false, immediateStart: true });
+
+    tapped(rig, MIDI.G4);
+    expect([rig.runtime.controller.session?.status, rig.hitSound.hits.length]).toEqual(['running', 1]);
+
+    rig.runtime.controller.stop();
+    rig.runtime.controller.updateSettings({ immediateStart: false, countInBars: 1 });
+    rig.runtime.controller.start();
+    tapped(rig, MIDI.G4);
+    expect([rig.runtime.controller.session?.status, rig.hitSound.hits.length]).toEqual(['counting-in', 2]);
+
+    rig.runtime.controller.pause();
+    tapped(rig, MIDI.G4);
+    expect([rig.runtime.controller.session?.status, rig.hitSound.hits.length, rig.instrument.played]).toEqual(['paused', 3, []]);
+  });
+
+  it('is itself where the key is asked for, in free play, where the machine plays, and on music answered by name', async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+    await rig.runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    rig.runtime.controller.updateSettings({ hearTheOtherHand: false });
+    rig.runtime.controller.start();
+    tapped(rig, MIDI.C4);
+    rig.runtime.controller.stop();
+    const heardAsItself = (): unknown => [rig.hitSound.hits, rig.instrument.played.at(-1)?.midi];
+    expect(heardAsItself()).toEqual([[], MIDI.C4]);
+
+    rig.runtime.controller.updateSettings({ rhythmOnly: true, modeId: FREE_PLAY_MODE_ID });
+    tapped(rig, MIDI.D4);
+    expect(heardAsItself()).toEqual([[], MIDI.D4]);
+
+    rig.runtime.controller.updateSettings({ modeId: LISTEN_MODE_ID });
+    tapped(rig, MIDI.E4);
+    expect(heardAsItself()).toEqual([[], MIDI.E4]);
+
+    rig.runtime.controller.updateSettings({ modeId: WAIT_MODE_ID });
+    element<HTMLButtonElement>('focus-scores').click();
+    element<HTMLButtonElement>('scores-show-solfege').click();
+    element<HTMLButtonElement>('solfege-intervals-name-them').click();
+    await vi.waitFor(() => {
+      expect(rig.runtime.controller.openedExercise?.title).toBe('Intervals by name');
+    });
+    tapped(rig, MIDI.F4);
+    expect([rig.runtime.controller.settings.rhythmOnly, heardAsItself()]).toEqual([true, [[], MIDI.F4]]);
+  });
+
+  it('is nothing with the monitor off', async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+    await rig.runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    rig.runtime.controller.updateSettings({ rhythmOnly: true, hearTheOtherHand: false });
+    const monitor = element<HTMLInputElement>('audio-feedback');
+    monitor.checked = false;
+    monitor.dispatchEvent(new Event('change', { bubbles: true }));
+    rig.runtime.controller.start();
+    tapped(rig, MIDI.G4);
+    expect([rig.runtime.controller.session?.status, rig.hitSound.hits, rig.instrument.played]).toEqual(['running', [], []]);
   });
 });
 

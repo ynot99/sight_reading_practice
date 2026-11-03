@@ -440,7 +440,10 @@ slow piece and lag behind on a fast one.
 whatever the pitch, because reading a rhythm before playing the notes is
 standard practice and it is the half beginners drop first. It is a match rule
 rather than a mode of its own, so it composes with either — nothing about when
-the cursor moves changes.
+the cursor moves changes. Where the page sounds the keys, a press in it is
+heard as a drum's hit rather than as the key: which key it was is nobody's
+question, and on a computer's keyboard it played whichever letters were
+nearest as a tune.
 
 Everything about the click lives behind one button on the transport bar —
 what it marks, how much of the run it sounds for, how many bars it counts in,

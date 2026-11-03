@@ -4168,6 +4168,21 @@ export class PracticeController {
     return this.exercise?.playedBack === undefined && !this.isAnsweredByName;
   }
 
+  /**
+   * Whether the keys are taps: judged for their moment alone, any key taken
+   * for the note written.
+   *
+   * In rhythm only, on music a run is played on, and whatever the run is
+   * doing. The page asks this of a press the run may have heard first, and
+   * the tap that ends a run had then ended it: asked whether a run was going,
+   * the last tap of every run was answered as a key. Not in free play, nor
+   * where the machine plays or the music is answered by name: there a key is
+   * the reader playing, or working out what was heard, whatever the Modes say.
+   */
+  get keysAreTaps(): boolean {
+    return this.playedUnder.rhythmOnly && !this.playsFreely && !this.machinePlays && !this.isAnsweredByName;
+  }
+
   /** Whether the frame now chosen is the one the machine plays. */
   get machinePlays(): boolean {
     return machineIsPlaying(this.playedUnder.modeId);

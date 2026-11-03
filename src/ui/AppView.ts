@@ -8522,6 +8522,12 @@ export class AppView {
       }
       switch (event.type) {
         case 'noteon':
+          // Which key it was is nobody's question in rhythm only, and sounded
+          // as itself it plays a tune nobody wrote: the press is a hit.
+          if (this.runtime.controller.keysAreTaps) {
+            this.runtime.hitSound.hit(event.velocity);
+            return;
+          }
           this.runtime.pitchPlayer.play(event.midi, event.velocity);
           return;
         case 'noteoff':

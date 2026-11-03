@@ -4,6 +4,7 @@ import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { WebAudioMetronome } from '../../src/infrastructure/audio/WebAudioMetronome.js';
 import { WebAudioPitchPlayer } from '../../src/infrastructure/audio/WebAudioPitchPlayer.js';
+import { WebAudioHitSound } from '../../src/infrastructure/audio/WebAudioHitSound.js';
 import { AudioClockReading, outputLatencySeconds } from '../../src/infrastructure/audio/audioTime.js';
 import { beginThePlaybackTimings, noteAFrame, thePlaybackTimingsText } from '../../src/shared/playbackTimings.js';
 import { theLatestPlayback } from '../support/playbackTimings.js';
@@ -1219,5 +1220,42 @@ describe('when the click is actually heard', () => {
 
     expect(heard[0]?.scheduledTimeMs).toBeCloseTo(60, 3);
     vi.useRealTimers();
+  });
+});
+
+describe('WebAudioHitSound', () => {
+  /** The highest level each of a hit's envelopes reaches. */
+  const peaksOf = (context: FakeAudioContext): number[] =>
+    context.gains.map((node) => Math.max(...node.gain.ramps.map((ramp) => ramp.value)));
+
+  it('strikes at once, a falling body under a short snap, and lets both go', () => {
+    const context = new FakeAudioContext();
+    context.advance(2);
+    new WebAudioHitSound(contextFactory(context), () => 1).hit(0.8);
+
+    const [body, snap] = context.oscillators;
+    expect([body?.type, snap?.type, body?.startedAt, snap?.startedAt]).toEqual(['sine', 'triangle', 2, 2]);
+    // The body falls in pitch as it dies; the snap is over before it.
+    const falls = body?.frequency.ramps.map((ramp) => ramp.value) ?? [];
+    expect(falls[0]).toBeGreaterThan(falls[falls.length - 1] ?? Infinity);
+    expect((snap?.stoppedAt ?? Infinity) - 2).toBeLessThan((body?.stoppedAt ?? 0) - 2);
+    body?.onended?.();
+    snap?.onended?.();
+    expect([body?.unplugged, snap?.unplugged]).toEqual([true, true]);
+  });
+
+  it('is as loud as it was struck and as the instrument is, and silent where the instrument is', () => {
+    const peaks = (velocity: number, volume: number): number[] => {
+      const context = new FakeAudioContext();
+      new WebAudioHitSound(contextFactory(context), () => volume).hit(velocity);
+      return peaksOf(context);
+    };
+    const [loudBody = 0, loudSnap = 0] = peaks(1, 1);
+    const [softBody = 0, softSnap = 0] = peaks(0.4, 1);
+    const [quietBody = 0] = peaks(1, 0.5);
+    expect(softBody / loudBody).toBeCloseTo(0.4, 6);
+    expect(softSnap / loudSnap).toBeCloseTo(0.4, 6);
+    expect(quietBody / loudBody).toBeCloseTo(0.25, 6);
+    expect(peaks(1, 0)).toEqual([]);
   });
 });

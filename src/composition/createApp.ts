@@ -17,6 +17,7 @@ import type {
   ISampleLibrary,
   ISustainPedal,
 } from '../application/ports/IPitchPlayer.js';
+import type { IHitSound } from '../application/ports/IHitSound.js';
 import type {
   IMidiConnection,
   IMidiDeviceDirectory,
@@ -120,6 +121,7 @@ import {
 } from '../domain/scoring/strategies.js';
 import { keepAudioAwake } from '../infrastructure/audio/keepAudioAwake.js';
 import { WebAudioMetronome, createAudioContextFactory } from '../infrastructure/audio/WebAudioMetronome.js';
+import { WebAudioHitSound } from '../infrastructure/audio/WebAudioHitSound.js';
 import { AudioClockReading } from '../infrastructure/audio/audioTime.js';
 import { WebAudioPitchPlayer } from '../infrastructure/audio/WebAudioPitchPlayer.js';
 import { SampledPitchPlayer } from '../infrastructure/audio/SampledPitchPlayer.js';
@@ -260,6 +262,8 @@ export interface AppRuntime {
   /** The keys drawn on the screen, which play where the reader plays freely. */
   readonly screenKeys: IMidiSource & IPlayableKeys;
   readonly pitchPlayer: IPitchPlayer;
+  /** What a key sounds as where only its moment is judged: see `IHitSound`. */
+  readonly hitSound: IHitSound;
   /** Keeps the screen up while the reader is playing. */
   readonly screenWake: IScreenWake;
   /** The audio device, and whether it can sound anything yet. */
@@ -374,6 +378,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     fallback: new WebAudioPitchPlayer(audioContextFactory, { reading }),
     reading,
   });
+  const hitSound = new WebAudioHitSound(audioContextFactory, () => pitchPlayer.volume);
 
   const webMidi = new WebMidiAdapter(browserMidiAccessProvider(), clock);
   const computerKeyboard = new ComputerKeyboardMidiSource(options.keyboardTarget, clock);
@@ -618,6 +623,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     computerKeyboard,
     screenKeys,
     pitchPlayer,
+    hitSound,
     // A tablet on a music stand is looked at and not touched: a piece played
     // through sends every note as MIDI and nothing at all to the screen, so
     // the device decides nobody is there and turns the page off mid-bar.

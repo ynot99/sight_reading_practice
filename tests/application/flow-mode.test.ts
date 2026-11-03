@@ -322,6 +322,89 @@ describe('Flow mode', () => {
       expect(judged?.deviationMs).toBe(-300);
     });
 
+    it('in rhythm only, gives any key to the beat it was nearer to, whether or not the beat behind has had its tap, swept across the gap', () => {
+      // The second beat at 1000 ms. A key no note wants, as a computer's
+      // keyboard nearly always gives: dead on the beat it reaches the run
+      // before the tick that opens the beat, and was the first beat's again.
+      const judgedAt = (atMs: number, firstTapped: boolean, key: number = MIDI.F5): string => {
+        const harness = createHarness({
+          exercise: twoBarExercise({ tempoBpm: 60 }),
+          mode: new FlowMode(),
+          options: {
+            countInBars: COUNT_IN_BARS,
+            clickWhen: 'never',
+            click: 'subdivision',
+            matchPolicy: { toleranceMs: 250, pitchClassOnly: false, anyPitch: true },
+          },
+        });
+        startAndCountIn(harness);
+        if (firstTapped) {
+          harness.midi.noteOn(MIDI.F5);
+        }
+        let guard = 64;
+        // Every tick before the press, and not the one at it: the press is heard first.
+        while (harness.clock.now() + SUBDIVISION_MS < RUN_STARTS_AT_MS + atMs && guard > 0) {
+          harness.metronome.advanceSubdivisions(1);
+          guard -= 1;
+        }
+        harness.clock.set(RUN_STARTS_AT_MS + atMs);
+        harness.midi.noteOn(key);
+        harness.metronome.advanceSubdivisions(2);
+        return harness.of('noteJudged').slice(firstTapped ? 1 : 0).map((event) => `${event.verdict}@${String(event.stepIndex)}`).join(' ');
+      };
+      const swept = [300, 450, 499, 501, 550, 700, 880, 1000].map((atMs) => [atMs, judgedAt(atMs, true), judgedAt(atMs, false)]);
+      expect(swept).toEqual([
+        [300, 'duplicate@0', 'correct@0'],
+        [450, 'duplicate@0', 'correct@0'],
+        [499, 'duplicate@0', 'correct@0'],
+        [501, 'correct@1', 'correct@1'],
+        [550, 'correct@1', 'correct@1'],
+        [700, 'correct@1', 'correct@1'],
+        [880, 'correct@1', 'correct@1'],
+        [1000, 'correct@1', 'correct@1'],
+      ]);
+      // Whichever key it was - the open beat's own note among them.
+      expect(judgedAt(700, false, MIDI.C4)).toBe('correct@1');
+    });
+
+    it('in rhythm only, keeps a tap off a beat that asks for none - a rest, or only the other hand', () => {
+      // A tap three tenths of a beat short of such a beat stays the beat
+      // behind's: nothing ahead is asking, so only the narrow window could
+      // take it, and this is outside it.
+      const judgedAt = (atMs: number, expectedStaff: number | null, tapAtMs: number): string => {
+        const harness = createHarness({
+          exercise: twoBarExercise({ tempoBpm: 60 }),
+          mode: new FlowMode(),
+          options: {
+            countInBars: COUNT_IN_BARS,
+            clickWhen: 'never',
+            click: 'subdivision',
+            expectedStaff,
+            matchPolicy: { toleranceMs: 250, pitchClassOnly: false, anyPitch: true },
+          },
+        });
+        startAndCountIn(harness);
+        let guard = 64;
+        const upTo = (ms: number): void => {
+          while (harness.clock.now() + SUBDIVISION_MS < RUN_STARTS_AT_MS + ms && guard > 0) {
+            harness.metronome.advanceSubdivisions(1);
+            guard -= 1;
+          }
+          harness.clock.set(RUN_STARTS_AT_MS + ms);
+        };
+        upTo(tapAtMs);
+        harness.midi.noteOn(MIDI.F5);
+        upTo(atMs);
+        harness.midi.noteOn(MIDI.F5);
+        harness.metronome.advanceSubdivisions(2);
+        return harness.of('noteJudged').map((event) => `${event.verdict}@${String(event.stepIndex)}`).join(' ');
+      };
+      // The second bar's third beat is a rest in the bass, under a held G4.
+      expect(judgedAt(5_700, null, 4_010)).toBe('correct@4 duplicate@4');
+      // Played with the bass alone, the first bar's second beat is the treble's.
+      expect(judgedAt(700, 2, 10)).toBe('correct@0 duplicate@0');
+    });
+
     it('still belongs where it fell when the beat ahead does not want it', () => {
       // A note nobody is expecting yet has to be very close indeed before it
       // is read as an early anything.

@@ -2,6 +2,7 @@ import type { MetronomeTick } from '../ports/IMetronome.js';
 import type { MidiNoteOnEvent } from '../ports/IMidiSource.js';
 import type { PracticeContext } from '../session/PracticeContext.js';
 import { BasePracticeMode, type PracticeStep } from './IPracticeMode.js';
+import { expectedFor } from '../../domain/timeline/Timeline.js';
 
 export const FLOW_MODE_ID = 'mode.flow';
 
@@ -124,14 +125,26 @@ export class FlowMode extends BasePracticeMode {
       return false;
     }
 
+    // Where only the rhythm is read, every key is the key, so a tap belongs
+    // to the nearer of the two beats wherever the one ahead asks for a tap at
+    // all - whether or not the one open has had its own. Asked by pitch
+    // instead, a tap on a computer's keyboard was nearly never a key the next
+    // note wanted, so one dead on its beat - which reaches the run before the
+    // tick that opens the beat does - fell back to the note behind: as a tap
+    // that note already had, or as that note played a beat late with the one
+    // it was meant for missed.
+    const anyKey = context.options.matchPolicy.anyPitch === true;
     const matcher = context.matcher;
-    if (matcher !== null && matcher.remaining.includes(event.midi)) {
+    if (!anyKey && matcher !== null && matcher.remaining.includes(event.midi)) {
       return false;
     }
 
     const dueAt = context.scheduledTimeMs(next.onsetTicks);
     const openedAt = context.scheduledTimeMs(step.onsetTicks);
-    if (next.expectedMidi.includes(event.midi)) {
+    const wanted = anyKey
+      ? expectedFor(next, context.options.expectedStaff).length > 0
+      : next.expectedMidi.includes(event.midi);
+    if (wanted) {
       return Math.abs(event.timestampMs - dueAt) < Math.abs(event.timestampMs - openedAt);
     }
 

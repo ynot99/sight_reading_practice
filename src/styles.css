@@ -7468,6 +7468,17 @@ body[data-repeats='hidden'] .repeat-mark {
   vector-effect: non-scaling-stroke;
 }
 
+/*
+ * A tap in rhythm only: one stroke down the system where it landed, in the
+ * verdict's colour. As thin as a ring's line, so the printed note it crosses
+ * when it lands dead on is still read through it.
+ */
+.played-tick {
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
 .played-accidental {
   stroke: none;
   font-weight: 700;

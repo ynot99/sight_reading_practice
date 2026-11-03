@@ -838,6 +838,35 @@ describe('what was played', () => {
     expect(perfect?.getAttribute('class')).toContain('played--correct');
   });
 
+  it('strokes a tap down the system where it landed, once for a chord, pale until its beat is played', async () => {
+    const { renderer, surface } = await twoBarsOpen();
+    const ticks = (): Element[] => [...(sheets(surface)[0]?.querySelectorAll('.played-overlay line.played-tick') ?? [])];
+
+    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0, settled: false, tap: true });
+    renderer.showPlayed({ stepIndex: 0, midi: 64, correct: true, offset: 0, settled: false, tap: true });
+    renderer.showPlayed({ stepIndex: 1, midi: 62, correct: true, offset: 0, tier: 'good', tap: true });
+
+    const drawing = sheets(surface)[0]?.querySelector('svg') as SVGSVGElement;
+    const [system] = readThePage(drawing).systems;
+    const c4 = headOf(surface, 'n0-1-0-0');
+    const [first, second] = ticks();
+    expect([ticks().length, ringsOf(surface).length]).toEqual([2, 0]);
+    expect([first?.getAttribute('y1'), first?.getAttribute('y2')].map(Number)).toEqual([system?.top, system?.bottom]);
+    // Through the middle of the head, as a ring is round it.
+    expect(Number(first?.getAttribute('x1'))).toBeGreaterThan(c4.x);
+    expect(first?.getAttribute('x1')).toBe(first?.getAttribute('x2'));
+    expect([first?.getAttribute('class'), second?.getAttribute('class')]).toEqual([
+      'played-tick played--correct played--unsettled',
+      'played-tick played--loose',
+    ]);
+    renderer.settlePlayed(0);
+    expect(first?.getAttribute('class')).toBe('played-tick played--correct');
+
+    // Drawn again with the page, still once.
+    await laidOutAgain(renderer, surface);
+    expect(ticks().length).toBe(2);
+  });
+
   it('rings a right note round the note where it is printed', async () => {
     const { renderer, surface } = await twoBarsOpen();
 

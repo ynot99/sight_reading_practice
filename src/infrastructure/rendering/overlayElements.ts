@@ -37,6 +37,15 @@ export function drawShape(shape: OverlayShape, doc: Document): SVGElement {
       element.setAttribute('class', `played-ledger ${colourClass}`);
       return element;
     }
+    case 'tick': {
+      const element = doc.createElementNS(SVG_NAMESPACE, 'line');
+      element.setAttribute('x1', String(shape.x));
+      element.setAttribute('x2', String(shape.x));
+      element.setAttribute('y1', String(shape.y1));
+      element.setAttribute('y2', String(shape.y2));
+      element.setAttribute('class', `played-tick ${colourClass}`);
+      return element;
+    }
     case 'accidental': {
       const element = doc.createElementNS(SVG_NAMESPACE, 'text');
       element.setAttribute('x', String(shape.x));

@@ -4,6 +4,7 @@ import { Pitch } from '../../src/domain/model/Pitch.js';
 import type { PrintedHere } from '../../src/domain/notation/printedIds.js';
 import {
   buildOverlayShapes,
+  buildTapShape,
   spellPlayed,
   type NoteheadShape,
   type OverlayLayout,
@@ -361,5 +362,28 @@ describe('a page with only one staff', () => {
 
     expect(noteheads(shapes)).toHaveLength(1);
     expect(noteheads(shapes)[0]?.x).toBe(120);
+  });
+});
+
+describe('a tap, drawn as a stroke', () => {
+  const system = { top: 100, bottom: 240 };
+  const stepX = new Map([
+    [0, 120],
+    [1, 200],
+    [2, 260],
+  ]);
+
+  it('stands where its step does, down the whole system, leaning as a ring would by how early or late', () => {
+    const tap = (stepIndex: number, offset: number) =>
+      buildTapShape({ stepIndex, midi: 60, correct: true, offset, tap: true }, stepX, system);
+    expect(tap(1, 0)).toEqual({ kind: 'tick', x: 200, y1: 100, y2: 240, correct: true, looseTiming: false });
+    expect([tap(1, 0.5)?.x, tap(1, -0.5)?.x, tap(0, -0.5)?.x]).toEqual([230, 160, 120]);
+  });
+
+  it('is in the paler colour where it was Good, and nowhere where its step was not drawn', () => {
+    expect(buildTapShape({ stepIndex: 0, midi: 60, correct: true, offset: 0, tier: 'good' }, stepX, system)?.looseTiming).toBe(true);
+    expect(buildTapShape({ stepIndex: 0, midi: 60, correct: true, offset: 0, tier: 'perfect' }, stepX, system)?.looseTiming).toBe(false);
+    expect(buildTapShape({ stepIndex: 7, midi: 60, correct: true, offset: 0 }, stepX, system)).toBeNull();
+    expect(buildTapShape({ stepIndex: 0, midi: 60, correct: false, offset: 0 }, stepX, system)?.correct).toBe(false);
   });
 });

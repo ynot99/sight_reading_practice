@@ -25,6 +25,8 @@ export interface PlayedMark {
   readonly settled?: boolean;
   /** How well a right key landed; see `PlayedNote.tier`. */
   readonly tier?: NoteTier;
+  /** A press judged for its moment alone; see `PlayedNote.tap`. */
+  readonly tap?: boolean;
 }
 
 export interface OverlayLayout {
@@ -80,7 +82,18 @@ export interface AccidentalShape {
   readonly sounding?: boolean;
 }
 
-export type OverlayShape = NoteheadShape | LedgerShape | AccidentalShape;
+/** A tap: a stroke down the system at the moment it landed. */
+export interface TickShape {
+  readonly kind: 'tick';
+  readonly x: number;
+  readonly y1: number;
+  readonly y2: number;
+  readonly correct: boolean;
+  readonly looseTiming: boolean;
+  readonly sounding?: boolean;
+}
+
+export type OverlayShape = NoteheadShape | LedgerShape | AccidentalShape | TickShape;
 
 const ACCIDENTAL_GLYPHS: Readonly<Record<number, string>> = {
   [-2]: '𝄫',
@@ -140,6 +153,32 @@ function markX(
   }
   const gap = offset < 0 ? base - neighbour : neighbour - base;
   return gap > 0 ? base + offset * gap : base;
+}
+
+/**
+ * The stroke a tap is drawn as, from the top of the system to its foot.
+ *
+ * Where the step stands, shifted by how early or late the tap was exactly as
+ * a ring is; and the whole height of the system, as the marker is, because a
+ * tap is a moment of the step rather than a note of either hand.
+ */
+export function buildTapShape(
+  mark: PlayedMark,
+  stepX: ReadonlyMap<number, number>,
+  system: { readonly top: number; readonly bottom: number },
+): TickShape | null {
+  const x = markX(stepX, mark.stepIndex, mark.offset, null);
+  if (x === undefined) {
+    return null;
+  }
+  return {
+    kind: 'tick',
+    x,
+    y1: system.top,
+    y2: system.bottom,
+    correct: mark.correct,
+    looseTiming: mark.tier === 'good',
+  };
 }
 
 export function buildOverlayShapes(

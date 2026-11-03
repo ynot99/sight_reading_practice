@@ -6067,6 +6067,42 @@ describe('a run shown again on the page', () => {
     expect(between(60_000, 61_000)).toEqual([[3_000, Number.POSITIVE_INFINITY]]);
   });
 
+  it('draws a press in rhythm only as a tap, as it is played and as it is shown again, and no other', async () => {
+    const rig = createController(true);
+    const { controller, renderer } = rig;
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0, rhythmOnly: true });
+    controller.start();
+    rig.metronome.advanceSubdivisions(1);
+    rig.midi.noteOn(MIDI.G4);
+    // Chosen otherwise mid-run, the run is still judged as it began.
+    controller.updateSettings({ rhythmOnly: false });
+    rig.metronome.advanceSubdivisions(1);
+    rig.midi.noteOn(MIDI.G4);
+    controller.stop();
+    const taps = (): (boolean | undefined)[] => renderer.played.map((mark) => mark.tap);
+    expect(taps()).toEqual([true, true]);
+    const roll = controller.lastRoll;
+    if (roll === null) {
+      throw new Error('expected the run to have been written down');
+    }
+
+    renderer.played.length = 0;
+    controller.beginReplay(roll, { modeId: FLOW_MODE_ID, modes: ['rhythm'] });
+    controller.endReplay();
+    expect(taps()).toEqual([true, true]);
+    renderer.played.length = 0;
+    controller.beginReplay(roll, { modeId: FLOW_MODE_ID, modes: [] });
+    controller.endReplay();
+    expect(taps()).toEqual([undefined, undefined]);
+
+    renderer.played.length = 0;
+    controller.start();
+    rig.metronome.advanceSubdivisions(1);
+    rig.midi.noteOn(MIDI.C4);
+    expect(taps()).toEqual([undefined]);
+  });
+
   it('keeps what a run was played with, as it was, for showing it again', async () => {
     const rig = createController(true);
     const { controller } = rig;

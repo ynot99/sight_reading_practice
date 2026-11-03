@@ -44,7 +44,7 @@ import { drawShape } from '../overlayElements.js';
 import { PAGE_LABEL_INSET, pageLabelText, rungAfterTheTitle } from '../pageLabel.js';
 import { PREVIEW_CLIP_ID, PREVIEW_SYSTEM_CLIP_ID, previewPlacement } from '../pagePreview.js';
 import { timeTheStart } from '../../../shared/timeTheStart.js';
-import { buildOverlayShapes, type PlayedMark } from '../playedNoteShapes.js';
+import { buildOverlayShapes, buildTapShape, type PlayedMark } from '../playedNoteShapes.js';
 import { fitStaffGeometry, type DrawnNoteSample, type StaffGeometry } from '../staffGeometry.js';
 import { swipeDirection, visibleHeightOf } from '../pageTurns.js';
 import {
@@ -849,6 +849,10 @@ export class VerovioScoreRenderer
     if (overlay === undefined || overlay.geometry === null || context === null) {
       return;
     }
+    if (mark.tap === true) {
+      this.drawTheTap(mark, overlay);
+      return;
+    }
     const shapes = buildOverlayShapes([mark], {
       geometry: overlay.geometry,
       stepX: overlay.stepX,
@@ -864,6 +868,43 @@ export class VerovioScoreRenderer
       }
       overlay.layer.append(drawn);
     }
+  }
+
+  /**
+   * Draws a tap onto its page: once a step, however many notes it asks for.
+   *
+   * One tap answers the whole chord, and each of its notes is announced as
+   * played; strokes drawn over one another would only darken the line.
+   */
+  private drawTheTap(mark: PlayedMark, overlay: PageOverlay): void {
+    const step = String(mark.stepIndex);
+    if (overlay.layer.querySelector(`[data-tap="${step}"]`) !== null) {
+      return;
+    }
+    const system = this.theSystemOf(mark.stepIndex);
+    const shape = system === null ? null : buildTapShape(mark, overlay.stepX, system);
+    if (shape === null) {
+      return;
+    }
+    const drawn = drawShape(shape, overlay.layer.ownerDocument);
+    drawn.setAttribute('data-mark', `${step}:${String(mark.midi)}`);
+    drawn.setAttribute('data-tap', step);
+    if (mark.settled === false) {
+      drawn.classList.add('played--unsettled');
+    }
+    overlay.layer.append(drawn);
+  }
+
+  /**
+   * The system a step is drawn in, from the top line of its top staff to the
+   * bottom line of its lowest, in the page's units: as the page drew it.
+   */
+  private theSystemOf(index: number): { readonly top: number; readonly bottom: number } | null {
+    const step = this.printed[index];
+    const page = step === undefined ? undefined : this.pageOfName.get(step.barId);
+    const read = page === undefined ? undefined : this.layouts.get(page)?.layout;
+    const system = read?.systems.find((each) => each.bars.some((bar) => bar.id === step?.barId));
+    return system === undefined ? null : { top: system.top, bottom: system.bottom };
   }
 
   /** Forgets what one page, or every page, was read as. */
@@ -1770,6 +1811,7 @@ export class VerovioScoreRenderer
       offset: note.offset,
       settled: note.settled,
       ...(note.tier === undefined ? {} : { tier: note.tier }),
+      ...(note.tap === true ? { tap: true } : {}),
     };
     this.marks.push(mark);
     this.drawTheMark(mark);

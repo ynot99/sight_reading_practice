@@ -2520,7 +2520,7 @@ export class PracticeController {
       this.deps.modes.get(playedIn).requiresMetronome;
     this.deps.overlay.clearPlayed();
     this.deps.fade.clearFaded();
-    const judging: ReplayJudging = { keepsTime, tempoBpm: this.tempoBpm };
+    const judging: ReplayJudging = { keepsTime, tempoBpm: this.tempoBpm, taps: playedWith.modes.includes('rhythm') };
     this.replay = {
       roll,
       playedWith,
@@ -3218,6 +3218,8 @@ export class PracticeController {
     // through from one picked up partway that also reached the end.
     const firstOwed = this.theFirstStepTheReaderOwes(passage.from)?.index ?? passage.from;
     const startedAtBar = beginsAt <= firstOwed ? null : (timeline.at(beginsAt)?.measureIndex ?? 0) + 1;
+    // What the run is judged on, kept for its marks: a tap is drawn as one.
+    const taps = this.playedUnder.rhythmOnly;
     const session = new PracticeSession({
       timeline,
       mode,
@@ -3232,7 +3234,7 @@ export class PracticeController {
         matchPolicy: {
           toleranceMs: this.currentSettings.matchToleranceMs,
           pitchClassOnly: this.playedUnder.pitchClassOnly,
-          anyPitch: this.playedUnder.rhythmOnly,
+          anyPitch: taps,
         },
         countInBars,
         startAtIndex: beginsAt,
@@ -3362,6 +3364,7 @@ export class PracticeController {
           // landed; the tier says whether that was in its window.
           offset: this.timingOffsetFor(stepIndex, deviationMs, session.tempoBpm),
           ...(tier === undefined ? {} : { tier }),
+          ...(taps ? { tap: true } : {}),
         };
         if (this.currentSettings.playedNotes === 'at-end') {
           this.heldMarks.push(mark);

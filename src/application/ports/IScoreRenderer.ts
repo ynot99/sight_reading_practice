@@ -400,6 +400,15 @@ export interface PlayedNote {
    * simply right.
    */
   readonly tier?: NoteTier;
+  /**
+   * A press judged for its moment alone, in rhythm only.
+   *
+   * Drawn as a stroke across the system where it landed rather than as a
+   * ring: the key it was is nobody's question, and a ring on the written note
+   * repeats what is printed under it - once for every note of a chord, for
+   * one tap.
+   */
+  readonly tap?: boolean;
 }
 
 /** What the overlay needs in order to spell and place a press. */

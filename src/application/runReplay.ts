@@ -19,6 +19,8 @@ import { rollBeganAtMs, theMusicsPlaceAt, type RunRoll } from './session/RunRoll
 export interface ReplayJudging {
   readonly keepsTime: boolean;
   readonly tempoBpm: number;
+  /** Whether any key was taken for the note written, so a press was a tap. */
+  readonly taps?: boolean;
 }
 
 /** A mark of the run, and when in it the key went down: the run's own nought. */
@@ -78,6 +80,7 @@ export function theMarksOfTheRun(
           ? playedNoteOffset(timeline, stepIndex, press.deviationMs, judging.tempoBpm)
           : 0,
         ...(tier === undefined ? {} : { tier }),
+        ...(judging.taps === true ? { tap: true } : {}),
       },
     });
   }

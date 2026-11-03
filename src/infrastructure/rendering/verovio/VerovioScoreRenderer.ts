@@ -1830,9 +1830,9 @@ export class VerovioScoreRenderer
       ...(note.extra === true ? { extra: true } : {}),
     };
     this.marks.push(mark);
-    // A tap drawn while its beat is still being played is one landing now;
-    // drawn again with the page, or put up once the run is over, it is not.
-    this.drawTheMark(mark, mark.tap === true && mark.settled === false);
+    // A tap landing now flashes; drawn again with the page, put up once the
+    // run is over, or the verdict of one drawn as it was made, it does not.
+    this.drawTheMark(mark, mark.tap === true && note.landing === true);
   }
 
   /** Takes one press off again, found by what it is a mark of. */

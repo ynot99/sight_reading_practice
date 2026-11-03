@@ -6149,6 +6149,43 @@ describe('a run shown again on the page', () => {
     expect([extras(), renderer.played.length]).toEqual([[], 4]);
   });
 
+  it('draws a tap kept for the beat ahead as it is made, the verdict over it when the beat opens, and each once', async () => {
+    const drawn = async (settings: Partial<PracticeSettings>): Promise<unknown[][]> => {
+      const rig = createController(true, undefined, { matchToleranceMs: 250 });
+      const { controller, renderer, midi, metronome, clock } = rig;
+      await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+      controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0, rhythmOnly: true, ...settings });
+      controller.start();
+      const steps = controller.currentTimeline?.playableSteps ?? [];
+      metronome.advanceToTicks(steps[0]?.onsetTicks ?? 0);
+      midi.noteOn(MIDI.G4, clock.now());
+      // A tap judged as it is made lands as it is drawn.
+      const onTheBeat = renderer.played.map((mark) => [mark.stepIndex, mark.landing === true]);
+      renderer.played.length = 0;
+      // Two taps inside the window before the second beat, before its tick is heard.
+      clock.advance(880);
+      midi.noteOn(MIDI.G4, clock.now());
+      clock.advance(20);
+      midi.noteOn(MIDI.F5, clock.now());
+      const asMade = renderer.played.map((mark) => [mark.stepIndex, mark.extra === true, mark.landing === true, mark.offset.toFixed(2)]);
+      metronome.advanceToTicks(steps[1]?.onsetTicks ?? 0);
+      const whenOpened = renderer.played.slice(asMade.length).map((mark) => [mark.stepIndex, mark.extra === true, mark.landing === true, mark.tier]);
+      return [onTheBeat, asMade, whenOpened];
+    };
+    expect(await drawn({})).toEqual([
+      [[0, true]],
+      // Each where it landed, in grey, landing now.
+      [
+        [1, true, true, '-0.12'],
+        [1, true, true, '-0.10'],
+      ],
+      // The first one's verdict over it, not landing again; the second, judged for nothing, already there.
+      [[1, false, false, 'good']],
+    ]);
+    // Held to the end, nothing is drawn as it is made.
+    expect((await drawn({ playedNotes: 'at-end' })).slice(0, 2)).toEqual([[], []]);
+  });
+
   it('keeps what a run was played with, as it was, for showing it again', async () => {
     const rig = createController(true);
     const { controller } = rig;

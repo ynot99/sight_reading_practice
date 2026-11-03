@@ -842,8 +842,8 @@ describe('what was played', () => {
     const { renderer, surface } = await twoBarsOpen();
     const ticks = (): Element[] => [...(sheets(surface)[0]?.querySelectorAll('.played-overlay line.played-tick') ?? [])];
 
-    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0, settled: false, tap: true });
-    renderer.showPlayed({ stepIndex: 0, midi: 64, correct: true, offset: 0, settled: false, tap: true });
+    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0, settled: false, tap: true, landing: true });
+    renderer.showPlayed({ stepIndex: 0, midi: 64, correct: true, offset: 0, settled: false, tap: true, landing: true });
     renderer.showPlayed({ stepIndex: 1, midi: 62, correct: true, offset: 0, tier: 'good', tap: true });
 
     const drawing = sheets(surface)[0]?.querySelector('svg') as SVGSVGElement;
@@ -902,24 +902,25 @@ describe('what was played', () => {
     expect(Number(ticks[0]?.getAttribute('x1'))).toBeLessThan(Number(ticks[1]?.getAttribute('x1')));
   });
 
-  it('flashes a tap as it lands, and not one put up after the fact or drawn again with the page', async () => {
+  it('flashes a tap as it lands, and not one put up after the fact, the verdict of one drawn already, or one drawn again with the page', async () => {
     const { renderer, surface } = await twoBarsOpen();
     const landing = (): boolean[] =>
       [...(sheets(surface)[0]?.querySelectorAll('.played-overlay line.played-tick') ?? [])].map((tick) =>
         tick.classList.contains('played-tick--landing'),
       );
 
-    // As played: drawn while its beat is still going.
-    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0, settled: false, tap: true });
-    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0.3, settled: false, tap: true, extra: true });
-    // Shown again, or held to the end: settled already.
-    renderer.showPlayed({ stepIndex: 1, midi: 62, correct: true, offset: 0, settled: true, tap: true });
-    renderer.showPlayed({ stepIndex: 2, midi: 64, correct: true, offset: 0, tap: true });
+    // As played.
+    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0, settled: false, tap: true, landing: true });
+    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0.3, settled: false, tap: true, extra: true, landing: true });
+    // The verdict of a tap drawn as it was made, its beat still going; shown again; held to the end.
+    renderer.showPlayed({ stepIndex: 1, midi: 62, correct: true, offset: 0, settled: false, tap: true });
+    renderer.showPlayed({ stepIndex: 2, midi: 64, correct: true, offset: 0, settled: true, tap: true });
+    renderer.showPlayed({ stepIndex: 3, midi: 65, correct: true, offset: 0, tap: true });
     // The grey one under the rest, so first.
-    expect(landing()).toEqual([true, true, false, false]);
+    expect(landing()).toEqual([true, true, false, false, false]);
 
     await laidOutAgain(renderer, surface);
-    expect(landing()).toEqual([false, false, false, false]);
+    expect(landing()).toEqual([false, false, false, false, false]);
   });
 
   it('rings a right note round the note where it is printed', async () => {

@@ -972,6 +972,12 @@ export class PracticeController {
   private opening: ChordMatcher | null = null;
   /** Whether the run last begun is judged for its taps: see `theRunIsTapped`. */
   private tappedRun = false;
+  /**
+   * The taps of this run already drawn as they were made, kept for a beat
+   * still to come, by the moment and the key: their verdicts are not drawn
+   * as landing again when the beat opens and judges them.
+   */
+  private readonly tapsDrawnAhead = new Set<string>();
   private openingPresses: MidiNoteOnEvent[] = [];
   private listeningForTheOpening: Unsubscribe | null = null;
   private openedScore: Exercise | null = null;
@@ -3240,6 +3246,7 @@ export class PracticeController {
     // What the run is judged on, kept for its marks: a tap is drawn as one.
     const taps = this.playedUnder.rhythmOnly;
     this.tappedRun = taps;
+    this.tapsDrawnAhead.clear();
     const session = new PracticeSession({
       timeline,
       mode,
@@ -3334,8 +3341,29 @@ export class PracticeController {
       // Every press is drawn where it was actually struck, right or wrong -
       // and a tap with no note left for it too. Left off the page, a key the
       // run heard looked like a key that had not worked.
-      session.events.on('noteJudged', ({ midi, verdict, stepIndex, deviationMs, tier }) => {
+      // A tap reaching for a beat still to come is judged when the beat opens,
+      // which is a moment after it was made: drawn then, the page answered a
+      // tap late. So it is drawn as it is made, in grey where it landed, and
+      // the beat's verdict goes over it when it comes.
+      session.events.on('pressKept', ({ midi, atMs, stepIndex, deviationMs }) => {
+        if (!taps || this.currentSettings.playedNotes !== 'live') {
+          return;
+        }
+        this.tapsDrawnAhead.add(`${String(atMs)}:${String(midi)}`);
+        this.deps.overlay.showPlayed({
+          stepIndex,
+          midi,
+          correct: true,
+          settled: false,
+          offset: this.timingOffsetFor(stepIndex, deviationMs, session.tempoBpm, WHERE_IT_LANDED),
+          tap: true,
+          extra: true,
+          landing: true,
+        });
+      }),
+      session.events.on('noteJudged', ({ midi, verdict, stepIndex, deviationMs, tier, atMs }) => {
         const held = this.currentSettings.playedNotes === 'at-end';
+        const drawnAhead = this.tapsDrawnAhead.delete(`${String(atMs)}:${String(midi)}`);
         const why =
           this.currentSettings.playedNotes === 'hidden'
             ? 'marks are turned off'
@@ -3393,8 +3421,11 @@ export class PracticeController {
         };
         if (this.currentSettings.playedNotes === 'at-end') {
           this.heldMarks.push(mark);
-        } else {
-          this.deps.overlay.showPlayed(mark);
+        } else if (!(drawnAhead && extra)) {
+          // A tap landing now, unless it was drawn as it was made: then this
+          // is the verdict arriving over it, and judged for nothing it is
+          // there already. Only a tap lands so: a ring is simply drawn.
+          this.deps.overlay.showPlayed(taps && !drawnAhead ? { ...mark, landing: true } : mark);
         }
       }),
     );

@@ -2013,7 +2013,14 @@ export class PracticeSession {
         session.judgeNote(midi, verdict, deviationMs, atMs);
       },
       keptForTheNextStep: (midi: number, atMs: number) => {
-        session.emitter.emit('pressKept', { midi, atMs, stepIndex: session.stepIndex + 1 });
+        const next = session.timeline.at(session.stepIndex + 1);
+        session.emitter.emit('pressKept', {
+          midi,
+          atMs,
+          stepIndex: session.stepIndex + 1,
+          // Against the beat it is kept for, as it will be judged when it opens.
+          deviationMs: next === null ? null : atMs - (session.runStartedAt + session.elapsedTo(next.onsetTicks)),
+        });
       },
       holdForTheBar: (untilTicks: number) => {
         session.holdForTheBar(untilTicks);

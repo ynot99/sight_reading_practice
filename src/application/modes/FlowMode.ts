@@ -145,7 +145,12 @@ export class FlowMode extends BasePracticeMode {
       ? expectedFor(next, context.options.expectedStaff).length > 0
       : next.expectedMidi.includes(event.midi);
     if (wanted) {
-      return Math.abs(event.timestampMs - dueAt) < Math.abs(event.timestampMs - openedAt);
+      const nearer = Math.abs(event.timestampMs - dueAt) < Math.abs(event.timestampMs - openedAt);
+      // Any key is reaching only as far as the window a press may miss its
+      // beat by. Nearer, but further off than that, a tap through the back
+      // half of a long note was held for the next one - drawn only when that
+      // note began, and taking the tap that note was then given.
+      return anyKey ? nearer && Math.abs(event.timestampMs - dueAt) <= context.options.matchPolicy.toleranceMs : nearer;
     }
 
     const untilDue = dueAt - event.timestampMs;

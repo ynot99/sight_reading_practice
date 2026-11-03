@@ -293,7 +293,8 @@ describe('Flow mode', () => {
       harness.midi.noteOn(MIDI.D4);
 
       expect(harness.of('pressKept')).toEqual([
-        { midi: MIDI.D4, atMs: RUN_STARTS_AT_MS + 950, stepIndex: 1 },
+        // And how far ahead of that step's beat, as it will be judged when it opens.
+        { midi: MIDI.D4, atMs: RUN_STARTS_AT_MS + 950, stepIndex: 1, deviationMs: -50 },
       ]);
 
       harness.metronome.advanceSubdivisions(1);
@@ -323,7 +324,7 @@ describe('Flow mode', () => {
       expect(judged?.deviationMs).toBe(-300);
     });
 
-    it('in rhythm only, gives any key to the beat it was nearer to, whether or not the beat behind has had its tap, swept across the gap', () => {
+    it('in rhythm only, gives any key to the beat it was nearer to and within the window of, whether or not the beat behind has had its tap, swept across the gap', () => {
       // The second beat at 1000 ms. A key no note wants, as a computer's
       // keyboard nearly always gives: dead on the beat it reaches the run
       // before the tick that opens the beat, and was the first beat's again.
@@ -353,19 +354,20 @@ describe('Flow mode', () => {
         harness.metronome.advanceSubdivisions(2);
         return harness.of('noteJudged').slice(firstTapped ? 1 : 0).map((event) => `${event.verdict}@${String(event.stepIndex)}`).join(' ');
       };
-      const swept = [300, 450, 499, 501, 550, 700, 880, 1000].map((atMs) => [atMs, judgedAt(atMs, true), judgedAt(atMs, false)]);
+      // Nearer the second, and within the window of 250 ms a press may miss its beat by.
+      const swept = [300, 499, 501, 700, 749, 750, 880, 1000].map((atMs) => [atMs, judgedAt(atMs, true), judgedAt(atMs, false)]);
       expect(swept).toEqual([
         [300, 'duplicate@0', 'correct@0'],
-        [450, 'duplicate@0', 'correct@0'],
         [499, 'duplicate@0', 'correct@0'],
-        [501, 'correct@1', 'correct@1'],
-        [550, 'correct@1', 'correct@1'],
-        [700, 'correct@1', 'correct@1'],
+        [501, 'duplicate@0', 'correct@0'],
+        [700, 'duplicate@0', 'correct@0'],
+        [749, 'duplicate@0', 'correct@0'],
+        [750, 'correct@1', 'correct@1'],
         [880, 'correct@1', 'correct@1'],
         [1000, 'correct@1', 'correct@1'],
       ]);
       // Whichever key it was - the open beat's own note among them.
-      expect(judgedAt(700, false, MIDI.C4)).toBe('correct@1');
+      expect(judgedAt(880, false, MIDI.C4)).toBe('correct@1');
     });
 
     it('in rhythm only, keeps a tap off a beat that asks for none - a rest, or only the other hand', () => {

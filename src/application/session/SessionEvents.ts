@@ -92,6 +92,8 @@ export interface PressKeptEvent {
   readonly atMs: number;
   /** The step it is kept for. */
   readonly stepIndex: number;
+  /** How far ahead of that step's beat it was, as it will be judged; negative is early. */
+  readonly deviationMs: number | null;
 }
 
 /**

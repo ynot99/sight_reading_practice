@@ -415,6 +415,12 @@ export interface PlayedNote {
    * key that reached the run is never missing from the page.
    */
   readonly extra?: boolean;
+  /**
+   * Drawn the moment it was played, rather than put up after it: drawn again
+   * with the page, held to the end of a run, shown again, or the verdict of a
+   * tap already drawn, it is not. What a tap's flash is for.
+   */
+  readonly landing?: boolean;
 }
 
 /** What the overlay needs in order to spell and place a press. */

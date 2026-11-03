@@ -856,11 +856,11 @@ describe('what was played', () => {
     expect(Number(first?.getAttribute('x1'))).toBeGreaterThan(c4.x);
     expect(first?.getAttribute('x1')).toBe(first?.getAttribute('x2'));
     expect([first?.getAttribute('class'), second?.getAttribute('class')]).toEqual([
-      'played-tick played--correct played--unsettled',
+      'played-tick played--correct played--unsettled played-tick--landing',
       'played-tick played--loose',
     ]);
     renderer.settlePlayed(0);
-    expect(first?.getAttribute('class')).toBe('played-tick played--correct');
+    expect(first?.getAttribute('class')).toBe('played-tick played--correct played-tick--landing');
 
     // Drawn again with the page, still once.
     await laidOutAgain(renderer, surface);
@@ -900,6 +900,26 @@ describe('what was played', () => {
     expect(ticks.map((tick) => tick.getAttribute('class'))).toEqual(['played-tick played--extra', 'played-tick played--correct']);
     // Before the first note, by half the gap after it.
     expect(Number(ticks[0]?.getAttribute('x1'))).toBeLessThan(Number(ticks[1]?.getAttribute('x1')));
+  });
+
+  it('flashes a tap as it lands, and not one put up after the fact or drawn again with the page', async () => {
+    const { renderer, surface } = await twoBarsOpen();
+    const landing = (): boolean[] =>
+      [...(sheets(surface)[0]?.querySelectorAll('.played-overlay line.played-tick') ?? [])].map((tick) =>
+        tick.classList.contains('played-tick--landing'),
+      );
+
+    // As played: drawn while its beat is still going.
+    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0, settled: false, tap: true });
+    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0.3, settled: false, tap: true, extra: true });
+    // Shown again, or held to the end: settled already.
+    renderer.showPlayed({ stepIndex: 1, midi: 62, correct: true, offset: 0, settled: true, tap: true });
+    renderer.showPlayed({ stepIndex: 2, midi: 64, correct: true, offset: 0, tap: true });
+    // The grey one under the rest, so first.
+    expect(landing()).toEqual([true, true, false, false]);
+
+    await laidOutAgain(renderer, surface);
+    expect(landing()).toEqual([false, false, false, false]);
   });
 
   it('rings a right note round the note where it is printed', async () => {

@@ -75,6 +75,15 @@ describe('the stylesheet', () => {
     expect(CSS).toMatch(/@keyframes ring-breathes/);
   });
 
+  it('flashes a tap as it lands, thick and at full strength, once and only where motion is welcome', () => {
+    const landing = rules().find((rule) => rule.selector === '.played-tick--landing');
+    expect(inWhichMedia(landing?.at ?? 0)).toBe('@media (prefers-reduced-motion: no-preference)');
+    expect(landing?.body).toMatch(/animation\s*:\s*tap-lands 160ms ease-out\s*(;|$)/);
+    // From thicker and brighter than the stroke it leaves, which is 2.5 and pale while its beat goes on.
+    expect(CSS).toMatch(/@keyframes tap-lands\s*\{\s*from\s*\{[^}]*stroke-width\s*:\s*7;[^}]*opacity\s*:\s*1;/);
+    expect(rules().find((rule) => rule.selector === '.played-tick')?.body).toMatch(/stroke-width\s*:\s*2\.5/);
+  });
+
   it('colours the Sync button for a moment by how a sync ended, a ring going out from it once where motion is welcome', () => {
     const synced = rules().find((rule) => rule.selector === ".score__reading[data-sync-ended='synced']");
     const failed = rules().find((rule) => rule.selector === ".score__reading[data-sync-ended='failed']");

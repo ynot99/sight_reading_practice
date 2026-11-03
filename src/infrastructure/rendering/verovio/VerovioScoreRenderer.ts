@@ -842,7 +842,7 @@ export class VerovioScoreRenderer
   }
 
   /** Draws one played note onto its page, if that page is drawn. */
-  private drawTheMark(mark: PlayedMark): void {
+  private drawTheMark(mark: PlayedMark, landing = false): void {
     const page = this.pageOfStep(mark.stepIndex);
     const overlay = page === undefined ? undefined : this.overlays.get(page);
     const context = this.overlayContext;
@@ -850,7 +850,7 @@ export class VerovioScoreRenderer
       return;
     }
     if (mark.tap === true) {
-      this.drawTheTap(mark, overlay);
+      this.drawTheTap(mark, overlay, landing);
       return;
     }
     const shapes = buildOverlayShapes([mark], {
@@ -879,7 +879,7 @@ export class VerovioScoreRenderer
    * the others, so one landing on a verdict's stroke never puts its colour
    * out.
    */
-  private drawTheTap(mark: PlayedMark, overlay: PageOverlay): void {
+  private drawTheTap(mark: PlayedMark, overlay: PageOverlay, landing: boolean): void {
     const step = String(mark.stepIndex);
     const extra = mark.extra === true;
     if (!extra && overlay.layer.querySelector(`[data-tap="${step}"]`) !== null) {
@@ -899,6 +899,9 @@ export class VerovioScoreRenderer
     }
     if (mark.settled === false) {
       drawn.classList.add('played--unsettled');
+    }
+    if (landing) {
+      drawn.classList.add('played-tick--landing');
     }
     if (extra) {
       overlay.layer.prepend(drawn);
@@ -1827,7 +1830,9 @@ export class VerovioScoreRenderer
       ...(note.extra === true ? { extra: true } : {}),
     };
     this.marks.push(mark);
-    this.drawTheMark(mark);
+    // A tap drawn while its beat is still being played is one landing now;
+    // drawn again with the page, or put up once the run is over, it is not.
+    this.drawTheMark(mark, mark.tap === true && mark.settled === false);
   }
 
   /** Takes one press off again, found by what it is a mark of. */

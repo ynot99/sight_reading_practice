@@ -7482,6 +7482,26 @@ body[data-repeats='hidden'] .repeat-mark {
   vector-effect: non-scaling-stroke;
 }
 
+/*
+ * A tap the moment it lands: thick and at full strength, settling in a
+ * sixth of a second to the stroke it leaves - which is pale while its beat
+ * is still being played. The verdict is in the colour from the first frame.
+ * Only where motion is welcome, and only as it lands: drawn again with the
+ * page, or put up once the run is over, it is simply there.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .played-tick--landing {
+    animation: tap-lands 160ms ease-out;
+  }
+}
+
+@keyframes tap-lands {
+  from {
+    stroke-width: 7;
+    opacity: 1;
+  }
+}
+
 .played-accidental {
   stroke: none;
   font-weight: 700;

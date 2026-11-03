@@ -211,10 +211,8 @@ import type { ClosingCue, DrawnPassage, PassageEnd, ScorePageState } from '../ap
 import { barLines, barNumberOf, measureCount, measureIndexAt, pedalHeldUntil, type Exercise, type NamingQuestion, type PlayedBack } from '../domain/model/Exercise.js';
 import type { ImportedScore, ImportWarning } from '../domain/notation/MusicXmlParser.js';
 import { theHitErrors } from '../domain/scoring/theHitErrors.js';
-import { thePerfectWindowOf } from '../domain/scoring/PerformanceReport.js';
-import type { NoteTier } from '../domain/scoring/noteTiers.js';
 import { theProfile } from '../domain/scoring/theProfile.js';
-import { drawTheHitErrors } from './hitErrorBar.js';
+import { drawTheHitErrors, LiveHitStrip } from './hitErrorBar.js';
 import { sizeOf, theStorageAccount } from './storageReport.js';
 import { drawTheShareBar } from './shareBar.js';
 import { findAll, wordsIn, type Found } from './settingsSearch.js';
@@ -581,20 +579,14 @@ const RUN_ROLL_ID = 'the run just played';
 const RUN_REPLAY_ID = 'a run shown again on the page';
 
 /**
- * How many of a run's last taps the strip over the bar shows as they land.
+ * How long a tap's mark stands on the strip over the bar, fading over the end
+ * of it.
  *
  * The shape of how the reader is tapping now, rather than of the whole run so
- * far: a reader who has corrected a lean should see the correction, and a
- * strip of everything since the first bar would still be showing the lean.
+ * far: a reader who has corrected a lean sees the correction, and stops
+ * tapping to see the strip empty. A few beats at any tempo a rhythm is read.
  */
-const LIVE_HITS = 16;
-
-/** One tap of a run as it landed, for the strip over the bar. */
-interface LiveHit {
-  readonly deviationMs: number;
-  readonly tier: NoteTier;
-  readonly windowMs: number | undefined;
-}
+const LIVE_TICK_MS = 3_000;
 /**
  * How far ahead of the sound the clicks over a playback are laid out.
  *
@@ -2145,8 +2137,8 @@ export class AppView {
   private readonly doc: Document;
   private readonly subscriptions: Unsubscribe[] = [];
   private sessionSubscriptions: Unsubscribe[] = [];
-  /** The last taps of the run going, as the strip over the bar shows them; `null` with none. */
-  private liveHits: readonly LiveHit[] | null = null;
+  /** The strip over the bar of a run's taps as they land; made the first time it is wanted. */
+  private liveStripMade: LiveHitStrip | null = null;
   private audioFeedbackEnabled = true;
   /** Where the words searched for in the settings were found, and which one is gone to. */
   private found: readonly Found[] = [];
@@ -3834,6 +3826,7 @@ export class AppView {
 
   dispose(): void {
     clearTimeout(this.heardTimer);
+    this.liveStripMade?.clear();
     this.forgetTheBeats();
     this.cancelPreview();
     if (this.tempoRedraw !== null) {
@@ -8303,13 +8296,12 @@ export class AppView {
         if (!this.runtime.controller.theRunIsTapped || deviationMs === null || tier === undefined) {
           return;
         }
-        const kept = this.liveHits ?? [];
-        this.showTheLiveHits([...kept, { deviationMs, tier, windowMs }].slice(-LIVE_HITS));
+        this.liveStrip.land({ deviationMs, tier, windowMs }, this.runtime.controller.settings.matchToleranceMs);
       }),
       session.events.on('statusChanged', ({ status }) => {
         // Over, the strip under the verdict says it for the whole run.
         if (status === 'completed' || status === 'aborted') {
-          this.showTheLiveHits(null);
+          this.liveStrip.clear();
         }
       }),
     );
@@ -20129,30 +20121,21 @@ export class AppView {
    * and a strip that twitches under it is an eye taken off the notes - which is
    * the work the exercise exists for. Except in rhythm only, which is played
    * as a rhythm game is, and where the last taps are shown as they land as
-   * well: see `showTheLiveHits`.
+   * well: see `liveStrip`.
    */
   /**
-   * Shows how the last taps landed, or takes the strip away.
-   *
-   * The strip a run's presses are drawn across when it ends, worked out the
-   * same way - and only from as many presses as make a shape: until then it
-   * is not there.
+   * The strip over the bar of a run's taps as they land, in rhythm only: each
+   * mark where it landed, fading by itself. See `LiveHitStrip`.
    */
-  private showTheLiveHits(hits: readonly LiveHit[] | null): void {
-    this.liveHits = hits;
-    const errors =
-      hits === null
-        ? null
-        : theHitErrors(
-            hits.map((hit) => hit.deviationMs),
-            this.runtime.controller.settings.matchToleranceMs,
-            {
-              tiers: hits.map((hit) => hit.tier),
-              perfectMs: thePerfectWindowOf(hits.flatMap((hit) => (hit.windowMs === undefined ? [] : [hit.windowMs]))),
-            },
-          );
-    this.el.liveHits.hidden = errors === null;
-    this.el.liveHits.replaceChildren(...(errors === null ? [] : [drawTheHitErrors(errors)]));
+  private get liveStrip(): LiveHitStrip {
+    this.liveStripMade ??= new LiveHitStrip(this.el.liveHits, {
+      fadeMs: LIVE_TICK_MS,
+      later: (run, ms) => setTimeout(run, ms),
+      cancel: (handle) => {
+        clearTimeout(handle);
+      },
+    });
+    return this.liveStripMade;
   }
 
   private drawTheHitErrorsOf(report: PerformanceReport): void {

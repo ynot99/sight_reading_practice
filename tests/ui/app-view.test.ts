@@ -24756,23 +24756,56 @@ describe('the strip of the last taps, as a run in rhythm only goes', () => {
   const marks = (): string[] =>
     [...element('live-hits').querySelectorAll('.hit-bar__tick')].map((tick) => tick.getAttribute('title') ?? '');
 
-  it('shows how the last sixteen taps landed once there are enough to make a shape, and goes when the run does', async () => {
+  it('stands each tap where it landed for three seconds and no longer, the mean once there are enough, and goes when the run does', async () => {
     const rig = createRig();
     await rig.view.initialize();
     await rig.runtime.controller.openScore(longExercise({ tempoBpm: 60, bars: 6 }));
     rig.runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, rhythmOnly: true, countInBars: 0, matchToleranceMs: 250, hearTheOtherHand: false });
-    rig.runtime.controller.start();
     const strip = element('live-hits');
+    const mean = (): boolean => strip.querySelector<HTMLElement>('.hit-bar__mean')?.hidden === false;
+    vi.useFakeTimers();
+    try {
+      rig.runtime.controller.start();
+      expect(strip.hidden).toBe(true);
 
-    tapThrough(rig, 0, 3, () => 0);
-    expect([strip.hidden, marks().length]).toEqual([true, 0]);
-    tapThrough(rig, 3, 20, (index) => (index % 2 === 0 ? 30 : -10));
-    // Each tap where it landed, the last sixteen of twenty; the Perfect window behind them.
-    expect([strip.hidden, marks().length, marks()[0], marks().at(-1), marks().at(-2)]).toEqual([false, 16, '30 ms', '-10 ms', '30 ms']);
-    expect(strip.querySelector('.hit-bar__perfect')).not.toBeNull();
+      // A tap a second, as the music goes.
+      tapThrough(rig, 0, 1, () => 30);
+      expect([strip.hidden, marks(), mean()]).toEqual([false, ['30 ms'], false]);
+      // How long it fades over, said to the stylesheet by what takes it away.
+      expect(strip.style.getPropertyValue('--live-tick-ms')).toBe('3000ms');
+      expect(strip.querySelector<HTMLElement>('.hit-bar__perfect')?.hidden).toBe(false);
+      for (let index = 1; index < 4; index += 1) {
+        vi.advanceTimersByTime(900);
+        tapThrough(rig, index, index + 1, () => -10);
+      }
+      // Four standing: the first 2.7 seconds old and still there, the mean with them.
+      expect([marks(), mean()]).toEqual([['30 ms', '-10 ms', '-10 ms', '-10 ms'], true]);
+      vi.advanceTimersByTime(300);
+      // Gone by itself, though nothing came after it: three left, and the mean with the shape.
+      expect([marks(), mean()]).toEqual([['-10 ms', '-10 ms', '-10 ms'], false]);
+      vi.advanceTimersByTime(3_000);
+      // All gone, and the strip there to tap on.
+      expect([strip.hidden, marks(), mean(), strip.querySelector<HTMLElement>('.hit-bar__perfect')?.hidden]).toEqual([false, [], false, true]);
 
-    rig.runtime.controller.stop();
-    expect([strip.hidden, marks().length]).toEqual([true, 0]);
+      tapThrough(rig, 4, 5, () => 0);
+      rig.runtime.controller.stop();
+      expect([strip.hidden, marks()]).toEqual([true, []]);
+      // The marks of the run before take nothing of the next with them when their time comes.
+      vi.advanceTimersByTime(1_000);
+      rig.runtime.controller.start();
+      tapThrough(rig, 0, 1, () => 0);
+      vi.advanceTimersByTime(2_500);
+      // Still standing, and still counted: the Perfect window is the one it was judged in.
+      expect([marks(), strip.querySelector<HTMLElement>('.hit-bar__perfect')?.hidden]).toEqual([['0 ms'], false]);
+      // And with a window of no width there is nowhere to put a tap.
+      rig.runtime.controller.stop();
+      rig.runtime.controller.updateSettings({ matchToleranceMs: Number.POSITIVE_INFINITY });
+      rig.runtime.controller.start();
+      tapThrough(rig, 0, 1, () => 0);
+      expect([strip.hidden, marks()]).toEqual([true, []]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('starts again with each run, and is not there on a run that asks for the keys', async () => {
@@ -24787,7 +24820,7 @@ describe('the strip of the last taps, as a run in rhythm only goes', () => {
     rig.runtime.controller.stop();
     rig.runtime.controller.start();
     tapThrough(rig, 0, 2, () => 0);
-    expect([element('live-hits').hidden, marks().length]).toEqual([true, 0]);
+    expect([element('live-hits').hidden, marks().length]).toEqual([false, 2]);
 
     // The keys asked for: the run's own strip says it when it is over, and nothing as it goes.
     rig.runtime.controller.stop();

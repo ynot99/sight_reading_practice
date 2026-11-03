@@ -1176,6 +1176,8 @@ textarea {
  * says them when it ends.
  */
 .live-hits {
+  /* Said by the page, which takes each mark away when it is up; this is what it says. */
+  --live-tick-ms: 3000ms;
   position: absolute;
   left: 50%;
   bottom: calc(100% + 8px);
@@ -1195,6 +1197,30 @@ textarea {
 
 .live-hits .hit-bar__ends {
   display: none;
+}
+
+/*
+ * Each mark fading by itself as a rhythm game's do: standing for most of its
+ * time, then gone, whatever comes after it. How long is the page's to say -
+ * it takes the mark away when the time is up - and it says it once, as
+ * `--live-tick-ms`. A filter rather than the opacity, which already says
+ * whether a mark stands inside the window. Where motion is not welcome the
+ * mark stands until it is taken away.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .live-hits .hit-bar__tick {
+    animation: live-tick-fades var(--live-tick-ms) linear forwards;
+  }
+}
+
+@keyframes live-tick-fades {
+  0%,
+  65% {
+    filter: opacity(1);
+  }
+  100% {
+    filter: opacity(0);
+  }
 }
 
 /*

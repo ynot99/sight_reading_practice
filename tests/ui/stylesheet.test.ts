@@ -89,6 +89,11 @@ describe('the stylesheet', () => {
     const narrowed = rules().find((rule) => rule.selector === '.live-hits .hit-bar__strip');
     expect(narrowed?.body).toMatch(/height\s*:\s*18px/);
     expect(narrowed?.at ?? 0).toBeGreaterThan(own?.at ?? Infinity);
+    // Each mark fading by itself, over as long as the page says, where motion is welcome.
+    const fading = rules().find((rule) => rule.selector === '.live-hits .hit-bar__tick');
+    expect(inWhichMedia(fading?.at ?? 0)).toBe('@media (prefers-reduced-motion: no-preference)');
+    expect(fading?.body).toMatch(/animation\s*:\s*live-tick-fades var\(--live-tick-ms\) linear forwards/);
+    expect(CSS).toMatch(/@keyframes live-tick-fades\s*\{\s*0%,\s*65%\s*\{\s*filter\s*:\s*opacity\(1\);\s*\}\s*100%\s*\{\s*filter\s*:\s*opacity\(0\);/);
   });
 
   it('flashes a tap as it lands, thick and at full strength, once and only where motion is welcome', () => {

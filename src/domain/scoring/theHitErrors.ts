@@ -61,6 +61,28 @@ export interface HitErrors {
 const ENOUGH_TO_BE_A_SHAPE = 4;
 
 /**
+ * Where a press falls across a strip as wide as the window: nought at its
+ * early edge, a half at the beat, one at its late edge.
+ *
+ * Outside the window a press is still drawn, against the edge it went past.
+ * Left off, a run of wild misses would draw as an empty strip, which reads as
+ * a tidy one.
+ */
+export function placeOnTheStrip(deviationMs: number, toleranceMs: number): number {
+  return Math.min(1, Math.max(0, 0.5 + deviationMs / (toleranceMs * 2)));
+}
+
+/** One press, ready to draw across a strip as wide as the window. */
+export function aMarkOf(deviationMs: number, toleranceMs: number, tier?: NoteTier): HitMark {
+  return {
+    deviationMs,
+    of: placeOnTheStrip(deviationMs, toleranceMs),
+    beyond: Math.abs(deviationMs) > toleranceMs,
+    ...(tier === undefined ? {} : { tier }),
+  };
+}
+
+/**
  * The presses of a run, placed across a window of the given width.
  *
  * `null` where there is nothing to see: too few presses, or a window with no
@@ -80,26 +102,14 @@ export function theHitErrors(
   ) {
     return null;
   }
-  // Outside the window a press is still drawn, against the edge it went past.
-  // Left off, a run of wild misses would draw as an empty strip, which reads as
-  // a tidy one.
-  const placeOf = (deviationMs: number): number =>
-    Math.min(1, Math.max(0, 0.5 + deviationMs / (toleranceMs * 2)));
+  const placeOf = (deviationMs: number): number => placeOnTheStrip(deviationMs, toleranceMs);
   const mean = deviations.reduce((sum, at) => sum + at, 0) / deviations.length;
   // Said only where there is a verdict for every mark: one list a mark short
   // would colour every mark after it with its neighbour's.
   const tiers = verdicts.tiers?.length === deviations.length ? verdicts.tiers : undefined;
   const perfectMs = verdicts.perfectMs ?? null;
   return {
-    marks: deviations.map((deviationMs, at) => {
-      const tier = tiers?.[at];
-      return {
-        deviationMs,
-        of: placeOf(deviationMs),
-        beyond: Math.abs(deviationMs) > toleranceMs,
-        ...(tier === undefined ? {} : { tier }),
-      };
-    }),
+    marks: deviations.map((deviationMs, at) => aMarkOf(deviationMs, toleranceMs, tiers?.[at])),
     meanOf: placeOf(mean),
     // Dead on the beat is neither, and counting it as one of them would put a
     // machine's reading down as leaning whichever way the tie was broken.

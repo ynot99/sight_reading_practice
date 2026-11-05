@@ -1333,6 +1333,46 @@ const heldOver = `<?xml version="1.0" encoding="UTF-8"?>
     expect(serializer.serialize(exercise)).toContain('<arpeggiate/>');
   });
 
+  it('asks for nothing a cue note says, the notes of its chord included', () => {
+    // MuseScore writes how a rolled chord sounds as cue notes hidden in a
+    // voice beside it: here its notes one by one as a triplet of 32nds, and a
+    // cue chord, its cue marked on its first note only, and one the writer
+    // left visible. A cue is not played, and a rest in its place was never
+    // written.
+    const hiddenCue = (step: string, duration: number, type: string, voice: number, chord = false, shown = false): string =>
+      `<note${shown ? '' : ' print-object="no"'}>${chord ? '<chord/>' : '<cue/>'}<pitch><step>${step}</step><octave>4</octave></pitch>` +
+      `<duration>${duration}</duration><voice>${voice}</voice><type size="cue">${type}</type></note>`;
+    const rolledChord =
+      ['C', 'E', 'G']
+        .map(
+          (step, at) =>
+            `<note>${at === 0 ? '' : '<chord/>'}<pitch><step>${step}</step><octave>4</octave></pitch>` +
+            '<duration>96</duration><voice>1</voice><type>whole</type>' +
+            '<notations><arpeggiate/></notations></note>',
+        )
+        .join('') +
+      '<backup><duration>96</duration></backup>' +
+      hiddenCue('C', 2, '32nd', 2) +
+      hiddenCue('E', 2, '32nd', 2) +
+      hiddenCue('G', 2, '32nd', 2) +
+      '<forward><duration>90</duration></forward>' +
+      '<backup><duration>96</duration></backup>' +
+      hiddenCue('E', 48, 'half', 3) +
+      hiddenCue('G', 48, 'half', 3, true) +
+      hiddenCue('B', 48, 'half', 3, false, true);
+    const { exercise } = importer.read(scoreXml(rolledChord));
+
+    const asked = buildTimeline(exercise).steps.map((step) => [...step.expectedMidi].sort());
+    const [c4, e4, g4] = [60, 64, 67];
+    expect(asked).toEqual([[c4, e4, g4]]);
+    // And it is a silence, drawing nothing in its place.
+    const drawn = exercise.staves
+      .filter((staff) => staff.voice !== 1)
+      .flatMap((staff) => staff.measures.flatMap((measure) => measure.entries))
+      .filter((entry) => entry.kind !== 'silence');
+    expect(drawn).toEqual([]);
+  });
+
   it('carries a fermata and a breath mark, and prints them again', () => {
     // Both are the writer's own instructions and neither is a number: how
     // much longer to hold, and how long a lift, are the performer's. So they

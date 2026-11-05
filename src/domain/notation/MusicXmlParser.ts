@@ -1145,6 +1145,8 @@ function readMeasureNotes(
   const pendingGraces: XmlNode[] = [];
   /** The notes sounding immediately before here: one, or a chord of them. */
   let lastNotes: RawNote[] = [];
+  /** Whether the note a chord member is stacked on is a cue. */
+  let stackedOnACue = false;
   const sayOnce = (detail: string): void => {
     if (!warnings.some((warning) => warning.kind === 'grace-notes')) {
       warnings.push({ kind: 'grace-notes', detail });
@@ -1302,7 +1304,16 @@ function readMeasureNotes(
 
     const staff = childNumber(node, 'staff') ?? 1;
     const voice = childNumber(node, 'voice') ?? 1;
-    const invisible = attribute(node, 'print-object') === 'no';
+    // A cue is a note the format says is not played. MuseScore writes the
+    // sound of a rolled chord or a held fermata as a run of them, hidden in a
+    // voice of its own beside the chord it realises: read as notes, the run
+    // asked for the chord's notes again one by one after it was played. It
+    // marks only the chord's first note, and the notes stacked on it are the
+    // same cue. So each is a silence - it keeps its time in its voice and asks
+    // for nothing.
+    const cue: boolean = isChord ? stackedOnACue : hasChild(node, 'cue');
+    stackedOnACue = cue;
+    const invisible = cue || attribute(node, 'print-object') === 'no';
 
     // The ornaments waiting in front of this note belong *to* it, and take no
     // time from anybody: they are carried on the entry and drawn where the
@@ -1335,7 +1346,7 @@ function readMeasureNotes(
       onsetTicks,
       ticks: ownTicks,
       duration,
-      pitch: readPitch(node),
+      pitch: cue ? null : readPitch(node),
       tieStart: hasTie(node, 'start'),
       isChord,
       beams: isChord ? [] : readBeams(node),

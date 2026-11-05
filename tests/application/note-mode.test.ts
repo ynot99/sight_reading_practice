@@ -109,6 +109,21 @@ describe('Note mode', () => {
     expect(harness.clock.now()).toBe(MUSIC_BEGINS_AT_MS + 1_500 + 1_000);
   });
 
+  it('counts on from the moment the press was struck, not from when it was heard', () => {
+    // A key reaches the page a hop after it goes down. The pulse begun again
+    // from the hearing put every click after it that much behind the hand.
+    const harness = noteHarness();
+    startAndCountIn(harness);
+    const struckAt = MUSIC_BEGINS_AT_MS + 1_500;
+    harness.clock.set(struckAt + 40);
+    harness.midi.noteOn(MIDI.C3, struckAt);
+    harness.midi.noteOn(MIDI.C4, struckAt);
+
+    expect(harness.metronome.advanceSubdivisions(1 + 4).map((tick) => tick.scheduledTimeMs - struckAt)).toEqual([
+      0, 250, 500, 750, 1_000,
+    ]);
+  });
+
   describe('across the band around a note', () => {
     // The second note, due at five seconds. Where each press lands, what it
     // is worth, and whether the music had to stand for it.

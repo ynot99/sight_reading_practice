@@ -441,8 +441,16 @@ export interface IMetronome extends IClickOnce {
    *
    * Nothing of the last pulse survives it: no second scheduler, and no click
    * left on the audio clock by the pulse that has just been replaced.
+   *
+   * @param fromMs The moment its first tick is, on the clock the ticks carry,
+   *   where that moment has already been given: the reader's own press, which
+   *   began the music or a bar of it. Every tick is then stamped from there,
+   *   however long the device takes to sound - a tick whose moment has gone by
+   *   the time a click could be heard is delivered at once and not sounded,
+   *   since a click late is a click off the beat. Omitted, the first tick is
+   *   as soon as the device can sound it.
    */
-  start(): void;
+  start(fromMs?: number): void;
   stop(): void;
   /**
    * A tick as it is *heard*: what is seen moves on this - the marker, the

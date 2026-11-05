@@ -149,6 +149,15 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
   private standingTo: number | null = null;
   /** Where the audio clock stood when it was last asked to run: moved past, it is running. */
   private clockStoodAt = 0;
+  /** The moment the pulse running was begun from, on the page's clock, where it was given one. */
+  private startsFromMs: number | null = null;
+  /**
+   * The earliest a click of this pulse may sound, on the audio clock: where it
+   * was begun from a moment, as soon as one could once the device sounded.
+   * A tick before it has had its moment, and sounded late it would be a click
+   * off the beat.
+   */
+  private soundsFrom = Number.NEGATIVE_INFINITY;
   private currentVolume = 1;
   /** Where the epoch above is lent, while the pulse beats, to what sounds beside it. */
   private readonly reading: AudioClockReading;
@@ -210,7 +219,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     return this.emitter.on('placed', listener);
   }
 
-  start(): void {
+  start(fromMs?: number): void {
     timeTheStart('metronome started');
     beginThePlaybackTimings();
     // Told to start while it is already running, a pulse begins again rather
@@ -231,6 +240,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
 
     this.nextTickIndex = 0;
     this.nextTickAudioTime = context.currentTime + this.options.firstClickLeadSec;
+    this.startsFromMs = fromMs ?? null;
     // Read once the device is sounding, not here: see `readTheClocks`.
     this.clocksRead = false;
     this.clockStoodAt = context.currentTime;
@@ -290,10 +300,16 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     this.earliestNought = null;
     noteAnEvent('the clocks read');
     if (this.nextTickIndex === 0) {
-      this.nextTickAudioTime = Math.max(
-        this.nextTickAudioTime,
-        context.currentTime + this.options.firstClickLeadSec,
-      );
+      const soonest = context.currentTime + this.options.firstClickLeadSec;
+      // Begun from a moment, the first tick is that moment however long the
+      // device took to sound: the clicks are on its grid, and those already
+      // gone are not heard. Otherwise as soon as a click can be.
+      if (this.startsFromMs === null) {
+        this.nextTickAudioTime = Math.max(this.nextTickAudioTime, soonest);
+      } else {
+        this.nextTickAudioTime = (this.startsFromMs - this.outputLatencyMs() - this.audioEpochMs) / 1000;
+        this.soundsFrom = soonest;
+      }
     }
     timeTheStart('metronome: the clocks read', () => describeTheDevice(context));
     return true;
@@ -435,7 +451,9 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
       // speaker at once. The same rule the notes keep, and for the same
       // reason. What the click *means* is untouched: the tick is still built,
       // still counted and still delivered below.
-      const late = this.nextTickAudioTime < context.currentTime - TOO_LATE_MS / 1000;
+      const late =
+        this.nextTickAudioTime < context.currentTime - TOO_LATE_MS / 1000 ||
+        this.nextTickAudioTime < this.soundsFrom;
       if (!late && !this.config.muted && isAudibleClick(tick, this.config)) {
         this.playClick(context, tick, this.nextTickAudioTime);
       }

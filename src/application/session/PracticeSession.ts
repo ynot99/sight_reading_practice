@@ -146,22 +146,6 @@ export class PracticeSession {
    * going on without the reader.
    */
   private pulseHeldFrom: number | null = null;
-  /**
-   * Whether the run's clock is still to be taken from the pulse it restarted.
-   *
-   * A bar opened at a gate is begun by a key press, and a key press carries no
-   * output latency - the note is under the reader's finger the instant they
-   * play it. The click does carry it, and a little scheduling runway besides.
-   * Anchor the bar to the press and the two disagree by that much for the
-   * whole bar: every note read late, every mark drawn to the right of its
-   * notehead, and a reader playing with the click told they are behind it.
-   *
-   * So the bar takes its clock from the first beat of the new pulse, which is
-   * exactly how the count-in hands over to the music. His press still counts
-   * as the downbeat - it is what asked for this beat - but what the bar is
-   * *measured* by is the beat everybody can hear.
-   */
-  private anchorOnTheNextTick = false;
   /** Bar lines this run has stopped at. @see PerformanceReport.waitedAtBars */
   private waitedAtBars: number[] = [];
   /** What the run did, written down for drawing. @see RunRoll */
@@ -369,25 +353,51 @@ export class PracticeSession {
     this.subscriptions.push(this.metronome.onTick((tick) => this.handleTick(tick)));
     this.subscriptions.push(this.metronome.onTickPlaced((tick) => this.sayWhatATickCarries(tick)));
 
+    const chordAt = this.theOpeningChordsMoment();
     if (this.usesPulse()) {
       this.countInRemaining = Math.max(0, this.countInPulses());
+      // Begun by the chord, and not counted in: the music begins where the
+      // chord was struck, and the pulse with it. See `theOpeningChordsMoment`.
+      if (chordAt !== null && this.countInRemaining === 0) {
+        this.metronome.start(chordAt);
+        this.emitStatus(previous);
+        this.beginRunning(chordAt, 0);
+        return;
+      }
+      // Otherwise on the pulse's first tick, which is the music's first beat
+      // as the reader hears it - after the count-in, or the moment the device
+      // can sound one.
       this.metronome.start();
       // Said after the pulse has been given its moment, not before: announcing
       // a run redraws the page that is watching it, and every millisecond of
       // that spent in front of the start is a millisecond of silence in front
       // of the music.
       this.emitStatus(previous);
-      // The music begins on the pulse's first tick, always. It was begun on
-      // the reader's own chord for a while, to get out from under an audio
-      // context that took its time waking up - but that is a *guess* at where
-      // the beat was, and a reader is meant to play with the metronome rather
-      // than with an estimate of it. The device is kept awake instead, so
-      // there is nothing to get out from under. His, and he is right about it.
       return;
     }
 
     this.emitStatus(previous);
-    this.beginRunning(this.clock.now(), 0);
+    this.beginRunning(chordAt ?? this.clock.now(), 0);
+  }
+
+  /**
+   * When the chord that began the run was struck - its first note - or `null`
+   * where the run was not begun by one.
+   *
+   * The moment the music begins, and the one moment everything else is taken
+   * from: the run's clock, the marker, the judging, and the pulse, whose first
+   * tick is put there. Begun from its first tick instead, the run was taken
+   * from the moment the device could sound a click, which on a device asleep
+   * is most of a second after the chord and never sooner than a scheduling
+   * lead: the chord then had to be judged against a beat that came after it
+   * and the music after it measured from that beat, two beginnings a moment
+   * apart. A chord is no guess about where the beat was. It is the beat,
+   * played; the click then counts from it, its first click being the chord
+   * itself and so never sounded.
+   */
+  private theOpeningChordsMoment(): number | null {
+    const opening = this.theOpeningChord;
+    return opening.length === 0 ? null : Math.min(...opening.map((event) => this.struckAt(event).timestampMs));
   }
 
   /**
@@ -955,12 +965,6 @@ export class PracticeSession {
       : this.options.clickWhen;
   }
 
-  /** Whether the pulse is heard once the music has begun: neither off, nor only the count-in's. */
-  private theClickIsHeardInTheMusic(): boolean {
-    const when = this.clickForThePulse();
-    return !clickIsSilent(when) && when !== 'count-in-only';
-  }
-
   private usesPulse(): boolean {
     return this.thePulseGoesOn() || this.options.countInBars > 0;
   }
@@ -1029,7 +1033,6 @@ export class PracticeSession {
     this.runBeganAt = 0;
     this.heldAtBarTicks = null;
     this.pulseHeldFrom = null;
-    this.anchorOnTheNextTick = false;
     this.waitedAtBars = [];
     this.roller.reset();
     this.theFirstBarHasBegun = false;
@@ -1166,7 +1169,6 @@ export class PracticeSession {
     // Corrected here, because these are the only presses that did not come
     // through the door where that is done - the run had no ears yet when they
     // were played.
-    const onTheBeat = this.theOpeningChordsBeat(opening);
     for (const event of opening) {
       const struck = this.struckAt(event);
       // Written down as well as judged, and written first so the verdict has a
@@ -1177,7 +1179,7 @@ export class PracticeSession {
       // it began. His: "є інша бага при стартових нотах: їх просто нема у MIDI
       // viewer коли я починаю гру".
       this.roller.keyDown(struck);
-      this.mode.onNoteOn(this.context, onTheBeat(struck));
+      this.mode.onNoteOn(this.context, struck);
     }
     const aBeat = this.aBeatBeforeTheMusicMs();
     for (const event of held) {
@@ -1193,39 +1195,6 @@ export class PracticeSession {
         this.judgeNote(event.midi, 'duplicate', -early, event.timestampMs);
       }
     }
-  }
-
-  /**
-   * The chord that began a run under a pulse, as it is judged: on the beat.
-   *
-   * It is the beat - the music began because it was played - and there is
-   * nothing earlier to have been late or early against. Judged against the
-   * pulse's first tick instead, it was early by however long the device took
-   * to sound that tick: measured in Chrome on the first start after a quiet
-   * spell, 94 and 436 ms, and never Perfect. Where no click is heard the run
-   * is taken from the chord itself, as a bar the reader begins is, and the
-   * music after it is measured from their own downbeat. Where one is heard
-   * the run stays on it, since that click is what the rest is played with,
-   * and the chord is judged as on the beat, its notes as far apart as they
-   * were played.
-   *
-   * In every frame. Measured with the first tick 300 ms late, a frame that
-   * waits at the bar line took its downbeat from the chord but then measured
-   * the next note, played a beat after the chord with no click, 300 ms early;
-   * and one that waits at every note judged the chord itself 300 ms early.
-   */
-  private theOpeningChordsBeat(opening: readonly MidiNoteOnEvent[]): (struck: MidiNoteOnEvent) => MidiNoteOnEvent {
-    const as = (struck: MidiNoteOnEvent): MidiNoteOnEvent => struck;
-    if (opening.length === 0) {
-      return as;
-    }
-    const first = Math.min(...opening.map((event) => this.struckAt(event).timestampMs));
-    if (!this.theClickIsHeardInTheMusic()) {
-      this.runStartedAt = first - this.elapsedTo(this.resumeAtTicks);
-      return as;
-    }
-    const beat = this.runStartedAt + this.elapsedTo(this.resumeAtTicks);
-    return (struck) => ({ ...struck, timestampMs: beat + (struck.timestampMs - first) });
   }
 
   /** How long the beat the count-in ends on lasts: the metre and tempo the music opens in. */
@@ -1381,13 +1350,11 @@ export class PracticeSession {
       // the one their own press starts.
       this.configureThePulse(0, this.barEndAfter(step));
       this.pulseGeneration += 1;
-      // Measured from the click that answers the press, a moment behind it,
-      // where that click is heard: it is what the reader plays the bar with.
-      // Where none is, they play it from their own downbeat, and measured
-      // from a tick nobody heard every note after it read early by the
-      // moment between.
-      this.anchorOnTheNextTick = this.theClickIsHeardInTheMusic();
-      this.metronome.start();
+      // From the press: the bar begins where the reader gave its downbeat,
+      // and the click is on the grid of that downbeat however long the device
+      // takes to sound it, as the run's own beginning is: see
+      // `theOpeningChordsMoment`.
+      this.metronome.start(atMs);
     }
     this.emitter.emit('barBegan', { stepIndex: step.index, atMs });
   }
@@ -1432,8 +1399,7 @@ export class PracticeSession {
     this.runStartedAt = atMs - this.elapsedTo(step.onsetTicks);
     this.configureThePulse(0);
     this.pulseGeneration += 1;
-    this.anchorOnTheNextTick = true;
-    this.metronome.start();
+    this.metronome.start(atMs);
     this.emitter.emit('barBegan', { stepIndex: step.index, atMs });
   }
 
@@ -1506,8 +1472,7 @@ export class PracticeSession {
     this.positionOffsetTicks = -step.onsetTicks;
     this.configureThePulse(0, this.barEndAfter(step));
     this.pulseGeneration += 1;
-    this.anchorOnTheNextTick = true;
-    this.metronome.start();
+    this.metronome.start(atMs);
   }
 
   /**
@@ -1696,13 +1661,6 @@ export class PracticeSession {
     // перші ноти - то чомусь я одразу стрибаю на наступний бар".
     if (this.status !== 'running' || this.pulseGeneration !== pulse) {
       return;
-    }
-    if (this.anchorOnTheNextTick) {
-      // The same arithmetic `beginRunning` does, and for the same reason: this
-      // tick is the music at `resumeAtTicks`, and its stamp is the moment it
-      // is *heard*. Everything the bar is judged by follows from here.
-      this.anchorOnTheNextTick = false;
-      this.runStartedAt = tick.scheduledTimeMs - this.elapsedTo(this.resumeAtTicks);
     }
     // Only the ticks the run acts on, and only where the pulse is what carries
     // the music. A tick from a superseded pulse would put a line on the grid

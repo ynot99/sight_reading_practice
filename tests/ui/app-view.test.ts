@@ -9236,7 +9236,7 @@ describe('AppView', () => {
       const { view, runtime, instrument, hitSound, metronome } = createRig();
       await view.initialize();
       runtime.controller.updateSettings({ immediateStart: true, countInBars: 0, previewSeconds: 0 });
-      // The ticks before the music begins: one where nothing is counted in, a bar's more where it is.
+      // The ticks before the music begins: none where the tap begins it, a bar's and one where it is counted in.
       const ticksToTheMusic = (): number => {
         let ticks = 0;
         for (; ticks < 64 && runtime.controller.session?.status === 'counting-in'; ticks += 1) {
@@ -9265,7 +9265,8 @@ describe('AppView', () => {
       expect(stopped()).toBe(1);
       runtime.controller.stop();
 
-      // Heard a bar at a time, the first tap begins the run as ever, a hit as well.
+      // Heard a bar at a time, the first tap begins the run as ever, a hit as well - and there, on
+      // the tap itself, with no tick waited for.
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-solfege').click();
       element<HTMLButtonElement>('solfege-rhythm-open').click();
@@ -9273,7 +9274,7 @@ describe('AppView', () => {
         expect(runtime.controller.openedExercise?.title).toBe('Rhythmic dictation');
       });
       tap.dispatchEvent(new Event('pointerdown'));
-      expect([hitSound.hits.length, stopped(), ticksToTheMusic()]).toEqual([2, 1, 1]);
+      expect([hitSound.hits.length, stopped(), ticksToTheMusic()]).toEqual([2, 1, 0]);
       tap.dispatchEvent(new Event('pointerup'));
       expect(stopped()).toBe(2);
     });

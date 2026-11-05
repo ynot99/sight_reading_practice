@@ -2275,9 +2275,10 @@ describe('hearing the hand you are not reading', () => {
     expect(rig.metronome.nextTickIndex).toBe(0);
     expect(before).toBeGreaterThan(0);
 
-    // And only at a bar line: the beats inside the bar are the pulse's own, or
-    // there would be no pulse to play against at all.
-    rig.metronome.advanceSubdivisions(2);
+    // From the moment the downbeat was struck, however long after the page
+    // came to hear it - and only at a bar line: the beats inside the bar are
+    // the pulse's own, or there would be no pulse to play against at all.
+    expect(rig.metronome.advanceSubdivisions(2).map((tick) => tick.scheduledTimeMs)).toEqual([6_000, 7_000]);
     const inside = rig.controller.session?.currentStep;
     for (const midi of inside?.expectedMidi ?? []) {
       rig.midi.noteOn(midi, 7_000);
@@ -6237,8 +6238,8 @@ describe('a run shown again on the page', () => {
     expect((await drawn({ playedNotes: 'at-end' })).slice(0, 2)).toEqual([[], []]);
   });
 
-  it('judges the chord that begins a run as on the beat in every frame that keeps time, however long the first click took, and the music after it from the click heard or from the chord', async () => {
-    // The device takes 300 ms to sound the pulse's first tick after the chord that began the run.
+  it('begins a run from the chord that began it in every frame that keeps time, the click with it, however long the device took to sound', async () => {
+    // The device takes 300 ms to wake after the chord that began the run.
     const judged = async (modeId: string, clickOn: boolean): Promise<unknown[]> => {
       const rig = createController(true, undefined, { matchToleranceMs: 250 });
       const { controller, midi, metronome, clock } = rig;
@@ -6253,8 +6254,8 @@ describe('a run shown again on the page', () => {
       }
       metronome.delayBy(300);
       metronome.advanceSubdivisions(1);
-      // The next note a beat on: from the click heard, or from the chord where none is.
-      const nextAt = (clickOn ? chordAt + 300 : chordAt) + 1_000;
+      // The next note a beat on from the chord, which is where the click heard is too.
+      const nextAt = chordAt + 1_000;
       while (clock.now() + metronome.subdivisionMs <= nextAt) {
         metronome.advanceSubdivisions(1);
       }
@@ -6269,7 +6270,8 @@ describe('a run shown again on the page', () => {
       for (const clickOn of [true, false]) {
         const log = await judged(modeId, clickOn);
         // On the beat, its notes as far apart as they were played - but where the frame waits at the
-        // bar line, whose gate the chord opens and which judges its notes as one - and the next dead on.
+        // bar line, whose gate the chord opens and which judges its notes as one - and the next dead on,
+        // with the click and without.
         const spread = modeId === BAR_MODE_ID ? 0 : 15;
         expect(log, `${modeId} ${String(clickOn)}`).toEqual([
           ['correct', 0, 0],

@@ -350,6 +350,31 @@ describe('WebAudioMetronome', () => {
     expect(context.oscillators.length).toBeGreaterThan(0);
   });
 
+  it('begun from a moment, stamps its ticks from it however long the device took, and sounds none already gone', () => {
+    // The reader's chord began the music, and the device was asleep: it wakes
+    // a second and a little after. The clicks are on the chord's grid all the
+    // same, and one a moment late is not heard late, which would be a click
+    // off the beat - the one a few hundredths of a second gone included.
+    context.state = 'suspended';
+    // And it takes a twentieth of a second to get a sound to the speaker.
+    context.outputLatency = 0.05;
+    const begunAt = performance.now();
+    metronome.start(begunAt);
+    context.wakeAfter(1.04);
+    for (let look = 0; look < 50; look += 1) {
+      context.advance(0.02);
+      vi.advanceTimersByTime(20);
+    }
+
+    expect(ticks.slice(0, 3).map((tick) => [tick.index, Math.round(tick.scheduledTimeMs - begunAt)])).toEqual([
+      [0, 0],
+      [1, 1000],
+      [2, 2000],
+    ]);
+    // Only the third, put on the audio clock that much ahead of where it is heard.
+    expect(context.oscillators.map((click) => Number((click.startedAt ?? 0).toFixed(3)))).toEqual([0.91]);
+  });
+
   it('sounds no click whose moment has gone, and still counts it', () => {
     // When the page stalls - engraving a long score stalls it for seconds -
     // the audio clock goes on without it, and the scheduler wakes with every

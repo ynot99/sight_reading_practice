@@ -127,11 +127,11 @@ export class ManualMetronome implements IMetronome {
     return this.emitter.on('placed', listener);
   }
 
-  start(): void {
+  start(fromMs?: number): void {
     this.running = true;
     this.placedNotHeard.length = 0;
     this.nextIndex = 0;
-    this.nextTimeMs = (this.clock?.now() ?? 0) + this.leadMs;
+    this.nextTimeMs = fromMs ?? (this.clock?.now() ?? 0) + this.leadMs;
   }
 
   stop(): void {

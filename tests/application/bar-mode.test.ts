@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BarMode } from '../../src/application/modes/BarMode.js';
 import { FlowMode } from '../../src/application/modes/FlowMode.js';
+import { WaitMode } from '../../src/application/modes/WaitMode.js';
 import { isAudibleClick } from '../../src/infrastructure/audio/metronomeMath.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { noteEntry, restEntry } from '../../src/domain/model/Exercise.js';
@@ -97,17 +98,18 @@ function restFirstExercise() {
 const CLICK_LEAD_MS = 30;
 
 describe('Bar mode', () => {
-  it('measures a bar by the beat that is heard, not by the press that asked for it', () => {
+  it('measures a bar from the press that gave its downbeat, and clicks it from there', () => {
     // Both of his at once: "метроном дуже маленький проміжок часу трохи тупить"
     // and "я точно в метроном натиснув правильну клавішу, але кольорова нота
     // зявилась трохи правіше".
     //
     // A key press carries no output latency - the note is under the finger the
     // instant it is played - and a click carries the device's whole output
-    // path, plus the runway the scheduler needs to place it. Anchor the bar to
-    // the press and the two disagree by that much for the whole bar: a reader
-    // playing exactly with the click is read late on every note, and every
-    // mark is drawn to the right of its notehead. Which is what he saw.
+    // path, plus the runway the scheduler needs to place it. A pulse begun
+    // when it was asked for put its first click that far behind the press, and
+    // the bar had two beginnings: measured from the press, a reader playing
+    // exactly with the click read late on every note; measured from the click,
+    // their own downbeat early. Begun from the press, there is one.
     const clock = new ManualClock();
     const midi = new MockMidiAdapter({ clock });
     const metronome = new ManualMetronome(clock, CLICK_LEAD_MS);
@@ -136,9 +138,10 @@ describe('Bar mode', () => {
     const gaveAt = clock.now();
     midi.noteOn(MIDI.C4, gaveAt);
 
-    // The click that answers is a moment behind the hand that asked for it.
+    // The pulse counts from the hand that gave the downbeat, however long the
+    // device takes to sound a click.
     const first = metronome.advanceSubdivisions(1).at(0);
-    expect(first?.scheduledTimeMs).toBe(gaveAt + CLICK_LEAD_MS);
+    expect(first?.scheduledTimeMs).toBe(gaveAt);
 
     // On to the second beat of the bar, and played exactly with its click.
     metronome.advanceSubdivisions(SUBDIVISIONS_PER_BEAT);
@@ -146,10 +149,9 @@ describe('Bar mode', () => {
 
     const second = judged.at(-1);
     expect(second?.verdict).toBe('correct');
-    // Dead on. Counted from the press instead, this reads as a reader who is
-    // behind the click by exactly the lead the click was given - and the mark
-    // is drawn that far to the right of its notehead.
+    // Dead on, and so is the downbeat.
     expect(second?.deviationMs).toBe(0);
+    expect(judged.at(0)?.deviationMs).toBe(0);
   });
 
   it('waits at the first note of the piece before the pulse runs at all', () => {
@@ -325,13 +327,12 @@ describe('Bar mode', () => {
     expect(harness.of('stepEntered').at(-1)?.step.index).toBe(0);
   });
 
-  it('waits for the pulse even when the chord it began with is already played', () => {
-    // It did not, for a day: the run was begun on the reader's own chord to
-    // get out from under an audio context that took its time waking up. That
-    // is a *guess* at where the beat was, and a reader is meant to play with
-    // the metronome rather than with an estimate of it - his, and he is right.
-    // The device is kept awake instead, so there is nothing to get out from
-    // under and one rule serves everywhere: the click is the clock.
+  it('begins with the chord it was begun by, and the pulse from that chord', () => {
+    // Once it was begun on the chord with the pulse left to come in when the
+    // device could sound it, so the click and the music had two beginnings and
+    // one of them was a guess. Then it waited for the pulse's first tick, which
+    // a device asleep sounds most of a second after the chord. The chord is the
+    // beat: the run begins there, and so does the pulse.
     const clock = new ManualClock();
     const midi = new MockMidiAdapter({ clock });
     const metronome = new ManualMetronome(clock, 20);
@@ -347,26 +348,63 @@ describe('Bar mode', () => {
         clickWhen: 'never',
         click: 'subdivision',
         matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
+        // The keyboard's own delay, which the moment a key went down is taken
+        // back by.
+        inputLatencyMs: 30,
       },
     });
     const judged: NoteJudgedEvent[] = [];
     session.events.on('noteJudged', (event) => judged.push(event));
 
+    // Struck at nought, and heard by the page a hop later still.
+    clock.advance(70);
     session.start([
-      { type: 'noteon', sourceId: 'test', midi: MIDI.C3, velocity: 100, timestampMs: 0 },
-      { type: 'noteon', sourceId: 'test', midi: MIDI.C4, velocity: 100, timestampMs: 0 },
+      { type: 'noteon', sourceId: 'test', midi: MIDI.C3, velocity: 100, timestampMs: 30 },
+      { type: 'noteon', sourceId: 'test', midi: MIDI.C4, velocity: 100, timestampMs: 30 },
     ]);
 
-    // Nothing judged and nothing begun: the beat has not been sounded yet.
-    expect(session.status).toBe('counting-in');
-    expect(judged).toHaveLength(0);
-
-    metronome.advanceSubdivisions(1);
-
-    // And the chord that asked for the run is handed to it the moment it
-    // exists, rather than being asked for a second time.
+    // Begun, and the chord that asked for the run judged on its beat rather
+    // than asked for a second time - before any click has been heard.
     expect(session.status).toBe('running');
-    expect(judged.some((event) => event.midi === MIDI.C4)).toBe(true);
+    expect(judged.map((event) => [event.midi, event.deviationMs])).toEqual([
+      [MIDI.C3, 0],
+      [MIDI.C4, 0],
+    ]);
+    // And the pulse is counted from it, however long the device takes.
+    expect(metronome.advanceSubdivisions(1).at(0)?.scheduledTimeMs).toBe(0);
+  });
+
+  it('begins with the chord where no pulse runs, and counts in first where one is asked for', () => {
+    const begun = (countInBars: number, mode: FlowMode | WaitMode): PracticeSession => {
+      const clock = new ManualClock();
+      const session = new PracticeSession({
+        timeline: buildTimeline(twoBarExercise({ tempoBpm: 60 })),
+        mode,
+        midi: new MockMidiAdapter({ clock }),
+        metronome: new ManualMetronome(clock),
+        clock,
+        scoring: new TimingWeightedScoringStrategy(),
+        options: {
+          countInBars,
+          clickWhen: 'never',
+          click: 'subdivision',
+          matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
+        },
+      });
+      clock.advance(40);
+      session.start([
+        { type: 'noteon', sourceId: 'test', midi: MIDI.C3, velocity: 100, timestampMs: 0 },
+        { type: 'noteon', sourceId: 'test', midi: MIDI.C4, velocity: 100, timestampMs: 0 },
+      ]);
+      return session;
+    };
+
+    // Where the music waits and nothing clicks, its first beat is the chord.
+    const unclicked = begun(0, new WaitMode());
+    expect([unclicked.status, unclicked.roll.beats.at(0)?.atMs]).toEqual(['running', 0]);
+
+    // A count-in asked for is the reader's tempo, and is given first.
+    expect(begun(1, new FlowMode()).status).toBe('counting-in');
   });
 
   it('silences a first beat only in the frame that waits to be given one', () => {

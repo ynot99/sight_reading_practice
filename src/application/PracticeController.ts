@@ -18,9 +18,11 @@ import type { ScoringStrategyRegistry } from '../domain/scoring/ScoringStrategyR
 import {
   buildTimeline,
   expectedFor,
+  notesStruckAt,
   notesStruckOutside,
   soundsFor,
   type ExerciseTimeline,
+  type TimelineNote,
   type TimelineStep,
 } from '../domain/timeline/Timeline.js';
 import { playedNoteOffset, WHERE_IT_LANDED, type PlayedNoteOffsetOptions } from './playedNoteOffset.js';
@@ -4889,9 +4891,27 @@ export class PracticeController {
   private wantsTheOtherHand(): boolean {
     return (
       this.currentSettings.hearTheOtherHand &&
-      this.playedUnder.handStaff !== null &&
+      (this.playedUnder.handStaff !== null || this.keysAreTaps) &&
       this.exercise !== null
     );
+  }
+
+  /**
+   * The notes of a step the reader does not sound themselves, which are the
+   * ones the run sounds for them when they ask to hear the hand they are not
+   * playing.
+   *
+   * A tap sounds no note of the music at all - its key is heard as a drum,
+   * whichever key it was - so where the keys are taps every note is one the
+   * reader is not playing, both hands of it, and asking to hear what they are
+   * not playing is asking to hear the music they are tapping the rhythm of.
+   */
+  private theNotesNotTheReaders(step: TimelineStep): readonly TimelineNote[] {
+    if (this.keysAreTaps) {
+      return notesStruckAt(step, null);
+    }
+    const hand = this.playedUnder.handStaff;
+    return hand === null ? [] : notesStruckOutside(step, hand);
   }
 
   /**
@@ -4964,14 +4984,13 @@ export class PracticeController {
   }
 
   private soundTheOtherHand(step: TimelineStep, atMs: number): void {
-    const hand = this.playedUnder.handStaff;
     const exercise = this.exercise;
-    if (hand === null || exercise === null) {
+    if (exercise === null) {
       return;
     }
     // Each key once, as the reader's own hand is sounded: a unison written in
     // two voices is one key, and struck twice it knocks.
-    for (const note of notesStruckOutside(step, hand)) {
+    for (const note of this.theNotesNotTheReaders(step)) {
       this.deps.instrument.play(note.midi, OTHER_HAND_VELOCITY, atMs);
       // Sounded for as long as it sounds rather than as long as it is written,
       // which is the same number unless the writer marked it short.

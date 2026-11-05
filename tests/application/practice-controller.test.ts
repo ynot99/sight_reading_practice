@@ -2154,6 +2154,57 @@ describe('hearing the hand you are not reading', () => {
     expect((letGo?.atMs ?? 0) - (struck?.atMs ?? 0)).toBe(2_000);
   });
 
+  describe('where only the rhythm is read', () => {
+    // A tap sounds no note of the music, so both hands are the ones the reader
+    // is not playing - whichever hand they chose to read the rhythm of - and
+    // asking to hear that is asking to hear the music they are tapping.
+    async function tapping(settings: Partial<PracticeSettings>): Promise<ReturnType<typeof createController>> {
+      const rig = createController(true);
+      await rig.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+      rig.controller.updateSettings({ rhythmOnly: true, countInBars: 0, hearTheOtherHand: true, ...settings });
+      return rig;
+    }
+
+    for (const handStaff of [null, 1]) {
+      it(`sounds the music of both hands under the pulse, reading ${handStaff === null ? 'both' : 'one'}`, async () => {
+        const rig = await tapping({ handStaff, modeId: FLOW_MODE_ID });
+        rig.controller.start();
+        rig.metronome.advanceSubdivisions(2);
+
+        // The treble's first two beats over the bass's whole note, as written.
+        expect(rig.instrument.played.map(({ midi, atMs }) => `${midi}@${atMs}`).sort()).toEqual(
+          [`${MIDI.C3}@0`, `${MIDI.C4}@0`, `${MIDI.D4}@1000`].sort(),
+        );
+      });
+
+      it(`sounds it with each tap where the music waits, reading ${handStaff === null ? 'both' : 'one'}`, async () => {
+        const rig = await tapping({ handStaff, modeId: WAIT_MODE_ID, clickOn: false });
+        rig.controller.start();
+        rig.midi.noteOn(MIDI.F5, 400);
+
+        expect(sounded(rig.instrument).sort()).toEqual([MIDI.C3, MIDI.C4].sort());
+      });
+    }
+
+    it('sounds nothing unless asked, and nothing of a hand being read by its keys', async () => {
+      const unasked = await tapping({ handStaff: null, modeId: FLOW_MODE_ID, hearTheOtherHand: false });
+      unasked.controller.start();
+      unasked.metronome.advanceSubdivisions(2);
+      expect(sounded(unasked.instrument)).toEqual([]);
+
+      // Both hands read by their keys: there is no other hand, to sound or to
+      // follow.
+      const byTheKeys = await tapping({ handStaff: null, modeId: WAIT_MODE_ID, clickOn: false, rhythmOnly: false });
+      const reached: number[] = [];
+      byTheKeys.controller.events.on('otherHandReached', ({ stepIndex }) => reached.push(stepIndex));
+      byTheKeys.controller.start();
+      byTheKeys.midi.noteOn(MIDI.C4, 400);
+      byTheKeys.midi.noteOn(MIDI.C3, 400);
+      expect(byTheKeys.controller.session?.currentStep?.index).toBe(1);
+      expect([sounded(byTheKeys.instrument), reached]).toEqual([[], []]);
+    });
+  });
+
   it('says where the other hand will be, and when', async () => {
     // Where the music waits it is in two places at once: the reader's hand and
     // the accompaniment going on under it in written time. The run knows both

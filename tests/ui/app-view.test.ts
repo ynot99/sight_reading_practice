@@ -17303,6 +17303,26 @@ describe('AppView', () => {
       expect(carrier('rushing-counts').dataset['idle']).toBeUndefined();
     });
 
+    it('offers the music to hear where only the rhythm is read, both hands of it', async () => {
+      // A tap plays none of the notes, so with both hands read there is still
+      // a hand the reader is not playing: all of it.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      const carrier = (id: string): HTMLElement =>
+        element(id).closest('label, .control-group') as HTMLElement;
+      element<HTMLButtonElement>('modes-grid').querySelector<HTMLButtonElement>('[data-mode="rhythm"]')?.click();
+
+      expect([runtime.controller.settings.rhythmOnly, runtime.controller.settings.handStaff]).toEqual([true, null]);
+      expect(carrier('hear-other-hand').dataset['idle']).toBeUndefined();
+      expect(carrier('rushing-counts').dataset['idle']).toBe('true');
+
+      const hear = element<HTMLInputElement>('hear-other-hand');
+      hear.checked = true;
+      hear.dispatchEvent(new Event('change'));
+
+      expect(carrier('rushing-counts').dataset['idle']).toBeUndefined();
+    });
+
     it('asks each mode in one place: its square, and no box in the settings', async () => {
       // A square and a box were two editors of one setting, and the box had
       // to be taught the squares' rules so it could not make a pair they

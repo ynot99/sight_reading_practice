@@ -1195,12 +1195,14 @@ function whyItIsIdle(
       return opened ? 'A score is on the stand; this writes the exercises.' : null;
     case 'playing-ahead':
       return keepsTime ? 'Under a pulse the beat says where a press belongs, not the reader.' : null;
+    // Where only the rhythm is read the reader plays none of the notes, so
+    // both hands are the ones they are not playing, and this sounds the music.
     case 'hear-other-hand':
-      return settings.handStaff === null
+      return settings.handStaff === null && !settings.rhythmOnly
         ? 'Both hands are being read, so there is no other one to hear.'
         : null;
     case 'rushing-counts':
-      return settings.hearTheOtherHand && settings.handStaff !== null
+      return settings.hearTheOtherHand && (settings.handStaff !== null || settings.rhythmOnly)
         ? null
         : 'Nothing of the other hand is sounding to be ahead of.';
     case 'click-when':

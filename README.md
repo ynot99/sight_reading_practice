@@ -449,7 +449,11 @@ every note of the chord it answered. A tap the note it fell to already had is
 drawn too, in grey and exactly where it landed: a key that reached the run is
 never missing from the page. So is a tap on the last beat of the count-in,
 before the first note; the beats of the count before that are the reader
-keeping time with the click, and are only heard.
+keeping time with the click, and are only heard. Since a tap plays none of the
+notes, "Hear the hand I am not playing" sounds both hands there: the music
+whose rhythm is being tapped, on the beat with the click, or with each tap
+where the music waits. It is off unless asked for, since a rhythm heard is a
+rhythm no longer read.
 
 Everything about the click lives behind one button on the transport bar —
 what it marks, how much of the run it sounds for, how many bars it counts in,

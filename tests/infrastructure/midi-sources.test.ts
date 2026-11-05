@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { MidiEvent } from '../../src/application/ports/IMidiSource.js';
 import { CompositeMidiSource, ONE_PRESS_MS } from '../../src/infrastructure/midi/CompositeMidiSource.js';
 import {
@@ -122,6 +122,37 @@ describe('ComputerKeyboardMidiSource', () => {
       { type: 'noteon', midi: 48, velocity: 0.7, timestampMs: 100, sourceId: 'computer-keyboard' },
       { type: 'noteon', midi: 50, velocity: 0.7, timestampMs: 100, sourceId: 'computer-keyboard' },
     ]);
+  });
+
+  it('stamps a key with when it moved, not with when it was heard', () => {
+    // Heard 300 ms after the key went down - the page creating its audio
+    // device in the same keydown, before this hears of it - and the press
+    // and its letting go both put back to the moment of the key.
+    const { target, source, clock, events } = setup();
+    source.enable();
+    clock.set(5_000);
+    const page = vi.spyOn(performance, 'now').mockReturnValue(60_000);
+    onTestFinished(() => page.mockRestore());
+
+    target.press('KeyZ', { timeStamp: 60_000 - 300 });
+    target.release('KeyZ', { timeStamp: 60_000 - 120 });
+
+    expect(events.map((event) => event.timestampMs)).toEqual([4_700, 4_880]);
+  });
+
+  it('stamps a key when it is heard where its event says no moment of the page', () => {
+    // None, nought, or one on another timeline - ahead of the page's own, as
+    // a stamp in milliseconds since 1970 is.
+    const { target, source, clock, events } = setup();
+    source.enable();
+    clock.set(5_000);
+    const page = vi.spyOn(performance, 'now').mockReturnValue(60_000);
+    onTestFinished(() => page.mockRestore());
+
+    target.press('KeyZ');
+    target.press('KeyX', { timeStamp: 0 });
+    target.press('KeyC', { timeStamp: Date.now() });
+    expect(events.map((event) => event.timestampMs)).toEqual([5_000, 5_000, 5_000]);
   });
 
   it('emits nothing before being enabled', () => {

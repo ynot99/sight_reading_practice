@@ -49,7 +49,30 @@ export interface KeyboardEventLike {
   readonly altKey: boolean;
   /** Where the key went, which on a keydown is whatever has the focus. */
   readonly target?: TypedInto | null;
+  /** When the key moved, on the browser's high-resolution timeline: see `theMomentOf`. */
+  readonly timeStamp?: number;
   preventDefault(): void;
+}
+
+/**
+ * When a key moved, on the page's clock.
+ *
+ * Asked of the event and not of the clock when it is handled, which can be a
+ * good while later: the first touch of a page is often the key that begins a
+ * run, and the page creates its audio device in that very keydown before this
+ * hears of it - measured in Chrome, 63 to 326 ms, every one of them a press
+ * stamped late and a run begun late from it.
+ *
+ * How long ago the event was, taken from the clock, so the clock the run keeps
+ * is the one the answer is on. A stamp that is no moment of the page's own
+ * timeline - none, nought (a browser that has none to give), or one ahead of
+ * it, which is a stamp on another timeline altogether - leaves the moment it
+ * is handled, which is all there is then.
+ */
+function theMomentOf(event: KeyboardEventLike, clock: IClock): number {
+  const stamped = event.timeStamp ?? 0;
+  const ago = performance.now() - stamped;
+  return stamped > 0 && ago >= 0 ? clock.now() - ago : clock.now();
 }
 
 export interface KeyboardTarget {
@@ -99,7 +122,7 @@ export class ComputerKeyboardMidiSource implements IMidiSource {
       type: 'noteon',
       midi: this.baseMidi + offset,
       velocity: this.velocity,
-      timestampMs: this.clock.now(),
+      timestampMs: theMomentOf(event, this.clock),
       sourceId: 'computer-keyboard',
     });
   };
@@ -120,7 +143,7 @@ export class ComputerKeyboardMidiSource implements IMidiSource {
     this.emitter.emit('midi', {
       type: 'noteoff',
       midi: this.baseMidi + offset,
-      timestampMs: this.clock.now(),
+      timestampMs: theMomentOf(event, this.clock),
       sourceId: 'computer-keyboard',
     });
   };

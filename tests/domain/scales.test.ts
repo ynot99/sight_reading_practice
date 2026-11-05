@@ -7,6 +7,7 @@ import {
   theTonicOfTheScale,
   theNameOfTheKey,
   theTonicPitchClass,
+  theScaleUpAnOctave,
   type ScaleName,
 } from '../../src/domain/harmony/scales.js';
 import { theChordsOfTheKey, theChordsOfTheScale } from '../../src/domain/harmony/chordsOfTheKey.js';
@@ -112,5 +113,29 @@ describe('the chords of a scale', () => {
     // Rooted in the octave of middle C, as a key's are.
     expect(theChordsOfTheScale(0, 'harmonicMinor')[6]?.midis).toEqual([68, 71, 74]);
     expect(theChordsOfTheScale(0, 'dorian')[0]?.midis).toEqual([62, 65, 69]);
+  });
+});
+
+describe('a scale heard', () => {
+  it('is D dorian from the D above middle C to the D above that', () => {
+    expect(theScaleUpAnOctave(2, 'dorian')).toEqual([62, 64, 65, 67, 69, 71, 72, 74]);
+  });
+
+  it('is, on every tonic in every scale, the notes its key lights, up an octave from the middle', () => {
+    for (const scale of SCALE_NAMES) {
+      for (let tonic = 0; tonic < 12; tonic += 1) {
+        const keys = theScaleUpAnOctave(tonic, scale);
+        const lit = thePitchClassesOfTheScale(theSignatureOfTheScale(tonic, scale), scale);
+        const first = keys[0] ?? 0;
+        expect({ scale, tonic, first, octave: (keys.at(-1) ?? 0) - first, rising: keys.every((key, at) => at === 0 || key > (keys[at - 1] ?? 0)), classes: keys.slice(0, -1).map((key) => key % 12) }).toEqual({
+          scale,
+          tonic,
+          first: 60 + tonic,
+          octave: 12,
+          rising: true,
+          classes: lit,
+        });
+      }
+    }
   });
 });

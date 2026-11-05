@@ -142,6 +142,8 @@ import type { IVolumeControl } from '../../src/application/ports/IVolumeControl.
 import type { SampleLoading } from '../../src/application/ports/IPitchPlayer.js';
 import { WebMidiAdapter } from '../../src/infrastructure/midi/WebMidiAdapter.js';
 import {
+  A_SCALE_ARRIVES_MS,
+  A_SCALE_NOTE_MS,
   AppView,
   describeTendency,
   healthGlideMs,
@@ -25902,6 +25904,88 @@ describe('searching the settings', () => {
       expect(highlights.get('settings-found-here')?.ranges[0]?.toString().toLowerCase()).toBe('cursor');
     } finally {
       view.CSS = hadCss;
+    }
+  });
+});
+
+describe('hearing the scale a key is chosen in', () => {
+  beforeEach(() => {
+    mountRealMarkup();
+  });
+
+  // Beside each pair of lists a key is chosen with: the sketch's own, and a
+  // change of key over a bar. Heard whether or not editing sounds.
+  for (const [where, tonicId, scaleId, buttonId] of [
+    ['the sketch', 'roll-key', 'roll-scale', 'roll-hear-scale'],
+    ['a change over a bar', 'roll-mark-key', 'roll-mark-scale', 'roll-mark-hear-scale'],
+  ] as const) {
+    it(`runs up the scale chosen for ${where}, a note at a time, the top one held`, async () => {
+      const { view, runtime, instrument } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ rollSounds: false });
+      vi.useFakeTimers();
+      try {
+        element<HTMLSelectElement>(tonicId).value = '2';
+        element<HTMLSelectElement>(scaleId).value = 'dorian';
+        element<HTMLButtonElement>(buttonId).click();
+        const heard = (): number[] => instrument.played.map((note) => note.midi);
+
+        // The tonic at once, and each note after it a step later.
+        vi.advanceTimersByTime(0);
+        expect(heard()).toEqual([62]);
+        vi.advanceTimersByTime(A_SCALE_NOTE_MS * 3);
+        expect(heard()).toEqual([62, 64, 65, 67]);
+        vi.advanceTimersByTime(A_SCALE_NOTE_MS * 10);
+        expect(heard()).toEqual([62, 64, 65, 67, 69, 71, 72, 74]);
+        // Each let go of as the next comes, and the top one held longer.
+        const lengths = instrument.played.map((note, at) => (instrument.stopped[at]?.atMs ?? 0) - (note.atMs ?? 0));
+        expect(lengths).toEqual([...Array.from({ length: 7 }, () => A_SCALE_NOTE_MS), A_SCALE_ARRIVES_MS]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  }
+
+  it('begins again when asked again, letting go of the one running', async () => {
+    const { view, instrument } = createRig();
+    await view.initialize();
+    vi.useFakeTimers();
+    try {
+      element<HTMLSelectElement>('roll-key').value = '2';
+      element<HTMLSelectElement>('roll-scale').value = 'dorian';
+      element<HTMLButtonElement>('roll-hear-scale').click();
+      vi.advanceTimersByTime(A_SCALE_NOTE_MS);
+      const stoppedBefore = instrument.stopped.length;
+
+      element<HTMLSelectElement>('roll-scale').value = 'major';
+      element<HTMLButtonElement>('roll-hear-scale').click();
+
+      // The key sounding let go of at once, and nothing more of the first.
+      expect(instrument.stopped.slice(stoppedBefore)).toEqual([{ midi: 64, velocity: 0, atMs: undefined }]);
+      vi.advanceTimersByTime(A_SCALE_NOTE_MS * 20);
+      expect(instrument.played.map((note) => note.midi)).toEqual([62, 64, 62, 64, 66, 67, 69, 71, 73, 74]);
+
+      // Over, nothing is let go of when one is asked for again.
+      const stoppedAfter = instrument.stopped.length;
+      element<HTMLButtonElement>('roll-hear-scale').click();
+      expect(instrument.stopped.length).toBe(stoppedAfter);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('lets go of the scale running when the page goes', async () => {
+    const { view, instrument } = createRig();
+    await view.initialize();
+    vi.useFakeTimers();
+    try {
+      element<HTMLButtonElement>('roll-hear-scale').click();
+      vi.advanceTimersByTime(0);
+      view.dispose();
+      vi.advanceTimersByTime(A_SCALE_NOTE_MS * 20);
+      expect([instrument.played.map((note) => note.midi), instrument.stopped.at(-1)?.atMs]).toEqual([[60], undefined]);
+    } finally {
+      vi.useRealTimers();
     }
   });
 });

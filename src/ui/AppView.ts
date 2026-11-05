@@ -28,6 +28,7 @@ import {
   theNameOfTheKey,
   thePitchClassesOfTheScale,
   theTonicPitchClass,
+  theScaleUpAnOctave,
   type ScaleName,
 } from '../domain/harmony/scales.js';
 import { SCALE_COMPLEX_SCALES, theScaleComplex, type ScaleOfTheComplex } from '../domain/solfege/scaleComplex.js';
@@ -646,6 +647,12 @@ const THE_WAY_ROUND_SHOWN = 4;
 
 /** How long a chord tapped in the lane sounds at most: long enough to be heard as a chord, short of a bar of one. */
 const A_CHORD_TAPPED_SOUNDS_MS = 1_200;
+
+/** How long each note of a scale asked to be heard sounds before the next: brisk, as a scale is run up. */
+export const A_SCALE_NOTE_MS = 220;
+
+/** How long the tonic at the top of a scale heard is held: long enough to be heard as where it arrived. */
+export const A_SCALE_ARRIVES_MS = 700;
 
 /** What each goal for the next chord makes the music, said where none of the circle does. */
 const GOAL_SAID: Readonly<Record<Exclude<GoalOfTheNextChord, 'release'>, string>> = {
@@ -2342,6 +2349,8 @@ export class AppView {
   private rollSlice: { readonly of: string; readonly fromMs: number; readonly toMs: number } | null = null;
   /** The keys of the chord last tapped in the lane, sounding for a moment: see `soundTheChordTapped`. */
   private chordTappedSounds: readonly number[] = [];
+  /** The scale asked to be heard while it runs: the timers of its notes to come, and the key down now. */
+  private scaleHeard: { readonly timers: ReturnType<typeof setTimeout>[]; sounding: number | null } | null = null;
   /**
    * A chord drafted on the keys under the circle to write over the chord of
    * the lane chosen - the one beginning where this says - as the pitches
@@ -2977,6 +2986,7 @@ export class AppView {
     rollAuthor: HTMLInputElement;
     rollKey: HTMLSelectElement;
     rollScale: HTMLSelectElement;
+    rollHearScale: HTMLButtonElement;
     rollMetre: HTMLSelectElement;
     rollTempo: HTMLInputElement;
     rollHandLeft: HTMLButtonElement;
@@ -2999,6 +3009,7 @@ export class AppView {
     rollMarkMetre: HTMLSelectElement;
     rollMarkKey: HTMLSelectElement;
     rollMarkScale: HTMLSelectElement;
+    rollMarkHearScale: HTMLButtonElement;
     rollMarkTempo: HTMLInputElement;
     rollMarkTap: HTMLButtonElement;
     rollMarkDynamic: HTMLSelectElement;
@@ -3447,6 +3458,7 @@ export class AppView {
       rollAuthor: requireElement(doc, 'roll-author'),
       rollKey: requireElement(doc, 'roll-key'),
       rollScale: requireElement(doc, 'roll-scale'),
+      rollHearScale: requireElement(doc, 'roll-hear-scale'),
       rollMetre: requireElement(doc, 'roll-metre'),
       rollTempo: requireElement(doc, 'roll-tempo'),
       rollHandLeft: requireElement(doc, 'roll-hand-left'),
@@ -3469,6 +3481,7 @@ export class AppView {
       rollMarkMetre: requireElement(doc, 'roll-mark-metre'),
       rollMarkKey: requireElement(doc, 'roll-mark-key'),
       rollMarkScale: requireElement(doc, 'roll-mark-scale'),
+      rollMarkHearScale: requireElement(doc, 'roll-mark-hear-scale'),
       rollMarkTempo: requireElement(doc, 'roll-mark-tempo'),
       rollMarkTap: requireElement(doc, 'roll-mark-tap'),
       rollMarkDynamic: requireElement(doc, 'roll-mark-dynamic'),
@@ -3828,6 +3841,7 @@ export class AppView {
 
   dispose(): void {
     clearTimeout(this.heardTimer);
+    this.letGoOfTheScale();
     this.liveStripMade?.clear();
     this.forgetTheBeats();
     this.cancelPreview();
@@ -10402,6 +10416,16 @@ export class AppView {
     for (const select of [this.el.rollKey, this.el.rollScale]) {
       this.listen(select, 'change', () => {
         this.writeTheSketchInTheKeyChosen();
+      });
+    }
+    // Beside each pair of lists a key is chosen with: the sketch's own, and a
+    // change of key over a bar.
+    for (const [button, tonic, scale] of [
+      [this.el.rollHearScale, this.el.rollKey, this.el.rollScale],
+      [this.el.rollMarkHearScale, this.el.rollMarkKey, this.el.rollMarkScale],
+    ] as const) {
+      this.listen(button, 'click', () => {
+        this.soundTheScale(Number(tonic.value), SCALE_NAMES.find((each) => each === scale.value) ?? 'major');
       });
     }
     this.listen(this.el.rollMetre, 'change', () => {
@@ -17607,6 +17631,59 @@ export class AppView {
       this.runtime.pitchPlayer.stop(midi, now + Math.min(lastsMs, A_CHORD_TAPPED_SOUNDS_MS));
     }
     this.chordTappedSounds = keys.map(({ midi }) => midi);
+  }
+
+  /**
+   * Runs up the scale chosen, from its tonic to the tonic an octave above,
+   * one note after another and the top one held. A scale asked for again
+   * begins again, the one running let go of. Heard whether or not editing
+   * sounds, as a playback is: it is asked for to be heard, and is nothing
+   * done to the notes.
+   *
+   * Each note sounded when its moment comes rather than all handed over at
+   * once ahead: one begun again has to take back what it had not played yet,
+   * and an instrument can take back only everything it holds, a playback's
+   * notes with them.
+   */
+  private soundTheScale(tonicPitchClass: number, scale: ScaleName): void {
+    this.letGoOfTheScale();
+    const keys = theScaleUpAnOctave(tonicPitchClass, scale);
+    const heard: { readonly timers: ReturnType<typeof setTimeout>[]; sounding: number | null } = { timers: [], sounding: null };
+    this.scaleHeard = heard;
+    const velocity = DYNAMIC_VELOCITY.mf;
+    keys.forEach((midi, at) => {
+      const lastsMs = at === keys.length - 1 ? A_SCALE_ARRIVES_MS : A_SCALE_NOTE_MS;
+      heard.timers.push(
+        setTimeout(() => {
+          const now = this.runtime.clock.now();
+          this.runtime.pitchPlayer.play(midi, velocity, now);
+          this.runtime.pitchPlayer.stop(midi, now + lastsMs);
+          heard.sounding = midi;
+        }, at * A_SCALE_NOTE_MS),
+      );
+    });
+    heard.timers.push(
+      setTimeout(() => {
+        if (this.scaleHeard === heard) {
+          this.scaleHeard = null;
+        }
+      }, (keys.length - 1) * A_SCALE_NOTE_MS + A_SCALE_ARRIVES_MS),
+    );
+  }
+
+  /** Stops the scale running, if one is: its notes to come, and the one sounding. */
+  private letGoOfTheScale(): void {
+    const heard = this.scaleHeard;
+    if (heard === null) {
+      return;
+    }
+    for (const timer of heard.timers) {
+      clearTimeout(timer);
+    }
+    if (heard.sounding !== null) {
+      this.runtime.pitchPlayer.stop(heard.sounding);
+    }
+    this.scaleHeard = null;
   }
 
   /** Whether an event is on the lane of chords under the notes. */

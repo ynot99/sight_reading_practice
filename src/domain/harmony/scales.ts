@@ -100,3 +100,17 @@ export function theNameOfTheKey(key: { readonly fifths: number; readonly scale: 
   const { step, alter } = theTonicOfTheScale(key.fifths, key.scale);
   return `${step}${alterationSign(alter)} ${SCALES[key.scale].called}`;
 }
+
+/** Middle C, where the scales heard begin: the tonic is the first key on or above it. */
+const MIDDLE_C = 60;
+
+/**
+ * The keys a scale is heard on, from its tonic up to the tonic an octave
+ * above: the eight notes that say what a mode is, which its chords alone
+ * leave the ear to work out. On the first tonic at or above middle C, where
+ * every scale offered sounds in the middle of the keyboard.
+ */
+export function theScaleUpAnOctave(tonicPitchClass: number, scale: ScaleName): readonly number[] {
+  const tonic = MIDDLE_C + tonicPitchClass;
+  return [...SCALES[scale].steps.map((step) => tonic + step), tonic + 12];
+}

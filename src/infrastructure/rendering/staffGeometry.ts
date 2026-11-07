@@ -71,6 +71,11 @@ export interface StaffGeometry {
    * on that stave, in that bar, at that point across it.
    */
   readonly printedOn: ReadonlyMap<number, ReadonlyMap<number, PrintedNote>>;
+  /**
+   * Where each staff's bottom line is printed, by system and staff: what a
+   * staff that drew no note in a system is measured from.
+   */
+  readonly bottomLines: ReadonlyMap<number, ReadonlyMap<number, number>>;
 }
 
 /** Where the page puts one note: which stave, and where across it. */
@@ -98,7 +103,10 @@ export interface PrintedNote {
  */
 const DEFAULT_STEP_HEIGHT = 5;
 
-export function fitStaffGeometry(samples: readonly DrawnNoteSample[]): StaffGeometry | null {
+export function fitStaffGeometry(
+  samples: readonly DrawnNoteSample[],
+  bottomLines: ReadonlyMap<number, ReadonlyMap<number, number>> = new Map(),
+): StaffGeometry | null {
   if (samples.length === 0) {
     return null;
   }
@@ -156,6 +164,7 @@ export function fitStaffGeometry(samples: readonly DrawnNoteSample[]): StaffGeom
     byStaff: sorted,
     systemOfStep: systemsByStep(samples),
     printedOn: printedByStep(samples),
+    bottomLines,
   };
 }
 
@@ -244,8 +253,7 @@ export function anchorFor(
   // which that is. Nearest in time is nearest on the page only *along* a
   // system: across a break it is the line above or below, and a mark measured
   // from there is drawn a system's height out, over empty staff. Where this
-  // staff drew nothing in the whole system there is nothing better to measure
-  // from, so the nearest note anywhere is used, as it always was.
+  // staff drew nothing in the whole system, see `measuredFrom`.
   const system = geometry.systemOfStep.get(stepIndex);
   const inSystem =
     system === undefined ? [] : all.filter((sample) => sample.system === system);
@@ -279,14 +287,39 @@ export function anchorFor(
   return stepIndex - before.stepIndex <= after.stepIndex - stepIndex ? before : after;
 }
 
+/**
+ * A position on a staff and where it is printed, near a step: a note the
+ * staff drew near it, or - where the staff drew no note in the whole system,
+ * a hand resting through it with every bar a whole rest - its bottom line,
+ * which is printed there all the same and whose position the clef says.
+ * Measured from the nearest note anywhere instead, a note played over those
+ * rests was drawn on the system before, a system's height above where it was
+ * played.
+ */
+function measuredFrom(
+  geometry: StaffGeometry,
+  staffNumber: number,
+  stepIndex: number,
+  clef: ClefKind | undefined,
+): Pick<DrawnNoteSample, 'diatonicIndex' | 'y'> | null {
+  const system = geometry.systemOfStep.get(stepIndex);
+  const bottom = system === undefined ? undefined : geometry.bottomLines.get(system)?.get(staffNumber);
+  const drewHere = geometry.byStaff.get(staffNumber)?.some((sample) => sample.system === system) === true;
+  if (!drewHere && bottom !== undefined && clef !== undefined) {
+    return { diatonicIndex: CLEF_LINE_RANGE[clef][0], y: bottom };
+  }
+  return anchorFor(geometry, staffNumber, stepIndex);
+}
+
 /** Where a staff position sits vertically, near a given step. */
 export function yForDiatonic(
   geometry: StaffGeometry,
   staffNumber: number,
   stepIndex: number,
   diatonicIndex: number,
+  clef?: ClefKind,
 ): number | null {
-  const anchor = anchorFor(geometry, staffNumber, stepIndex);
+  const anchor = measuredFrom(geometry, staffNumber, stepIndex, clef);
   if (anchor === null) {
     return null;
   }

@@ -817,7 +817,17 @@ export class VerovioScoreRenderer
         }
       }
     }
-    const fitted = fitStaffGeometry(samples);
+    // Each staff's bottom line in each system, as the page prints it: the
+    // staves of a system are one under another in every bar of it, the right
+    // hand's the upper one.
+    const bottomLines = new Map<number, ReadonlyMap<number, number>>();
+    for (const [system, drawn] of read.systems.entries()) {
+      bottomLines.set(
+        system,
+        new Map((drawn.bars[0]?.staves ?? []).map((staff, at) => [at + 1, staff.bottom] as const)),
+      );
+    }
+    const fitted = fitStaffGeometry(samples, bottomLines);
     // In the page's units, as everything it is placed by was read.
     const layer = over.ownerDocument.createElementNS(SVG_NAMESPACE, 'g');
     layer.setAttribute('class', 'played-overlay');

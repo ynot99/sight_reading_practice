@@ -244,15 +244,15 @@ export function buildOverlayShapes(
     if (staffNumber === null) {
       continue;
     }
-    const y = yForDiatonic(layout.geometry, staffNumber, mark.stepIndex, pitch.diatonicIndex);
+    const clef = layout.clefAt(staffNumber, mark.stepIndex);
+    const y = yForDiatonic(layout.geometry, staffNumber, mark.stepIndex, pitch.diatonicIndex, clef);
     if (y === null) {
       continue;
     }
 
-    const clef = layout.clefAt(staffNumber, mark.stepIndex);
     const [bottomLine, topLine] = CLEF_LINE_RANGE[clef];
     for (const ledgerIndex of ledgerIndicesFor(bottomLine, topLine, pitch.diatonicIndex)) {
-      const ledgerY = yForDiatonic(layout.geometry, staffNumber, mark.stepIndex, ledgerIndex);
+      const ledgerY = yForDiatonic(layout.geometry, staffNumber, mark.stepIndex, ledgerIndex, clef);
       if (ledgerY !== null) {
         shapes.push({
           kind: 'ledger',

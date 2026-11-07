@@ -825,7 +825,61 @@ describe('what was played', () => {
     return { x: head?.x ?? NaN, y: head?.y ?? NaN };
   }
 
-  it('rings a Good note in the paler green, wherever it sits', async () => {
+  it('rings a note played over a hand resting through a whole system on that system, not the one above', async () => {
+    // The right hand rests from the third bar to the end, so the last systems
+    // print nothing on the treble but its lines. A note played there was
+    // measured from the nearest treble note anywhere - on a system above -
+    // and drawn a system's height above where it was played.
+    const resting = {
+      ...longExercise({ bars: 16 }),
+      staves: [
+        {
+          staffNumber: 1,
+          voice: 1,
+          clef: 'treble' as const,
+          clefChanges: [],
+          measures: Array.from({ length: 16 }, (_, at) =>
+            at < 2
+              ? bar(...['C5', 'D5', 'E5', 'F5'].map((name) => noteEntry(p(name), Duration.QUARTER)))
+              : bar(restEntry(Duration.WHOLE)),
+          ),
+        },
+        {
+          staffNumber: 2,
+          voice: 2,
+          clef: 'bass' as const,
+          clefChanges: [],
+          measures: Array.from({ length: 16 }, () =>
+            bar(...['C3', 'E3', 'G3', 'C3'].map((name) => noteEntry(p(name), Duration.QUARTER))),
+          ),
+        },
+      ],
+    };
+    const stage = aStage();
+    stage.renderer.setPaged(true);
+    const page = printed(resting);
+    await stage.renderer.load(page.xml, page.steps);
+    stage.renderer.configureOverlay(context);
+    const last = page.steps.length - 1;
+    const drawing = sheets(stage.surface)[0]?.querySelector('svg') as SVGSVGElement;
+    const systems = readThePage(drawing).systems;
+    const systemOf = (index: number): number =>
+      systems.findIndex((system) => system.bars.some((each) => each.id === page.steps[index]?.barId));
+    // The case itself: the last step on a system after the first, whose
+    // treble printed no note at all.
+    expect(systemOf(last)).toBeGreaterThan(systemOf(0));
+    const treble = systems[systemOf(last)]?.bars[0]?.staves[0];
+
+    stage.renderer.showPlayed({ stepIndex: last, midi: p('E5').midi, correct: false, offset: 0 });
+
+    const ring = ringsOf(stage.surface).at(0);
+    const y = Number(ring?.getAttribute('cy'));
+    const position = ((treble?.bottom ?? 0) - (treble?.top ?? 0)) / 8;
+    // E5 is the fourth space, seven positions over the bottom line's E4.
+    expect(y).toBeCloseTo((treble?.bottom ?? NaN) - 7 * position, 0);
+  });
+
+  it('rings a Good note in its own colour, wherever it sits', async () => {
     // The run's own verdict, so the page cannot call a note Perfect that the
     // numbers under the reading call Good.
     const { renderer, surface } = await twoBarsOpen();

@@ -7678,7 +7678,7 @@ body[data-repeats='hidden'] .repeat-mark {
   width: 5rem;
 }
 
-/* Right note, but it missed the beat: the same green, worn thinner. */
+/* Right note, but outside its Perfect window: Good, in Good's yellow. */
 .played--loose {
   stroke: var(--mark-good);
   fill: none;

@@ -241,6 +241,27 @@ describe('a staff that enters late in a system', () => {
     ]);
     expect(anchorFor(empty!, 1, 4)?.stepIndex).toBe(1);
   });
+
+  it('measures a note played over a staff that drew none all system from that staff’s own lines', () => {
+    // A hand resting through a whole system, every bar a whole rest: its lines
+    // are printed all the same, the bottom one at 560 here. Measured from the
+    // nearest note anywhere, a note played there was drawn on the system
+    // before, a system's height above where it was played.
+    const samples: DrawnNoteSample[] = [
+      { stepIndex: 0, page: 0, system: 0, staffNumber: 1, diatonicIndex: treble, y: 150 },
+      { stepIndex: 1, page: 0, system: 0, staffNumber: 1, diatonicIndex: treble + 1, y: 145 },
+      { stepIndex: 4, page: 0, system: 1, staffNumber: 2, diatonicIndex: bass, y: 650 },
+    ];
+    const lines = new Map([[0, new Map([[1, 160]])], [1, new Map([[1, 560]])]]);
+    const resting = fitStaffGeometry(samples, lines)!;
+    const [e4, g4] = [Pitch.parse('E4').diatonicIndex, Pitch.parse('G4').diatonicIndex];
+
+    expect(yForDiatonic(resting, 1, 4, e4, 'treble')).toBeCloseTo(560, 10);
+    expect(yForDiatonic(resting, 1, 4, g4, 'treble')).toBeCloseTo(550, 10);
+    expect(staffForDiatonic(resting, 4, g4, (staff) => (staff === 1 ? 'treble' : 'bass'))).toBe(1);
+    // Where it drew a note in the system, that note says where it is.
+    expect(yForDiatonic(resting, 1, 1, treble + 1, 'treble')).toBeCloseTo(145, 10);
+  });
 });
 
 describe('ledgerIndicesFor', () => {

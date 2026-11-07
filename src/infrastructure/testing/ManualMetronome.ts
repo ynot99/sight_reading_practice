@@ -81,10 +81,19 @@ export class ManualMetronome implements IMetronome {
    * measured *by* have to be able to say so.
    */
   private readonly leadMs: number;
+  /**
+   * Whether the device is already sounding: then a pulse begun from a moment
+   * hears the ticks whose moments have gone at once, before `start` returns,
+   * as the real one does once the device has been sounding - in the very call
+   * that starts it. Otherwise they wait to be heard, as they do while the
+   * device wakes.
+   */
+  private readonly sounding: boolean;
 
-  constructor(clock?: ManualClock, leadMs = 0) {
+  constructor(clock?: ManualClock, leadMs = 0, options: { readonly sounding?: boolean } = {}) {
     this.clock = clock ?? null;
     this.leadMs = leadMs;
+    this.sounding = options.sounding ?? false;
   }
 
   get isRunning(): boolean {
@@ -132,6 +141,16 @@ export class ManualMetronome implements IMetronome {
     this.placedNotHeard.length = 0;
     this.nextIndex = 0;
     this.nextTimeMs = fromMs ?? (this.clock?.now() ?? 0) + this.leadMs;
+    // The clock stays where it is: the ticks heard at once are late.
+    const now = this.clock?.now() ?? 0;
+    while (this.sounding && fromMs !== undefined && this.running && this.nextTimeMs <= now) {
+      const tick = this.placeNext();
+      if (tick === null) {
+        break;
+      }
+      this.emitted.push(tick);
+      this.emitter.emit('tick', tick);
+    }
   }
 
   stop(): void {

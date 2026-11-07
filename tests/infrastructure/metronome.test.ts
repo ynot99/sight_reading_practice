@@ -376,6 +376,24 @@ describe('ManualMetronome', () => {
     expect(tick?.index).toBe(0);
     expect(tick?.scheduledTimeMs).toBe(9000);
   });
+
+  it('hears the ticks a pulse begun from a moment has missed at once where the device is sounding, and only there', () => {
+    const heardAtTheStart = (sounding: boolean): number[] => {
+      const clock = new ManualClock(2_600);
+      const metronome = new ManualMetronome(clock, 0, { sounding });
+      metronome.configure(COMMON);
+      const heard: number[] = [];
+      metronome.onTick((tick) => heard.push(tick.scheduledTimeMs));
+      metronome.start(1_000);
+      // Late, so the clock is not moved back to them.
+      expect(clock.now()).toBe(2_600);
+      return heard;
+    };
+
+    // A quarter of a beat apart at sixty, up to the last one gone.
+    expect(heardAtTheStart(true)).toEqual([1_000, 1_250, 1_500, 1_750, 2_000, 2_250, 2_500]);
+    expect(heardAtTheStart(false)).toEqual([]);
+  });
 });
 
 describe('a pulse that changes tempo', () => {

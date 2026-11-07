@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { BarMode } from '../../src/application/modes/BarMode.js';
 import { FlowMode } from '../../src/application/modes/FlowMode.js';
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
+import { NoteMode } from '../../src/application/modes/NoteMode.js';
+import type { StepResult } from '../../src/domain/scoring/PerformanceReport.js';
 import { isAudibleClick } from '../../src/infrastructure/audio/metronomeMath.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { noteEntry, restEntry } from '../../src/domain/model/Exercise.js';
@@ -372,6 +374,97 @@ describe('Bar mode', () => {
     ]);
     // And the pulse is counted from it, however long the device takes.
     expect(metronome.advanceSubdivisions(1).at(0)?.scheduledTimeMs).toBe(0);
+  });
+
+  it('keeps the chord it was begun by in its step where the device is already sounding, in every frame that keeps time', () => {
+    // A device already sounding hands over the ticks a pulse begun from a
+    // moment has missed in the very call that starts it. Begun before the run,
+    // the first of them began the run a second time, opening the chord's step
+    // again behind the chord: drawn and judged Perfect, and missing from the
+    // step - three notes in four, and 83% for a run played on the beat.
+    for (const mode of [new FlowMode(), new BarMode(), new NoteMode()]) {
+      const clock = new ManualClock();
+      const midi = new MockMidiAdapter({ clock });
+      const metronome = new ManualMetronome(clock, 20, { sounding: true });
+      const session = new PracticeSession({
+        timeline: buildTimeline(twoBarExercise({ tempoBpm: 60 })),
+        mode,
+        midi,
+        metronome,
+        clock,
+        scoring: new TimingWeightedScoringStrategy(),
+        options: {
+          countInBars: 0,
+          clickWhen: 'always',
+          click: 'subdivision',
+          matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
+        },
+      });
+      const completed: StepResult[] = [];
+      session.events.on('stepCompleted', ({ result }) => completed.push(result));
+
+      clock.advance(70);
+      session.start([
+        { type: 'noteon', sourceId: 'test', midi: MIDI.C3, velocity: 100, timestampMs: 0 },
+        { type: 'noteon', sourceId: 'test', midi: MIDI.C4, velocity: 100, timestampMs: 15 },
+      ]);
+      metronome.advanceToTicks(Duration.QUARTER.ticks);
+
+      const first = completed.at(0);
+      expect(
+        { mode: mode.id, status: first?.status, hits: first?.hits.map((hit) => [hit.midi, hit.tier]) },
+      ).toEqual({ mode: mode.id, status: 'correct', hits: [[MIDI.C3, 'perfect'], [MIDI.C4, 'perfect']] });
+      // And its pulse begun once.
+      expect({ mode: mode.id, begun: metronome.emitted.filter((tick) => tick.index === 0).length }).toEqual({ mode: mode.id, begun: 1 });
+    }
+  });
+
+  it('begins the pulse again from a bar given late, in a run begun by its chord', () => {
+    // The pulse is taken as going only while the chord that began the run is
+    // judged. Taken so for the rest of the run, a bar line waited at was
+    // opened as if nothing had stopped, and the music never went on.
+    const clock = new ManualClock();
+    const midi = new MockMidiAdapter({ clock });
+    const metronome = new ManualMetronome(clock);
+    const session = new PracticeSession({
+      timeline: buildTimeline(twoBarExercise({ tempoBpm: 60 })),
+      mode: new BarMode(),
+      midi,
+      metronome,
+      clock,
+      scoring: new TimingWeightedScoringStrategy(),
+      options: {
+        countInBars: 0,
+        clickWhen: 'always',
+        click: 'subdivision',
+        matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
+      },
+    });
+    const played = (atMs: number, ...keys: number[]): void => {
+      metronome.advanceToTicks((atMs / 1_000) * Duration.QUARTER.ticks - 1);
+      clock.set(atMs);
+      for (const key of keys) {
+        midi.noteOn(key, atMs);
+      }
+    };
+
+    session.start([
+      { type: 'noteon', sourceId: 'test', midi: MIDI.C3, velocity: 100, timestampMs: 0 },
+      { type: 'noteon', sourceId: 'test', midi: MIDI.C4, velocity: 100, timestampMs: 0 },
+    ]);
+    played(1_000, MIDI.D4);
+    played(2_000, MIDI.E4);
+    played(3_000, MIDI.F4);
+    // Past the bar line, where the reader has not given the downbeat.
+    metronome.advanceToTicks(Duration.QUARTER.ticks * 5);
+    expect(metronome.isRunning).toBe(false);
+
+    clock.set(6_000);
+    for (const key of [MIDI.G2, MIDI.D3, MIDI.G4]) {
+      midi.noteOn(key, 6_000);
+    }
+
+    expect(metronome.advanceSubdivisions(1).map((tick) => tick.scheduledTimeMs)).toEqual([6_000]);
   });
 
   it('begins with the chord where no pulse runs, and counts in first where one is asked for', () => {

@@ -146,6 +146,12 @@ export class PracticeSession {
    * going on without the reader.
    */
   private pulseHeldFrom: number | null = null;
+  /**
+   * Where the pulse of a run begun by its chord is about to begin, while the
+   * chord is being judged: the pulse is this run's from that moment, though
+   * it is begun only once the chord is in its step. See `beginRunning`.
+   */
+  private pulseBeginsAt: number | null = null;
   /** Bar lines this run has stopped at. @see PerformanceReport.waitedAtBars */
   private waitedAtBars: number[] = [];
   /** What the run did, written down for drawing. @see RunRoll */
@@ -359,9 +365,8 @@ export class PracticeSession {
       // Begun by the chord, and not counted in: the music begins where the
       // chord was struck, and the pulse with it. See `theOpeningChordsMoment`.
       if (chordAt !== null && this.countInRemaining === 0) {
-        this.metronome.start(chordAt);
         this.emitStatus(previous);
-        this.beginRunning(chordAt, 0);
+        this.beginRunning(chordAt, 0, chordAt);
         return;
       }
       // Otherwise on the pulse's first tick, which is the music's first beat
@@ -965,6 +970,11 @@ export class PracticeSession {
       : this.options.clickWhen;
   }
 
+  /** Whether the pulse is going, or is this run's from its chord and about to begin. */
+  private thePulseIsGoing(): boolean {
+    return this.metronome.isRunning || this.pulseBeginsAt !== null;
+  }
+
   private usesPulse(): boolean {
     return this.thePulseGoesOn() || this.options.countInBars > 0;
   }
@@ -1081,7 +1091,11 @@ export class PracticeSession {
     this.countedInToMs = tick.scheduledTimeMs + ticksToMilliseconds(musicFrom - tick.positionTicks, bpm);
   }
 
-  private beginRunning(atMs: number, tickPositionTicks: number): void {
+  /**
+   * @param pulseFrom Where the run, begun by the chord rather than by a tick,
+   *   begins its pulse: see `theOpeningChordsMoment`.
+   */
+  private beginRunning(atMs: number, tickPositionTicks: number, pulseFrom?: number): void {
     this.countedInToMs = null;
     this.runStartedAt = atMs - this.elapsedTo(this.resumeAtTicks);
     // The first time only: a run counted back in after a pause is the same
@@ -1111,7 +1125,21 @@ export class PracticeSession {
     this.dispatch('countInComplete');
     this.mode.onSessionStart(this.context);
     this.enterStep(this.resumeAtIndex);
+    // Begun once the chord is in its step. Begun from a moment already gone,
+    // a device already sounding hands over the ticks it has missed in the very
+    // call that starts it, and each found the run short of the chord: begun
+    // before the run, the first of them began it a second time, opening the
+    // chord's step again behind the chord - which, judged once, was lost from
+    // the step it was judged for; begun before the chord was judged, it closed
+    // the gate at the first note, and the chord opening it began the pulse a
+    // second time, from its last note. Meanwhile the pulse is the run's from
+    // the chord, which is what a gate the chord opens asks.
+    this.pulseBeginsAt = pulseFrom ?? null;
     this.replayPressesAimedAtTheFirstBeat(atMs);
+    this.pulseBeginsAt = null;
+    if (pulseFrom !== undefined) {
+      this.metronome.start(pulseFrom);
+    }
   }
 
   /**
@@ -1314,7 +1342,7 @@ export class PracticeSession {
       this.openTheNoteGate(step, atMs);
       return;
     }
-    if (this.metronome.isRunning) {
+    if (this.thePulseIsGoing()) {
       // Nothing ever stopped, so nothing has to start: the pulse is already
       // this bar's, counting from where it always was. Beginning it again
       // would only put a scheduling lead of silence between the reader's key
@@ -1387,7 +1415,7 @@ export class PracticeSession {
   private openTheNoteGate(step: TimelineStep, atMs: number): void {
     this.theFirstBarHasBegun = true;
     this.pulseHeldFrom = step.index + 1;
-    if (atMs <= this.gateClosesAt(step) && this.metronome.isRunning) {
+    if (atMs <= this.gateClosesAt(step) && this.thePulseIsGoing()) {
       this.configureThePulse(this.pulseCountInBars);
       this.emitter.emit('barBegan', { stepIndex: step.index, atMs });
       return;

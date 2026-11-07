@@ -324,7 +324,7 @@ describe('Flow mode', () => {
       expect(judged?.deviationMs).toBe(-300);
     });
 
-    it('in rhythm only, gives any key to the beat it was nearer to and within the window of, whether or not the beat behind has had its tap, swept across the gap', () => {
+    it('in rhythm only, gives any key to the beat it was nearer to and within the window of, and outside every window to nobody, whether or not the beat behind has had its tap, swept across the gap', () => {
       // The second beat at 1000 ms. A key no note wants, as a computer's
       // keyboard nearly always gives: dead on the beat it reaches the run
       // before the tick that opens the beat, and was the first beat's again.
@@ -354,14 +354,19 @@ describe('Flow mode', () => {
         harness.metronome.advanceSubdivisions(2);
         return harness.of('noteJudged').slice(firstTapped ? 1 : 0).map((event) => `${event.verdict}@${String(event.stepIndex)}`).join(' ');
       };
-      // Nearer the second, and within the window of 250 ms a press may miss its beat by.
-      const swept = [300, 499, 501, 700, 749, 750, 880, 1000].map((atMs) => [atMs, judgedAt(atMs, true), judgedAt(atMs, false)]);
+      // A beat's within the window of 250 ms a press may miss its beat by, on
+      // either side of it, and nobody's between the two windows - judged for
+      // nothing, the beat behind left without a tap if it had none.
+      const swept = [200, 250, 251, 300, 499, 501, 700, 749, 750, 880, 1000].map((atMs) => [atMs, judgedAt(atMs, true), judgedAt(atMs, false)]);
       expect(swept).toEqual([
-        [300, 'duplicate@0', 'correct@0'],
-        [499, 'duplicate@0', 'correct@0'],
-        [501, 'duplicate@0', 'correct@0'],
-        [700, 'duplicate@0', 'correct@0'],
-        [749, 'duplicate@0', 'correct@0'],
+        [200, 'duplicate@0', 'correct@0'],
+        [250, 'duplicate@0', 'correct@0'],
+        [251, 'duplicate@0', 'duplicate@0'],
+        [300, 'duplicate@0', 'duplicate@0'],
+        [499, 'duplicate@0', 'duplicate@0'],
+        [501, 'duplicate@0', 'duplicate@0'],
+        [700, 'duplicate@0', 'duplicate@0'],
+        [749, 'duplicate@0', 'duplicate@0'],
         [750, 'correct@1', 'correct@1'],
         [880, 'correct@1', 'correct@1'],
         [1000, 'correct@1', 'correct@1'],

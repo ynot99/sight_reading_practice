@@ -169,13 +169,24 @@ export class FlowMode extends BasePracticeMode {
       return;
     }
 
-    const outcome = matcher.accept(event.midi, event.timestampMs);
     // Measured for every verdict, not just the right notes: *when* a press
     // landed is a fact about the press, and a wrong one is exactly where the
     // page needs to show that the beat was nearly reached. The report only
     // takes deviations from correct notes, so the timing statistics are
     // untouched by this.
     const deviationMs = event.timestampMs - context.scheduledTimeMs(step.onsetTicks);
+    // Where only the rhythm is read, a tap is a beat's only within the window
+    // a press may miss its beat by - the strip of where the taps landed. Later
+    // than that it is nobody's: judged for nothing and drawn where it landed,
+    // and a beat left without a tap is missed. Taken by the beat open however
+    // late, a tap most of a beat late was Good. Early, a tap is kept for its
+    // beat only within the same window, and further ahead is judged here as
+    // late for the beat behind: see `isAimedAtTheNextStep`.
+    if (context.options.matchPolicy.anyPitch === true && deviationMs > context.options.matchPolicy.toleranceMs) {
+      context.judgeNote(event.midi, 'duplicate', deviationMs, event.timestampMs);
+      return;
+    }
+    const outcome = matcher.accept(event.midi, event.timestampMs);
     context.judgeNote(event.midi, outcome.verdict, deviationMs, event.timestampMs);
   }
 }

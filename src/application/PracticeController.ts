@@ -3319,6 +3319,7 @@ export class PracticeController {
         // beat that judges it, and so none held yet belongs to a later one -
         // even a note taken early is marked once the beat before it is over.
         this.heldMarks = this.heldMarks.map((mark) => ({ ...mark, settled: true }));
+        this.markTheBeatMissed(result);
         if (this.playedUnder.readAheadSteps !== null) {
           this.fadeThrough(result.index);
         }
@@ -3895,6 +3896,39 @@ export class PracticeController {
    * decision to look at what happened, and a reader who stops halfway and
    * sees a blank page has been given nothing for it.
    */
+  /**
+   * A beat of a tapped run that its window closed on with no tap in it,
+   * marked where the tap was owed: as the window closes, or with the rest at
+   * the end where marks are held.
+   *
+   * Taps off the page's beats are drawn grey, judged for nothing; without
+   * this the beat they missed showed nothing at all, and the page could not
+   * say which beats were missed - only the count under the reading could.
+   * Only where the keys are taps: there a beat is missed or tapped, and
+   * nothing later can take the miss back.
+   */
+  private markTheBeatMissed(result: StepResult): void {
+    // A note it asked for and nobody played: a beat untapped has them all.
+    const midi = result.missing[0];
+    if (!this.tappedRun || midi === undefined) {
+      return;
+    }
+    const mark: PlayedNote = {
+      stepIndex: result.index,
+      midi,
+      correct: false,
+      offset: 0,
+      settled: true,
+      tap: true,
+      missed: true,
+    };
+    if (this.currentSettings.playedNotes === 'at-end') {
+      this.heldMarks.push(mark);
+    } else if (this.currentSettings.playedNotes === 'live') {
+      this.deps.overlay.showPlayed(mark);
+    }
+  }
+
   private drawHeldMarks(): void {
     for (const mark of this.heldMarks) {
       this.deps.overlay.showPlayed(mark);

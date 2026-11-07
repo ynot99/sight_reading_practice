@@ -2245,8 +2245,18 @@ describe('the four numbers of a reading', () => {
     expect(body(".readings__count[data-kind='perfect']")).toContain('var(--correct)');
     expect(body(".readings__count[data-kind='good']")).toContain('var(--good)');
     expect(body(".readings__count[data-kind='wrong']")).toContain('var(--wrong)');
-    expect(body(".readings__count[data-kind='missed']")).toContain('var(--text-muted)');
+    // Missed as a ring of the red of a fault, as the page draws it broken:
+    // nothing was pressed, and a filled red dot is a wrong key.
+    expect(body(".readings__count[data-kind='missed']")).toMatch(/--count-dot\s*:\s*transparent/);
+    expect(body(".readings__count[data-kind='missed']::before")).toMatch(/box-shadow\s*:\s*inset 0 0 0 [\d.]+px var\(--wrong\)/);
     expect(body('.readings__count::before')).toMatch(/background:\s*var\(--count-dot\)/);
+  });
+
+  it('draws a beat nobody tapped in the red of a fault, broken, never solid like a press', () => {
+    const missed = body('.played--missed');
+    expect(missed).toMatch(/stroke\s*:\s*var\(--mark-wrong\)/);
+    expect(missed).toMatch(/stroke-dasharray\s*:\s*\d/);
+    expect(body('.played--wrong')).not.toMatch(/stroke-dasharray/);
   });
 });
 

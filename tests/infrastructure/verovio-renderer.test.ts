@@ -879,6 +879,17 @@ describe('what was played', () => {
     expect(y).toBeCloseTo((treble?.bottom ?? NaN) - 7 * position, 0);
   });
 
+  it('strokes a beat nobody tapped down the system on the beat, as Miss', async () => {
+    const { renderer, surface } = await twoBarsOpen();
+
+    renderer.showPlayed({ stepIndex: 1, midi: 62, correct: false, offset: 0, settled: true, tap: true, missed: true });
+
+    const strokes = [...(sheets(surface)[0]?.querySelectorAll('.played-overlay line.played-tick') ?? [])];
+    expect(strokes.map((stroke) => stroke.getAttribute('class'))).toEqual(['played-tick played--missed']);
+    // The beat's own stroke, so no tap drawn on it later is drawn twice.
+    expect(strokes[0]?.getAttribute('data-tap')).toBe('1');
+  });
+
   it('rings a Good note in its own colour, wherever it sits', async () => {
     // The run's own verdict, so the page cannot call a note Perfect that the
     // numbers under the reading call Good.

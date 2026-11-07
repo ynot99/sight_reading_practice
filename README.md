@@ -448,7 +448,8 @@ system where it landed, in its verdict's colour, rather than as a ring on
 every note of the chord it answered. A tap is a beat's only within the window
 a press may miss its beat by (the chord window, 250 ms unless set otherwise),
 which is the strip of where the taps landed: further off it answers nothing,
-and the beat left without a tap is missed. A tap the note it fell to already
+and the beat left without a tap is missed - drawn on the beat as a broken red
+stroke, Miss, where its tap was owed. A tap the note it fell to already
 had, or one that fell in no window, is drawn too, in grey and exactly where it
 landed: a key that reached the run is never missing from the page. So is a tap on the last beat of the count-in,
 before the first note; the beats of the count before that are the reader

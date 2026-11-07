@@ -6059,6 +6059,50 @@ describe('a run shown again on the page', () => {
   const at = (renderer: FakeScoreRenderer): string[] =>
     renderer.played.map((mark) => `${String(mark.stepIndex)}:${String(mark.midi)}`);
 
+  it('marks a beat nobody tapped where its tap was owed, as marks are shown, and only where the keys are taps', async () => {
+    // The second beat left untapped, every other one tapped on time.
+    const run = async (settings: Partial<PracticeSettings>): Promise<{ beforeTheEnd: string[]; atTheEnd: string[] }> => {
+      const rig = createController(true);
+      const { controller, metronome, midi, clock, renderer } = rig;
+      await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+      controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0, rhythmOnly: true, hearTheOtherHand: false, ...settings });
+      const missed = (): string[] =>
+        renderer.played
+          .filter((mark) => mark.missed === true)
+          .map((mark) => `${String(mark.stepIndex)}:${String(mark.offset)}:${String(mark.tap === true)}:${String(mark.settled)}`);
+      controller.start();
+      metronome.advanceSubdivisions(1);
+      const began = clock.now();
+      const steps = controller.currentTimeline?.playableSteps ?? [];
+      for (const [at, step] of steps.entries()) {
+        const due = began + (step.onsetTicks / Duration.QUARTER.ticks) * 1_000;
+        while (clock.now() + metronome.subdivisionMs <= due) {
+          metronome.advanceSubdivisions(1);
+        }
+        clock.set(due);
+        for (const key of at === 1 ? [] : (step.expectedMidi.slice(0, 1))) {
+          midi.noteOn(key, due);
+        }
+      }
+      metronome.advanceToTicks(Duration.QUARTER.ticks * 3 + 1);
+      const beforeTheEnd = missed();
+      let guard = 64;
+      while (controller.session?.status !== 'completed' && guard > 0) {
+        metronome.advanceSubdivisions(1);
+        guard -= 1;
+      }
+      return { beforeTheEnd, atTheEnd: missed() };
+    };
+
+    // On the beat, drawn as its window closes.
+    expect(await run({ playedNotes: 'live' })).toEqual({ beforeTheEnd: ['1:0:true:true'], atTheEnd: ['1:0:true:true'] });
+    // With the rest at the end, where marks are held.
+    expect(await run({ playedNotes: 'at-end' })).toEqual({ beforeTheEnd: [], atTheEnd: ['1:0:true:true'] });
+    expect(await run({ playedNotes: 'hidden' })).toEqual({ beforeTheEnd: [], atTheEnd: [] });
+    // Read by its keys, a note may yet be played late and credited.
+    expect(await run({ playedNotes: 'live', rhythmOnly: false })).toEqual({ beforeTheEnd: [], atTheEnd: [] });
+  });
+
   it('hands the run whose notes the click is on', async () => {
     const rig = createController(true);
     const { controller } = rig;

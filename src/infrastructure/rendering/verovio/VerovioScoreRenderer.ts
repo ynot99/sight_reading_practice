@@ -1838,6 +1838,7 @@ export class VerovioScoreRenderer
       ...(note.tier === undefined ? {} : { tier: note.tier }),
       ...(note.tap === true ? { tap: true } : {}),
       ...(note.extra === true ? { extra: true } : {}),
+      ...(note.missed === true ? { missed: true } : {}),
     };
     this.marks.push(mark);
     // A tap landing now flashes; drawn again with the page, put up once the

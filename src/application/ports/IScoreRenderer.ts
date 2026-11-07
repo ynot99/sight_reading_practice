@@ -416,6 +416,12 @@ export interface PlayedNote {
    */
   readonly extra?: boolean;
   /**
+   * A beat nobody tapped, in rhythm only: its window passed with no tap in
+   * it. Drawn as a stroke down the system on the beat, as a tap would have
+   * been, in Miss's colour and broken - no press, so not a solid stroke.
+   */
+  readonly missed?: boolean;
+  /**
    * Drawn the moment it was played, rather than put up after it: drawn again
    * with the page, held to the end of a run, shown again, or the verdict of a
    * tap already drawn, it is not. What a tap's flash is for.

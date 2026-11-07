@@ -13,6 +13,8 @@ const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 export function drawShape(shape: OverlayShape, doc: Document): SVGElement {
   const colourClass = shape.kind === 'tick' && shape.extra === true
     ? 'played--extra'
+    : shape.kind === 'tick' && shape.missed === true
+    ? 'played--missed'
     : shape.sounding
     ? 'played--sounding'
     : !shape.correct

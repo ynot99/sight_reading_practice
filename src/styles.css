@@ -847,8 +847,8 @@ textarea {
 
 /*
  * A reading's notes: Perfect, Good, missed, wrong, each a number behind a dot
- * in its verdict's colour, as the dialogs are drawn. Missed has no mark on
- * the page and is only quiet here.
+ * in its verdict's colour, as the dialogs are drawn. Missed is the red of a
+ * fault as a ring, as the page breaks its stroke: nothing was pressed.
  */
 .readings__notes {
   display: inline-flex;
@@ -880,7 +880,11 @@ textarea {
 }
 
 .readings__count[data-kind='missed'] {
-  --count-dot: var(--text-muted);
+  --count-dot: transparent;
+}
+
+.readings__count[data-kind='missed']::before {
+  box-shadow: inset 0 0 0 1.5px var(--wrong);
 }
 
 .readings__count[data-kind='wrong'] {
@@ -7699,6 +7703,17 @@ body[data-repeats='hidden'] .repeat-mark {
  */
 .played--extra {
   stroke: var(--mark-extra);
+  fill: none;
+}
+
+/*
+ * A beat nobody tapped: Miss, in the red of a fault and broken, because no
+ * key was pressed there - a solid stroke is a press, and a red one a wrong
+ * key. Where a tap would have been, on the beat.
+ */
+.played--missed {
+  stroke: var(--mark-wrong);
+  stroke-dasharray: 3 3;
   fill: none;
 }
 

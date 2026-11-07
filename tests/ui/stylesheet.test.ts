@@ -111,7 +111,7 @@ describe('the stylesheet', () => {
     const byHand = rules().find((rule) => rule.selector === ".score__reading[data-sync='by-hand']");
     const ring = rules().find((rule) => rule.selector === '.score__reading[data-sync-ended]');
 
-    expect(synced?.body).toMatch(/border-color\s*:\s*var\(--good\)/);
+    expect(synced?.body).toMatch(/border-color\s*:\s*var\(--correct\)/);
     expect(failed?.body).toMatch(/border-color\s*:\s*var\(--wrong\)/);
     // Over the colour of a button waiting on a press, which a failed one is too.
     expect(failed?.at ?? 0).toBeGreaterThan(byHand?.at ?? Infinity);
@@ -1443,7 +1443,7 @@ describe('the stylesheet', () => {
   it('never paints a Good note in the colour of a wrong one', () => {
     // A press judged Good was right and a little off its beat. A switch once
     // drew it red, the colour of Wrong, which is a verdict nobody gave: the
-    // colours are the verdicts, so a Good note is green whatever is set.
+    // colours are the verdicts, so a Good note is Good's colour whatever is set.
     const good = rules().filter((rule) => rule.selector.includes('played--loose'));
 
     expect(good.length).toBeGreaterThan(0);
@@ -2257,7 +2257,7 @@ describe('the strip of where the notes landed', () => {
       .map((rule) => rule.body)
       .join(';');
 
-  it('marks each note in the green it is drawn in on the page', () => {
+  it('marks each note in the colour it is drawn in on the page', () => {
     expect(body(".hit-bar__tick[data-tier='perfect']")).toContain('var(--correct)');
     expect(body(".hit-bar__tick[data-tier='good']")).toContain('var(--good)');
     // The page's own verdict colours, which are its paper's; the strip is
@@ -2267,7 +2267,7 @@ describe('the strip of where the notes landed', () => {
   });
 
   it('colours a note played from past the edge by its verdict, not as a miss', () => {
-    // A note a step late is Good and played: at the edge, and green.
+    // A note a step late is Good and played: at the edge, and in Good's colour.
     const all = rules();
     const edge = all.findIndex((rule) => rule.selector === ".hit-bar__tick[data-beyond='true']");
     const good = all.findIndex((rule) => rule.selector === ".hit-bar__tick[data-tier='good']");
@@ -2825,6 +2825,33 @@ describe('the paper the music is printed on', () => {
       expect(dark, verdict).toMatch(/^#[0-9a-f]{6}$/);
       expect(dark, verdict).not.toBe(light);
     }
+  });
+
+  it('marks Good in yellow, never a green beside Perfect, by day and at night', () => {
+    // Two greens read as one: a run with two notes Good was seen as all
+    // Perfect, and its grade taken for a fault.
+    const hue = (hex: string): number => {
+      const [r, g, b] = [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16) / 255) as [number, number, number];
+      const max = Math.max(r, g, b);
+      const span = max - Math.min(r, g, b);
+      const turn = max === r ? ((g - b) / span) % 6 : max === g ? (b - r) / span + 2 : (r - g) / span + 4;
+      return Math.round(((turn * 60) + 360) % 360);
+    };
+    const yellow = (hex: string): boolean => hue(hex) >= 40 && hue(hex) <= 65;
+    for (const [good, perfect] of [['--mark-good', '--mark-perfect'], ['--good', '--correct']] as const) {
+      for (const theme of ['light', 'dark'] as const) {
+        const [goodHex, perfectHex] = [token(good)[theme], token(perfect)[theme]];
+        expect({ good, theme, yellow: yellow(goodHex), green: hue(perfectHex) >= 120 && hue(perfectHex) <= 160 }).toEqual({
+          good,
+          theme,
+          yellow: true,
+          green: true,
+        });
+      }
+    }
+    expect(yellow(token('--keys-good').light)).toBe(true);
+    // And a sync that ended well is no verdict: green, not a Good.
+    expect(body(".score__reading[data-sync-ended='synced']")).toContain('var(--correct)');
   });
 
   it('prints the page, its ground and its own words on that paper', () => {

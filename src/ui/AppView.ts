@@ -4242,7 +4242,7 @@ export class AppView {
    *
    * Numbers first and words only under the finger, because a row is read
    * against the rows around it and four short numbers line up. The dots and
-   * not the digits carry the colour: the paler green is the page's own, and
+   * not the digits carry the colour: Good's yellow is the page's own, and
    * as text that small it could not be read.
    */
   private theNotesOf(notes: NoteCounts): HTMLElement {

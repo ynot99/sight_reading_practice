@@ -21,10 +21,12 @@
   --wrong: #b91c1c;
   --pending: #b45309;
   /*
-   * Good: the same green as `--correct`, weaker - lighter on a light ground
-   * and darker on a dark one.
+   * Good: yellow, a verdict of its own rather than a weaker green. Two
+   * greens read as one: a run with two notes Good was seen as all Perfect,
+   * and its grade taken for a fault. Lemon rather than the orange of
+   * `--pending`, which is a wait, not a verdict.
    */
-  --good: #22c55e;
+  --good: #ca8a04;
   /*
    * The page the music is printed on, what it is printed in, and the
    * verdicts a note is marked with there.
@@ -38,7 +40,7 @@
   --ink: #000000;
   --ink-muted: #6b7280;
   --mark-perfect: #15803d;
-  --mark-good: #22c55e;
+  --mark-good: #ca8a04;
   --mark-wrong: #b91c1c;
   --mark-sounding: #7c3aed;
   --mark-extra: #6b7280;
@@ -134,7 +136,7 @@
     --correct: #4ade80;
     --wrong: #f87171;
     --pending: #fbbf24;
-    --good: #16a34a;
+    --good: #fde047;
     --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 30%);
     --mode-card-fill: 100%;
     --mode-card-edge: 0%;
@@ -166,7 +168,7 @@
     --ink: #d5dae2;
     --ink-muted: #8b94a3;
     --mark-perfect: #4ade80;
-    --mark-good: #16a34a;
+    --mark-good: #fde047;
     --mark-wrong: #f87171;
     --mark-sounding: #a78bfa;
     --mark-extra: #9ca3af;
@@ -187,7 +189,7 @@
   --correct: #4ade80;
   --wrong: #f87171;
   --pending: #fbbf24;
-  --good: #16a34a;
+  --good: #fde047;
   --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 30%);
   --mode-card-fill: 100%;
   --mode-card-edge: 0%;
@@ -219,7 +221,7 @@
   --ink: #d5dae2;
   --ink-muted: #8b94a3;
   --mark-perfect: #4ade80;
-  --mark-good: #16a34a;
+  --mark-good: #fde047;
   --mark-wrong: #f87171;
   --mark-sounding: #a78bfa;
   --mark-extra: #9ca3af;
@@ -1115,8 +1117,8 @@ textarea {
 }
 
 /*
- * Each mark in the colour its note is drawn on the page: Perfect in the
- * deeper green, Good in the paler. After the edge's red, and winning over
+ * Each mark in the colour its note is drawn on the page: Perfect in green,
+ * Good in yellow. After the edge's red, and winning over
  * it - a note a step late is Good, played, and only drawn at the edge
  * because it came from past it.
  */
@@ -4006,7 +4008,7 @@ body[data-notes-falling='true'] .focus-bar:has(:focus-visible) {
 .replay-keys {
   /* What a key is lit in, and the note falling onto it. */
   --keys-perfect: #15803d;
-  --keys-good: #22c55e;
+  --keys-good: #eab308;
   --keys-wrong: #b91c1c;
   --keys-aside: #94a3b8;
   /* Not a verdict: what the machine plays, nobody's press. */
@@ -5241,8 +5243,8 @@ body[data-take-on-keys='true'] .focus-bar__row > #focus-speed {
  * out from it once, drawn as a shadow, so the button keeps its size.
  */
 .score__reading[data-sync-ended='synced'] {
-  color: var(--good);
-  border-color: var(--good);
+  color: var(--correct);
+  border-color: var(--correct);
 }
 
 .score__reading[data-sync-ended='failed'] {

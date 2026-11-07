@@ -1046,13 +1046,16 @@ export interface KeyOfTheTake {
  * the newest leaves the first ringing to the end of the piece.
  *
  * One pairing for drawing a take and for changing it, so the note a finger
- * chooses on the drawing is the note taken out of the take.
+ * chooses on the drawing is the note taken out of the take. The keys only,
+ * unless the drums of a sketch are asked for: they are struck and let go of
+ * as keys are, and paired so.
  */
-export function theKeysOfTheTake(events: readonly MidiFileEvent[]): readonly KeyOfTheTake[] {
+export function theKeysOfTheTake(events: readonly MidiFileEvent[], of: 'keys' | 'drums' = 'keys'): readonly KeyOfTheTake[] {
   const keys: KeyOfTheTake[] = [];
   const open = new Map<number, number[]>();
+  const [struck, letGo] = of === 'keys' ? (['noteOn', 'noteOff'] as const) : (['drumOn', 'drumOff'] as const);
   events.forEach((event, at) => {
-    if (event.kind === 'noteOn') {
+    if (event.kind === struck) {
       open.set(event.midi, [...(open.get(event.midi) ?? []), keys.length]);
       keys.push({
         midi: event.midi,
@@ -1064,7 +1067,7 @@ export function theKeysOfTheTake(events: readonly MidiFileEvent[]): readonly Key
         on: at,
         off: null,
       });
-    } else if (event.kind === 'noteOff') {
+    } else if (event.kind === letGo) {
       const waiting = open.get(event.midi) ?? [];
       const index = waiting.shift();
       const key = index === undefined ? undefined : keys[index];
@@ -1158,7 +1161,9 @@ export function thePlayingWithABarTakenOut(
   const inIt = (event: MidiFileEvent): boolean =>
     event.atMs < untilMs - SAME_MOMENT_MS &&
     (event.atMs > fromMs + SAME_MOMENT_MS || (event.atMs >= fromMs - SAME_MOMENT_MS && beginsSomething(event)));
-  const keys = theKeysOfTheTake(events);
+  // The drums with the keys: a hit in the bar goes with it, and one ringing
+  // into it is let go of where it begins, as a key is.
+  const keys = [...theKeysOfTheTake(events), ...theKeysOfTheTake(events, 'drums')];
   if (keys.every((key) => inIt(elementAt(events, key.on)))) {
     return null;
   }

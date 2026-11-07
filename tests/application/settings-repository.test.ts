@@ -69,6 +69,7 @@ const SETTINGS: PracticeSettings = {
   rollScrollPlayback: true,
   rollHeadAtPercent: 35,
   rollSounds: false,
+  drumsHeard: false,
   circleNamesTheChord: false,
   circleShowsTheKeys: false,
   solfegeAsked: { 'complex-key': '3', 'intervals-which': '1,6,12' },

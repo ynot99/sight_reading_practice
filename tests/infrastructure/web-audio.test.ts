@@ -5,6 +5,8 @@ import { Duration } from '../../src/domain/model/Duration.js';
 import { WebAudioMetronome } from '../../src/infrastructure/audio/WebAudioMetronome.js';
 import { WebAudioPitchPlayer } from '../../src/infrastructure/audio/WebAudioPitchPlayer.js';
 import { WebAudioHitSound } from '../../src/infrastructure/audio/WebAudioHitSound.js';
+import { WebAudioDrumKit } from '../../src/infrastructure/audio/WebAudioDrumKit.js';
+import { DRUM_KIT } from '../../src/domain/midi/drums.js';
 import { AudioClockReading, outputLatencySeconds } from '../../src/infrastructure/audio/audioTime.js';
 import { beginThePlaybackTimings, noteAFrame, thePlaybackTimingsText } from '../../src/shared/playbackTimings.js';
 import { theLatestPlayback } from '../support/playbackTimings.js';
@@ -53,6 +55,7 @@ class FakeNode {
   readonly gain = new FakeParam();
   readonly frequency = new FakeParam();
   type = '';
+  buffer: unknown = null;
   startedAt: number | null = null;
   stoppedAt: number | null = null;
   onended: (() => void) | null = null;
@@ -126,6 +129,29 @@ class FakeAudioContext {
   createGain(): FakeNode {
     const node = new FakeNode();
     this.gains.push(node);
+    return node;
+  }
+
+  readonly sampleRate = 48_000;
+  readonly buffers: Float32Array[] = [];
+  readonly sources: FakeNode[] = [];
+  readonly filters: FakeNode[] = [];
+
+  createBuffer(_channels: number, length: number): { getChannelData(): Float32Array } {
+    const samples = new Float32Array(length);
+    this.buffers.push(samples);
+    return { getChannelData: () => samples };
+  }
+
+  createBufferSource(): FakeNode {
+    const node = new FakeNode();
+    this.sources.push(node);
+    return node;
+  }
+
+  createBiquadFilter(): FakeNode {
+    const node = new FakeNode();
+    this.filters.push(node);
     return node;
   }
 
@@ -1334,5 +1360,71 @@ describe('WebAudioHitSound', () => {
     expect(softSnap / loudSnap).toBeCloseTo(0.4, 6);
     expect(quietBody / loudBody).toBeCloseTo(0.25, 6);
     expect(peaks(1, 0)).toEqual([]);
+  });
+});
+
+describe('WebAudioDrumKit', () => {
+  /** What one hit of a drum made: its tones, its noises through their filters, and how long each rings. */
+  const aHitOf = (midi: number, velocity = 1, volume = 1) => {
+    const context = new FakeAudioContext();
+    context.advance(2);
+    new WebAudioDrumKit(contextFactory(context), () => volume).play(midi, velocity);
+    return {
+      context,
+      tones: context.oscillators.map((node) => ({ type: node.type, pitches: node.frequency.ramps.map((ramp) => ramp.value) })),
+      noises: context.filters.map((node) => ({ type: node.type, at: node.frequency.value })),
+      rings: [...context.oscillators, ...context.sources].map((node) => (node.stoppedAt ?? 0) - (node.startedAt ?? 0)),
+      peaks: context.gains.map((node) => Math.max(...node.gain.ramps.map((ramp) => ramp.value))),
+    };
+  };
+
+  it('strikes every drum of the kit, at once, and nothing for a number the kit has no drum by', () => {
+    for (const drum of DRUM_KIT) {
+      const { context } = aHitOf(drum.midi);
+      const started = [...context.oscillators, ...context.sources].map((node) => node.startedAt);
+      expect(started.length, drum.name).toBeGreaterThan(0);
+      expect(started.every((at) => at === 2), drum.name).toBe(true);
+    }
+    expect(aHitOf(60).context.gains).toEqual([]);
+  });
+
+  it('makes a skin a tone falling in pitch, and a hi-hat noise above where a skin sounds, the open one ringing longer', () => {
+    const kick = aHitOf(36);
+    const body = kick.tones[0]?.pitches ?? [];
+    expect(body[0]).toBeGreaterThan(body[body.length - 1] ?? Infinity);
+    const closed = aHitOf(39);
+    const open = aHitOf(40);
+    expect([closed.tones, closed.noises]).toEqual([[], [{ type: 'highpass', at: 7_000 }]]);
+    expect(open.rings[0]).toBeGreaterThan((closed.rings[0] ?? 0) * 3);
+  });
+
+  it('is as loud as it was struck and as the instrument is, and silent where the instrument is', () => {
+    const [loud = 0] = aHitOf(36, 1).peaks;
+    const [soft = 0] = aHitOf(36, 0.4).peaks;
+    const [quiet = 0] = aHitOf(36, 1, 0.5).peaks;
+    expect(soft / loud).toBeCloseTo(0.4, 6);
+    expect(quiet / loud).toBeCloseTo(0.25, 6);
+    expect(aHitOf(36, 1, 0).peaks).toEqual([]);
+  });
+
+  it('makes its noise once, and takes back hits handed over ahead, and every one when told to stop', () => {
+    const context = new FakeAudioContext();
+    const kit = new WebAudioDrumKit(contextFactory(context), () => 1);
+    const takenBack = (node: FakeNode | undefined): boolean => (node?.stoppedAt ?? Infinity) <= (node?.startedAt ?? 0);
+    withTheClockStill((now) => {
+      kit.play(37, 0.5);
+      kit.play(37, 0.5, now + 500);
+      kit.takeBackFrom(now + 100);
+    });
+    expect(context.buffers).toHaveLength(1);
+    expect(context.sources.map(takenBack)).toEqual([false, true]);
+    withTheClockStill((now) => {
+      kit.play(44, 0.5, now + 800);
+    });
+    kit.stopAll();
+    expect(context.sources.map(takenBack)).toEqual([true, true, true]);
+    // Over by itself, it is let go of whole.
+    context.sources[0]?.onended?.();
+    expect([context.sources[0]?.unplugged, context.filters[0]?.unplugged]).toEqual([true, true]);
   });
 });

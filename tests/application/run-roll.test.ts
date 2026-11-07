@@ -2270,6 +2270,10 @@ describe('a bar taken out', () => {
           return `${String(event.atMs)} ${event.level}`;
         case 'section':
           return `${String(event.atMs)} [${event.name}]`;
+        case 'drumOn':
+          return `${String(event.atMs)} hit ${String(event.midi)}`;
+        case 'drumOff':
+          return `${String(event.atMs)} hit off ${String(event.midi)}`;
       }
     });
 

@@ -121,6 +121,7 @@ import {
 import { keepAudioAwake } from '../infrastructure/audio/keepAudioAwake.js';
 import { WebAudioMetronome, createAudioContextFactory } from '../infrastructure/audio/WebAudioMetronome.js';
 import { WebAudioHitSound } from '../infrastructure/audio/WebAudioHitSound.js';
+import { WebAudioDrumKit } from '../infrastructure/audio/WebAudioDrumKit.js';
 import { AudioClockReading } from '../infrastructure/audio/audioTime.js';
 import { WebAudioPitchPlayer } from '../infrastructure/audio/WebAudioPitchPlayer.js';
 import { SampledPitchPlayer } from '../infrastructure/audio/SampledPitchPlayer.js';
@@ -266,6 +267,8 @@ export interface AppRuntime {
    * tapped that way plays back through: see `WebAudioHitSound`.
    */
   readonly hitSound: IPitchPlayer;
+  /** The drums a sketch is written with, each key a drum of the kit: see `WebAudioDrumKit`. */
+  readonly drumKit: IPitchPlayer;
   /** Keeps the screen up while the reader is playing. */
   readonly screenWake: IScreenWake;
   /** The audio device, and whether it can sound anything yet. */
@@ -381,6 +384,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     reading,
   });
   const hitSound = new WebAudioHitSound(audioContextFactory, () => pitchPlayer.volume, { reading });
+  const drumKit = new WebAudioDrumKit(audioContextFactory, () => pitchPlayer.volume, { reading });
 
   const webMidi = new WebMidiAdapter(browserMidiAccessProvider(), clock);
   const computerKeyboard = new ComputerKeyboardMidiSource(options.keyboardTarget, clock);
@@ -626,6 +630,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     screenKeys,
     pitchPlayer,
     hitSound,
+    drumKit,
     // A tablet on a music stand is looked at and not touched: a piece played
     // through sends every note as MIDI and nothing at all to the screen, so
     // the device decides nobody is there and turns the page off mid-bar.

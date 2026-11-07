@@ -2176,6 +2176,33 @@ textarea {
   display: none;
 }
 
+/* The drums heard or silenced: the button says which by its picture. */
+.roll-drums-heard[aria-pressed='true'] .roll-drums-heard__off,
+.roll-drums-heard[aria-pressed='false'] .roll-drums-heard__on {
+  display: none;
+}
+
+/*
+ * The drums written: a row for each drum of the kit, named on the strip,
+ * which is wider for the names than for a key's.
+ */
+.roll-stage[data-drums='true'] {
+  --roll-keys: 56px;
+}
+
+/*
+ * And no pedal: it is the piano's, and stays as it is under the notes. Over
+ * the taller lane a sketch being edited has, so it wins there too.
+ */
+.roll-stage[data-editing='true'][data-drums='true'] {
+  --roll-pedal: 0px;
+}
+
+/* Edged only where it has a height, or a pixel of edge would stand there. */
+.roll-stage[data-drums='true'] .roll__pedal {
+  border-top: 0;
+}
+
 /*
  * The chord the keys held make and the chord the chosen notes make, under the
  * ruler at the middle of the drawing, side by side when both are there.

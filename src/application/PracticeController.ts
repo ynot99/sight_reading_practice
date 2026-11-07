@@ -392,6 +392,11 @@ export interface PracticeSettings {
    */
   readonly rollSounds: boolean;
   /**
+   * Whether a sketch's drums are heard as it plays: the track the writer
+   * keeps to feel the music by, silenced where it is in the way.
+   */
+  readonly drumsHeard: boolean;
+  /**
    * Whether the chord sounding is named: in the middle of the circle of
    * fifths, with its numeral, and at the top of the screen over free play -
    * worth seeing at times, and a distraction at others. One question asked in
@@ -1182,6 +1187,7 @@ export class PracticeController {
       // than one that is moving.
       rollHeadAtPercent: 15,
       rollSounds: true,
+      drumsHeard: true,
       circleNamesTheChord: true,
       circleShowsTheKeys: true,
       solfegeAsked: {},

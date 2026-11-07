@@ -2122,6 +2122,20 @@ describe('the rows of the drawing and the pitch map beside them', () => {
     expect(pills).toMatch(/display\s*:\s*flex/);
   });
 
+  it('widens the strip for the names of the drums while they are written, and gives the pedal no room then', () => {
+    expect(Number.parseFloat(declared(body(".roll-stage[data-drums='true']"), '--roll-keys') ?? '0')).toBeGreaterThan(
+      Number.parseFloat(declared(body('.roll-stage'), '--roll-keys') ?? '0'),
+    );
+    // Over the taller lane a sketch being edited has: more specific than it.
+    expect(declared(body(".roll-stage[data-editing='true']"), '--roll-pedal')).not.toBe('0px');
+    expect(declared(body(".roll-stage[data-editing='true'][data-drums='true']"), '--roll-pedal')).toBe('0px');
+    expect(declared(body(".roll-stage[data-drums='true'] .roll__pedal"), 'border-top')).toBe('0');
+    // The switch silencing them shows one picture at a time.
+    const pictures = rules().find((each) => each.selector.includes(".roll-drums-heard[aria-pressed='false'] .roll-drums-heard__on"));
+    expect(pictures?.selector).toContain(".roll-drums-heard[aria-pressed='true'] .roll-drums-heard__off");
+    expect(declared(pictures?.body ?? '', 'display')).toBe('none');
+  });
+
   it('gives the lane of chords room only while the chords are open, between the notes and the pedal', () => {
     expect(declared(body('.roll-stage'), '--roll-chords')).toBe('0px');
     expect(Number.parseFloat(declared(body(".roll-stage[data-chords='true']"), '--roll-chords') ?? '0')).toBeGreaterThanOrEqual(28);

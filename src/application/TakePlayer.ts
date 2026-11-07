@@ -1,4 +1,5 @@
 import { damperIsDown, type MidiFileEvent } from '../domain/midi/MidiFile.js';
+import { theNotesAndTheDrumsSwapped } from '../domain/midi/drums.js';
 import type { IClock } from './ports/IClock.js';
 import type { IPitchPlayer, ISustainPedal } from './ports/IPitchPlayer.js';
 
@@ -52,6 +53,8 @@ export class TakePlayer {
   private readonly instrument: IPitchPlayer;
   /** What the take being played sounds through: the instrument, unless it was handed another. */
   private voice: IPitchPlayer;
+  /** What a sketch's drums sound through, while one with its drums heard is played: none otherwise. */
+  private drumVoice: IPitchPlayer | null = null;
   private readonly clock: IClock;
   private readonly sustain: ISustainPedal | null;
 
@@ -211,6 +214,9 @@ export class TakePlayer {
    * And it may be played through something other than the instrument - a
    * run whose keys were heard as a drum, through the drum. That too goes
    * with what is played: the next take sounds as the instrument again.
+   *
+   * A sketch's drums are heard through the kit they are handed with, beside
+   * its notes; handed none, they are not heard.
    */
   play(
     id: string,
@@ -218,11 +224,15 @@ export class TakePlayer {
     fromMs = 0,
     loop: TakeLoop | null = null,
     through: IPitchPlayer = this.instrument,
+    drums: IPitchPlayer | null = null,
   ): void {
     this.stop();
     this.voice = through;
+    this.drumVoice = drums;
     this.lengthMs = events.reduce((longest, event) => Math.max(longest, event.atMs), 0);
-    this.notes = soundingNotes(events, this.lengthMs);
+    const hits = drums === null ? [] : theHitsOf(events);
+    // In the order they begin, a note before a hit at one moment.
+    this.notes = [...soundingNotes(events, this.lengthMs), ...hits].sort((one, other) => one.startMs - other.startMs);
     this.playingId = id;
     this.loop = loop !== null && loop.toMs > loop.fromMs ? loop : null;
     this.offsetMs = Math.max(0, Math.min(this.lengthMs, fromMs));
@@ -304,8 +314,9 @@ export class TakePlayer {
       // chord, not the silence between its attack and its release.
       const startsAt = Math.max(note.startMs, begins);
       const endsAt = loop === null ? note.endMs : Math.min(note.endMs, loop.toMs);
-      this.voice.play(note.midi, note.velocity, this.whenHeard(startsAt + shift));
-      this.voice.stop(note.midi, this.whenHeard(Math.max(endsAt, startsAt) + shift));
+      const voice = note.drum === true && this.drumVoice !== null ? this.drumVoice : this.voice;
+      voice.play(note.midi, note.velocity, this.whenHeard(startsAt + shift));
+      voice.stop(note.midi, this.whenHeard(Math.max(endsAt, startsAt) + shift));
       this.handed.add(index);
     }
 
@@ -371,6 +382,7 @@ export class TakePlayer {
 
   private silence(): void {
     this.voice.stopAll();
+    this.drumVoice?.stopAll();
     this.sustain?.setSustain(false);
   }
 }
@@ -386,6 +398,17 @@ interface StruckNote {
 interface PairedNote extends StruckNote {
   /** When the sound stops: the damper falling, or the next strike. */
   readonly endMs: number;
+  /** Whether it is a drum of a sketch's, heard through the kit rather than the instrument. */
+  readonly drum?: true;
+}
+
+/**
+ * A sketch's drums as notes to hand over: each from its hit to its letting
+ * go, which the pedal has nothing to do with - it is the piano's.
+ */
+function theHitsOf(events: readonly MidiFileEvent[]): PairedNote[] {
+  const drums = theNotesAndTheDrumsSwapped(events.filter((event) => event.kind === 'drumOn' || event.kind === 'drumOff'));
+  return pairUp(drums).map((hit) => ({ ...hit, endMs: hit.keyUpMs, drum: true }));
 }
 
 /** A moment the sustain pedal changed which side of down it was on. */

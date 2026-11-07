@@ -598,6 +598,7 @@ const TAKE_COUNTER_MS = 500;
 
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { fillSelect, requireElement, isFormControl } from './dom.js';
+import { DRUM_KIT, theDrumOf, theNotesAndTheDrumsSwapped } from '../domain/midi/drums.js';
 import { keepTheTrail, timeTheStart, traceTheStart } from '../shared/timeTheStart.js';
 import { noteAFrame, noteTheFramesStopped, thePlaybackTimingsText } from '../shared/playbackTimings.js';
 
@@ -2456,6 +2457,12 @@ export class AppView {
        * around the notes to choose, with a finger as with the mouse.
        */
       readonly tool: 'pencil' | 'selection';
+      /**
+       * Whether its drums are being written rather than its notes: drawn and
+       * changed in their place, the notes left as they are. See
+       * `theSketchAsDrawn`.
+       */
+      readonly drums: boolean;
       /** What it was before each change, the last last: its notes, its beats and the notes chosen. */
       readonly before: readonly SketchAsItWas[];
       /** What each undo took it back from, the last last, for a redo to bring back; gone at the next change. */
@@ -2463,6 +2470,8 @@ export class AppView {
     };
   } | null = null;
 
+  /** How far down the notes of a sketch were looked at, while its drums are written: see `writeTheDrums`. */
+  private notesLookedAtFrom: number | null = null;
   /** The sketches the drive had at the last sync: see `showTheSketchesOnTheDrive`. */
   private sketchesOnTheDrive: readonly SketchOnTheDrive[] = [];
   /** The reading the sheet over the list is showing, so its buttons know theirs. */
@@ -2729,6 +2738,8 @@ export class AppView {
     rollHumanize: HTMLButtonElement;
     rollDelete: HTMLButtonElement;
     rollSelect: HTMLButtonElement;
+    rollDrums: HTMLButtonElement;
+    rollDrumsHeard: HTMLButtonElement;
     rollUndo: HTMLButtonElement;
     rollRedo: HTMLButtonElement;
     rollChordsOpen: HTMLButtonElement;
@@ -3204,6 +3215,8 @@ export class AppView {
       rollHumanize: requireElement(doc, 'roll-humanize'),
       rollDelete: requireElement(doc, 'roll-delete'),
       rollSelect: requireElement(doc, 'roll-select'),
+      rollDrums: requireElement(doc, 'roll-drums'),
+      rollDrumsHeard: requireElement(doc, 'roll-drums-heard'),
       rollUndo: requireElement(doc, 'roll-undo'),
       rollRedo: requireElement(doc, 'roll-redo'),
       rollChordsOpen: requireElement(doc, 'roll-chords-open'),
@@ -8785,7 +8798,7 @@ export class AppView {
     const id = this.sketchTakenUnderTheEditor;
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
-    const stored = id === null ? null : this.runtime.sketches.find(id);
+    const stored = id === null ? null : this.theSketchAsDrawn(id);
     if (showing === null || sketch?.id !== id || stored === null) {
       return;
     }
@@ -10415,6 +10428,18 @@ export class AppView {
       this.theOtherRollShowing = { ...showing, sketch: { ...sketch, tool } };
       this.sayWhatCanBeChanged();
     });
+    this.listen(this.el.rollDrums, 'click', () => {
+      this.writeTheDrums(this.theOtherRollShowing?.sketch?.drums !== true);
+    });
+    this.listen(this.el.rollDrumsHeard, 'click', () => {
+      this.runtime.controller.updateSettings({ drumsHeard: !this.runtime.controller.settings.drumsHeard });
+      this.sayWhatCanBeChanged();
+      // Heard from now on as asked, a playback going picked up where it is.
+      if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
+        this.holdTheRoll();
+        this.playTheRoll();
+      }
+    });
     this.listen(this.el.rollUndo, 'click', () => {
       this.sketchEditing.putBackTheLastChange();
     });
@@ -10525,6 +10550,10 @@ export class AppView {
       this.insertABarBeforeTheBeatAsked();
     });
     this.listen(this.el.rollChordsOpen, 'click', () => {
+      // The chords are of the notes, and wait for them while the drums are written.
+      if (this.theDrumsAreWritten()) {
+        return;
+      }
       this.chordsOfTheKeyOpen = !this.chordsOfTheKeyOpen;
       this.chordsBeingForgotten = false;
       this.showTheChordsOfTheKey();
@@ -14629,6 +14658,8 @@ export class AppView {
       this.el.rollRedo,
       this.el.rollMark,
       this.el.rollRecord,
+      this.el.rollDrums,
+      this.el.rollDrumsHeard,
     ]) {
       button.hidden = sketch === undefined;
       if (editing) {
@@ -14638,6 +14669,7 @@ export class AppView {
       }
     }
     this.sayWhetherItRecords();
+    this.sayWhetherTheDrumsAreWritten();
     // The box chooses notes on any drawing: on a sketch while it is edited,
     // and on anything else to copy them out of.
     this.el.rollSelect.hidden = false;
@@ -14682,7 +14714,7 @@ export class AppView {
       delete this.el.rollDelete.dataset['idle'];
       this.el.rollDelete.title =
         chosen.length === 1 && only !== undefined
-          ? `Delete the chosen note, ${midiToLabel(only.midi)} (Delete)`
+          ? `Delete the chosen note, ${this.theNameOfTheRow(only.midi)} (Delete)`
           : `Delete the ${String(chosen.length)} chosen notes (Delete)`;
     }
     this.el.rollDelete.setAttribute('aria-label', this.el.rollDelete.title);
@@ -14731,11 +14763,13 @@ export class AppView {
       }
     }
     const spelling = this.theKeyTheDrawingSpellsIn();
-    const chord = theChordTheNotesMake(
-      chosen.map((key) => ({ midi: key.midi, lengthMs: lengthOf.get(`${String(key.midi)} ${String(key.downAtMs)}`) ?? 0 })),
-      spelling?.fifths ?? null,
-      spelling?.scale,
-    );
+    const chord = this.theDrumsAreWritten()
+      ? null
+      : theChordTheNotesMake(
+          chosen.map((key) => ({ midi: key.midi, lengthMs: lengthOf.get(`${String(key.midi)} ${String(key.downAtMs)}`) ?? 0 })),
+          spelling?.fifths ?? null,
+          spelling?.scale,
+        );
     this.el.rollChord.textContent = chord === null ? '' : chord.exactly ? chord.name : `≈ ${chord.name}`;
     this.el.rollChord.title =
       chord?.exactly === false ? 'The chord most of the chosen notes make, by how long they sound' : 'The chord the chosen notes make';
@@ -14769,7 +14803,7 @@ export class AppView {
    */
   private theKeyTheDrawingSpellsIn(): { readonly fifths: number; readonly scale: ScaleName } | null {
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     if (stored === null) {
       return null;
     }
@@ -14807,7 +14841,7 @@ export class AppView {
    */
   showTheChordsOfTheKey(): void {
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     const open = this.theChordsOfTheKeyAreOpen();
     const written = this.theChordsAreWritten();
     // There for any music whose keys are known; read only, but beside a sketch being edited.
@@ -14819,6 +14853,11 @@ export class AppView {
         ? 'Chords, to write where the cursor is'
         : 'The chords of the music: the circle of fifths and their chart';
     this.el.rollChordsOpen.setAttribute('aria-label', this.el.rollChordsOpen.title);
+    if (this.theDrumsAreWritten()) {
+      sayWhetherIdle(this.el.rollChordsOpen, 'The chords are of the notes: back to them to see the chords', true);
+    } else {
+      delete this.el.rollChordsOpen.dataset['idle'];
+    }
     this.el.rollSide.hidden = !open;
     // What writes - the drawer, the goals, the circle's slices - only where it can.
     this.el.rollSide.dataset['writes'] = String(written);
@@ -14901,7 +14940,7 @@ export class AppView {
    */
   private whatKeepingWouldDo(): { readonly says: string; readonly idle: boolean; readonly lettingGo: boolean } {
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     const chosen = eachKeyOnce(sketch?.chosen.map((key) => key.midi) ?? []);
     if (stored === null || chosen.length < 2) {
       return { says: 'Keep the chosen notes as a chord. Choose two notes or more first.', idle: true, lettingGo: false };
@@ -14937,7 +14976,7 @@ export class AppView {
   private breakTheChosenChords(way: ArpeggioWay): void {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     if (showing === null || sketch === undefined || stored === null) {
       return;
     }
@@ -14951,7 +14990,7 @@ export class AppView {
   /** Where the sketch shown changes key, metre or pace, from its first beat, and what a mark there says: "G major 3/4 ♩=90". */
   private theMarksOfTheSketchShown(): readonly { readonly atMs: number; readonly says: string }[] {
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     if (stored === null) {
       return [];
     }
@@ -15026,8 +15065,8 @@ export class AppView {
   /** Marks on the strip the keys of the scale the cursor is in. */
   private markTheScaleOnTheStrip(): void {
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
-    const key = stored === null ? null : this.theKeyAtTheHead(stored);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
+    const key = stored === null || this.theDrumsAreWritten() ? null : this.theKeyAtTheHead(stored);
     const inTheScale = new Set(key === null ? [] : thePitchClassesOfTheScale(key.fifths, theScaleOfTheKey(key)));
     this.rollKeysStrip?.querySelectorAll<HTMLElement>('.roll__key').forEach((each) => {
       const midi = Number(each.dataset['midi']);
@@ -15048,7 +15087,7 @@ export class AppView {
    */
   private followTheKeyWhereTheHeadGoes(): void {
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     const found = stored === null ? '' : `${stored.id} ${JSON.stringify(this.theKeyAtTheHead(stored))}`;
     if (found === this.keyAtTheHeadFollowed) {
       return;
@@ -15066,6 +15105,9 @@ export class AppView {
 
   /** The scales the sketch shown is written in, each from where it begins, or none where no sketch is shown. */
   private theScalesOfTheSketchShown(): readonly { readonly fromMs: number; readonly pitchClasses: readonly number[] }[] {
+    if (this.theDrumsAreWritten()) {
+      return [];
+    }
     return this.theKeysOfTheSketchShown().map((key) => ({
       fromMs: key.fromMs,
       pitchClasses: thePitchClassesOfTheScale(key.fifths, key.scale),
@@ -15075,7 +15117,7 @@ export class AppView {
   /** The keys the sketch shown is in, each from where it begins: the one it begins in from the very beginning. */
   private theKeysOfTheSketchShown(): readonly KeyFrom[] {
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     if (stored === null) {
       return [];
     }
@@ -15092,13 +15134,22 @@ export class AppView {
    * whose keys are known - a sketch's, or the open score's.
    */
   private theChordsOfTheKeyAreOpen(): boolean {
-    return this.chordsOfTheKeyOpen && this.theKeysOfTheMusicAreKnown();
+    return this.chordsOfTheKeyOpen && this.theKeysOfTheMusicAreKnown() && !this.theDrumsAreWritten();
+  }
+
+  /**
+   * Whether the drums of the sketch shown are being written rather than its
+   * notes. Nothing that reads the notes as pitches - the chords, the scale,
+   * a chord's name - is asked of them then: a drum is no pitch.
+   */
+  private theDrumsAreWritten(): boolean {
+    return this.theOtherRollShowing?.sketch?.drums === true;
   }
 
   /** Whether the chords open are written with as well as read: only beside a sketch being edited. */
   private theChordsAreWritten(): boolean {
     const sketch = this.theOtherRollShowing?.sketch;
-    return sketch?.editing === true && this.runtime.sketches.find(sketch.id) !== null;
+    return sketch?.editing === true && this.theSketchAsDrawn(sketch.id) !== null;
   }
 
   /**
@@ -15142,7 +15193,7 @@ export class AppView {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
     if (sketch !== undefined) {
-      return this.runtime.sketches.find(sketch.id) !== null;
+      return this.theSketchAsDrawn(sketch.id) !== null;
     }
     return (showing === null || showing.ofTheOpenScore) && this.theRoll() !== null;
   }
@@ -15155,7 +15206,7 @@ export class AppView {
   private theSectionsOfTheMusicShown(): readonly { readonly atMs: number; readonly name: string }[] {
     const roll = this.theRoll();
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     if (roll === null) {
       return [];
     }
@@ -15237,7 +15288,7 @@ export class AppView {
    * one, nothing goes.
    */
   private forgetTheChordInTheDrawer(at: number): void {
-    const stored = this.theOtherRollShowing?.sketch === undefined ? null : this.runtime.sketches.find(this.theOtherRollShowing.sketch.id);
+    const stored = this.theOtherRollShowing?.sketch === undefined ? null : this.theSketchAsDrawn(this.theOtherRollShowing.sketch.id);
     const chord = stored === null ? undefined : this.theChordsInTheDrawer(this.theKeyAtTheHead(stored))[at];
     if (chord === undefined) {
       return;
@@ -15278,7 +15329,7 @@ export class AppView {
   /** Writes what a chord would make of the sketch, as `writeTheChordAtTheHead` says; what was written, or none. */
   private writeTheChordWritten(written: ChordWritten | null): ChordWritten | null {
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     if (sketch === undefined || stored === null || written === null || !written.changes) {
       return null;
     }
@@ -15437,7 +15488,7 @@ export class AppView {
   private draftTheKey(midi: number): void {
     const over = this.theChordChosenInTheLane();
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     if (over === null || stored === null) {
       return;
     }
@@ -15536,7 +15587,7 @@ export class AppView {
    */
   private theChordWrittenAtTheHead(at: number): ChordWritten | null {
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     const chord = stored === null ? undefined : this.theChordsInTheDrawer(this.theKeyAtTheHead(stored))[at];
     return chord === undefined ? null : this.theKeysWrittenAtTheHead(chord.midis);
   }
@@ -15545,7 +15596,7 @@ export class AppView {
   private theKeysWrittenAtTheHead(keys: readonly number[]): ChordWritten | null {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     if (showing === null || sketch === undefined || stored === null) {
       return null;
     }
@@ -15608,7 +15659,7 @@ export class AppView {
    */
   private theChordWrittenOver(over: SceneChord, drawn: readonly number[]): ChordWritten | null {
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     const roll = this.theRoll();
     const to = theChordTheNotesMake(drawn.map((midi) => ({ midi, lengthMs: 1 })));
     if (stored === null || roll === null || to === null) {
@@ -15868,12 +15919,12 @@ export class AppView {
     // Where it begins, and who wrote it, in the options, while it is edited as well.
     this.el.rollSketchStart.hidden = sketch?.editing !== true;
     this.el.rollAuthorGroup.hidden = sketch?.editing !== true;
-    this.el.rollAuthor.value = (sketch === undefined ? null : this.runtime.sketches.find(sketch.id))?.author ?? '';
-    const key = sketch === undefined ? null : this.runtime.sketches.find(sketch.id)?.key;
+    this.el.rollAuthor.value = (sketch === undefined ? null : this.theSketchAsDrawn(sketch.id))?.author ?? '';
+    const key = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id)?.key;
     if (key !== undefined && key !== null) {
       this.sayTheKeyOfTheSketch(key);
     }
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     const first = stored === null ? undefined : theClickOfTheTake(stored.events, stored.beats)?.[0];
     const pace = stored === null ? null : thePaceOfTheClick(stored.events, stored.beats);
     this.el.rollTempo.value = pace === null ? '' : String(Math.round(pace));
@@ -15916,7 +15967,7 @@ export class AppView {
   /** The chosen notes each struck a little harder or softer: one change, put back as one. They stay chosen. */
   private humanizeTheChosen(): void {
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     if (sketch === undefined || stored === null) {
       return;
     }
@@ -15935,7 +15986,7 @@ export class AppView {
   private putTheChosenOnTheGrid(): void {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     if (showing === null || sketch === undefined || stored === null) {
       return;
     }
@@ -15958,14 +16009,16 @@ export class AppView {
    */
   private sayWhichHand(): void {
     const hands = this.theChosenKeys().map((key) => key.hand ?? null);
-    const idle = hands.length === 0;
+    // A drum has no hand: the staves are the notes'.
+    const drums = this.theDrumsAreWritten();
+    const idle = hands.length === 0 || drums;
     const all = (hand: Hand | null): boolean => !idle && hands.every((each) => each === hand);
     if (idle) {
       this.el.rollHands.dataset['idle'] = 'true';
     } else {
       delete this.el.rollHands.dataset['idle'];
     }
-    const first = idle ? ' Choose a note first.' : '';
+    const first = drums ? ' The drums are played by no hand: back to the notes.' : idle ? ' Choose a note first.' : '';
     for (const [button, hand, says] of [
       [this.el.rollHandLeft, 'left', 'Left hand: the chosen notes on the lower staff.'],
       [this.el.rollHandPitch, null, 'By pitch: below middle C the left hand, from it the right.'],
@@ -15980,7 +16033,7 @@ export class AppView {
   /** The chosen keys of the sketch, as they are in it now. */
   private theChosenKeys(): KeyOfTheTake[] {
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     if (sketch === undefined || stored === null) {
       return [];
     }
@@ -16012,7 +16065,7 @@ export class AppView {
    */
   private askAboutTheBeatAt(atMs: number): boolean {
     const showing = this.theOtherRollShowing;
-    const stored = showing?.sketch === undefined ? null : this.runtime.sketches.find(showing.sketch.id);
+    const stored = showing?.sketch === undefined ? null : this.theSketchAsDrawn(showing.sketch.id);
     if (showing === null || stored === null) {
       return false;
     }
@@ -16091,7 +16144,7 @@ export class AppView {
   private insertABarBeforeTheBeatAsked(): void {
     const bar = this.beatAskedAbout;
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     this.el.sheetRollMark.hidden = true;
     this.beatAskedAbout = null;
     this.keyAskedAbout = null;
@@ -16116,7 +16169,7 @@ export class AppView {
   private deleteTheBarOfTheBeatAsked(): void {
     const bar = this.beatAskedAbout;
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     this.el.sheetRollMark.hidden = true;
     this.beatAskedAbout = null;
     this.keyAskedAbout = null;
@@ -16261,7 +16314,7 @@ export class AppView {
     const roll = this.theRoll();
     const marks = this.rollHeads?.marks;
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     if (marks === undefined || scene === null || roll === null) {
       return;
     }
@@ -16334,7 +16387,7 @@ export class AppView {
    */
   copyTheMarkChosen(cutting: boolean): void {
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     const atMs = this.markChosenAtMs;
     const beat = stored === null || atMs === null ? null : theBeatOfTheClickAt(stored.events, stored.beats, atMs);
     if (stored === null || atMs === null || beat === null) {
@@ -16431,7 +16484,7 @@ export class AppView {
     this.dynamicAskedAbout = null;
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     const [beatsInBar, beatType] = metre.split('/').map(Number);
     this.el.sheetRollMark.hidden = true;
     this.beatAskedAbout = null;
@@ -16505,7 +16558,7 @@ export class AppView {
   private countTheSketchIn(metre: string): void {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     const [beatsInBar, beatType] = metre.split('/').map(Number);
     if (showing === null || stored === null || beatsInBar === undefined || beatType === undefined) {
       return;
@@ -16524,7 +16577,7 @@ export class AppView {
    */
   private paceTheSketchAt(crotchetsPerMinute: number): void {
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     if (sketch === undefined || stored === null) {
       return;
     }
@@ -16591,9 +16644,15 @@ export class AppView {
   /** Gives the chosen notes to a hand, or back to their pitch: one change. */
   private giveTheChosenToAHand(hand: Hand | null): void {
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     const keys = this.theChosenKeys();
-    if (sketch === undefined || stored === null || keys.length === 0 || keys.every((key) => (key.hand ?? null) === hand)) {
+    if (
+      sketch === undefined ||
+      sketch.drums ||
+      stored === null ||
+      keys.length === 0 ||
+      keys.every((key) => (key.hand ?? null) === hand)
+    ) {
       return;
     }
     const events = takeWithTheKeysChanged(
@@ -16649,7 +16708,7 @@ export class AppView {
     // the flags; a level's edge dashed where every one follows the flags and
     // a flag over each says that level.
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     const chosen = this.theChosenKeys();
     const following = chosen.length > 0 && chosen.every((key) => key.loudness?.level === null);
     const flagsSay = (key: KeyOfTheTake): DynamicLevel => (stored === null ? LOUDNESS_UNMARKED : theDynamicAt(stored.events, key.downAtMs) ?? LOUDNESS_UNMARKED);
@@ -16679,7 +16738,7 @@ export class AppView {
    */
   private writeTheChosenAt(loudness: NoteLoudness): void {
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     const keys = this.theChosenKeys();
     if (
       sketch === undefined ||
@@ -16715,7 +16774,7 @@ export class AppView {
   /** The chosen notes made as loud as the slider was let go at, by as much each: one change. */
   private setTheLoudnessAsked(): void {
     const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     const loudness = this.theLoudnessOfTheChosen();
     if (sketch === undefined || stored === null || loudness.length === 0) {
       return;
@@ -16803,7 +16862,7 @@ export class AppView {
       why: 'A sketch: no bars to practise until it is written down.',
       ofTheOpenScore: false,
       barLabel: barsCountedOnItsBeats(roll),
-      sketch: { id, editing: false, chosen: [], before: [], after: [], tool: 'pencil' },
+      sketch: { id, editing: false, chosen: [], before: [], after: [], tool: 'pencil', drums: false },
     };
     this.rollAtMs = 0;
     this.rollScroller.to(0, 0);
@@ -17130,6 +17189,56 @@ export class AppView {
   }
 
   /**
+   * A sketch as the drawing has it: as it is kept, or - where its drums are
+   * being written - with its drums and its notes changed places, so that
+   * everything that finds and changes notes finds and changes the drums.
+   * What changes it goes back through `changeTheSketchShowing`, which
+   * changes them back. Saving, writing down and syncing read it as it is
+   * kept.
+   */
+  theSketchAsDrawn(id: string): StoredSketch | null {
+    const stored = this.runtime.sketches.find(id);
+    const sketch = this.theOtherRollShowing?.sketch;
+    return stored !== null && sketch?.id === id && sketch.drums ? { ...stored, events: theNotesAndTheDrumsSwapped(stored.events) } : stored;
+  }
+
+  /**
+   * Turns the drawing of a sketch to its drums, or back to its notes. What
+   * was chosen is let go of, as it was chosen among the others; what can be
+   * put back is turned with it, so an undo puts back the change it says,
+   * whichever is written now.
+   */
+  private writeTheDrums(drums: boolean): void {
+    // What was being recorded is written in first, among the notes.
+    this.writeInWhatWasRecorded();
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    if (showing === null || sketch === undefined || sketch.drums === drums) {
+      return;
+    }
+    const turned = (changes: readonly SketchAsItWas[]): readonly SketchAsItWas[] =>
+      changes.map((change) => ({ ...change, events: theNotesAndTheDrumsSwapped(change.events), chosen: [] }));
+    this.theOtherRollShowing = {
+      ...showing,
+      sketch: { ...sketch, drums, chosen: [], before: turned(sketch.before), after: turned(sketch.after) },
+    };
+    const drawn = this.theSketchAsDrawn(sketch.id);
+    if (drawn !== null) {
+      const roll = rollOfTheTake(drawn, ROOM_IN_A_SKETCH);
+      this.theOtherRollShowing = { ...this.theOtherRollShowing, roll, barLabel: barsCountedOnItsBeats(roll) };
+    }
+    // The notes are kept where they were looked at, for coming back to; the
+    // kit is a few rows, drawn from its top. Scrolled once drawn, so the
+    // drawing it is scrolled over is the one it is kept for.
+    const y = this.rollScroller.y;
+    this.drawTheRollInto();
+    this.rollScroller.to(this.rollScroller.x, drums ? 0 : (this.notesLookedAtFrom ?? y));
+    this.notesLookedAtFrom = drums ? y : null;
+    this.paintTheRoll();
+    this.sayWhatCanBeChanged();
+  }
+
+  /**
    * Changes the sketch on the drawing, and everything drawn from it: the
    * sketch kept, its drawing and its row in the list. A playback going is
    * held where it stands, since it was sounding the sketch before the change.
@@ -17148,12 +17257,14 @@ export class AppView {
     if (showing === null || sketch === undefined || this.sketchTakenUnderTheEditor === sketch.id) {
       return;
     }
-    const changed = this.runtime.sketches.changeTheNotes(sketch.id, events, beats);
-    if (changed === null) {
+    // Changed where its drums are written, they go back to being drums.
+    const changed = this.runtime.sketches.changeTheNotes(sketch.id, sketch.drums ? theNotesAndTheDrumsSwapped(events) : events, beats);
+    const drawn = changed === null ? null : this.theSketchAsDrawn(sketch.id);
+    if (drawn === null) {
       return;
     }
     this.holdTheRoll();
-    const roll = rollOfTheTake(changed, ROOM_IN_A_SKETCH);
+    const roll = rollOfTheTake(drawn, ROOM_IN_A_SKETCH);
     this.theOtherRollShowing = {
       ...showing,
       roll,
@@ -17191,6 +17302,7 @@ export class AppView {
       keepsTime: this.theRunKeptTime(),
       chosen,
       wholeKeyboard: this.theOtherRollShowing?.sketch?.editing === true,
+      ...(this.theDrumsAreWritten() ? { kit: DRUM_KIT } : {}),
       freely: this.nothingOnTheDrawingIsJudged(),
       scales: this.theScalesOfTheSketchShown(),
       marks: this.theMarksOfTheSketchShown(),
@@ -17218,6 +17330,8 @@ export class AppView {
     const stage = this.el.rollBody.closest<HTMLElement>('.roll-stage');
     if (stage !== null) {
       stage.dataset['editing'] = String(this.theOtherRollShowing?.sketch?.editing === true);
+      // And with the drums written, the strip wide enough for their names.
+      stage.dataset['drums'] = String(this.theDrumsAreWritten());
       // And with the chords open, the lane naming those the notes make -
       // said on the sheet as well, for the rows under the drawing.
       stage.dataset['chords'] = String(this.theChordsOfTheKeyAreOpen());
@@ -17236,6 +17350,7 @@ export class AppView {
     this.rollPitches = thePitchesOfTheRun(roll, ghosts, this.theOtherRollShowing?.sketch?.editing === true, {
       freely: this.nothingOnTheDrawingIsJudged(),
       chosen: this.sketchEditing.theNotesChosen(),
+      ...(this.theDrumsAreWritten() ? { kit: DRUM_KIT } : {}),
     });
     this.applyTheZoom();
     this.el.rollMap.replaceChildren(
@@ -17522,7 +17637,27 @@ export class AppView {
    */
   private playTheRoll(): void {
     const roll = this.theRoll();
-    if (roll === null || roll.presses.length === 0) {
+    if (roll === null) {
+      return;
+    }
+    // A sketch sounds as it is kept, whichever of it is drawn: its notes on
+    // the instrument, and its drums on the kit unless they are silenced -
+    // each from the nought of the drawing shown, so what sounds is what is
+    // under the head.
+    const sketch = this.theOtherRollShowing?.sketch;
+    const kept = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const origin = rollBeganAtMs(roll);
+    const notesRoll = kept === null ? null : rollOfTheTake(kept, ROOM_IN_A_SKETCH);
+    const events =
+      kept === null || notesRoll === null
+        ? rollAsEvents(roll)
+        : [
+            ...rollAsEvents(notesRoll).map((event) => ({ ...event, atMs: event.atMs + rollBeganAtMs(notesRoll) - origin })),
+            ...kept.events.flatMap((event) =>
+              event.kind === 'drumOn' || event.kind === 'drumOff' ? [{ ...event, atMs: event.atMs - origin }] : [],
+            ),
+          ];
+    if (!events.some((event) => event.kind === 'noteOn' || event.kind === 'drumOn')) {
       return;
     }
     if (this.takeTick !== null) {
@@ -17537,7 +17672,8 @@ export class AppView {
     // it somewhere - and the clicks behind it are already spent.
     this.clicksHandedOver(clicksBefore(roll, this.rollAtMs, this.theRollsGrid()));
     this.runtime.takePlayer.setSpeed(this.theRollsSpeed());
-    this.runtime.takePlayer.play(RUN_ROLL_ID, rollAsEvents(roll), this.rollAtMs, this.theSliceGoneRoundFrom(this.rollAtMs));
+    const drums = kept !== null && this.runtime.controller.settings.drumsHeard ? this.runtime.drumKit : null;
+    this.runtime.takePlayer.play(RUN_ROLL_ID, events, this.rollAtMs, this.theSliceGoneRoundFrom(this.rollAtMs), undefined, drums);
     this.clickAheadOfTheRoll();
     if (this.rollTick === null) {
       this.rollTick = setInterval(() => this.followTheRoll(), TAKE_TICK_MS);
@@ -17614,7 +17750,8 @@ export class AppView {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
-    if (showing === null || sketch === undefined || !sketch.editing || stored === null) {
+    // Played into the notes: the keys are no drums.
+    if (showing === null || sketch === undefined || !sketch.editing || sketch.drums || stored === null) {
       return;
     }
     if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
@@ -17785,7 +17922,31 @@ export class AppView {
       : bars > 0
         ? `Record into the sketch from the cursor, after ${String(bars)} ${bars === 1 ? 'bar' : 'bars'} counted in`
         : 'Record into the sketch from the cursor';
-    this.el.rollRecord.setAttribute('aria-label', this.el.rollRecord.title);
+    // The keys are recorded into the notes, so not while the drums are written.
+    sayWhetherIdle(
+      this.el.rollRecord,
+      this.theDrumsAreWritten() && !recording ? `${this.el.rollRecord.title}. The keys go into the notes: back to them first.` : this.el.rollRecord.title,
+      this.theDrumsAreWritten() && !recording,
+    );
+  }
+
+  /** Says on its switches whether the drums are written, and whether they are heard. */
+  private sayWhetherTheDrumsAreWritten(): void {
+    const drums = this.theDrumsAreWritten();
+    this.el.rollDrums.setAttribute('aria-pressed', String(drums));
+    this.el.rollDrums.title = drums
+      ? 'Back to the notes'
+      : 'Write the drums: a row for each drum, to feel the music by. They go into no file and onto no page.';
+    this.el.rollDrums.setAttribute('aria-label', this.el.rollDrums.title);
+    const heard = this.runtime.controller.settings.drumsHeard;
+    this.el.rollDrumsHeard.setAttribute('aria-pressed', String(heard));
+    this.el.rollDrumsHeard.title = heard ? 'The drums are heard: press to silence them' : 'The drums are silent: press to hear them';
+    this.el.rollDrumsHeard.setAttribute('aria-label', this.el.rollDrumsHeard.title);
+  }
+
+  /** What a row of the drawing is called: its key, or where the drums are written, its drum. */
+  private theNameOfTheRow(midi: number): string {
+    return this.theDrumsAreWritten() ? (theDrumOf(midi)?.name ?? midiToLabel(midi)) : midiToLabel(midi);
   }
 
   /** Which drawing is shown, as a slice laid on it is kept by: a sketch, a recording, or whatever else by what it is. */

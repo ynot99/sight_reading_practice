@@ -620,3 +620,67 @@ describe('playing a take through something other than the instrument', () => {
     expect([drum.played.length, instrument.played.map((note) => note.midi)]).toEqual([2, [60]]);
   });
 });
+
+describe('playing a sketch with its drums', () => {
+  /** C4 and E4 under the pedal, and a kick, a snare and a kick under them. */
+  const WITH_DRUMS: readonly MidiFileEvent[] = [
+    { kind: 'sustain', atMs: 0, value: 1 },
+    ...TAKE,
+    { kind: 'drumOn', atMs: 0, midi: 36, velocity: 0.9 },
+    { kind: 'drumOff', atMs: 100, midi: 36 },
+    { kind: 'drumOn', atMs: 500, midi: 37, velocity: 0.6 },
+    { kind: 'drumOff', atMs: 600, midi: 37 },
+    { kind: 'drumOn', atMs: 1_500, midi: 36, velocity: 0.9 },
+    { kind: 'drumOff', atMs: 1_600, midi: 36 },
+  ];
+  const playedTo = (player: TakePlayer, clock: ManualClock, untilMs: number): void => {
+    while (clock.now() < untilMs) {
+      clock.advance(50);
+      player.pump();
+    }
+  };
+
+  it('sounds the drums through the kit at their moments, each let go of as it was whatever the pedal, and the notes through the instrument', () => {
+    const { clock, instrument, player } = rig();
+    const kit = new RecordingPitchPlayer();
+    player.play('a sketch', WITH_DRUMS, 0, null, instrument, kit);
+    playedTo(player, clock, 2_500);
+    expect(kit.played.map((hit) => [hit.midi, hit.velocity, hit.atMs])).toEqual([
+      [36, 0.9, 0],
+      [37, 0.6, 500],
+      [36, 0.9, 1_500],
+    ]);
+    expect(kit.stopped.map((hit) => [hit.midi, hit.atMs])).toEqual([
+      [36, 100],
+      [37, 600],
+      [36, 1_600],
+    ]);
+    expect(instrument.played.map((note) => [note.midi, note.atMs])).toEqual([
+      [60, 0],
+      [64, 1_000],
+    ]);
+    // Stopped, the kit falls silent with the instrument.
+    player.stop();
+    expect(kit.stopAllCount).toBe(1);
+  });
+
+  it('sounds them from where it is played from, and round a stretch with the notes', () => {
+    const { clock, instrument, player } = rig();
+    const kit = new RecordingPitchPlayer();
+    player.play('a sketch', WITH_DRUMS, 400, { fromMs: 400, toMs: 1_000 }, instrument, kit);
+    playedTo(player, clock, 1_000);
+    // The snare a hundred after where it began, and again a lap of six hundred
+    // later; the next lap's, at 1300, not yet handed over.
+    expect(kit.played.map((hit) => [hit.midi, hit.atMs])).toEqual([
+      [37, 100],
+      [37, 700],
+    ]);
+  });
+
+  it('sounds no drum where it is handed no kit', () => {
+    const { clock, instrument, player } = rig();
+    player.play('a sketch', WITH_DRUMS);
+    playedTo(player, clock, 2_500);
+    expect(instrument.played.map((note) => note.midi)).toEqual([60, 64]);
+  });
+});

@@ -1,3 +1,4 @@
+import type { DrumOfTheKit } from '../domain/midi/drums.js';
 import {
   beatsWorthMarking,
   theMomentsOfTicks,
@@ -100,6 +101,12 @@ export interface RollDrawing {
    * of them.
    */
   readonly wholeKeyboard?: boolean;
+  /**
+   * The drums a sketch's drums are written for, where they are drawn rather
+   * than its notes: a row for each, named, and no others - in place of the
+   * keyboard, whose black keys and octaves say nothing of a drum.
+   */
+  readonly kit?: readonly DrumOfTheKit[];
 }
 
 /** One note the music asked for, in the music's own time. */
@@ -156,7 +163,13 @@ function bandOf(
   presses: readonly RolledPress[],
   ghosts: readonly RollGhost[],
   wholeKeyboard = false,
+  kit: readonly DrumOfTheKit[] | undefined = undefined,
 ): { readonly low: number; readonly high: number } {
+  // Every drum of the kit, where the drums are written, and nothing else.
+  if (kit !== undefined && kit.length > 0) {
+    const numbers = kit.map((drum) => drum.midi);
+    return { low: Math.min(...numbers), high: Math.max(...numbers) };
+  }
   // Every key, where a note may be put on any of them.
   if (wholeKeyboard) {
     return { low: LOWEST_KEY, high: HIGHEST_KEY };
@@ -372,6 +385,8 @@ export interface RollScene {
   /** The pitch on the top row. */
   readonly highest: number;
   readonly rows: number;
+  /** The drums its rows are, where they are a kit's rather than keys: see {@link RollDrawing.kit}. */
+  readonly kit?: readonly DrumOfTheKit[];
   /** How long the run is drawn: to its last event, and a moment of air past it. */
   readonly lengthMs: number;
   /** The rows the black keys are on, which are shaded as they are on the instrument. */
@@ -889,11 +904,11 @@ export function thePitchesOfTheRun(
   roll: RunRoll,
   ghosts: readonly RollGhost[] = [],
   wholeKeyboard = false,
-  drawing: Pick<RollDrawing, 'freely' | 'chosen'> = {},
+  drawing: Pick<RollDrawing, 'freely' | 'chosen' | 'kit'> = {},
 ): RollPitches {
   const origin = rollBeganAtMs(roll);
   const endMs = rollEndedAtMs(roll);
-  const band = bandOf(roll.presses, ghosts, wholeKeyboard);
+  const band = bandOf(roll.presses, ghosts, wholeKeyboard, drawing.kit);
   const notes: PitchedNote[] = roll.presses.map((press) => {
     // Coloured as the drawing colours it - the hand, where nothing judged it -
     // and a chosen one in the colour that marks it chosen.
@@ -1043,14 +1058,15 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
   const origin = rollBeganAtMs(roll);
   const endMs = rollEndedAtMs(roll);
   const ghosts = drawing.ghosts ?? [];
-  const band = bandOf(roll.presses, ghosts, drawing.wholeKeyboard);
+  const band = bandOf(roll.presses, ghosts, drawing.wholeKeyboard, drawing.kit);
+  const drums = drawing.kit !== undefined;
   // Whether any note is written at a level, as a sketch's may be: then a
   // note as loud as it was struck says so, told apart from them.
   const written = roll.presses.some((press) => press.written !== undefined);
 
   const blackRows: number[] = [];
   for (let midi = band.high; midi >= band.low; midi -= 1) {
-    if (isBlack(midi)) {
+    if (!drums && isBlack(midi)) {
       blackRows.push(band.high - midi);
     }
   }
@@ -1064,8 +1080,9 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
     }
     return rows;
   };
-  const octaves =
-    scales.length === 0
+  const octaves = drums
+    ? []
+    : scales.length === 0
       ? [{ fromMs: Number.NEGATIVE_INFINITY, untilMs: Number.POSITIVE_INFINITY, rows: rowsOf(0) }]
       : scales.map((scale, at) => ({
           fromMs: at === 0 ? Number.NEGATIVE_INFINITY : scale.fromMs - origin,
@@ -1163,6 +1180,7 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
   return {
     highest: band.high,
     rows: band.high - band.low + 1,
+    ...(drawing.kit === undefined ? {} : { kit: drawing.kit }),
     lengthMs: endMs - origin,
     blackRows,
     scaleSpans,
@@ -1571,11 +1589,18 @@ export function drawTheRoll(scene: RollScene): HTMLElement {
   const chosenRows = new Set(scene.notes.filter((note) => note.chosen === true).map((note) => note.row));
   for (let row = 0; row < scene.rows; row += 1) {
     const midi = scene.highest - row;
-    const key = element('div', `roll__key${isBlack(midi) ? ' roll__key--black' : ''}`);
+    const drum = scene.kit?.find((each) => each.midi === midi);
+    const key = element('div', `roll__key${drum === undefined && isBlack(midi) ? ' roll__key--black' : ''}`);
     key.style.top = atRow(row);
     // Every key named: a row is never shorter than its name, and a key
-    // pressed here is heard by that name.
-    key.textContent = midiToLabel(midi);
+    // pressed here is heard by that name. A drum by its short name, and in
+    // full when asked.
+    if (drum === undefined) {
+      key.textContent = midiToLabel(midi);
+    } else {
+      key.textContent = drum.short;
+      key.title = drum.name;
+    }
     key.dataset['midi'] = String(midi);
     if (chosenRows.has(row)) {
       key.dataset['chosen'] = 'true';

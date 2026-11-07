@@ -23,8 +23,10 @@ const HAND_CODES: Readonly<Record<Hand, number>> = { right: 1, left: 2 };
 
 export function pack(event: MidiFileEvent): Packed {
   switch (event.kind) {
-    case 'noteOn': {
-      const packed = [0, Math.round(event.atMs), event.midi, Math.round(event.velocity * 127)];
+    case 'noteOn':
+    case 'drumOn': {
+      // A drum struck is written as a key struck is, under a number of its own.
+      const packed = [event.kind === 'noteOn' ? 0 : 6, Math.round(event.atMs), event.midi, Math.round(event.velocity * 127)];
       const hand = event.hand === undefined ? [] : [HAND_CODES[event.hand]];
       // How loud it is written after its hand, none being said as nought:
       // the level by its place in the list from one, or nought for the
@@ -40,6 +42,8 @@ export function pack(event: MidiFileEvent): Packed {
     }
     case 'noteOff':
       return [1, Math.round(event.atMs), event.midi, 0];
+    case 'drumOff':
+      return [7, Math.round(event.atMs), event.midi, 0];
     case 'sustain':
       return [2, Math.round(event.atMs), 0, Math.round(event.value * 127)];
     case 'key':
@@ -62,8 +66,9 @@ export function unpack(value: unknown): MidiFileEvent | null {
     return null;
   }
   switch (kind) {
-    case 0: {
-      const played = { kind: 'noteOn' as const, atMs, midi: a, velocity: b / 127 };
+    case 0:
+    case 6: {
+      const played = { kind: kind === 0 ? ('noteOn' as const) : ('drumOn' as const), atMs, midi: a, velocity: b / 127 };
       // A level not known, or a share past the next level, is no loudness
       // written: the note is as loud as it is.
       const written = typeof level === 'number' && Number.isInteger(level) && typeof shade === 'number' && Math.abs(shade) <= 100
@@ -83,6 +88,8 @@ export function unpack(value: unknown): MidiFileEvent | null {
     }
     case 1:
       return { kind: 'noteOff', atMs, midi: a };
+    case 7:
+      return { kind: 'drumOff', atMs, midi: a };
     case 2:
       return { kind: 'sustain', atMs, value: b / 127 };
     case 3: {

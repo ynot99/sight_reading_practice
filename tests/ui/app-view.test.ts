@@ -88,6 +88,7 @@ import { ManualMetronome } from '../../src/infrastructure/testing/ManualMetronom
 import { MockMidiAdapter } from '../../src/infrastructure/testing/MockMidiAdapter.js';
 import { RecordingPitchPlayer } from '../../src/infrastructure/testing/RecordingPitchPlayer.js';
 import { RecordingHitSound } from '../../src/infrastructure/testing/RecordingHitSound.js';
+import { DRUM_KIT, THE_KITS_RANGE } from '../../src/domain/midi/drums.js';
 
 /** Remembers whether the screen was asked to stay up, and how often. */
 /** A device that starts asleep only when a test says so, and can be woken. */
@@ -239,6 +240,7 @@ interface Rig {
   readonly view: AppView;
   readonly instrument: RecordingPitchPlayer;
   readonly hitSound: RecordingHitSound;
+  readonly drumKit: RecordingPitchPlayer;
   readonly metronome: ManualMetronome;
   readonly midi: MockMidiAdapter;
   readonly renderer: FakeScoreRenderer;
@@ -372,6 +374,7 @@ function createRig(
   const rhythms = new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES);
   const instrument = new RecordingPitchPlayer();
   const hitSound = new RecordingHitSound();
+  const drumKit = new RecordingPitchPlayer();
   const screenWake = new CountingScreenWake();
   // Awake unless a test says otherwise, which is what a desk browser is.
   const audioWaking = new TestAudioWaking();
@@ -538,6 +541,7 @@ function createRig(
     // chime, and splitting it here hid a note that was left ringing.
     pitchPlayer: instrument,
     hitSound,
+    drumKit,
     screenWake,
     audio: audioWaking,
     mediaKeys,
@@ -562,6 +566,7 @@ function createRig(
     mediaKeys,
     instrument,
     hitSound,
+    drumKit,
     metronome,
     midi,
     renderer,
@@ -7129,6 +7134,226 @@ describe('AppView', () => {
       expect(notes().at(-1)).toEqual([64, 2_000, 2_125]);
       drag(at(2_115, 64), at(1_500, 64), { shiftKey: true });
       expect(notes().at(-1)).toEqual([64, 2_000, 2_030]);
+    });
+
+    it('writes the drums of a sketch in place of its notes, a row for each drum, and leaves the notes as they are', async () => {
+      const { view, sketches, drumKit, instrument } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: 400, midi: 60 },
+          ],
+          beats: [0, 500, 1_000, 1_500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Drums',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      await editTheSketch();
+      const drums = element<HTMLButtonElement>('roll-drums');
+      expect([drums.hidden, drums.getAttribute('aria-pressed')]).toEqual([false, 'false']);
+      const strip = (): string[] =>
+        [...element('roll-body').querySelectorAll<HTMLElement>('.roll__key')].map((key) => key.textContent ?? '');
+      const litInTheScale = (): number => element('roll-body').querySelectorAll('.roll__key[data-in-scale]').length;
+      // The notes in their key: its scale lit, its octaves drawn.
+      expect([view.rollScene?.scaleSpans.length, view.rollScene?.octaves.length]).toEqual([1, 1]);
+      expect(litInTheScale()).toBeGreaterThan(0);
+      // And its chords open beside it.
+      const stage = (): HTMLElement | null => element('roll-body').closest<HTMLElement>('.roll-stage');
+      element<HTMLButtonElement>('roll-chords-open').click();
+      expect(stage()?.dataset['chords']).toBe('true');
+      const scrolledTo = (): string =>
+        element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '';
+      const whereTheNotesWere = scrolledTo();
+      expect(Number.parseFloat(whereTheNotesWere)).toBeGreaterThan(0);
+
+      drums.click();
+      // The kit drawn from its top.
+      expect(Number.parseFloat(scrolledTo())).toBe(0);
+      // A row for each drum and no other, the kick at the foot, named.
+      expect(drums.getAttribute('aria-pressed')).toBe('true');
+      expect(strip()).toEqual([...DRUM_KIT].reverse().map((drum) => drum.short));
+      expect(element('roll-body').closest<HTMLElement>('.roll-stage')?.dataset['drums']).toBe('true');
+      expect(view.rollScene?.notes).toEqual([]);
+      // What reads the notes as pitches waits for them.
+      expect([element('roll-chords-open').dataset['idle'], element('roll-record').dataset['idle']]).toEqual(['true', 'true']);
+      expect([view.rollScene?.scaleSpans, view.rollScene?.octaves, view.rollScene?.blackRows, litInTheScale()]).toEqual([[], [], [], 0]);
+      // The chords are put away while the drums are written, and kept to come
+      // back to: not shut by a press there. Nor are the keys recorded among the drums.
+      expect(stage()?.dataset['chords']).toBe('false');
+      element<HTMLButtonElement>('roll-chords-open').click();
+      element<HTMLButtonElement>('roll-record').click();
+      expect([element('roll-chords-open').getAttribute('aria-pressed'), element('roll-record').getAttribute('aria-pressed')]).toEqual([
+        'true',
+        'false',
+      ]);
+
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const highest = view.rollScene?.highest ?? 0;
+      // Where a moment of a row is on the screen, as the drawing now stands.
+      const at = (ms: number, midi: number): { clientX: number; clientY: number } => {
+        const scrolledDown =
+          Number.parseFloat(
+            element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+          ) || 0;
+        return { clientX: (ms / 1000) * zoom, clientY: ((view.rollScene?.highest ?? 0) - midi + 0.5) * 13 - scrolledDown };
+      };
+      const body = element('roll-body');
+      const tap = (where: { clientX: number; clientY: number }): void => {
+        for (const type of ['pointerdown', 'pointerup']) {
+          body.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 97, pointerType: 'mouse', button: 0, ...where }));
+        }
+        body.dispatchEvent(new MouseEvent('click', { bubbles: true, ...where }));
+      };
+      const kept = (): string[] =>
+        (sketches.find(sketch.id)?.events ?? []).flatMap((event) =>
+          event.kind === 'noteOn' || event.kind === 'drumOn' ? [`${event.kind} ${String(event.midi)} ${String(event.atMs)}`] : [],
+        );
+
+      // Under the kick, a row the kit has no drum for: nothing is written.
+      tap(at(1_000, 33));
+      tap(at(1_000, 33));
+      expect(kept()).toEqual(['noteOn 60 0']);
+      // Two taps on the snare's row write a snare there, heard on the kit.
+      const heardOnTheKeys = instrument.played.length;
+      tap(at(1_000, 37));
+      tap(at(1_000, 37));
+      expect(kept()).toEqual(['noteOn 60 0', 'drumOn 37 1000']);
+      expect(drumKit.played.map((hit) => hit.midi)).toContain(37);
+      expect(instrument.played.slice(heardOnTheKeys).map((note) => note.midi)).not.toContain(37);
+      expect(sketches.find(sketch.id)?.noteCount).toBe(1);
+      expect(view.rollScene?.notes.map((note) => highest - note.row)).toEqual([37]);
+      // A drum is given to no hand.
+      element<HTMLButtonElement>('roll-hand-left').click();
+      expect(sketches.find(sketch.id)?.events.find((event) => event.kind === 'drumOn')).not.toHaveProperty('hand');
+
+      // Back to the notes: the snare is not among them, and an undo there
+      // puts back the change it says - the snare written.
+      drums.click();
+      expect(drums.getAttribute('aria-pressed')).toBe('false');
+      expect(strip()).toContain('C4');
+      // The notes where they were looked at.
+      expect(scrolledTo()).toBe(whereTheNotesWere);
+      expect(view.rollScene?.notes.map((note) => (view.rollScene?.highest ?? 0) - note.row)).toEqual([60]);
+      element<HTMLButtonElement>('roll-undo').click();
+      expect(kept()).toEqual(['noteOn 60 0']);
+      element<HTMLButtonElement>('roll-redo').click();
+      expect(kept()).toEqual(['noteOn 60 0', 'drumOn 37 1000']);
+
+      // A note copied is not pasted among the drums: no row there is its.
+      tap(at(100, 60));
+      element<HTMLButtonElement>('roll-copy-chosen').click();
+      drums.click();
+      element<HTMLButtonElement>('roll-paste').click();
+      // Pasted once the clipboard has been asked, which is a promise.
+      await new Promise((settled) => setTimeout(settled, 0));
+      expect(kept()).toEqual(['noteOn 60 0', 'drumOn 37 1000']);
+      // And a drum goes up the kit as far as its top, and no further.
+      tap(at(1_050, 37));
+      for (let step = 0; step < DRUM_KIT.length + 2; step += 1) {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowUp' }));
+      }
+      expect(kept()).toEqual(['noteOn 60 0', `drumOn ${String(THE_KITS_RANGE.high)} 1000`]);
+    });
+
+    it('plays a sketch with its drums on the kit and its notes on the instrument, and silences the drums when asked', async () => {
+      vi.useFakeTimers();
+      try {
+        const { view, sketches, drumKit, instrument, clock } = createRig();
+        await view.initialize();
+        sketches.begin(
+          {
+            events: [
+              { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+              { kind: 'noteOff' as const, atMs: 400, midi: 60 },
+              { kind: 'drumOn' as const, atMs: 0, midi: 36, velocity: 0.8 },
+              { kind: 'drumOff' as const, atMs: 100, midi: 36 },
+              { kind: 'drumOn' as const, atMs: 500, midi: 37, velocity: 0.8 },
+              { kind: 'drumOff' as const, atMs: 600, midi: 37 },
+            ],
+            beats: [0, 500, 1_000, 1_500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+          },
+          'Heard',
+          1,
+        );
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-sketches').click();
+        await editTheSketch();
+        const play = element<HTMLButtonElement>('roll-play');
+        const heard = (): { readonly kit: number[]; readonly keys: number[] } => ({
+          kit: drumKit.played.map((hit) => hit.midi),
+          keys: instrument.played.map((note) => note.midi),
+        });
+
+        play.click();
+        clock.advance(900);
+        vi.advanceTimersByTime(900);
+        // Played through by then, as each is below.
+        expect(heard()).toEqual({ kit: [36, 37], keys: [60] });
+
+        // Written as drums, it sounds the same: as it is kept.
+        element<HTMLButtonElement>('roll-drums').click();
+        play.click();
+        clock.advance(900);
+        vi.advanceTimersByTime(900);
+        expect(heard()).toEqual({ kit: [36, 37, 36, 37], keys: [60, 60] });
+
+        // Silenced, only the notes.
+        const silence = element<HTMLButtonElement>('roll-drums-heard');
+        expect(silence.getAttribute('aria-pressed')).toBe('true');
+        silence.click();
+        expect(silence.getAttribute('aria-pressed')).toBe('false');
+        play.click();
+        clock.advance(900);
+        vi.advanceTimersByTime(900);
+        expect(heard()).toEqual({ kit: [36, 37, 36, 37], keys: [60, 60, 60] });
+
+        // Silenced while it plays, from there on: the kick heard, the snare after it not.
+        silence.click();
+        play.click();
+        clock.advance(100);
+        vi.advanceTimersByTime(100);
+        silence.click();
+        clock.advance(800);
+        vi.advanceTimersByTime(800);
+        expect(heard().kit).toEqual([36, 37, 36, 37, 36]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('names no chord of the drums chosen, a drum being no pitch', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      // C, E and G struck together: on the keys, and on the kit's rows of those numbers.
+      const struck = (kind: 'noteOn' | 'drumOn', off: 'noteOff' | 'drumOff', midis: readonly number[]): MidiFileEvent[] =>
+        midis.flatMap((midi) => [
+          { kind, atMs: 0, midi, velocity: 0.5 },
+          { kind: off, atMs: 400, midi },
+        ]);
+      sketches.begin(
+        {
+          events: [...struck('noteOn', 'noteOff', [60, 64, 67]), ...struck('drumOn', 'drumOff', [36, 40, 43])],
+          beats: [0, 500, 1_000, 1_500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Chords',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      await editTheSketch();
+      const everything = (): void => {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, code: 'KeyA', key: 'a', ctrlKey: true }));
+      };
+      everything();
+      expect([element('roll-chord').hidden, element('roll-chord').textContent]).toEqual([false, 'C']);
+      element<HTMLButtonElement>('roll-drums').click();
+      everything();
+      expect(view.rollScene?.notes.filter((note) => note.chosen === true)).toHaveLength(3);
+      expect(element('roll-chord').hidden).toBe(true);
     });
 
     it('moves a note neither by a drag nor by an arrow over another of its pitch', async () => {

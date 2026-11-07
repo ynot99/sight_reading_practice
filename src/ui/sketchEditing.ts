@@ -226,6 +226,7 @@ export type TheViewOfTheSketch = Pick<
   | 'theRoll'
   | 'theRollsGrid'
   | 'theSceneToDraw'
+  | 'theSketchAsDrawn'
 >;
 
 /**
@@ -423,7 +424,8 @@ export class SketchEditing {
    * sounding.
    */
   get theEditingsInstrument(): Pick<IPitchPlayer, 'play'> {
-    const instrument = this.host.runtime.pitchPlayer;
+    // The kit while the drums are written: a row there is a drum.
+    const instrument = this.host.theOtherRollShowing?.sketch?.drums === true ? this.host.runtime.drumKit : this.host.runtime.pitchPlayer;
     return {
       play: (midi, velocity, atMs) => {
         if (this.host.runtime.controller.settings.rollSounds) {
@@ -453,14 +455,15 @@ export class SketchEditing {
   ): { readonly midi: number; readonly atMs: number; readonly stored: StoredSketch; readonly roll: RunRoll } | null {
     const showing = this.host.theOtherRollShowing;
     const sketch = showing?.sketch;
-    const stored = sketch === undefined ? null : this.host.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.host.theSketchAsDrawn(sketch.id);
     const at = this.host.thePointOnTheDrawing(event);
     const scene = this.host.drawnScene;
     if (showing === null || stored === null || at === null || scene === null) {
       return null;
     }
     const midi = scene.highest - at.row;
-    return midi < LOWEST_KEY || midi > HIGHEST_KEY ? null : { midi, atMs: at.atMs, stored, roll: showing.roll };
+    // Only a row the drawing has: a key, or a drum of the kit.
+    return midi < scene.highest - scene.rows + 1 || midi > scene.highest ? null : { midi, atMs: at.atMs, stored, roll: showing.roll };
   }
 
   /**
@@ -709,7 +712,7 @@ export class SketchEditing {
     const drag = this.rollPedalDrag;
     const showing = this.host.theOtherRollShowing;
     const sketch = showing?.sketch;
-    const stored = sketch === undefined ? null : this.host.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.host.theSketchAsDrawn(sketch.id);
     const at = this.host.theMomentUnder(event.clientX);
     if (drag === null || showing === null || sketch === undefined || stored === null || at === null) {
       return;
@@ -763,7 +766,7 @@ export class SketchEditing {
   letGoOfThePedal(event: PointerEvent, lifted: boolean): void {
     const drag = this.rollPedalDrag;
     const sketch = this.host.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.host.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.host.theSketchAsDrawn(sketch.id);
     this.rollPedalDrag = null;
     if (drag === null) {
       return;
@@ -791,7 +794,7 @@ export class SketchEditing {
   letGoOfThePedalPress(press: ScenePedal): void {
     const showing = this.host.theOtherRollShowing;
     const sketch = showing?.sketch;
-    const stored = sketch === undefined ? null : this.host.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.host.theSketchAsDrawn(sketch.id);
     if (showing === null || sketch === undefined || stored === null) {
       return;
     }
@@ -827,7 +830,7 @@ export class SketchEditing {
     }
     const key = this.host.theKeyUnder(event);
     const at = this.host.thePointOnTheDrawing(event);
-    const stored = this.host.runtime.sketches.find(sketch.id);
+    const stored = this.host.theSketchAsDrawn(sketch.id);
     if (key === null || at === null || stored === null) {
       return false;
     }
@@ -865,7 +868,7 @@ export class SketchEditing {
       return false;
     }
     const key = this.host.theKeyUnder(event);
-    const stored = this.host.runtime.sketches.find(sketch.id);
+    const stored = this.host.theSketchAsDrawn(sketch.id);
     if (key === null || stored === null) {
       return false;
     }
@@ -992,7 +995,7 @@ export class SketchEditing {
     const drag = this.rollDrag;
     const showing = this.host.theOtherRollShowing;
     const sketch = showing?.sketch;
-    const stored = sketch === undefined ? null : this.host.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.host.theSketchAsDrawn(sketch.id);
     if (drag === null || showing === null || stored === null) {
       return;
     }
@@ -1172,7 +1175,7 @@ export class SketchEditing {
     this.letTheHeldKeysFallSilent();
     const drag = this.rollDrag;
     const sketch = this.host.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.host.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.host.theSketchAsDrawn(sketch.id);
     this.rollDrag = null;
     if (drag === null) {
       return;
@@ -1263,7 +1266,7 @@ export class SketchEditing {
       // Every note, rather than every word on the page.
       event.preventDefault();
       const sketch = this.host.theOtherRollShowing?.sketch;
-      const stored = sketch === undefined ? null : this.host.runtime.sketches.find(sketch.id);
+      const stored = sketch === undefined ? null : this.host.theSketchAsDrawn(sketch.id);
       this.choose(stored === null ? [] : theKeysOfTheTake(stored.events));
     } else if (event.key === 'Escape' && chosen.length > 0) {
       // First what is chosen is let go of; the next Escape shuts the sheet.
@@ -1325,7 +1328,7 @@ export class SketchEditing {
    */
   copyTheChosenKeys(cutting: boolean): void {
     const sketch = this.host.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.host.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.host.theSketchAsDrawn(sketch.id);
     const roll = this.host.theRoll();
     const clipboard = this.host.doc.defaultView?.navigator?.clipboard;
     // A sketch's notes as it keeps them; anything else's as its drawing has them.
@@ -1360,7 +1363,7 @@ export class SketchEditing {
   pasteTheNotesCopied(event: ClipboardEvent): void {
     const showing = this.host.theOtherRollShowing;
     const sketch = showing?.sketch;
-    const stored = sketch === undefined ? null : this.host.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.host.theSketchAsDrawn(sketch.id);
     if (
       this.host.el.sheetRoll.hidden ||
       showing === null ||
@@ -1413,11 +1416,15 @@ export class SketchEditing {
   private pasteTheNotes(notes: readonly NoteCopied[]): void {
     const showing = this.host.theOtherRollShowing;
     const sketch = showing?.sketch;
-    const stored = sketch === undefined ? null : this.host.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.host.theSketchAsDrawn(sketch.id);
     if (showing === null || sketch === undefined || stored === null) {
       return;
     }
-    const { events, pasted } = takeWithTheNotesPasted(stored.events, notes, this.host.rollAtMs + rollBeganAtMs(showing.roll));
+    // Only onto a row the drawing has: notes copied from the keys are no
+    // drums, and would be pasted where no row shows them.
+    const scene = this.host.drawnScene;
+    const onARow = scene === null ? notes : notes.filter((note) => note.midi <= scene.highest && note.midi > scene.highest - scene.rows);
+    const { events, pasted } = takeWithTheNotesPasted(stored.events, onARow, this.host.rollAtMs + rollBeganAtMs(showing.roll));
     if (pasted.length > 0) {
       this.host.changeTheSketchShowing(events, [...sketch.before, asItWas(stored, sketch.chosen)], pasted);
     }
@@ -1426,7 +1433,7 @@ export class SketchEditing {
   /** Takes the chosen keys out of the sketch, keeping what it was to be put back. */
   deleteTheChosenKeys(): void {
     const sketch = this.host.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.host.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.host.theSketchAsDrawn(sketch.id);
     if (sketch === undefined || sketch.chosen.length === 0 || stored === null) {
       return;
     }
@@ -1443,7 +1450,7 @@ export class SketchEditing {
    */
   deleteTheKey(key: KeyNamed): void {
     const sketch = this.host.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.host.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.host.theSketchAsDrawn(sketch.id);
     if (sketch === undefined || stored === null) {
       return;
     }
@@ -1460,7 +1467,7 @@ export class SketchEditing {
   /** Puts the sketch back as it was before its last change, keeping what it was for a redo. */
   putBackTheLastChange(): void {
     const sketch = this.host.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.host.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.host.theSketchAsDrawn(sketch.id);
     const last = sketch?.before.at(-1);
     if (sketch === undefined || stored === null || last === undefined) {
       return;
@@ -1477,7 +1484,7 @@ export class SketchEditing {
   /** Brings back what the last undo put back, while nothing has changed since. */
   bringBackTheLastPutBack(): void {
     const sketch = this.host.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.host.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.host.theSketchAsDrawn(sketch.id);
     const last = sketch?.after.at(-1);
     if (sketch === undefined || stored === null || last === undefined) {
       return;
@@ -1505,7 +1512,7 @@ export class SketchEditing {
   private moveTheChosenKeys(arrow: string, octave: boolean, copying: boolean): void {
     const showing = this.host.theOtherRollShowing;
     const sketch = showing?.sketch;
-    const stored = sketch === undefined ? null : this.host.runtime.sketches.find(sketch.id);
+    const stored = sketch === undefined ? null : this.host.theSketchAsDrawn(sketch.id);
     if (showing === null || sketch === undefined || stored === null) {
       return;
     }
@@ -1576,8 +1583,12 @@ export class SketchEditing {
       }
     } else {
       const step = (arrow === 'ArrowUp' ? 1 : -1) * (octave ? 12 : 1);
+      // Only as far as the rows the drawing has: the keyboard's, or the kit's.
+      const scene = this.host.drawnScene;
+      const highestRow = scene?.highest ?? HIGHEST_KEY;
+      const lowestRow = scene === null ? LOWEST_KEY : scene.highest - scene.rows + 1;
       for (bySemitones = step; placed === null; bySemitones += step) {
-        if (keys.some((key) => key.midi + bySemitones < LOWEST_KEY || key.midi + bySemitones > HIGHEST_KEY)) {
+        if (keys.some((key) => key.midi + bySemitones < lowestRow || key.midi + bySemitones > highestRow)) {
           return;
         }
         placed = fits(0, bySemitones);

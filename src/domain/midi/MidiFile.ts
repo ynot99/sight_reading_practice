@@ -10,21 +10,20 @@ import { DomainError } from '../../shared/errors.js';
  * came from and when it was delivered, neither of which belongs in a file.
  */
 export type MidiFileEvent =
-  | {
-      readonly kind: 'noteOn';
-      readonly atMs: number;
-      readonly midi: number;
-      readonly velocity: number;
-      /** Which hand plays it, where that has been said: see {@link HANDS_SPLIT_AT_MIDI}. */
-      readonly hand?: Hand;
-      /**
-       * How loud it is written, where it is: its velocity then follows from
-       * it (see `takeWithTheLoudnessWritten`). None, and it is as loud as it
-       * was struck - a note played rather than written.
-       */
-      readonly loudness?: NoteLoudness;
-    }
+  | ({ readonly kind: 'noteOn' } & Struck)
   | { readonly kind: 'noteOff'; readonly atMs: number; readonly midi: number }
+  /**
+   * A drum of a sketch's kit struck, and let go of: struck and let go of as
+   * a key is, its number naming which drum (see `DRUM_KIT`) rather than a
+   * pitch. Kept among the events so that it moves with the music it is
+   * under - a bar put in or taken out, another pace - and of a kind of its
+   * own so that nothing that reads the notes takes it for one: not the page
+   * a sketch is written down as, not a file it is saved as, not the chords
+   * and keys heard in it. A hand or a loudness is carried as a note's is,
+   * so that one changed into the other and back is as it was.
+   */
+  | ({ readonly kind: 'drumOn' } & Struck)
+  | { readonly kind: 'drumOff'; readonly atMs: number; readonly midi: number }
   | { readonly kind: 'sustain'; readonly atMs: number; readonly value: number }
   /**
    * The music written in another key from here: its signature and its scale.
@@ -55,6 +54,21 @@ export type MidiFileEvent =
    * it is in.
    */
   | { readonly kind: 'section'; readonly atMs: number; readonly name: string };
+
+/** What a key struck says, or a drum: when, which, how hard, and by whom. */
+export interface Struck {
+  readonly atMs: number;
+  readonly midi: number;
+  readonly velocity: number;
+  /** Which hand plays it, where that has been said: see {@link HANDS_SPLIT_AT_MIDI}. */
+  readonly hand?: Hand;
+  /**
+   * How loud it is written, where it is: its velocity then follows from
+   * it (see `takeWithTheLoudnessWritten`). None, and it is as loud as it
+   * was struck - a note played rather than written.
+   */
+  readonly loudness?: NoteLoudness;
+}
 
 /** The two hands, as the two staves of a piano score are theirs. */
 export type Hand = 'left' | 'right';
@@ -670,7 +684,7 @@ export function theLevelOfTheNote(events: readonly MidiFileEvent[], atMs: number
 export function takeWithTheLoudnessWritten(events: readonly MidiFileEvent[]): readonly MidiFileEvent[] {
   let changed = false;
   const written = events.map((event) => {
-    if (event.kind !== 'noteOn' || event.loudness === undefined) {
+    if ((event.kind !== 'noteOn' && event.kind !== 'drumOn') || event.loudness === undefined) {
       return event;
     }
     const velocity = theVelocityWritten(events, event.atMs, event.loudness);
@@ -824,13 +838,14 @@ export function thePlayingWithABarInserted(
 }
 
 /**
- * Whether an event begins something - a note, the pedal put down, a key, a
- * dynamic, a section - rather than ending what was begun: on a bar line,
+ * Whether an event begins something - a note, a drum struck, the pedal put
+ * down, a key, a dynamic, a section - rather than ending what was begun: on a bar line,
  * what begins there is the bar after's, and what ends there the bar before's.
  */
 export function beginsSomething(event: MidiFileEvent): boolean {
   return (
     event.kind === 'noteOn' ||
+    event.kind === 'drumOn' ||
     event.kind === 'key' ||
     event.kind === 'dynamic' ||
     event.kind === 'section' ||
@@ -963,6 +978,7 @@ function orderAt(event: MidiFileEvent): number {
     case 'section':
       return -1;
     case 'noteOff':
+    case 'drumOff':
       return 0;
     case 'sustain':
       return 1;
@@ -1070,9 +1086,13 @@ function onTheClick(grid: readonly HeardBeat[]): (ms: number) => number {
  * byte for byte in a test.
  */
 export function writeMidiFile(
-  events: readonly MidiFileEvent[],
+  played: readonly MidiFileEvent[],
   options: MidiFileOptions = {},
 ): Uint8Array {
+  // A sketch's drums are kept for the writer to feel the music by, and are no
+  // part of what it is saved as: left out before anything is measured, so the
+  // file is the one its notes alone make, to its length and its last bar.
+  const events = played.filter((event) => event.kind !== 'drumOn' && event.kind !== 'drumOff');
   const tempoBpm = options.tempoBpm ?? DEFAULT_TEMPO_BPM;
   if (tempoBpm <= 0) {
     throw new DomainError(`A tempo must be positive, got ${tempoBpm}.`);

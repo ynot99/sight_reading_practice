@@ -584,7 +584,7 @@ describe('Wait mode', () => {
       expect(finished?.report.endedAtMs).toBe(500);
     });
 
-    it('replays the current bar after a pause', () => {
+    it('picks the run up after a pause at the note it was paused at, keeping what came before', () => {
       const harness = waitHarness();
       harness.session.start();
       harness.midi.playChord([MIDI.C3, MIDI.C4], 0);
@@ -598,9 +598,9 @@ describe('Wait mode', () => {
 
       harness.session.resume();
       expect(harness.session.status).toBe('running');
-      // Bar one restarts from its first step, and its results are discarded.
-      expect(harness.session.currentIndex).toBe(0);
-      expect(harness.session.stepResults).toHaveLength(0);
+      // At the third note, not the top of the bar: the two played are kept.
+      expect(harness.session.currentIndex).toBe(2);
+      expect(harness.session.stepResults.map((result) => result.index)).toEqual([0, 1]);
     });
 
     it('restarts cleanly after finishing', () => {

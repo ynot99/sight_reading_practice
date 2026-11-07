@@ -713,6 +713,40 @@ describe('Flow mode', () => {
       expect(harness.of('positionChanged').at(-1)).toEqual({ measureIndex: 1, beat: 2 });
     });
 
+    it('picks the run up at the note it was paused at, partway through a bar, counted in to it', () => {
+      // Paused on the third beat of bar one: picked up there, not at the top
+      // of the bar, with what was played before it kept.
+      const harness = flowHarness();
+      startAndCountIn(harness);
+      harness.midi.playChord([MIDI.C3, MIDI.C4]);
+      harness.metronome.advanceSubdivisions(4);
+      harness.midi.noteOn(MIDI.D4);
+      harness.metronome.advanceSubdivisions(4);
+      expect(harness.session.currentStep?.index).toBe(2);
+
+      harness.session.pause();
+      harness.session.resume();
+      const counted = harness.metronome.advanceSubdivisions(TICKS_TO_START);
+
+      // On the third beat, the click not accenting it as a downbeat: counted
+      // in to it exactly as a run begun there is.
+      expect(harness.of('positionChanged').at(-1)).toEqual({ measureIndex: 0, beat: 3 });
+      expect(counted.at(-1)?.isDownbeat).toBe(false);
+      harness.midi.noteOn(MIDI.E4);
+      harness.metronome.advanceSubdivisions(4);
+      harness.midi.noteOn(MIDI.F4);
+      harness.metronome.advanceSubdivisions(4);
+      // And the next bar's first beat accented as the downbeat it is.
+      expect(harness.metronome.emitted.at(-1)?.isDownbeat).toBe(true);
+
+      expect(harness.session.stepResults.map((result) => [result.index, result.status, result.deviationMs])).toEqual([
+        [0, 'correct', 0],
+        [1, 'correct', 0],
+        [2, 'correct', 0],
+        [3, 'correct', 0],
+      ]);
+    });
+
     it('scores the bar it picks up from against the beat it really is', () => {
       // The count-in runs the metronome from zero again while the music picks
       // up at bar two, so the two clocks have to be reconciled or every press

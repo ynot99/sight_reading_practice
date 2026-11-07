@@ -530,6 +530,44 @@ describe('Bar mode', () => {
     expect(isAudibleClick(first!, plan)).toBe(true);
   });
 
+  it('leaves the note a run is picked up at for the reader to give, the count-in heard and it not', () => {
+    // As the first note of a run: the pulse counts the reader in to it, and
+    // the beat itself is theirs, clicked by nobody.
+    const clock = new ManualClock();
+    const midi = new MockMidiAdapter({ clock });
+    const metronome = new ManualMetronome(clock);
+    const session = new PracticeSession({
+      timeline: buildTimeline(twoBarExercise({ tempoBpm: 60 })),
+      mode: new BarMode(),
+      midi,
+      metronome,
+      clock,
+      scoring: new TimingWeightedScoringStrategy(),
+      options: {
+        countInBars: 1,
+        clickWhen: 'always',
+        click: 'subdivision',
+        matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
+      },
+    });
+    session.start();
+    metronome.advanceSubdivisions(TICKS_TO_START);
+    for (const key of [MIDI.C3, MIDI.C4]) {
+      midi.noteOn(key, clock.now());
+    }
+    metronome.advanceSubdivisions(SUBDIVISIONS_PER_BEAT + 1);
+    midi.noteOn(MIDI.D4, clock.now());
+    metronome.advanceSubdivisions(SUBDIVISIONS_PER_BEAT);
+
+    session.pause();
+    session.resume();
+    const plan = metronome.currentConfig;
+    const counted = metronome.advanceSubdivisions(TICKS_TO_START);
+
+    expect(isAudibleClick(counted[0]!, plan)).toBe(true);
+    expect(isAudibleClick(counted.at(-1)!, plan)).toBe(false);
+  });
+
   it('never stops the pulse for a gate that opens on the same tick', () => {
     // His, and it is what was left of the delay once the device was awake:
     // between the chord and the downbeat the pulse was begun twice. Once by
@@ -845,6 +883,39 @@ describe('Bar mode', () => {
     expect(harness.metronome.isRunning).toBe(false);
     press(harness, MIDI.G4);
     expect(harness.metronome.isRunning).toBe(true);
+  });
+
+  it('picks a run up partway through a bar at the note it was paused at, and waits at the next bar line as ever', () => {
+    const harness = barHarness();
+    startAndCountIn(harness);
+    press(harness, MIDI.C3, MIDI.C4);
+    // The pulse begun again from the downbeat given, its first tick that press.
+    harness.metronome.advanceSubdivisions(SUBDIVISIONS_PER_BEAT + 1);
+    press(harness, MIDI.D4);
+    harness.metronome.advanceSubdivisions(SUBDIVISIONS_PER_BEAT);
+    expect(harness.session.currentStep?.index).toBe(2);
+
+    harness.session.pause();
+    harness.session.resume();
+    harness.metronome.advanceSubdivisions(TICKS_TO_START);
+    // Picked up on the third beat, which the reader gives, as the first note
+    // of a run is given here: the pulse begun again from that press. Then on
+    // through the bar in time.
+    expect(harness.metronome.isRunning).toBe(false);
+    press(harness, MIDI.E4);
+    harness.metronome.advanceSubdivisions(SUBDIVISIONS_PER_BEAT + 1);
+    press(harness, MIDI.F4);
+    harness.metronome.advanceSubdivisions(SUBDIVISIONS_PER_BEAT + 4);
+
+    // At the bar line the music waits for the reader's downbeat, as ever.
+    expect(harness.metronome.isRunning).toBe(false);
+    expect(harness.session.currentStep?.index).toBe(4);
+    expect(harness.session.stepResults.map((result) => [result.index, result.status, result.deviationMs])).toEqual([
+      [0, 'correct', 0],
+      [1, 'correct', 0],
+      [2, 'correct', 0],
+      [3, 'correct', 0],
+    ]);
   });
 
   it('counts the rest of a bar it picks up in the middle of', () => {

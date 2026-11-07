@@ -525,10 +525,17 @@ export class PracticeSession {
   }
 
   /**
-   * Resumes from the top of the current measure.
+   * Resumes from the note the run was paused at, counted in to it as a run
+   * begun there is.
    *
-   * Restarting mid-bar would leave the click out of phase with the notation
-   * and would score half-played chords twice, so the bar is replayed instead.
+   * It was the top of the bar, for two reasons that no longer hold: a click
+   * begun partway through a bar was out of phase with the notation, and a
+   * chord half played before the pause would have been scored twice. A run
+   * now begins at any note with its count-in leading to it and its click
+   * accented by the bar it is in, and what was judged from the note picked
+   * up at is forgotten, so a chord half played is played again rather than
+   * twice. Picked up at the bar's top, the reader played again what they had
+   * already played.
    */
   resume(): void {
     if (this.pausedInCountIn) {
@@ -542,15 +549,18 @@ export class PracticeSession {
       this.metronome.start();
       return;
     }
-    const target = this.measureStartStep(this.currentStep);
+    const target = this.currentStep ?? this.timeline.at(0);
     this.resumeAtTicks = target?.onsetTicks ?? 0;
     this.resumeAtIndex = target?.index ?? 0;
-    // Held from the bar it picks up at, counted from there: the gate it was
+    // Held from the note it picks up at, counted from there: the gate it was
     // held at was reckoned from wherever the pulse last began.
     if (this.mode.holdsPastTheGate) {
       this.pulseHeldFrom = this.resumeAtIndex;
-      this.configureThePulse();
     }
+    // Laid out again from there, as a run begun there is: the bars and their
+    // accents are counted from where the music picks up, and picked up partway
+    // through a bar under the old plan, its third beat was clicked a downbeat.
+    this.configureThePulse(undefined, this.clickIsGivenAtTheStart());
 
     // Counted back in, exactly as at the start. A run that simply resumed left
     // the reader with their hands off the keys and the music already moving,
@@ -1962,17 +1972,6 @@ export class PracticeSession {
       return deviationMs;
     }
     return deviationMs + spanMs(this.timeline.exercise, from.onsetTicks, now.onsetTicks);
-  }
-
-  /** First step of the measure the given step belongs to. */
-  private measureStartStep(step: TimelineStep | null): TimelineStep | null {
-    if (step === null) {
-      return this.timeline.at(0);
-    }
-    const found = this.timeline.steps.find(
-      (candidate) => candidate.measureIndex === step.measureIndex,
-    );
-    return found ?? step;
   }
 
   /** Applies a trigger when it is legal, publishing the status change. */

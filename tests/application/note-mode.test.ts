@@ -238,19 +238,21 @@ describe('Note mode', () => {
     expect(report?.waitedAtBars).toEqual([0]);
   });
 
-  it('stands at the first note of the bar it resumes at', () => {
-    // A pause picks the run up at the top of its bar, counted in again, and
-    // the note the music is held past is found again from there - reckoned
-    // from where the pulse now begins, not from where it began before.
+  it('stands at the note it resumes at', () => {
+    // A pause picks the run up at the note it was paused at, counted in again
+    // to it, and the note the music is held past is found again from there -
+    // reckoned from where the pulse now begins, not from where it began before.
     const harness = noteHarness();
     toTheSecondNote(harness);
     pressAt(harness, MUSIC_BEGINS_AT_MS + 1_000, MIDI.D4);
+    const pausedAt = harness.session.currentStep?.index;
 
     harness.session.pause();
     harness.session.resume();
     harness.metronome.advanceSubdivisions(TICKS_TO_START);
 
-    expect(harness.session.currentStep?.index).toBe(0);
+    expect(pausedAt).toBe(1);
+    expect(harness.session.currentStep?.index).toBe(1);
     expect(harness.metronome.advanceSubdivisions(8)).toEqual([]);
   });
 

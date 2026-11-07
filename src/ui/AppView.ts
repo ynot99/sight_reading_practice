@@ -599,6 +599,8 @@ const TAKE_COUNTER_MS = 500;
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { fillSelect, requireElement, isFormControl } from './dom.js';
 import { DRUM_KIT, theDrumOf, theNotesAndTheDrumsSwapped } from '../domain/midi/drums.js';
+import { takeWithTheDrumLoopsKeptInStep } from '../domain/midi/drumLoops.js';
+import { DrumLoopEditing } from './drumLoopEditing.js';
 import { keepTheTrail, timeTheStart, traceTheStart } from '../shared/timeTheStart.js';
 import { noteAFrame, noteTheFramesStopped, thePlaybackTimingsText } from '../shared/playbackTimings.js';
 
@@ -2034,7 +2036,7 @@ export class AppView {
   /** The notes of the drawing by pitch, for the map down its side. */
   private rollPitches: RollPitches | null = null;
   /** The head's marks, found once as the drawing is made rather than looked for every frame. */
-  private rollHeads: RollHeads | null = null;
+  rollHeads: RollHeads | null = null;
   /** What the drawing shows, placed in the run's own time: see `RollScene`. */
   drawnScene: RollScene | null = null;
   /** The canvases it is painted on and the strip of keys, found once as it is drawn. */
@@ -2740,6 +2742,7 @@ export class AppView {
     rollSelect: HTMLButtonElement;
     rollDrums: HTMLButtonElement;
     rollDrumsHeard: HTMLButtonElement;
+    rollDrumLoop: HTMLButtonElement;
     rollUndo: HTMLButtonElement;
     rollRedo: HTMLButtonElement;
     rollChordsOpen: HTMLButtonElement;
@@ -2985,6 +2988,8 @@ export class AppView {
 
   /** What a pointer and the keys do to the notes of a sketch being edited: see `SketchEditing`. */
   private readonly sketchEditing = new SketchEditing(this);
+  /** The loops of a sketch's drums, drawn and pulled: see `DrumLoopEditing`. */
+  private readonly drumLoops = new DrumLoopEditing(this);
 
   constructor(runtime: AppRuntime, doc: Document = document) {
     this.runtime = runtime;
@@ -3217,6 +3222,7 @@ export class AppView {
       rollSelect: requireElement(doc, 'roll-select'),
       rollDrums: requireElement(doc, 'roll-drums'),
       rollDrumsHeard: requireElement(doc, 'roll-drums-heard'),
+      rollDrumLoop: requireElement(doc, 'roll-drum-loop'),
       rollUndo: requireElement(doc, 'roll-undo'),
       rollRedo: requireElement(doc, 'roll-redo'),
       rollChordsOpen: requireElement(doc, 'roll-chords-open'),
@@ -10060,6 +10066,10 @@ export class AppView {
       if (this.pinched || this.panned) {
         return;
       }
+      // The end of a loop pulled, which is not a tap on the drums under it.
+      if (on instanceof Element && on.closest('.roll__loop-end') !== null) {
+        return;
+      }
       // A slice laid by a press held on the ruler, which is not a tap there.
       if (this.sliceLaidByThePress) {
         this.sliceLaidByThePress = false;
@@ -10428,6 +10438,9 @@ export class AppView {
       this.theOtherRollShowing = { ...showing, sketch: { ...sketch, tool } };
       this.sayWhatCanBeChanged();
     });
+    this.listen(this.el.rollDrumLoop, 'click', () => {
+      this.drumLoops.makeOrLetGo();
+    });
     this.listen(this.el.rollDrums, 'click', () => {
       this.writeTheDrums(this.theOtherRollShowing?.sketch?.drums !== true);
     });
@@ -10774,6 +10787,11 @@ export class AppView {
       if (event.button === 0 && this.isOnTheRuler(event)) {
         this.watchForASliceHold(event);
       }
+      // The end of a loop of drums, pulled to repeat it.
+      if (event.button === 0 && this.drumLoops.takeHoldOfAnEnd(event)) {
+        event.preventDefault();
+        return;
+      }
       if (
         !middle &&
         this.rollFingers.size === 0 &&
@@ -10815,7 +10833,7 @@ export class AppView {
       if (this.fingersOnTheDrawing.has(event.pointerId)) {
         this.fingersOnTheDrawing.set(event.pointerId, { x: event.clientX, y: event.clientY });
       }
-      if (this.dragTheSlice(event) || this.dragAnEndOfTheSlice(event)) {
+      if (this.dragTheSlice(event) || this.dragAnEndOfTheSlice(event) || this.drumLoops.dragAnEnd(event)) {
         return;
       }
       if (this.keyHeldOnTheStrip?.pointerId === event.pointerId) {
@@ -10851,7 +10869,7 @@ export class AppView {
     for (const ending of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
       this.listen(this.el.rollBody, ending, (event) => {
         this.fingersOnTheDrawing.delete(event.pointerId);
-        if (this.letGoOfTheSliceHold(event) || this.letGoOfAnEndOfTheSlice(event)) {
+        if (this.letGoOfTheSliceHold(event) || this.letGoOfAnEndOfTheSlice(event) || this.drumLoops.letGoOfAnEnd(event, ending === 'pointerup')) {
           return;
         }
         if (this.keyHeldOnTheStrip?.pointerId === event.pointerId) {
@@ -17257,8 +17275,15 @@ export class AppView {
     if (showing === null || sketch === undefined || this.sketchTakenUnderTheEditor === sketch.id) {
       return;
     }
-    // Changed where its drums are written, they go back to being drums.
-    const changed = this.runtime.sketches.changeTheNotes(sketch.id, sketch.drums ? theNotesAndTheDrumsSwapped(events) : events, beats);
+    // Changed where its drums are written, they go back to being drums; and
+    // a lap of a loop of them changed, every lap is.
+    const kept = this.runtime.sketches.find(sketch.id);
+    const asKept = sketch.drums ? theNotesAndTheDrumsSwapped(events) : events;
+    const changed = this.runtime.sketches.changeTheNotes(
+      sketch.id,
+      kept === null ? asKept : takeWithTheDrumLoopsKeptInStep(kept.events, asKept),
+      beats,
+    );
     const drawn = changed === null ? null : this.theSketchAsDrawn(sketch.id);
     if (drawn === null) {
       return;
@@ -17347,6 +17372,7 @@ export class AppView {
     this.markTheScaleOnTheStrip();
     this.showTheMarkChosen();
     this.showTheSlice();
+    this.drumLoops.showTheLoops();
     this.rollPitches = thePitchesOfTheRun(roll, ghosts, this.theOtherRollShowing?.sketch?.editing === true, {
       freely: this.nothingOnTheDrawingIsJudged(),
       chosen: this.sketchEditing.theNotesChosen(),
@@ -17431,6 +17457,7 @@ export class AppView {
     this.rollHeads?.mark.style.setProperty('--roll-x', along);
     this.rollHeads?.place.style.setProperty('--roll-x', along);
     this.rollHeads?.marks.style.setProperty('--roll-x', along);
+    this.rollHeads?.loops.style.setProperty('--roll-x', along);
     this.rollKeysStrip?.style.setProperty('--roll-y', `${String(scrolled.y)}px`);
     // Nothing on the screen to paint for: the sheet is shut, or nothing has
     // been laid out yet.
@@ -17595,7 +17622,7 @@ export class AppView {
   }
 
   /** Where the head stands, whether something is sounding or not. */
-  private headIsAtMs(): number {
+  headIsAtMs(): number {
     const player = this.runtime.takePlayer;
     return player.playing === RUN_ROLL_ID ? player.positionMs : this.rollAtMs;
   }
@@ -17942,6 +17969,9 @@ export class AppView {
     this.el.rollDrumsHeard.setAttribute('aria-pressed', String(heard));
     this.el.rollDrumsHeard.title = heard ? 'The drums are heard: press to silence them' : 'The drums are silent: press to hear them';
     this.el.rollDrumsHeard.setAttribute('aria-label', this.el.rollDrumsHeard.title);
+    // Loops are of the drums, and made and let go of while they are written.
+    this.el.rollDrumLoop.hidden = !drums || this.theOtherRollShowing?.sketch?.editing !== true;
+    this.drumLoops.sayWhatTheButtonDoes();
   }
 
   /** What a row of the drawing is called: its key, or where the drums are written, its drum. */
@@ -17964,7 +17994,7 @@ export class AppView {
    * being worked on, laid on the page or in the drawing alike. On any other,
    * the drawing's own.
    */
-  private theSliceShown(): { readonly fromMs: number; readonly toMs: number } | null {
+  theSliceShown(): { readonly fromMs: number; readonly toMs: number } | null {
     if (this.theDrawingIsOfThePage()) {
       return this.thePassageInTheDrawing();
     }
@@ -18056,6 +18086,8 @@ export class AppView {
       band.style.setProperty('--roll-at', (slice.fromMs / 1000).toFixed(3));
       band.style.setProperty('--roll-span', ((slice.toMs - slice.fromMs) / 1000).toFixed(3));
     }
+    // A loop of drums is made of it.
+    this.drumLoops.sayWhatTheButtonDoes();
   }
 
   /**
@@ -18756,6 +18788,7 @@ export class AppView {
       this.rollHeads?.mark.style.setProperty('--roll-second', second);
       this.rollHeads?.place.style.setProperty('--roll-second', second);
       this.rollHeads?.marks.style.setProperty('--roll-second', second);
+      this.rollHeads?.loops.style.setProperty('--roll-second', second);
       roll.style.setProperty('--roll-row-asked', `${this.rollRowPx}px`);
     }
     // How long and how tall the run now is follow from the zoom, so the

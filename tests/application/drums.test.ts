@@ -91,6 +91,34 @@ describe('the drums of a sketch kept', () => {
   });
 });
 
+describe('the loops of drums kept', () => {
+  it('are kept and read back edge by edge, and an edge not known is none', () => {
+    const edges: MidiFileEvent[] = [
+      { kind: 'drumLoop', atMs: 0, loop: 3, edge: 'from' },
+      { kind: 'drumLoop', atMs: 2_000, loop: 3, edge: 'lap' },
+      { kind: 'drumLoop', atMs: 5_000, loop: 3, edge: 'until' },
+    ];
+    const sketch: StoredSketch = {
+      id: 'one',
+      title: 'One',
+      begunAtMs: 0,
+      events: [...hit(KICK, 0), ...edges],
+      beats: fours(4),
+      noteCount: 0,
+      key: { fifths: 0, mode: 'major' },
+    };
+    const kept = sketchAsKept(sketch);
+    expect((kept['events'] as readonly (readonly unknown[])[]).slice(2)).toEqual([
+      [8, 0, 3, 0],
+      [8, 2_000, 3, 1],
+      [8, 5_000, 3, 2],
+    ]);
+    expect(sketchFromKept(JSON.parse(JSON.stringify(kept)))?.events.slice(2)).toEqual(edges);
+    const unknown = { ...kept, events: [[8, 0, 3, 7]] };
+    expect(sketchFromKept(unknown)?.events).toEqual([]);
+  });
+});
+
 describe('a sketch with drums written as a file', () => {
   it('leaves the drums out: the file is the one its notes alone make', () => {
     const notes = [...key(60, 0, 400), ...key(64, 500, 900)];

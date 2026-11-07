@@ -1,4 +1,4 @@
-import type { Hand, HeardBeat, MidiFileEvent } from '../domain/midi/MidiFile.js';
+import type { DrumLoopEdge, Hand, HeardBeat, MidiFileEvent } from '../domain/midi/MidiFile.js';
 import { SCALE_NAMES } from '../domain/harmony/scales.js';
 import { DYNAMIC_LEVELS } from '../domain/model/Exercise.js';
 
@@ -17,6 +17,9 @@ import { DYNAMIC_LEVELS } from '../domain/model/Exercise.js';
  * reason an `Exercise` and not its MusicXML is what this project keeps.
  */
 type Packed = readonly (number | string)[];
+
+/** The edges of a loop of drums, by the number each is kept as. */
+const DRUM_LOOP_EDGES: readonly DrumLoopEdge[] = ['from', 'lap', 'until'];
 
 /** A hand as a number after a press's four, where one is said: 1 the right, 2 the left. */
 const HAND_CODES: Readonly<Record<Hand, number>> = { right: 1, left: 2 };
@@ -44,6 +47,9 @@ export function pack(event: MidiFileEvent): Packed {
       return [1, Math.round(event.atMs), event.midi, 0];
     case 'drumOff':
       return [7, Math.round(event.atMs), event.midi, 0];
+    case 'drumLoop':
+      // Its number where a key's pitch is, and which edge by its place among them.
+      return [8, Math.round(event.atMs), event.loop, DRUM_LOOP_EDGES.indexOf(event.edge)];
     case 'sustain':
       return [2, Math.round(event.atMs), 0, Math.round(event.value * 127)];
     case 'key':
@@ -90,6 +96,10 @@ export function unpack(value: unknown): MidiFileEvent | null {
       return { kind: 'noteOff', atMs, midi: a };
     case 7:
       return { kind: 'drumOff', atMs, midi: a };
+    case 8: {
+      const edge = DRUM_LOOP_EDGES[b];
+      return edge === undefined || !Number.isInteger(a) ? null : { kind: 'drumLoop', atMs, loop: a, edge };
+    }
     case 2:
       return { kind: 'sustain', atMs, value: b / 127 };
     case 3: {

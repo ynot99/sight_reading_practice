@@ -531,6 +531,8 @@ export interface RollHeads {
   readonly marks: HTMLElement;
   /** The slice played round and round, among the flags and placed as they are: hidden while there is none. */
   readonly slice: HTMLElement;
+  /** The loops of a sketch's drums, over the grid and placed as the head is: see `DrumLoopEditing`. */
+  readonly loops: HTMLElement;
 }
 
 /** The head's marks in a drawing, or `null` where nothing has been drawn. */
@@ -540,9 +542,10 @@ export function theHeadsOf(within: ParentNode): RollHeads | null {
   const place = within.querySelector<HTMLElement>('.roll__ruler > .roll__place-mark');
   const marks = within.querySelector<HTMLElement>('.roll__ruler > .roll__marks');
   const slice = marks?.querySelector<HTMLElement>(':scope > .roll__slice') ?? null;
-  return line === null || mark === null || place === null || marks === null || slice === null
+  const loops = within.querySelector<HTMLElement>('.roll__grid > .roll__loops');
+  return line === null || mark === null || place === null || marks === null || slice === null || loops === null
     ? null
-    : { line, mark, place, marks, slice };
+    : { line, mark, place, marks, slice, loops };
 }
 
 /**
@@ -1610,7 +1613,7 @@ export function drawTheRoll(scene: RollScene): HTMLElement {
   keys.append(strip);
 
   const grid = element('div', 'roll__grid');
-  grid.append(element('canvas', 'roll__paint'), element('div', 'roll__head'));
+  grid.append(element('canvas', 'roll__paint'), element('div', 'roll__loops'), element('div', 'roll__head'));
 
   const chords = element('div', 'roll__chords');
   chords.append(element('canvas', 'roll__paint'));

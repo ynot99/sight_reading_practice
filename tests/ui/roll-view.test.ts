@@ -188,8 +188,11 @@ describe('drawing a run as a piano roll', () => {
     ]);
     expect([...(view.querySelector('.roll__grid')?.children ?? [])].map((child) => child.className)).toEqual([
       'roll__paint',
+      'roll__loops',
       'roll__head',
     ]);
+    // The box the loops of a sketch's drums are drawn in, by the view, and empty here.
+    expect(view.querySelector('.roll__loops')?.childElementCount).toBe(0);
   });
 
   it('draws a bar line the reader gave as theirs', () => {

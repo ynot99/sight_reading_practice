@@ -2204,6 +2204,65 @@ textarea {
 }
 
 /*
+ * The loops of the drums, over the grid: placed as the head is, and touched
+ * nowhere but at the tab on each one's end, so the drums under a loop are
+ * written as they are anywhere.
+ */
+.roll__loops {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.roll__loop {
+  --roll-x: inherit;
+  --roll-second: inherit;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(var(--roll-second) * var(--roll-span, 0));
+  transform: translateX(calc(var(--roll-second) * var(--roll-at, 0) - var(--roll-x)));
+  box-sizing: border-box;
+  border: 2px solid var(--accent);
+  /* A line where each lap ends, so the laps are counted at a glance. */
+  background: repeating-linear-gradient(
+    to right,
+    transparent 0,
+    transparent calc(var(--roll-second) * var(--roll-lap, 1) - 2px),
+    color-mix(in srgb, var(--accent) 60%, transparent) calc(var(--roll-second) * var(--roll-lap, 1) - 2px),
+    color-mix(in srgb, var(--accent) 60%, transparent) calc(var(--roll-second) * var(--roll-lap, 1))
+  );
+}
+
+/* The repeats paler than the lap they are copies of: what is written there is written in it. */
+.roll__loop::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: calc(var(--roll-second) * var(--roll-lap, 0));
+  background: color-mix(in srgb, var(--surface) 45%, transparent);
+}
+
+/* What is pulled: a tab at the top of its end, wide enough for a finger. */
+.roll__loop-end {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: -12px;
+  width: 22px;
+  height: 22px;
+  border-radius: 0 6px 6px 0;
+  background: var(--accent);
+  cursor: ew-resize;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+/*
  * The chord the keys held make and the chord the chosen notes make, under the
  * ruler at the middle of the drawing, side by side when both are there.
  */

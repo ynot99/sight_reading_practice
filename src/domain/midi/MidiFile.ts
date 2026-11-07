@@ -24,6 +24,14 @@ export type MidiFileEvent =
    */
   | ({ readonly kind: 'drumOn' } & Struck)
   | { readonly kind: 'drumOff'; readonly atMs: number; readonly midi: number }
+  /**
+   * An edge of a loop of a sketch's drums: where it begins, where its first
+   * lap ends - the lap the others are copies of - and where the last ends.
+   * Its number pairs the three. Kept among the events, each edge a moment of
+   * its own, so that a bar put in or another pace moves the loop with the
+   * drums it holds: see `drumLoops.ts`.
+   */
+  | { readonly kind: 'drumLoop'; readonly atMs: number; readonly loop: number; readonly edge: DrumLoopEdge }
   | { readonly kind: 'sustain'; readonly atMs: number; readonly value: number }
   /**
    * The music written in another key from here: its signature and its scale.
@@ -72,6 +80,9 @@ export interface Struck {
 
 /** The two hands, as the two staves of a piano score are theirs. */
 export type Hand = 'left' | 'right';
+
+/** Which edge of a loop of drums: see the `drumLoop` event. */
+export type DrumLoopEdge = 'from' | 'lap' | 'until';
 
 /**
  * The lowest key of the right hand, for a note nothing says the hand of:
@@ -846,6 +857,7 @@ export function beginsSomething(event: MidiFileEvent): boolean {
   return (
     event.kind === 'noteOn' ||
     event.kind === 'drumOn' ||
+    (event.kind === 'drumLoop' && event.edge === 'from') ||
     event.kind === 'key' ||
     event.kind === 'dynamic' ||
     event.kind === 'section' ||
@@ -980,6 +992,9 @@ function orderAt(event: MidiFileEvent): number {
     case 'noteOff':
     case 'drumOff':
       return 0;
+    case 'drumLoop':
+      // Begun before what is in it, and ended where what ends there ends.
+      return event.edge === 'from' ? -1 : 0;
     case 'sustain':
       return 1;
     default:
@@ -1092,7 +1107,7 @@ export function writeMidiFile(
   // A sketch's drums are kept for the writer to feel the music by, and are no
   // part of what it is saved as: left out before anything is measured, so the
   // file is the one its notes alone make, to its length and its last bar.
-  const events = played.filter((event) => event.kind !== 'drumOn' && event.kind !== 'drumOff');
+  const events = played.filter((event) => event.kind !== 'drumOn' && event.kind !== 'drumOff' && event.kind !== 'drumLoop');
   const tempoBpm = options.tempoBpm ?? DEFAULT_TEMPO_BPM;
   if (tempoBpm <= 0) {
     throw new DomainError(`A tempo must be positive, got ${tempoBpm}.`);

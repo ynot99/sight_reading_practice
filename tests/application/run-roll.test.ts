@@ -2274,6 +2274,8 @@ describe('a bar taken out', () => {
           return `${String(event.atMs)} hit ${String(event.midi)}`;
         case 'drumOff':
           return `${String(event.atMs)} hit off ${String(event.midi)}`;
+        case 'drumLoop':
+          return `${String(event.atMs)} loop ${event.edge}`;
       }
     });
 

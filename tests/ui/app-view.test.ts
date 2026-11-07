@@ -7325,6 +7325,113 @@ describe('AppView', () => {
       }
     });
 
+    it('loops the drums: made of the slice, pulled out to the grid lap by lap, every lap kept alike, and let go of', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      const struck = (midi: number, atMs: number): MidiFileEvent[] => [
+        { kind: 'drumOn', atMs, midi, velocity: 0.75 },
+        { kind: 'drumOff', atMs: atMs + 100, midi },
+      ];
+      const sketch = sketches.begin(
+        {
+          events: [...struck(36, 0), ...struck(37, 500), ...struck(36, 1_000), ...struck(37, 1_500)],
+          beats: Array.from({ length: 16 }, (_, at) => ({ atMs: at * 500, beat: at % 4, beatsInBar: 4 })),
+        },
+        'Looped',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      await editTheSketch();
+      const loop = element<HTMLButtonElement>('roll-drum-loop');
+      // Not while the notes are written.
+      expect(loop.hidden).toBe(true);
+      element<HTMLButtonElement>('roll-drums').click();
+      expect([loop.hidden, loop.dataset['idle']]).toEqual([false, 'true']);
+
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const body = element('roll-body');
+      const ruler = (): Element => body.querySelector('.roll__ruler') ?? body;
+      const clickTheRuler = (seconds: number, init: MouseEventInit = {}): void => {
+        tapTheDrawing({ pointerType: 'mouse', button: 0, isPrimary: true, clientX: seconds * zoom, clientY: 4, ...init }, ruler());
+      };
+      const frames = (): string[] =>
+        [...body.querySelectorAll<HTMLElement>('.roll__loop')].map(
+          (frame) =>
+            `${frame.style.getPropertyValue('--roll-at')}+${frame.style.getPropertyValue('--roll-span')}/${frame.style.getPropertyValue('--roll-lap')}`,
+        );
+      const struckAt = (midi: number): number[] =>
+        (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'drumOn' && event.midi === midi ? [event.atMs] : []));
+
+      // The first bar laid as a slice, and made a loop: one lap.
+      clickTheRuler(0.3, { ctrlKey: true });
+      expect(loop.dataset['idle']).toBeUndefined();
+      loop.click();
+      expect(frames()).toEqual(['0.000+2.000/2.000']);
+
+      // Its end pulled to the beat nearest two and a half laps: the bar written again, and half of it.
+      const end = (): Element | null => body.querySelector('.roll__loop-end');
+      const pull = (toSeconds: number, shown: string): void => {
+        const headBefore = headAt(body);
+        end()?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 77, pointerType: 'mouse', button: 0, clientX: 2 * zoom, clientY: 4 }));
+        body.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 77, pointerType: 'mouse', clientX: toSeconds * zoom, clientY: 4 }));
+        // Drawn where it is pulled to as it is pulled, to the grid, before it is let go of.
+        expect(frames()[0]).toBe(`0.000+${shown}/2.000`);
+        expect(struckAt(36)).toHaveLength(heldBefore);
+        body.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 77, pointerType: 'mouse', clientX: toSeconds * zoom, clientY: 4 }));
+        body.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: toSeconds * zoom, clientY: 4 }));
+        // A pull, not a tap: the marker stays where it was.
+        expect(headAt(body)).toBe(headBefore);
+      };
+      let heldBefore = 2;
+      pull(4.95, '5.000');
+      expect(frames()).toEqual(['0.000+5.000/2.000']);
+      // Placed as the head is, the box it is in told where the view stands and how wide a second is.
+      expect(body.querySelector<HTMLElement>('.roll__loops')?.style.getPropertyValue('--roll-second')).not.toBe('');
+      expect(struckAt(36)).toEqual([0, 1_000, 2_000, 3_000, 4_000]);
+      expect(struckAt(37)).toEqual([500, 1_500, 2_500, 3_500, 4_500]);
+      // Pulled short of its first lap, it stops there.
+      heldBefore = 5;
+      pull(0.4, '2.000');
+      expect(frames()).toEqual(['0.000+2.000/2.000']);
+      expect(struckAt(36)).toEqual([0, 1_000]);
+      heldBefore = 2;
+      pull(6, '6.000');
+      expect(struckAt(36)).toEqual([0, 1_000, 2_000, 3_000, 4_000, 5_000]);
+      // A pull is one change, put back as one.
+      element<HTMLButtonElement>('roll-undo').click();
+      expect([frames(), struckAt(36)]).toEqual([['0.000+2.000/2.000'], [0, 1_000]]);
+      element<HTMLButtonElement>('roll-redo').click();
+      expect(struckAt(36)).toEqual([0, 1_000, 2_000, 3_000, 4_000, 5_000]);
+
+      // A hat written into the second lap is every lap's, as one change.
+      const highest = view.rollScene?.highest ?? 0;
+      const where = { clientX: 2.75 * zoom, clientY: (highest - 39 + 0.5) * 13 };
+      for (let tap = 0; tap < 2; tap += 1) {
+        tapTheDrawing({ pointerType: 'mouse', button: 0, isPrimary: true, ...where });
+      }
+      const [written = -1] = struckAt(39).filter((atMs) => atMs >= 2_000 && atMs < 4_000);
+      expect(struckAt(39)).toEqual([written - 2_000, written, written + 2_000]);
+      element<HTMLButtonElement>('roll-undo').click();
+      expect(struckAt(39)).toEqual([]);
+      element<HTMLButtonElement>('roll-redo').click();
+      expect(struckAt(39)).toHaveLength(3);
+
+      // Not drawn over the notes.
+      element<HTMLButtonElement>('roll-drums').click();
+      expect(frames()).toEqual([]);
+      element<HTMLButtonElement>('roll-drums').click();
+      expect(frames()).toHaveLength(1);
+
+      // With the marker in it, the button lets it go: its hits stay, no longer kept alike.
+      clickTheRuler(1);
+      expect(loop.getAttribute('aria-pressed')).toBe('true');
+      loop.click();
+      expect(frames()).toEqual([]);
+      expect(struckAt(36)).toEqual([0, 1_000, 2_000, 3_000, 4_000, 5_000]);
+      expect(sketches.find(sketch.id)?.events.some((event) => event.kind === 'drumLoop')).toBe(false);
+    });
+
     it('names no chord of the drums chosen, a drum being no pitch', async () => {
       const { view, sketches } = createRig();
       await view.initialize();

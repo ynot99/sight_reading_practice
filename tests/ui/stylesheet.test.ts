@@ -2122,6 +2122,16 @@ describe('the rows of the drawing and the pitch map beside them', () => {
     expect(pills).toMatch(/display\s*:\s*flex/);
   });
 
+  it('lays the loops of the drums over the grid, touched only at the tab on each end, scrolled and zoomed as the head is', () => {
+    expect(declared(body('.roll__loops'), 'pointer-events')).toBe('none');
+    expect(declared(body('.roll__loop-end'), 'pointer-events')).toBe('auto');
+    expect(declared(body('.roll__loop'), '--roll-x')).toBe('inherit');
+    expect(declared(body('.roll__loop'), '--roll-second')).toBe('inherit');
+    expect(declared(body('.roll__loop'), 'transform')).toBe('translateX(calc(var(--roll-second) * var(--roll-at, 0) - var(--roll-x)))');
+    // The repeats veiled from where the first lap ends.
+    expect(declared(body('.roll__loop::after'), 'left')).toBe('calc(var(--roll-second) * var(--roll-lap, 0))');
+  });
+
   it('widens the strip for the names of the drums while they are written, and gives the pedal no room then', () => {
     expect(Number.parseFloat(declared(body(".roll-stage[data-drums='true']"), '--roll-keys') ?? '0')).toBeGreaterThan(
       Number.parseFloat(declared(body('.roll-stage'), '--roll-keys') ?? '0'),

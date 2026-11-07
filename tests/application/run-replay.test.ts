@@ -128,6 +128,23 @@ describe('the marks a run left, and when', () => {
     expect(mark?.mark.offset).toBe(0);
     expect(mark?.mark.tier).toBe('perfect');
   });
+
+  it('marks again the beats a tapped run missed, on the beat, as their windows closed', () => {
+    // The first beat tapped, the second not: its window closed at the third.
+    const run: RunRoll = {
+      ...roll([press({ downAtMs: PLAYED_AT, stepIndex: 0 })]),
+      missed: [{ stepIndex: 1, midi: MIDI.D4, atMs: PLAYED_AT + 2_000 }],
+    };
+    const shown = (judging: ReplayJudging, which: RunRoll = run): string[] =>
+      theMarksOfTheRun(which, timeline, judging)
+        .filter(({ mark }) => mark.missed === true)
+        .map(({ atMs, mark }) => `${String(mark.stepIndex)}:${String(mark.midi)}@${String(atMs)}:${String(mark.offset)}:${String(mark.tap)}`);
+
+    expect(shown({ ...IN_TIME, taps: true })).toEqual([`1:${String(MIDI.D4)}@2000:0:true`]);
+    // Only where the keys were taps, and not from a run kept before misses were.
+    expect(shown(IN_TIME)).toEqual([]);
+    expect(shown({ ...IN_TIME, taps: true }, roll([press({ downAtMs: PLAYED_AT, stepIndex: 0 })]))).toEqual([]);
+  });
 });
 
 describe('where the music was, a moment into the run', () => {

@@ -375,6 +375,33 @@ describe('Flow mode', () => {
       expect(judgedAt(880, false, MIDI.C4)).toBe('correct@1');
     });
 
+    it('in rhythm only, writes down a beat its window closed on with no tap, when it closed', () => {
+      const missedIn = (anyPitch: boolean): readonly unknown[] => {
+        const harness = createHarness({
+          exercise: twoBarExercise({ tempoBpm: 60 }),
+          mode: new FlowMode(),
+          options: {
+            countInBars: COUNT_IN_BARS,
+            clickWhen: 'never',
+            click: 'subdivision',
+            matchPolicy: { toleranceMs: 250, pitchClassOnly: false, anyPitch },
+          },
+        });
+        startAndCountIn(harness);
+        // The first beat played, the second not, on to the third.
+        for (const key of harness.session.currentStep?.expectedMidi ?? []) {
+          harness.midi.noteOn(key);
+        }
+        harness.metronome.advanceSubdivisions(8);
+        return harness.session.roll.missed ?? [];
+      };
+
+      // Its window closed as the third beat began.
+      expect(missedIn(true)).toEqual([{ stepIndex: 1, midi: MIDI.D4, atMs: RUN_STARTS_AT_MS + 2_000 }]);
+      // Read by its keys, a note left behind may yet be credited, and is not written down so.
+      expect(missedIn(false)).toEqual([]);
+    });
+
     it('in rhythm only, keeps a tap off a beat that asks for none - a rest, or only the other hand', () => {
       // A tap three tenths of a beat short of such a beat stays the beat
       // behind's: nothing ahead is asking, so only the narrow window could

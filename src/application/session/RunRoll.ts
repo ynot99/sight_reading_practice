@@ -143,6 +143,17 @@ export interface RolledRush {
   readonly byMs: number;
 }
 
+/**
+ * A beat of a tapped run whose window closed with no tap in it: which, a
+ * note of it, and when the window closed - the moment it was marked missed,
+ * and the moment it is marked again when the run is shown again.
+ */
+export interface RolledMiss {
+  readonly stepIndex: number;
+  readonly midi: number;
+  readonly atMs: number;
+}
+
 /** The sustain pedal down and up again. */
 export interface RolledPedal {
   readonly downAtMs: number;
@@ -166,6 +177,11 @@ export interface RunRoll {
   readonly pedal: readonly RolledPedal[];
   /** Where the reader arrived before the music did; see {@link RolledRush}. */
   readonly rushes: readonly RolledRush[];
+  /**
+   * The beats a tapped run missed; see {@link RolledMiss}. Absent from a run
+   * kept before they were written down, which then shows none.
+   */
+  readonly missed?: readonly RolledMiss[];
   /**
    * Whether anything was left out for want of room.
    *
@@ -259,7 +275,7 @@ const PRESS_CAPACITY = 20_000;
 /** And clicks, which at the finest resolution outnumber the presses. */
 const BEAT_CAPACITY = 60_000;
 
-const EMPTY: RunRoll = { presses: [], beats: [], pedal: [], rushes: [], truncated: false };
+const EMPTY: RunRoll = { presses: [], beats: [], pedal: [], rushes: [], missed: [], truncated: false };
 
 /** A press whose verdict has not arrived yet, and where it sits. */
 interface Open {
@@ -280,6 +296,7 @@ export class RollRecorder {
   private beats: RolledBeat[] = [];
   private pedalSpans: RolledPedal[] = [];
   private rushes: RolledRush[] = [];
+  private misses: RolledMiss[] = [];
   /** Keys still down, oldest first, by the press each one belongs to. */
   private readonly held: Open[] = [];
   /** Presses still waiting for a verdict, oldest first. */
@@ -308,6 +325,7 @@ export class RollRecorder {
     this.beats = [];
     this.pedalSpans = [];
     this.rushes = [];
+    this.misses = [];
     this.held.length = 0;
     this.unjudged.length = 0;
     this.pedalDownAt = null;
@@ -437,6 +455,13 @@ export class RollRecorder {
    * Refused where it says nothing: an arrival at the moment the music was ready
    * is not early, and one the music had already passed is a wait.
    */
+  /** A beat a tapped run missed, as its window closed: see {@link RolledMiss}. */
+  missed(miss: RolledMiss): void {
+    // No cap of its own: one at most for each step the run finished, and the
+    // presses are capped already.
+    this.misses.push(miss);
+  }
+
   rushed(atMs: number, byMs: number): void {
     if (byMs <= ONE_BREATH_MS || this.rushes.length >= BEAT_CAPACITY) {
       return;
@@ -479,6 +504,7 @@ export class RollRecorder {
       beats: [...this.beats],
       pedal: [...pedal],
       rushes: [...this.rushes],
+      missed: [...this.misses],
       truncated: this.full,
     };
   }

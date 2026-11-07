@@ -88,6 +88,13 @@ export function theMarksOfTheRun(
       },
     });
   }
+  // And the beats a tapped run missed, marked as their windows closed.
+  for (const miss of judging.taps === true ? (roll.missed ?? []) : []) {
+    marks.push({
+      atMs: miss.atMs - began,
+      mark: { stepIndex: miss.stepIndex, midi: miss.midi, correct: false, settled: true, offset: 0, tap: true, missed: true },
+    });
+  }
   return marks.sort((left, right) => left.atMs - right.atMs);
 }
 

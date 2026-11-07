@@ -1454,6 +1454,14 @@ export class PracticeSession {
     };
 
     this.results.push(result);
+    // A beat tapped for its moment alone, whose window has closed on no tap:
+    // written down to be marked again when the run is shown again. Only where
+    // the keys are taps, since a note read by its key may yet be played late
+    // and credited to the step it was owed to.
+    const unplayed = result.missing[0];
+    if (this.options.matchPolicy.anyPitch === true && unplayed !== undefined) {
+      this.roller.missed({ stepIndex: step.index, midi: unplayed, atMs: this.clock.now() });
+    }
     // Finished by a press where there was one, and otherwise by the run
     // walking through: a step of rests is nobody's doing.
     const finishedAt =

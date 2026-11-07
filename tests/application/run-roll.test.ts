@@ -410,6 +410,7 @@ describe('writing a run down', () => {
     roller.beat(0, 'downbeat', 0);
     roller.rushed(100, 800);
     roller.pedal(pedal(true, 50));
+    roller.missed({ stepIndex: 1, midi: MIDI.D4, atMs: 1_000 });
     roller.reset();
 
     expect(roller.roll()).toEqual({
@@ -417,6 +418,7 @@ describe('writing a run down', () => {
       beats: [],
       pedal: [],
       rushes: [],
+      missed: [],
       truncated: false,
     });
   });

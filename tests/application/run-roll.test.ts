@@ -750,35 +750,41 @@ describe('the beat a run was measured against', () => {
       expect(theGridForANote(run, PLAIN_GRID, 5_000, 250)).toBe(PLAIN_GRID);
     });
 
-    it('takes an end to the lines after its start, and in the first step its halves, thirds and quarters, across the step', () => {
-      const firstStep = [125, 500 / 3, 250, 1_000 / 3, 375];
-      const lines = [500, 1_000, 1_500, 2_000];
-      const nearest = (among: readonly number[], wanted: number): number =>
-        [...among].sort((one, other) => one - other).reduce((best, at) => (Math.abs(at - wanted) < Math.abs(best - wanted) ? at : best));
+    // Every beat's line, and its halves, thirds and quarters: where a length may end or begin, whatever it is.
+    const theBeatsCut = [0, 500, 1_000, 1_500].flatMap((beat) => [0, 125, 500 / 3, 250, 1_000 / 3, 375].map((part) => beat + part));
+    const theLinesAndTheirParts = [...theBeatsCut, 2_000];
+    const nearest = (among: readonly number[], wanted: number): number =>
+      [...among].sort((one, other) => one - other).reduce((best, at) => (Math.abs(at - wanted) < Math.abs(best - wanted) ? at : best));
+
+    it('takes an end to the lines after its start and the halves, thirds and quarters of every step, across the run', () => {
+      const after = theLinesAndTheirParts.filter((at) => at > 0);
       for (let wanted = -100; wanted <= 2_200; wanted += 10) {
-        expect(theEndNearest(run, PLAIN_GRID, 0, wanted), String(wanted)).toBeCloseTo(nearest([...firstStep, ...lines], wanted), 6);
+        expect(theEndNearest(run, PLAIN_GRID, 0, wanted), String(wanted)).toBeCloseTo(nearest(after, wanted), 6);
       }
       // The shortest is the first of them.
       expect(theEndNearest(run, PLAIN_GRID, 0, 0)).toBe(125);
       // From a start off the grid, the rest of its step cut so too, and nothing before it.
       expect(theEndNearest(run, PLAIN_GRID, 250, 300)).toBeCloseTo(1_000 / 3, 6);
       expect(theEndNearest(run, PLAIN_GRID, 250, 0)).toBeCloseTo(1_000 / 3, 6);
-      // Past the step, only the grid's own lines.
-      expect(theEndNearest(run, PLAIN_GRID, 0, 640)).toBe(500);
+      // Past the first step, cut as finely: a beat and a half, a beat and a third, two and a quarter.
+      expect(theEndNearest(run, PLAIN_GRID, 0, 760)).toBe(750);
+      expect(theEndNearest(run, PLAIN_GRID, 0, 660)).toBeCloseTo(500 + 500 / 3, 6);
+      expect(theEndNearest(run, PLAIN_GRID, 0, 1_130)).toBe(1_125);
+      // Under bars alone, the beats and their parts.
+      expect(theEndNearest(run, { beats: false, parts: 1 }, 0, 1_380)).toBe(1_375);
       // With nothing after it, where it was pulled.
       expect(theEndNearest(run, PLAIN_GRID, 2_000, 2_300)).toBe(2_300);
     });
 
-    it('takes a start to the lines before its end, and in the last step its halves, thirds and quarters, across the step', () => {
-      const lastStep = [1_625, 1_500 + 500 / 3, 1_750, 1_500 + 1_000 / 3, 1_875];
-      const lines = [0, 500, 1_000, 1_500];
-      const nearest = (among: readonly number[], wanted: number): number =>
-        [...among].sort((one, other) => one - other).reduce((best, at) => (Math.abs(at - wanted) < Math.abs(best - wanted) ? at : best));
+    it('takes a start to the lines before its end and the halves, thirds and quarters of every step, across the run', () => {
+      const before = theLinesAndTheirParts.filter((at) => at < 2_000);
       for (let wanted = -100; wanted <= 2_200; wanted += 10) {
-        expect(theStartNearest(run, PLAIN_GRID, 2_000, wanted), String(wanted)).toBeCloseTo(nearest([...lines, ...lastStep], wanted), 6);
+        expect(theStartNearest(run, PLAIN_GRID, 2_000, wanted), String(wanted)).toBeCloseTo(nearest(before, wanted), 6);
       }
       // The latest is the last of them.
       expect(theStartNearest(run, PLAIN_GRID, 2_000, 2_000)).toBe(1_875);
+      // Before the last step, cut as finely.
+      expect(theStartNearest(run, PLAIN_GRID, 2_000, 1_240)).toBe(1_250);
       // With nothing before it, where it was pulled.
       expect(theStartNearest(run, PLAIN_GRID, 0, -50)).toBe(-50);
     });

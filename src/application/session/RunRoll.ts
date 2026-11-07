@@ -1369,50 +1369,32 @@ export function theGridForANote(roll: RunRoll, choice: GridChoice, atMs: number,
 }
 
 /**
- * The lines a note's end may go to, from where it begins: those of the grid
- * after it, and inside the first step, the halves, thirds and quarters of
- * that step as well - so a note is made shorter than a step without a finer
+ * The lines a note's end or start may go to: the halves, thirds and
+ * quarters of every step of the grid, its own lines among them - so a note
+ * is made a step and a half long, or shorter than a step, without a finer
  * grid being asked for. Moments from the run's start.
  */
-function theLinesAnEndGoesTo(roll: RunRoll, choice: GridChoice, fromMs: number): readonly number[] {
+function theLinesALengthGoesTo(roll: RunRoll, choice: GridChoice): readonly number[] {
   const began = rollBeganAtMs(roll);
-  const next = theNextLineOfTheGrid(roll, fromMs, choice, 1);
-  const lines = theMusicsBeats(roll, choice).map((line) => line.atMs - began);
-  const finer = theGridsFinerThan(choice).flatMap((grid) => theMusicsBeats(roll, grid).map((line) => line.atMs - began));
-  return [
-    ...lines.filter((at) => at > fromMs + 0.5),
-    ...(next === null ? [] : finer.filter((at) => at > fromMs + 0.5 && at < next - 0.5)),
-  ];
+  return theGridsFinerThan(choice).flatMap((grid) => theMusicsBeats(roll, grid).map((line) => line.atMs - began));
 }
 
 /**
  * Where the end of a note begun at a moment goes, pulled to near another:
- * the nearest of `theLinesAnEndGoesTo`, or the moment itself where there
- * are none.
+ * the nearest of `theLinesALengthGoesTo` after its start, or the moment
+ * itself where there are none.
  */
 export function theEndNearest(roll: RunRoll, choice: GridChoice, fromMs: number, wantedMs: number): number {
-  return nearestOf(theLinesAnEndGoesTo(roll, choice, fromMs), wantedMs) ?? wantedMs;
+  return nearestOf(theLinesALengthGoesTo(roll, choice).filter((at) => at > fromMs + 0.5), wantedMs) ?? wantedMs;
 }
 
 /**
  * Where the start of a note let go of at a moment goes, pulled to near
- * another: the lines of the grid before its end, and inside the last step
- * before it, the halves, thirds and quarters of that step as well.
+ * another: the nearest of `theLinesALengthGoesTo` before its end, or the
+ * moment itself where there are none.
  */
 export function theStartNearest(roll: RunRoll, choice: GridChoice, untilMs: number, wantedMs: number): number {
-  const began = rollBeganAtMs(roll);
-  const previous = theNextLineOfTheGrid(roll, untilMs, choice, -1);
-  const lines = theMusicsBeats(roll, choice).map((line) => line.atMs - began);
-  const finer = theGridsFinerThan(choice).flatMap((grid) => theMusicsBeats(roll, grid).map((line) => line.atMs - began));
-  return (
-    nearestOf(
-      [
-        ...lines.filter((at) => at < untilMs - 0.5),
-        ...(previous === null ? [] : finer.filter((at) => at < untilMs - 0.5 && at > previous + 0.5)),
-      ],
-      wantedMs,
-    ) ?? wantedMs
-  );
+  return nearestOf(theLinesALengthGoesTo(roll, choice).filter((at) => at < untilMs - 0.5), wantedMs) ?? wantedMs;
 }
 
 /** The one of some moments nearest another, the earlier on a tie; `null` of none. */

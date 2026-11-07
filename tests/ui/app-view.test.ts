@@ -7118,7 +7118,7 @@ describe('AppView', () => {
 
       // Its end dragged with Ctrl, a note is held longer, to the beat, not copied.
       tap(at(2_100, 64));
-      drag(at(2_390, 64), at(2_890, 64), { ctrlKey: true });
+      drag(at(2_390, 64), at(2_980, 64), { ctrlKey: true });
       expect(notes()).toHaveLength(5);
       expect(notes().at(-1)).toEqual([64, 2_000, 3_000]);
 

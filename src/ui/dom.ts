@@ -32,3 +32,33 @@ export function fillSelect(
     ...items.map((item) => option(item.value, item.label, item.value === selectedValue)),
   );
 }
+
+/** Anything the space bar already means something to. */
+export function isFormControl(element: Element | null): boolean {
+  if (element === null) {
+    return false;
+  }
+  const tag = element.tagName;
+  return (
+    tag === 'INPUT' ||
+    tag === 'SELECT' ||
+    tag === 'TEXTAREA' ||
+    tag === 'BUTTON' ||
+    element.hasAttribute('contenteditable')
+  );
+}
+
+/**
+ * Whether a control holding the focus has a use of its own for the arrow
+ * keys: a list, a slider, a choice of one, anything typed into. A button has
+ * none, so the arrows are the editor's still while one holds the focus -
+ * as a chord of the drawer does once it is pressed, and Shift and the
+ * arrows were then lost to the notes it had just written.
+ */
+export function usesTheArrows(element: Element | null): boolean {
+  if (element === null) {
+    return false;
+  }
+  const type = element.tagName === 'INPUT' ? (element.getAttribute('type') ?? 'text') : null;
+  return isFormControl(element) && element.tagName !== 'BUTTON' && !['button', 'checkbox', 'submit', 'reset'].includes(type ?? '');
+}

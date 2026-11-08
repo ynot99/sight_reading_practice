@@ -13,7 +13,6 @@ import {
   rollAsEvents,
   rollBeganAtMs,
   rollEndedAtMs,
-  rollOfTheTake,
   takeWithAKeyAdded,
   takeWithoutTheKeys,
   takeWithTheKeysChanged,
@@ -224,6 +223,7 @@ export type TheViewOfTheSketch = Pick<
   | 'theOtherRollShowing'
   | 'thePointOnTheDrawing'
   | 'theRoll'
+  | 'theRollOfTheSketch'
   | 'theRollsGrid'
   | 'theSceneToDraw'
   | 'theSketchAsDrawn'
@@ -752,7 +752,7 @@ export class SketchEditing {
       }
     }
     this.rollPedalDrag = { ...drag, moved };
-    this.host.drawnScene = this.host.theSceneToDraw(rollOfTheTake({ ...stored, events: moved ?? stored.events }, ROOM_IN_A_SKETCH), sketch.chosen);
+    this.host.drawnScene = this.host.theSceneToDraw(this.host.theRollOfTheSketch({ ...stored, events: moved ?? stored.events }), sketch.chosen);
     this.host.paintTheRoll();
   }
 
@@ -1160,7 +1160,7 @@ export class SketchEditing {
       return false;
     }
     this.rollDrag = { ...drag, moved: { to, events } };
-    this.host.drawnScene = this.host.theSceneToDraw(rollOfTheTake({ ...stored, events }, ROOM_IN_A_SKETCH), to);
+    this.host.drawnScene = this.host.theSceneToDraw(this.host.theRollOfTheSketch({ ...stored, events }), to);
     this.host.paintTheRoll();
     return true;
   }

@@ -17,6 +17,7 @@ export type TheViewOfTheLoops = Pick<
   | 'changeTheSketchShowing'
   | 'el'
   | 'headIsAtMs'
+  | 'makeRoomForWhatIsReached'
   | 'rollHeads'
   | 'runtime'
   | 'theMomentUnder'
@@ -41,6 +42,11 @@ export class DrumLoopEditing {
 
   constructor(host: TheViewOfTheLoops) {
     this.host = host;
+  }
+
+  /** Where the end of a loop being pulled is, from the sketch's beginning; `null` where none is. */
+  theEndHeldMs(): number | null {
+    return this.heldEnd?.untilMs ?? null;
   }
 
   /** The loops of the sketch drawn, while its drums are written and edited; none otherwise. */
@@ -91,7 +97,8 @@ export class DrumLoopEditing {
   /**
    * Pulls the end held to the line of the grid nearest the pointer - or the
    * half, third or quarter of a step, as a note's end goes - from the end of
-   * the first lap on. Says whether one was held.
+   * the first lap on - the sketch given room past it as it goes, so it can
+   * be pulled on as far as it is wanted. Says whether one was held.
    */
   dragAnEnd(event: PointerEvent): boolean {
     const held = this.heldEnd;
@@ -105,6 +112,7 @@ export class DrumLoopEditing {
       // From just before the first lap's end: that end is the nearest line it goes to, and none is short of it.
       const at = theEndNearest(roll, this.host.theRollsGrid(), held.loop.lapMs - origin - 1, wanted) + origin;
       this.heldEnd = { ...held, untilMs: at };
+      this.host.makeRoomForWhatIsReached();
       this.showTheLoops();
     }
     return true;
@@ -120,6 +128,8 @@ export class DrumLoopEditing {
     if (keep && Math.abs(held.untilMs - held.loop.untilMs) >= 1) {
       this.change((events) => takeWithTheDrumLoopUntil(events, held.loop.id, held.untilMs));
     }
+    // The room it was given goes with it, past what is there now.
+    this.host.makeRoomForWhatIsReached();
     this.showTheLoops();
     return true;
   }

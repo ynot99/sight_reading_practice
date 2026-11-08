@@ -259,7 +259,9 @@ export function theBeatsFromTheFirstBar(
  * The beats a take is written in: from the first beat of the bar its first
  * event falls in, on to its last event, the click carried on at its last
  * pace and in its last bar wherever it stopped before the playing did - and
- * `beatsAfter` more past it, where there is to be room for more.
+ * `beatsAfter` more past it, where there is to be room for more. Past a
+ * moment reached for, where that is later than the last event: a slice laid
+ * or a loop pulled into the room is given room past it in turn.
  *
  * One answer for the file, the page read from it and the drawing of the
  * take, so the three cannot disagree about where a bar is. `null` where the
@@ -269,9 +271,10 @@ export function theClickOfTheTake(
   events: readonly MidiFileEvent[],
   beats: readonly HeardBeat[],
   beatsAfter = 0,
+  reachedForMs = Number.NEGATIVE_INFINITY,
 ): readonly HeardBeat[] | null {
   const firstMs = events.reduce((earliest, event) => Math.min(earliest, event.atMs), Number.POSITIVE_INFINITY);
-  const lastMs = events.reduce((latest, event) => Math.max(latest, event.atMs), Number.NEGATIVE_INFINITY);
+  const lastMs = events.reduce((latest, event) => Math.max(latest, event.atMs), reachedForMs);
   const from = theBeatsFromTheFirstBar(beats, firstMs);
   if (from === null) {
     return null;

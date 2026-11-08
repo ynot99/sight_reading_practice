@@ -983,8 +983,15 @@ export function takeOfTheRun(roll: RunRoll): Take | null {
  *
  * A note still sounding at the end is left open, the same answer the roll gives
  * for a key still down when a run stops.
+ *
+ * Its bars carried on `beatsAfter` past its last event, or past a moment
+ * reached for where that is later: see `theClickOfTheTake`.
  */
-export function rollOfTheTake(take: Pick<Take, 'events' | 'beats'>, beatsAfter = 0): RunRoll {
+export function rollOfTheTake(
+  take: Pick<Take, 'events' | 'beats'>,
+  beatsAfter = 0,
+  reachedForMs = Number.NEGATIVE_INFINITY,
+): RunRoll {
   const presses: RolledPress[] = theKeysOfTheTake(take.events).map((key) => ({
     midi: key.midi,
     downAtMs: key.downAtMs,
@@ -1019,7 +1026,7 @@ export function rollOfTheTake(take: Pick<Take, 'events' | 'beats'>, beatsAfter =
   }
   // Each beat as long as its value, as the file has them.
   let positionTicks = 0;
-  const beats: RolledBeat[] = (theClickOfTheTake(take.events, take.beats, beatsAfter) ?? []).map((beat) => {
+  const beats: RolledBeat[] = (theClickOfTheTake(take.events, take.beats, beatsAfter, reachedForMs) ?? []).map((beat) => {
     const placed: RolledBeat = { atMs: beat.atMs, weight: beat.beat === 0 ? 'downbeat' : 'beat', positionTicks };
     positionTicks += (Duration.QUARTER.ticks * 4) / (beat.beatType ?? 4);
     return placed;
@@ -1432,16 +1439,38 @@ const BAR_LINES: GridChoice = { beats: false, parts: 1 };
  * from the roll's beginning: whole bars, from the bar line at or before the
  * earlier to the one after the later - a moment on a bar line being in the
  * bar it begins. Before the first bar line it begins where they are, and
- * past the last it ends where the run does: a run with no bars at all is
- * sliced from the earlier moment to its end.
+ * it goes no further than `theFurthestASliceGoes`: a moment in the empty
+ * room past the last bar line is in the bar before it, and past a last bar
+ * still being played it ends where the run does - a run with no bars at all
+ * is sliced from the earlier moment to its end.
  */
 export function theBarsAcross(roll: RunRoll, oneMs: number, otherMs: number): { readonly fromMs: number; readonly toMs: number } {
-  const earlier = Math.min(oneMs, otherMs);
-  const later = Math.max(oneMs, otherMs);
+  const furthest = theFurthestASliceGoes(roll);
+  const end = rollEndedAtMs(roll) - rollBeganAtMs(roll);
+  // A millisecond short of the last bar line is inside the bar it ends.
+  const within = (at: number): number => (furthest < end ? Math.min(at, furthest - 1) : at);
+  const earlier = within(Math.min(oneMs, otherMs));
+  const later = within(Math.max(oneMs, otherMs));
   return {
     fromMs: theLineOfTheGridUnder(roll, earlier, BAR_LINES),
-    toMs: theNextLineOfTheGrid(roll, later, BAR_LINES, 1) ?? rollEndedAtMs(roll) - rollBeganAtMs(roll),
+    toMs: theNextLineOfTheGrid(roll, later, BAR_LINES, 1) ?? end,
   };
+}
+
+/**
+ * The furthest a slice goes, in milliseconds from the roll's beginning: its
+ * last bar line, where nothing is played past it - the room left after the
+ * music is no bar of it; otherwise where the run ends, so a last bar the
+ * click stopped partway through, or a run with no bars at all, is sliced to
+ * where its playing ends.
+ */
+export function theFurthestASliceGoes(roll: RunRoll): number {
+  const began = rollBeganAtMs(roll);
+  const bars = theMusicsBeats(roll, BAR_LINES).map((line) => line.atMs - began);
+  const last = bars.length < 2 ? null : Math.max(...bars);
+  // A key or the pedal still down is played on to the end.
+  const played = [...roll.presses, ...roll.pedal].map((span) => (span.upAtMs ?? Number.POSITIVE_INFINITY) - began);
+  return last !== null && played.every((at) => at <= last) ? last : rollEndedAtMs(roll) - began;
 }
 
 /** A take's events with a key added, struck and let go of, in its place in time. */

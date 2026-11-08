@@ -253,6 +253,7 @@ import {
   theMusicsBeats,
   type ArpeggioWay,
   theBarsAcross,
+  theFurthestASliceGoes,
   takeWithThePlayingRecorded,
   theNotesRecorded,
   theClipboardTextOfTheChange,
@@ -8809,7 +8810,7 @@ export class AppView {
       return;
     }
     this.holdTheRoll();
-    const roll = rollOfTheTake(stored, ROOM_IN_A_SKETCH);
+    const roll = this.theRollOfTheSketch(stored);
     this.theOtherRollShowing = { ...showing, roll, barLabel: barsCountedOnItsBeats(roll), sketch: { ...sketch, chosen: [] } };
     this.drawTheRollInto();
     this.sayWhatCanBeChanged();
@@ -16873,7 +16874,7 @@ export class AppView {
     this.stopTheRoll();
     this.el.sheetTakes.hidden = true;
     this.el.sheetScores.hidden = true;
-    const roll = rollOfTheTake(sketch, ROOM_IN_A_SKETCH);
+    const roll = this.theRollOfTheSketch(sketch);
     this.theOtherRollShowing = {
       roll,
       what: sketch.title,
@@ -17221,6 +17222,43 @@ export class AppView {
   }
 
   /**
+   * The drawing of a sketch: its notes, and the room for more after them -
+   * past the last of them, or past what is reached for in the room, where
+   * that is further: the end of the slice laid on it, and the end of a loop
+   * being pulled. Taken to the last bar line there is, either is given more
+   * bars past it, so it can be taken on as far as it is wanted.
+   */
+  theRollOfTheSketch(take: Pick<StoredSketch, 'id' | 'events' | 'beats'>): RunRoll {
+    const roll = rollOfTheTake(take, ROOM_IN_A_SKETCH);
+    const slice = this.rollSlice;
+    const reached = Math.max(
+      slice === null || slice.of !== take.id ? Number.NEGATIVE_INFINITY : slice.toMs + rollBeganAtMs(roll),
+      this.drumLoops.theEndHeldMs() ?? Number.NEGATIVE_INFINITY,
+    );
+    return Number.isFinite(reached) ? rollOfTheTake(take, ROOM_IN_A_SKETCH, reached) : roll;
+  }
+
+  /**
+   * Draws the sketch shown again where what is reached for in its room has
+   * moved, and the room with it - the sound, unlike where its notes change,
+   * going on, since nothing it plays has.
+   */
+  makeRoomForWhatIsReached(): void {
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    const drawn = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
+    if (showing === null || drawn === null) {
+      return;
+    }
+    const roll = this.theRollOfTheSketch(drawn);
+    if (rollEndedAtMs(roll) === rollEndedAtMs(showing.roll)) {
+      return;
+    }
+    this.theOtherRollShowing = { ...showing, roll, barLabel: barsCountedOnItsBeats(roll) };
+    this.drawTheRollInto();
+  }
+
+  /**
    * Turns the drawing of a sketch to its drums, or back to its notes. What
    * was chosen is let go of, as it was chosen among the others; what can be
    * put back is turned with it, so an undo puts back the change it says,
@@ -17242,7 +17280,7 @@ export class AppView {
     };
     const drawn = this.theSketchAsDrawn(sketch.id);
     if (drawn !== null) {
-      const roll = rollOfTheTake(drawn, ROOM_IN_A_SKETCH);
+      const roll = this.theRollOfTheSketch(drawn);
       this.theOtherRollShowing = { ...this.theOtherRollShowing, roll, barLabel: barsCountedOnItsBeats(roll) };
     }
     // The notes are kept where they were looked at, for coming back to; the
@@ -17289,7 +17327,7 @@ export class AppView {
       return;
     }
     this.holdTheRoll();
-    const roll = rollOfTheTake(drawn, ROOM_IN_A_SKETCH);
+    const roll = this.theRollOfTheSketch(drawn);
     this.theOtherRollShowing = {
       ...showing,
       roll,
@@ -18053,6 +18091,8 @@ export class AppView {
       this.sayWhatWouldBePractised();
     } else {
       this.rollSlice = slice === null ? null : { of: this.theDrawingsName(), fromMs: slice.fromMs, toMs: slice.toMs };
+      // A sketch has room past it, wherever it now ends.
+      this.makeRoomForWhatIsReached();
     }
     this.followTheSlice();
   }
@@ -18127,9 +18167,11 @@ export class AppView {
 
   /**
    * Takes the end of the slice held to the bar line nearest the pointer, or
-   * the drawing's end, as a note's end goes to the beat nearest: past the
-   * other end, it is the other end, and on it, the slice keeps a bar. Says
-   * whether the move was its.
+   * where a slice goes no further (`theFurthestASliceGoes`), as a note's end
+   * goes to the beat nearest: past the other end, it is the other end, and
+   * on it, the slice keeps a bar. Taken to a sketch's last bar line, the
+   * sketch is given room past it, and the end can be taken on. Says whether
+   * the move was its.
    */
   private dragAnEndOfTheSlice(event: PointerEvent): boolean {
     const held = this.sliceEndHeld;
@@ -18140,7 +18182,7 @@ export class AppView {
     const at = this.theMomentUnder(event.clientX);
     if (roll !== null && at !== null) {
       const began = rollBeganAtMs(roll);
-      const lines = [...theMusicsBeats(roll, BAR_LINES_ONLY).map((line) => line.atMs - began), rollEndedAtMs(roll) - began];
+      const lines = [...theMusicsBeats(roll, BAR_LINES_ONLY).map((line) => line.atMs - began), theFurthestASliceGoes(roll)];
       const nearest = lines.reduce((best, line) => (Math.abs(line - at) < Math.abs(best - at) ? line : best));
       const slice = { fromMs: Math.min(held.otherMs, nearest), toMs: Math.max(held.otherMs, nearest) };
       const shown = this.theSliceShown();

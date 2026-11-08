@@ -9,6 +9,7 @@ import {
   theWaits,
   theBeatNearest,
   theBarsAcross,
+  theFurthestASliceGoes,
   takeWithThePlayingRecorded,
   theNotesRecorded,
   theNextLineOfTheGrid,
@@ -666,8 +667,49 @@ describe('the beat a run was measured against', () => {
     }
     // A moment a hair before a bar line, in whole milliseconds, is on it.
     expect(theBarsAcross(run, 1_999.6, 1_999.6)).toEqual({ fromMs: 2_000, toMs: 4_000 });
-    // Past the last bar line it ends where the run does.
-    expect(theBarsAcross(run, 4_100, 4_100)).toEqual({ fromMs: 4_000, toMs: rollEndedAtMs(run) - rollBeganAtMs(run) });
+    // Nothing is played past the last bar line: the room after it is no bar,
+    // and a moment anywhere in it is in the last bar - never sliced to the
+    // run's end, a second past that line.
+    expect(theFurthestASliceGoes(run)).toBe(4_000);
+    const end = rollEndedAtMs(run) - rollBeganAtMs(run);
+    expect(end).toBeGreaterThan(4_000);
+    for (let at = 4_000; at <= end + 1_000; at += 125) {
+      expect(theBarsAcross(run, at, at), String(at)).toEqual({ fromMs: 2_000, toMs: 4_000 });
+      expect(theBarsAcross(run, 0, at), String(at)).toEqual({ fromMs: 0, toMs: 4_000 });
+    }
+    // A last bar still played when the click stopped is sliced to where the run ends.
+    const played = rollOfTheTake({
+      events: [
+        { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.5 },
+        { kind: 'noteOff', atMs: 4_300, midi: 60 },
+      ],
+      beats: [0, 500, 1_000, 1_500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+    });
+    const playedEnd = rollEndedAtMs(played) - rollBeganAtMs(played);
+    expect(theFurthestASliceGoes(played)).toBe(playedEnd);
+    expect(theBarsAcross(played, 4_100, 4_100)).toEqual({ fromMs: 4_000, toMs: playedEnd });
+    // As is one whose key is still down.
+    const held = rollOfTheTake({
+      events: [{ kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.5 }, { kind: 'noteOn', atMs: 3_900, midi: 62, velocity: 0.5 }, { kind: 'noteOff', atMs: 3_950, midi: 60 }],
+      beats: [0, 500, 1_000, 1_500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+    });
+    expect(theFurthestASliceGoes(held)).toBe(rollEndedAtMs(held) - rollBeganAtMs(held));
+    // And one the pedal is still held down in.
+    const pedalled = rollOfTheTake({
+      events: [
+        { kind: 'sustain', atMs: 0, value: 1 },
+        { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.5 },
+        { kind: 'noteOff', atMs: 3_900, midi: 60 },
+        { kind: 'sustain', atMs: 4_300, value: 0 },
+      ],
+      beats: [0, 500, 1_000, 1_500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+    });
+    expect(theFurthestASliceGoes(pedalled)).toBe(rollEndedAtMs(pedalled) - rollBeganAtMs(pedalled));
+    // An empty sketch in a long bar, its room short of a second bar line: no bar is whole, and it is sliced to its end.
+    const empty = rollOfTheTake({ events: [], beats: [0, 250].map((atMs, beat) => ({ atMs, beat, beatsInBar: 12 })) }, 8);
+    const emptyEnd = rollEndedAtMs(empty) - rollBeganAtMs(empty);
+    expect(theMusicsBeats(empty, { beats: false, parts: 1 })).toHaveLength(1);
+    expect(theBarsAcross(empty, 100, 100)).toEqual({ fromMs: 0, toMs: emptyEnd });
     // With no bars, from the earlier moment to the end.
     const free = rollOfTheTake({
       events: [

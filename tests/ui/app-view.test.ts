@@ -7432,6 +7432,160 @@ describe('AppView', () => {
       expect(sketches.find(sketch.id)?.events.some((event) => event.kind === 'drumLoop')).toBe(false);
     });
 
+    it('gives a sketch room past a loop or a slice taken to its last bar line, so either is taken on as far as it is wanted', async () => {
+      const { view, sketches, clock } = createRig();
+      await view.initialize();
+      const struck = (midi: number, atMs: number): MidiFileEvent[] => [
+        { kind: 'drumOn', atMs, midi, velocity: 0.75 },
+        { kind: 'drumOff', atMs: atMs + 100, midi },
+      ];
+      // One bar of 4/4 at 120, two seconds: the room after it two bars more, and a second of air.
+      const sketch = sketches.begin(
+        {
+          events: [...struck(36, 0), ...struck(37, 500), ...struck(36, 1_000), ...struck(37, 1_500)],
+          beats: [0, 500, 1_000, 1_500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Room',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      await editTheSketch();
+      element<HTMLButtonElement>('roll-drums').click();
+      const length = (): number => view.rollScene?.lengthMs ?? 0;
+      expect(length()).toBe(7_000);
+
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const body = element('roll-body');
+      const ruler = (): Element => body.querySelector('.roll__ruler') ?? body;
+      const struckAt = (midi: number): number[] =>
+        (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'drumOn' && event.midi === midi ? [event.atMs] : []));
+      const pointer = (target: Element, type: string, seconds: number): void => {
+        target.dispatchEvent(
+          new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 43, pointerType: 'mouse', button: 0, isPrimary: true, clientX: seconds * zoom, clientY: 4 }),
+        );
+      };
+      const span = (selector: string): string => body.querySelector<HTMLElement>(selector)?.style.getPropertyValue('--roll-span') ?? '';
+      tapTheDrawing({ pointerType: 'mouse', button: 0, isPrimary: true, clientX: 0.3 * zoom, clientY: 4, ctrlKey: true }, ruler());
+      element<HTMLButtonElement>('roll-drum-loop').click();
+
+      // A pull taken away by the browser takes the room it was given with it.
+      pointer(body.querySelector('.roll__loop-end') ?? body, 'pointerdown', 2);
+      pointer(body, 'pointermove', 6);
+      expect(length()).toBe(11_000);
+      pointer(body, 'pointercancel', 6);
+      expect([span('.roll__loop'), length(), struckAt(36)]).toEqual(['2.000', 7_000, [0, 1_000]]);
+
+      // A loop's end pulled to the last bar line there is: the room goes on
+      // past it as it is pulled, and it is pulled on, a bar line at a time.
+      pointer(body.querySelector('.roll__loop-end') ?? body, 'pointerdown', 2);
+      for (const [seconds, shown, room] of [
+        [6, '6.000', 11_000],
+        [10, '10.000', 15_000],
+        [14, '14.000', 19_000],
+      ] as const) {
+        pointer(body, 'pointermove', seconds);
+        expect([span('.roll__loop'), length()], String(seconds)).toEqual([shown, room]);
+      }
+      // Nothing is written until it is let go of.
+      expect(struckAt(36)).toEqual([0, 1_000]);
+      // Pulled back, the room it was given goes back with it.
+      pointer(body, 'pointermove', 8);
+      expect([span('.roll__loop'), length()]).toEqual(['8.000', 13_000]);
+      pointer(body, 'pointermove', 12);
+      pointer(body, 'pointerup', 12);
+      body.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 12 * zoom, clientY: 4 }));
+      expect(struckAt(36)).toEqual([0, 1_000, 2_000, 3_000, 4_000, 5_000, 6_000, 7_000, 8_000, 9_000, 10_000, 11_000]);
+      // Its hits written, the room is past them.
+      expect(length()).toBe(17_000);
+
+      // The slice's end taken on in the same way, from its last bar line to the next.
+      const nudge = 3 / zoom;
+      clock.advance(1_000);
+      pointer(ruler(), 'pointerdown', 2 - nudge);
+      for (const [seconds, shown, room] of [
+        [15.9, '16.000', 21_000],
+        [19.9, '20.000', 25_000],
+        // Never into the air past the last bar line, however far the pointer goes.
+        [60, '24.000', 29_000],
+      ] as const) {
+        pointer(body, 'pointermove', seconds);
+        expect([span('.roll__marks > .roll__slice'), length()], String(seconds)).toEqual([shown, room]);
+      }
+      pointer(body, 'pointerup', 60);
+      ruler().dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 60 * zoom, clientY: 4 }));
+      // Let go of, it keeps its room; taken back, the room goes back to what the hits have.
+      expect(length()).toBe(29_000);
+      clock.advance(1_000);
+      pointer(ruler(), 'pointerdown', 24 - nudge);
+      pointer(body, 'pointermove', 4.1);
+      pointer(body, 'pointerup', 4.1);
+      ruler().dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 4.1 * zoom, clientY: 4 }));
+      expect([span('.roll__marks > .roll__slice'), length()]).toEqual(['4.000', 17_000]);
+    });
+
+    it('keeps the room past a slice while a hit or the pedal is dragged, as it is drawn', async () => {
+      const { view, sketches, clock } = createRig();
+      await view.initialize();
+      // One bar of 4/4 at 120: a kick, and the pedal - no notes, so no page
+      // written down from it. Begun ten seconds into its clock, as a sketch
+      // recorded is: the drawing begins at its first bar, and a slice is
+      // measured from there.
+      const late = 10_000;
+      sketches.begin(
+        {
+          events: [
+            { kind: 'drumOn', atMs: late, midi: 36, velocity: 0.75 },
+            { kind: 'drumOff', atMs: late + 100, midi: 36 },
+            { kind: 'sustain', atMs: late + 1_000, value: 1 },
+            { kind: 'sustain', atMs: late + 1_500, value: 0 },
+          ],
+          beats: [0, 500, 1_000, 1_500].map((atMs, beat) => ({ atMs: late + atMs, beat, beatsInBar: 4 })),
+        },
+        'Sliced',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      await editTheSketch();
+      element<HTMLButtonElement>('roll-drums').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const body = element('roll-body');
+      const ruler = (): Element => body.querySelector('.roll__ruler') ?? body;
+      const length = (): number => view.rollScene?.lengthMs ?? 0;
+      // Its room ends partway through the third bar. A slice of the first
+      // bar gives it room to the end of the fourth, and one on to the third
+      // bar's end two bars past that.
+      expect(length()).toBe(6_500);
+      tapTheDrawing({ pointerType: 'mouse', button: 0, isPrimary: true, clientX: 0.3 * zoom, clientY: 4, ctrlKey: true }, ruler());
+      clock.advance(1_000);
+      tapTheDrawing({ pointerType: 'mouse', button: 0, isPrimary: true, clientX: 5.5 * zoom, clientY: 4, altKey: true }, ruler());
+      expect(body.querySelector<HTMLElement>('.roll__marks > .roll__slice')?.style.getPropertyValue('--roll-span')).toBe('6.000');
+      expect(length()).toBe(11_000);
+      const drag = (target: Element, fromMs: number, toMs: number, clientY: number): number => {
+        clock.advance(1_000);
+        const at = (ms: number): PointerEventInit => ({ bubbles: true, pointerId: 78, pointerType: 'mouse', button: 0, isPrimary: true, clientX: (ms / 1000) * zoom, clientY });
+        target.dispatchEvent(new PointerEvent('pointerdown', at(fromMs)));
+        body.dispatchEvent(new PointerEvent('pointermove', at(toMs)));
+        const drawn = length();
+        body.dispatchEvent(new PointerEvent('pointerup', at(toMs)));
+        return drawn;
+      };
+      // The kick taken a beat on: drawn with the room as it goes.
+      const highest = view.rollScene?.highest ?? 0;
+      expect(drag(body, 50, 550, (highest - 36 + 0.5) * 13)).toBe(11_000);
+      // And the pedal, among the notes.
+      element<HTMLButtonElement>('roll-drums').click();
+      expect(drag(body.querySelector('.roll__pedal') ?? body, 1_250, 1_750, 0)).toBe(11_000);
+      expect(length()).toBe(11_000);
+      // Shut and opened again, the slice is still there, and its room with it.
+      element<HTMLButtonElement>('roll-close').click();
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      await editTheSketch();
+      expect([view.theSliceShown()?.fromMs, view.theSliceShown()?.toMs, length()]).toEqual([0, 6_000, 11_000]);
+    });
+
     it('names no chord of the drums chosen, a drum being no pitch', async () => {
       const { view, sketches } = createRig();
       await view.initialize();

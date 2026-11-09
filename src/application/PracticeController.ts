@@ -3488,10 +3488,12 @@ export class PracticeController {
     this.sessionSubscriptions.push(
       // Held, the music stops where it is: what was laid ahead of it and has
       // not begun must not sound into the pause, and is sounded again when
-      // the bar is played again.
+      // the bar is played again - laid ahead by the pulse, or out in written
+      // time as far as the reader's next entry, which is where they pick up.
       session.events.on('statusChanged', ({ status }) => {
         if (status === 'paused') {
           this.takeBackWhatWasLaidAhead();
+          this.takeBackWhatWasLaidOut();
         }
       }),
     );
@@ -5067,6 +5069,17 @@ export class PracticeController {
     }
   }
 
+  /**
+   * Takes back the other hand laid out in written time and not begun, and
+   * forgets it was laid. What has begun is left to end as it was told to.
+   */
+  private takeBackWhatWasLaidOut(): void {
+    if (this.otherHandLaidUntilMs !== null) {
+      this.deps.instrument.takeBackFrom(this.deps.clock.now());
+    }
+    this.otherHandLaidUntilMs = null;
+  }
+
   /** Takes back the other hand laid ahead of the run and not begun, and forgets it was laid. */
   private takeBackWhatWasLaidAhead(): void {
     if (this.otherHandLaidAhead.size > 0) {
@@ -5095,12 +5108,8 @@ export class PracticeController {
       this.deps.instrument.stop(midi);
     }
     this.sounding.clear();
-    // Laid out in written time, it is taken back from now: what has begun is left to end as it was told to.
     if (run === 'walked away from') {
-      if (this.otherHandLaidUntilMs !== null) {
-        this.deps.instrument.takeBackFrom(this.deps.clock.now());
-      }
-      this.otherHandLaidUntilMs = null;
+      this.takeBackWhatWasLaidOut();
     }
     this.otherHandAnchor = null;
     this.takeBackWhatWasLaidAhead();

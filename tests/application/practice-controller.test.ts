@@ -3069,6 +3069,33 @@ describe('hearing the hand you are not reading', () => {
     expect(rig.instrument.takenBackFrom).toEqual([]);
   });
 
+  it('takes back what the other hand laid out when the run is paused, and lays it again from where the reader picks up', async () => {
+    // The walking bass, held a second and a half in: the two quarters still
+    // to come played on into the pause.
+    const rig = createController(true);
+    await rig.controller.openScore(oneHandWalksUnderAHeldNote({ tempoBpm: 60 }));
+    rig.controller.updateSettings({ handStaff: 1, hearTheOtherHand: true, modeId: WAIT_MODE_ID });
+    rig.controller.start();
+    rig.midi.noteOn(p('C4').midi, rig.clock.now());
+    rig.clock.set(1_500);
+    rig.controller.pause();
+    expect(rig.controller.session?.status).toBe('paused');
+    expect(rig.instrument.heard.map((note) => [note.midi, note.atMs])).toEqual([
+      [p('C3').midi, 0],
+      [p('D3').midi, 1_000],
+    ]);
+    // Picked up at the next note, the other hand comes in with it, and nothing is taken back twice.
+    rig.clock.set(5_000);
+    rig.controller.resume();
+    rig.midi.noteOn(p('D4').midi, rig.clock.now());
+    expect(rig.instrument.heard.map((note) => [note.midi, note.atMs])).toEqual([
+      [p('C3').midi, 0],
+      [p('D3').midi, 1_000],
+      [p('G2').midi, 5_000],
+    ]);
+    expect(rig.instrument.takenBackFrom).toEqual([1_500]);
+  });
+
   it('lets the end of the piece after the last note owed sound, until a run begins', async () => {
     // One bar: the reader's bass a whole note, the treble four quarters over
     // it. Their note is the last they owe, so the run is over at once, and

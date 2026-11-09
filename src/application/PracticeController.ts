@@ -3237,6 +3237,11 @@ export class PracticeController {
       return null;
     }
 
+    // Whatever the run before still had of the other hand to sound is no
+    // part of this one: laid out in a run let go of now without finishing,
+    // which nothing else says was walked away from, or the end of a piece
+    // played to its end.
+    this.silenceTheOtherHand('walked away from');
     this.disposeSession('another run');
 
     const mode = this.deps.modes.get(this.playedUnder.modeId);
@@ -3501,8 +3506,9 @@ export class PracticeController {
         // would be saying the reader is stuck on music they have finished.
         // Said for both ways a run can end, which both arrive here.
         this.forgetTheTrouble();
-        // A run that is over takes back what it was still holding.
-        this.silenceTheOtherHand();
+        // A run that is over takes back what it was still holding - and one
+        // walked away from, the music it had laid out ahead of the reader.
+        this.silenceTheOtherHand(report.completed ? 'ended' : 'walked away from');
         const picture = this.pictureOfTheReading(report, session.roll);
         const modes = modesOn(this.playedUnder);
         this.finishedPlayedWith = { modeId: this.playedUnder.modeId, modes };
@@ -5076,14 +5082,27 @@ export class PracticeController {
    * phrase the reader has walked away from: the accompaniment is laid out
    * ahead of them as far as their next entry, and a run stopped in the middle
    * of that would otherwise play on without anybody.
+   *
+   * A waiting run lays the other hand out in written time as far as the
+   * reader's next entry - a phrase of several bars where the reader rests.
+   * Walked away from, the run takes back what of that has not begun, or it
+   * played on into the next run, heard through its waiting for the first
+   * chord. Played to its end, what follows the reader's last note is the
+   * end of the piece, and is left to sound - until a run begins.
    */
-  private silenceTheOtherHand(): void {
+  private silenceTheOtherHand(run: 'ended' | 'walked away from'): void {
     for (const midi of this.sounding) {
       this.deps.instrument.stop(midi);
     }
     this.sounding.clear();
+    // Laid out in written time, it is taken back from now: what has begun is left to end as it was told to.
+    if (run === 'walked away from') {
+      if (this.otherHandLaidUntilMs !== null) {
+        this.deps.instrument.takeBackFrom(this.deps.clock.now());
+      }
+      this.otherHandLaidUntilMs = null;
+    }
     this.otherHandAnchor = null;
-    this.otherHandLaidUntilMs = null;
     this.takeBackWhatWasLaidAhead();
     this.readersLastEntry = null;
     // And the beats laid out with them. A run walked away from must not go on

@@ -6340,8 +6340,8 @@ describe('a run shown again on the page', () => {
     expect([extras(), renderer.played.length]).toEqual([[], 4]);
   });
 
-  it('draws a tap kept for the beat ahead as it is made, the verdict over it when the beat opens, and each once', async () => {
-    const drawn = async (settings: Partial<PracticeSettings>): Promise<unknown[][]> => {
+  it('draws a tap kept for the beat ahead as it is made, and puts its verdict in its place when the beat opens, each once', async () => {
+    const drawn = async (settings: Partial<PracticeSettings>, taps: readonly { readonly early: number; readonly midi: number }[]): Promise<unknown[][]> => {
       const rig = createController(true, undefined, { matchToleranceMs: 250 });
       const { controller, renderer, midi, metronome, clock } = rig;
       await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
@@ -6349,32 +6349,44 @@ describe('a run shown again on the page', () => {
       controller.start();
       const steps = controller.currentTimeline?.playableSteps ?? [];
       metronome.advanceToTicks(steps[0]?.onsetTicks ?? 0);
+      const beganAt = clock.now();
       midi.noteOn(MIDI.G4, clock.now());
       // A tap judged as it is made lands as it is drawn.
       const onTheBeat = renderer.played.map((mark) => [mark.stepIndex, mark.landing === true]);
       renderer.played.length = 0;
-      // Two taps inside the window before the second beat, before its tick is heard.
-      clock.advance(880);
-      midi.noteOn(MIDI.G4, clock.now());
-      clock.advance(20);
-      midi.noteOn(MIDI.F5, clock.now());
-      const asMade = renderer.played.map((mark) => [mark.stepIndex, mark.extra === true, mark.landing === true, mark.offset.toFixed(2)]);
+      // Taps inside the window before the second beat, before its tick is heard.
+      for (const tap of taps) {
+        clock.set(beganAt + 1_000 - tap.early);
+        midi.noteOn(tap.midi, clock.now());
+      }
+      const asMade = renderer.played.map((mark) => [mark.midi, mark.extra === true, mark.landing === true, mark.offset.toFixed(2)]);
       metronome.advanceToTicks(steps[1]?.onsetTicks ?? 0);
-      const whenOpened = renderer.played.slice(asMade.length).map((mark) => [mark.stepIndex, mark.extra === true, mark.landing === true, mark.tier]);
-      return [onTheBeat, asMade, whenOpened];
+      const opened = renderer.played.map((mark) => [mark.midi, mark.extra === true, mark.landing === true, mark.tier ?? null, mark.offset.toFixed(2)]);
+      return [onTheBeat, asMade, opened];
     };
-    expect(await drawn({})).toEqual([
+    expect(await drawn({}, [{ early: 120, midi: MIDI.G4 }, { early: 100, midi: MIDI.F5 }])).toEqual([
       [[0, true]],
       // Each where it landed, in grey, landing now.
       [
-        [1, true, true, '-0.12'],
-        [1, true, true, '-0.10'],
+        [MIDI.G4, true, true, '-0.12'],
+        [MIDI.F5, true, true, '-0.10'],
       ],
-      // The first one's verdict over it, not landing again; the second, judged for nothing, already there.
-      [[1, false, false, 'good']],
+      // The first one's verdict in its place, not landing again; the second, judged for nothing, as it was.
+      [
+        [MIDI.F5, true, true, null, '-0.10'],
+        [MIDI.G4, false, false, 'good', '-0.12'],
+      ],
+    ]);
+    // Close enough to be Perfect, the verdict is drawn on its note, and the
+    // grey where it landed goes: one press, one stroke.
+    expect((await drawn({}, [{ early: 50, midi: MIDI.G4 }]))[2]).toEqual([[MIDI.G4, false, false, 'perfect', '0.00']]);
+    // Two taps of one key: the second, judged for nothing, stays where it landed as the first is judged.
+    expect((await drawn({}, [{ early: 50, midi: MIDI.G4 }, { early: 30, midi: MIDI.G4 }]))[2]).toEqual([
+      [MIDI.G4, true, false, null, '-0.03'],
+      [MIDI.G4, false, false, 'perfect', '0.00'],
     ]);
     // Held to the end, nothing is drawn as it is made.
-    expect((await drawn({ playedNotes: 'at-end' })).slice(0, 2)).toEqual([[], []]);
+    expect((await drawn({ playedNotes: 'at-end' }, [{ early: 120, midi: MIDI.G4 }])).slice(0, 2)).toEqual([[], []]);
   });
 
   it('begins a run from the chord that began it in every frame that keeps time, the click with it, however long the device took to sound', async () => {

@@ -981,10 +981,11 @@ export class PracticeController {
   private tappedRun = false;
   /**
    * The taps of this run already drawn as they were made, kept for a beat
-   * still to come, by the moment and the key: their verdicts are not drawn
-   * as landing again when the beat opens and judges them.
+   * still to come, by the moment and the key, and the grey mark each was
+   * drawn as: their verdicts take that mark's place when the beat opens and
+   * judges them, and are not drawn as landing again.
    */
-  private readonly tapsDrawnAhead = new Set<string>();
+  private readonly tapsDrawnAhead = new Map<string, PlayedNote>();
   private openingPresses: MidiNoteOnEvent[] = [];
   private listeningForTheOpening: Unsubscribe | null = null;
   private openedScore: Exercise | null = null;
@@ -3363,8 +3364,7 @@ export class PracticeController {
         if (!taps || this.currentSettings.playedNotes !== 'live') {
           return;
         }
-        this.tapsDrawnAhead.add(`${String(atMs)}:${String(midi)}`);
-        this.deps.overlay.showPlayed({
+        const grey: PlayedNote = {
           stepIndex,
           midi,
           correct: true,
@@ -3372,12 +3372,15 @@ export class PracticeController {
           offset: this.timingOffsetFor(stepIndex, deviationMs, session.tempoBpm, WHERE_IT_LANDED),
           tap: true,
           extra: true,
-          landing: true,
-        });
+        };
+        this.tapsDrawnAhead.set(`${String(atMs)}:${String(midi)}`, grey);
+        this.deps.overlay.showPlayed({ ...grey, landing: true });
       }),
       session.events.on('noteJudged', ({ midi, verdict, stepIndex, deviationMs, tier, atMs }) => {
         const held = this.currentSettings.playedNotes === 'at-end';
-        const drawnAhead = this.tapsDrawnAhead.delete(`${String(atMs)}:${String(midi)}`);
+        const key = `${String(atMs)}:${String(midi)}`;
+        const drawnAs = this.tapsDrawnAhead.get(key);
+        const drawnAhead = this.tapsDrawnAhead.delete(key);
         const why =
           this.currentSettings.playedNotes === 'hidden'
             ? 'marks are turned off'
@@ -3435,11 +3438,25 @@ export class PracticeController {
         };
         if (this.currentSettings.playedNotes === 'at-end') {
           this.heldMarks.push(mark);
-        } else if (!(drawnAhead && extra)) {
-          // A tap landing now, unless it was drawn as it was made: then this
-          // is the verdict arriving over it, and judged for nothing it is
-          // there already. Only a tap lands so: a ring is simply drawn.
-          this.deps.overlay.showPlayed(taps && !drawnAhead ? { ...mark, landing: true } : mark);
+        } else if (drawnAs !== undefined && !extra) {
+          // Drawn grey where it landed and judged now, the tap is its verdict
+          // from here on, drawn where the verdict puts it - a Perfect on its
+          // note. Drawn over the grey, the grey stayed beside it: one press,
+          // two strokes. The mark is taken off by its note and key, so any
+          // other tap of that key drawn grey goes back up - kept, as every
+          // tap still drawn ahead is, for the beat this one is judged at.
+          this.deps.overlay.hidePlayed(drawnAs);
+          for (const other of this.tapsDrawnAhead.values()) {
+            if (other.midi === drawnAs.midi) {
+              this.deps.overlay.showPlayed(other);
+            }
+          }
+          this.deps.overlay.showPlayed(mark);
+        } else if (!drawnAhead) {
+          // A tap landing now; judged for nothing after it was drawn as it
+          // was made, it is there already. Only a tap lands so: a ring is
+          // simply drawn.
+          this.deps.overlay.showPlayed(taps ? { ...mark, landing: true } : mark);
         }
       }),
     );

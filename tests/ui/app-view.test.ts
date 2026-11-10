@@ -7377,6 +7377,8 @@ describe('AppView', () => {
         body.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 77, pointerType: 'mouse', clientX: toSeconds * zoom, clientY: 4 }));
         // Drawn where it is pulled to as it is pulled, to the grid, before it is let go of.
         expect(frames()[0]).toBe(`0.000+${shown}/2.000`);
+        // Its repeats veiled from where its first lap ends, as it is pulled.
+        expect(body.querySelector<HTMLElement>('.roll__loop')?.style.getPropertyValue('--roll-lap-share')).toBe((2 / Number(shown)).toFixed(6));
         expect(struckAt(36)).toHaveLength(heldBefore);
         body.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 77, pointerType: 'mouse', clientX: toSeconds * zoom, clientY: 4 }));
         body.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: toSeconds * zoom, clientY: 4 }));
@@ -7386,6 +7388,8 @@ describe('AppView', () => {
       let heldBefore = 2;
       pull(4.95, '5.000');
       expect(frames()).toEqual(['0.000+5.000/2.000']);
+      // Its repeats veiled from two fifths of the way along: the share of it its first lap takes.
+      expect(body.querySelector<HTMLElement>('.roll__loop')?.style.getPropertyValue('--roll-lap-share')).toBe('0.400000');
       // Placed as the head is, the box it is in told where the view stands and how wide a second is.
       expect(body.querySelector<HTMLElement>('.roll__loops')?.style.getPropertyValue('--roll-second')).not.toBe('');
       expect(struckAt(36)).toEqual([0, 1_000, 2_000, 3_000, 4_000]);

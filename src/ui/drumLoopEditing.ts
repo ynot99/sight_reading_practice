@@ -73,6 +73,9 @@ export class DrumLoopEditing {
         frame.style.setProperty('--roll-at', ((loop.fromMs - origin) / 1000).toFixed(3));
         frame.style.setProperty('--roll-span', ((untilMs - loop.fromMs) / 1000).toFixed(3));
         frame.style.setProperty('--roll-lap', ((loop.lapMs - loop.fromMs) / 1000).toFixed(3));
+        // And the share of the frame its first lap takes, which is where its
+        // repeats begin to be veiled: see `.roll__loop::after`.
+        frame.style.setProperty('--roll-lap-share', ((loop.lapMs - loop.fromMs) / Math.max(1, untilMs - loop.fromMs)).toFixed(6));
         const end = box.ownerDocument.createElement('div');
         end.className = 'roll__loop-end';
         end.title = 'Pull to repeat the loop, or back to repeat it less';

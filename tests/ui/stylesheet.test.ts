@@ -2129,7 +2129,9 @@ describe('the rows of the drawing and the pitch map beside them', () => {
     expect(declared(body('.roll__loop'), '--roll-second')).toBe('inherit');
     expect(declared(body('.roll__loop'), 'transform')).toBe('translateX(calc(var(--roll-second) * var(--roll-at, 0) - var(--roll-x)))');
     // The repeats veiled from where the first lap ends.
-    expect(declared(body('.roll__loop::after'), 'left')).toBe('calc(var(--roll-second) * var(--roll-lap, 0))');
+    // A share of the frame, which the frame's own width carries through a zoom; the border's 2px each side counted in.
+    expect(declared(body('.roll__loop::after'), 'left')).toBe('calc(var(--roll-lap-share, 1) * (100% + 4px))');
+    expect(declared(body('.roll__loop'), 'border')).toBe('2px solid var(--accent)');
   });
 
   it('widens the strip for the names of the drums while they are written, and gives the pedal no room then', () => {

@@ -130,7 +130,7 @@ import {
   type StoredSketch,
 } from '../application/SketchLibrary.js';
 import { theKeysOfTheScore } from '../application/keysOfTheScore.js';
-import { CONFLICTING_COPY, type SketchOnTheDrive, type SketchSyncOutcome } from '../application/SketchSync.js';
+import type { SketchOnTheDrive, SketchSyncOutcome } from '../application/SketchSync.js';
 import type { DrillTask } from '../application/drill/SectionDrill.js';
 import type { ControlBinding } from '../application/ControlBinding.js';
 import {
@@ -680,14 +680,14 @@ const BEGIN_A_SKETCH_OF_A_TAKE = 'Begin a sketch of this recording to edit; the 
 
 /**
  * What a sync did with the sketches, in a sentence: what went and came, and
- * - only where there were any - what was kept as a copy because it had been
- * changed on two devices at once.
+ * - only where there were any - which had been changed on two devices at
+ * once, and where this device's change went.
  */
 function theSketchesSynced(sketches: SketchSyncOutcome): string {
   const said = [`Sketches sent ${String(sketches.sent)}, brought here ${String(sketches.brought)}`];
   if (sketches.conflicts > 0) {
     said.push(
-      `${String(sketches.conflicts)} changed on two devices at once, kept here as a ${CONFLICTING_COPY} beside the other`,
+      `${String(sketches.conflicts)} changed on two devices at once: the drive's taken, this device's kept among its versions`,
     );
   }
   return `${said.join('; ')}.`;

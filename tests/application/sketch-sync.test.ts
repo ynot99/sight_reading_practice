@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { CloudFile, ICloudDrive } from '../../src/application/ports/ICloudDrive.js';
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
 import { SketchLibrary } from '../../src/application/SketchLibrary.js';
+import { SketchVersions } from '../../src/application/SketchVersions.js';
 import {
-  CONFLICTING_COPY,
   SKETCHES_FILE,
   SketchSync,
   type SketchOnTheDrive,
@@ -77,10 +77,12 @@ const BEATS: readonly HeardBeat[] = [
 /** A device: its sketches, its sync to the shared drive, and which sketch it has open. */
 function device(drive: FolderDrive) {
   let open: string | null = null;
-  const sketches = new SketchLibrary(new InMemorySettingsStore(), () => 1_000);
+  const versions = new SketchVersions(new InMemorySettingsStore(), () => 1_000);
+  const sketches = new SketchLibrary(new InMemorySettingsStore(), () => 1_000, versions);
   const sync = new SketchSync({ drive, sketches });
   return {
     sketches,
+    versions,
     sync: () => sync.sync(open),
     bring: (id: string) => sync.bringHere(id),
     deleteFromTheDrive: (id: string) => sync.deleteFromTheDrive(id),
@@ -169,7 +171,7 @@ describe('the sketches kept the same on every device that has them', () => {
     expect(drive.holds()).toEqual([[idea.id, 'Better', 2]]);
   });
 
-  it('keeps both where one was changed on each device: the drive\'s under its name, this one\'s as a copy beside it', async () => {
+  it('keeps both where one was changed on each device: the drive\'s taken, this one\'s among its versions', async () => {
     const drive = new FolderDrive();
     const ipad = device(drive);
     const pc = device(drive);
@@ -181,15 +183,15 @@ describe('the sketches kept the same on every device that has them', () => {
     ipad.sketches.changeTheNotes(idea.id, [...PLAYED, on(900, 67), off(1_000, 67)]);
     await pc.sync();
     const synced = await ipad.sync();
-    expect([synced.sent, synced.brought, synced.conflicts]).toEqual([1, 1, 1]);
+    expect([synced.sent, synced.brought, synced.conflicts]).toEqual([0, 1, 1]);
 
-    // The drive's notes under the name; the iPad's in the copy.
+    // The drive's notes; the iPad's a version of it, and no second sketch anywhere.
     expect(ipad.sketches.find(idea.id)?.noteCount).toBe(1);
-    const copy = ipad.sketches.find(`${idea.id}-copy`);
-    expect([copy?.title, copy?.noteCount]).toEqual([`Idea (${CONFLICTING_COPY})`, 3]);
+    expect(ipad.titles()).toEqual(['Idea']);
+    expect(ipad.versions.of(idea.id).map((version) => [version.why, version.sketch.noteCount])).toEqual([['drive', 3]]);
     expect(ipad.sketches.unsentSinceMs).toBeNull();
-    // And the copy offered to the PC.
-    expect(offered(pc, await pc.sync()).map(({ title }) => title)).toEqual([`Idea (${CONFLICTING_COPY})`]);
+    expect(offered(pc, await pc.sync())).toEqual([]);
+    expect(drive.holds().map(([, title]) => title)).toEqual(['Idea']);
   });
 
   it('takes one deleted here off this device only, and offers it back', async () => {
@@ -267,15 +269,17 @@ describe('the sketches kept the same on every device that has them', () => {
     await ipad.sync();
     await pc.sync();
     await ipad.sync();
+    // One sketch on both and on the drive, under one of the two names; the
+    // other name kept as a version on the device whose change it was.
+    const kept = ipad.sketches.find(idea.id)?.title ?? '';
+    expect(['Idea, iPad', 'Idea, PC']).toContain(kept);
     for (const each of [ipad, pc]) {
-      const titles = each.titles();
-      const there = offered(each, await each.sync()).map(({ title }) => title);
-      expect([...titles, ...there].sort().join(' | ')).toMatch(/^Idea, (iPad|PC) \| Idea, (iPad|PC) \(conflicting copy\)$/);
+      expect([each.titles(), offered(each, await each.sync())]).toEqual([[kept], []]);
     }
-    expect(drive.holds().map(([, title]) => title).sort()).toEqual(
-      [ipad.sketches.find(idea.id)?.title ?? '', `${ipad.sketches.find(idea.id)?.title === 'Idea, iPad' ? 'Idea, PC' : 'Idea, iPad'} (${CONFLICTING_COPY})`].sort(),
-    );
-    expect(pc.sketches.find(idea.id)?.title).toBe(ipad.sketches.find(idea.id)?.title);
+    expect(drive.holds().map(([, title]) => title)).toEqual([kept]);
+    const lost = kept === 'Idea, iPad' ? 'Idea, PC' : 'Idea, iPad';
+    const loser = lost === 'Idea, PC' ? pc : ipad;
+    expect(loser.versions.of(idea.id).map((version) => version.sketch.title)).toContain(lost);
   });
 
   it('settles again where another device wrote the drive between this one\'s reading it and writing it', async () => {
@@ -301,9 +305,10 @@ describe('the sketches kept the same on every device that has them', () => {
       }
     };
 
-    expect(said(pc, await pc.sync())).toEqual({ sent: 1, brought: 1, conflicts: 1, offered: [] });
-    expect(pc.titles()).toEqual(['Idea, PC (conflicting copy)', 'Idea, iPad']);
-    expect(drive.holds().map(([, title]) => title)).toEqual(['Idea, iPad', 'Idea, PC (conflicting copy)']);
+    expect(said(pc, await pc.sync())).toEqual({ sent: 0, brought: 1, conflicts: 1, offered: [] });
+    expect(pc.titles()).toEqual(['Idea, iPad']);
+    expect(pc.versions.of(idea.id)[0]?.sketch.title).toBe('Idea, PC');
+    expect(drive.holds().map(([, title]) => title)).toEqual(['Idea, iPad']);
   });
 
   it('writes after settling three times, however often another device writes meanwhile', async () => {
@@ -333,7 +338,7 @@ describe('the sketches kept the same on every device that has them', () => {
     expect(drive.holds().map(([, title]) => title).sort()).toEqual(['Mine, again', 'Shared, renamed']);
   });
 
-  it('keeps as a copy a sketch written over at its own revision, the drive\'s taken under its name', async () => {
+  it('keeps as a version a sketch written over at its own revision, the drive\'s taken', async () => {
     const drive = new FolderDrive();
     const ipad = device(drive);
     const pc = device(drive);
@@ -342,15 +347,11 @@ describe('the sketches kept the same on every device that has them', () => {
     // The PC in step at revision 1, with other notes than the drive's.
     pc.sketches.takeFromTheDrive({ ...idea, title: 'Idea, PC' }, 1);
 
-    expect(said(pc, await pc.sync())).toEqual({ sent: 1, brought: 1, conflicts: 1, offered: [] });
-    expect(pc.titles()).toEqual(['Idea', `Idea, PC (${CONFLICTING_COPY})`]);
+    expect(said(pc, await pc.sync())).toEqual({ sent: 0, brought: 1, conflicts: 1, offered: [] });
+    expect(pc.titles()).toEqual(['Idea']);
+    expect(pc.versions.of(idea.id)[0]?.sketch.title).toBe('Idea, PC');
     // In step and the same: nothing.
-    expect(said(ipad, await ipad.sync())).toEqual({
-      sent: 0,
-      brought: 0,
-      conflicts: 0,
-      offered: [{ id: `${idea.id}-copy`, title: `Idea, PC (${CONFLICTING_COPY})`, begunAtMs: 1, noteCount: 2 }],
-    });
+    expect(said(ipad, await ipad.sync())).toEqual({ sent: 0, brought: 0, conflicts: 0, offered: [] });
     // Open, it is left for the sync after.
     const other = device(drive);
     other.sketches.takeFromTheDrive({ ...idea, title: 'Elsewhere' }, 1);

@@ -19,9 +19,6 @@ const REQUESTS_TO_READ = 2;
  */
 export const SKETCH_REQUESTS_AT_MOST = 2 * REQUESTS_TO_READ + 1;
 
-/** What a copy of a sketch changed on two devices at once is called, after its own name. */
-export const CONFLICTING_COPY = 'conflicting copy';
-
 /** A sketch as the drive has it: the sketch, and the revision of it the drive is at. */
 interface SketchThere {
   readonly sketch: StoredSketch;
@@ -46,7 +43,7 @@ export interface SketchSyncOutcome {
   readonly sent: number;
   /** Sketches here this device took a newer copy of from the drive. */
   readonly brought: number;
-  /** Sketches changed here and elsewhere at once, kept here as a copy beside the drive's. */
+  /** Sketches changed here and elsewhere at once: the drive's taken, this device's kept among its versions. */
   readonly conflicts: number;
   /** Every sketch the drive has, newest first: those here among them, as the drive has them. */
   readonly onTheDrive: readonly SketchOnTheDrive[];
@@ -72,9 +69,11 @@ export interface SketchSyncDependencies {
  * - A sketch only here goes to the drive.
  * - Changed here, and still at the drive's revision: sent, a revision on.
  *   At an older revision and not changed here: the drive's is taken.
- * - Changed here *and* on the drive since: both kept. The drive's is taken
- *   under its own name, and this device's becomes a copy beside it, named
- *   so, and sent as a new sketch - the writer chooses which to keep.
+ * - Changed here *and* on the drive since: both kept. The drive's is taken,
+ *   and this device's is kept among the sketch's versions here (see
+ *   `SketchVersions`), to be looked at and put back. It was a copy beside
+ *   it, named so and sent as a sketch of its own: every such change was
+ *   another sketch in every device's list, to be cleared by hand.
  *
  * The sketch open in the editor is not taken from the drive underneath it -
  * its undo is of what is here - and waits for the next sync. That a sketch is
@@ -161,7 +160,7 @@ export class SketchSync {
    *
    * A sketch at the drive's revision, unchanged here since, whose notes are
    * not the drive's has been written over by another device at that same
-   * revision; it is kept as a copy, as a change made on both is.
+   * revision; it is kept as a version, as a change made on both is.
    */
   private settle(
     there: ReadonlyMap<string, SketchThere>,
@@ -192,13 +191,9 @@ export class SketchSync {
         if (sketch.id === open) {
           continue;
         }
+        // This device's kept as a version as the drive's is taken over it.
         if (mine.unsent || writtenOver) {
-          const copy = library.keepACopy(sketch.id, `${sketch.title} (${CONFLICTING_COPY})`);
-          if (copy !== null) {
-            next.set(copy.id, { sketch: copy, revision: 1 });
-            sentAt.push([copy.id, 1]);
-            conflicts += 1;
-          }
+          conflicts += 1;
         }
         library.takeFromTheDrive(theirs.sketch, theirs.revision);
         brought += 1;

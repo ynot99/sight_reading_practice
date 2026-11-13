@@ -681,24 +681,6 @@ describe('what a sync of the sketches needs kept beside them', () => {
     expect(library.list().map((sketch) => sketch.title).sort()).toEqual(['Brought', 'Theirs']);
   });
 
-  it('keeps a copy of one under a new id and name, never yet sent', () => {
-    const { library, again } = aLibrary();
-    const kept = library.begin({ events: PLAYED, beats: THREE }, 'Kept', 2_000);
-    library.sentAt(kept.id, 5);
-
-    const copy = library.keepACopy(kept.id, 'Kept (conflicting copy)');
-    const second = library.keepACopy(kept.id, 'Kept (another)');
-    expect([copy?.id, second?.id]).toEqual([`${kept.id}-copy`, `${kept.id}-copy-2`]);
-    expect(copy?.events).toEqual(kept.events);
-    expect(state(library).filter(([id]) => id === copy?.id)).toEqual([[copy?.id ?? '', 0, true]]);
-    expect(state(again()).sort()).toEqual([
-      [kept.id, 5, false],
-      [`${kept.id}-copy`, 0, true],
-      [`${kept.id}-copy-2`, 0, true],
-    ]);
-    expect(library.keepACopy('nowhere', 'x')).toBeNull();
-  });
-
   it('reads a sketch kept before there was a drive as never sent, and past what it cannot read', () => {
     const store = new InMemorySettingsStore();
     const sketch = (id: string, more: Record<string, unknown> = {}) => ({

@@ -562,23 +562,6 @@ export class SketchLibrary {
     this.persist();
   }
 
-  /**
-   * Keeps a sketch as it is here under a new id and name, never yet sent: what
-   * a change made here becomes where the drive has another, so that taking
-   * the drive's loses neither.
-   */
-  keepACopy(id: string, title: string): StoredSketch | null {
-    const found = this.find(id);
-    if (found === null) {
-      return null;
-    }
-    const copy = { ...found, id: this.unusedId(`${id}-copy`), title };
-    this.sketches = [...this.sketches, copy];
-    this.unsent.add(copy.id);
-    this.persist();
-    return copy;
-  }
-
   /** A sketch changed here: unsent, and when, kept. */
   private changedHere(id: string): void {
     this.unsent.add(id);

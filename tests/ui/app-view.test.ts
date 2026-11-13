@@ -8,7 +8,7 @@ import { timeTheStart } from '../../src/shared/timeTheStart.js';
 import { LibrarySync } from '../../src/application/LibrarySync.js';
 import { SettingsSync } from '../../src/application/SettingsSync.js';
 import { DriveSync } from '../../src/application/DriveSync.js';
-import { CONFLICTING_COPY, SKETCHES_FILE, SketchSync } from '../../src/application/SketchSync.js';
+import { SKETCHES_FILE, SketchSync } from '../../src/application/SketchSync.js';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { DARK_SYSTEM_THEMES, PracticeController, TEMPO_STEP_PERCENT, THEMES } from '../../src/application/PracticeController.js';
@@ -25660,11 +25660,13 @@ describe('the library on Google Drive', () => {
     await otherSync.sync(null);
     await sync();
     expect(rig.sketches.find(theirs.id)?.title).toBe('Renamed on the iPad');
-    // Shut, it is open no longer, and is taken - what was changed here kept beside it.
+    // Shut, it is open no longer, and is taken - what was changed here kept among its versions.
     element<HTMLButtonElement>('roll-close').click();
     await sync();
     expect(rig.sketches.find(theirs.id)?.title).toBe('Renamed again');
-    expect(element('sketches-list').textContent).toContain(`Renamed on the iPad (${CONFLICTING_COPY})`);
+    expect(rig.sketches.list()).toHaveLength(1);
+    // Kept as the change here began; the same again before the drive's, it is not kept twice.
+    expect(rig.sketchVersions.of(theirs.id).map((version) => version.sketch.title)).toContain('Renamed on the iPad');
   });
 
   it("refuses a change to the sketch open while the drive's is being taken underneath it, and draws the drive's after", async () => {
@@ -25895,7 +25897,7 @@ describe('the library on Google Drive', () => {
     expect(rig.sketches.list()).toEqual([]);
   });
 
-  it('says where a sync kept a copy of a sketch changed on two devices at once, and says nothing of copies where none was kept', async () => {
+  it('says where a sync kept the change made here to a sketch changed on two devices at once, and says nothing of it where there was none', async () => {
     const rig = createRig();
     await rig.view.initialize();
     const other = new SketchLibrary(new InMemorySettingsStore(), () => 1);
@@ -25910,7 +25912,7 @@ describe('the library on Google Drive', () => {
     await rig.runtime.sketchSync.bringHere(both.id);
     element<HTMLButtonElement>('drive-sync').click();
     await waitFor(() => element('drive-status').textContent?.startsWith('Synced') === true);
-    expect(element('drive-status').textContent).not.toContain('copy');
+    expect(element('drive-status').textContent).not.toContain('two devices');
 
     other.rename(both.id, 'Both, there');
     await otherSync.sync(null);
@@ -25920,12 +25922,11 @@ describe('the library on Google Drive', () => {
     await waitFor(() => element('drive-status').textContent?.startsWith('Synced') === true);
 
     expect(element('drive-status').textContent).toContain(
-      'Sketches sent 1, brought here 1; 1 changed on two devices at once, kept here as a conflicting copy beside the other.',
+      "Sketches sent 0, brought here 1; 1 changed on two devices at once: the drive's taken, this device's kept among its versions.",
     );
-    expect(rig.sketches.list().map((sketch) => sketch.title).sort()).toEqual([
-      'Both, here (conflicting copy)',
-      'Both, there',
-    ]);
+    // No second sketch in the list: this device's change is a version of the one.
+    expect(rig.sketches.list().map((sketch) => sketch.title)).toEqual(['Both, there']);
+    expect(rig.sketchVersions.of(both.id)[0]?.sketch.title).toBe('Both, here');
   });
 
   it('shows in the open drawer the chords a sync brought from another device', async () => {

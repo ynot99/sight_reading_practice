@@ -1,6 +1,6 @@
 import type { CloudFile, ICloudDrive } from './ports/ICloudDrive.js';
 import { sameKeys, theChordsMerged } from '../domain/harmony/chordsOfTheKey.js';
-import { readTheChords, sketchAsKept, sketchFromKept, type SketchLibrary, type StoredSketch } from './SketchLibrary.js';
+import { readTheChords, sketchAsKept, sketchFromKept, theSameSketch, type SketchLibrary, type StoredSketch } from './SketchLibrary.js';
 import type { SyncProgress } from './SyncProgress.js';
 
 /** The one file on the drive that holds every sketch. */
@@ -187,7 +187,7 @@ export class SketchSync {
         send(mine.revision + 1);
         continue;
       }
-      const writtenOver = theirs.revision === mine.revision && !mine.unsent && !theSame(theirs.sketch, sketch);
+      const writtenOver = theirs.revision === mine.revision && !mine.unsent && !theSameSketch(theirs.sketch, sketch);
       if (theirs.revision > mine.revision || writtenOver) {
         if (sketch.id === open) {
           continue;
@@ -263,11 +263,6 @@ export class SketchSync {
     const text = file === undefined ? null : await drive.read(file.id);
     return { file, text, ...(text === null ? { there: new Map(), chords: null } : readTheDrive(text)) };
   }
-}
-
-/** Whether two sketches say the same thing, as they are kept. */
-function theSame(one: StoredSketch, other: StoredSketch): boolean {
-  return JSON.stringify(sketchAsKept(one)) === JSON.stringify(sketchAsKept(other));
 }
 
 /** What the drive has, newest first. */

@@ -17316,6 +17316,12 @@ export class AppView {
     // Changed where its drums are written, they go back to being drums; and
     // a lap of a loop of them changed, every lap is.
     const kept = this.runtime.sketches.find(sketch.id);
+    // The first change since it was opened, or since every change was put
+    // back: what it was is kept as a version, to be gone back to whatever
+    // has been done to it since.
+    if (kept !== null && sketch.before.length === 0) {
+      this.runtime.sketchVersions.keep(kept, 'editing');
+    }
     const asKept = sketch.drums ? theNotesAndTheDrumsSwapped(events) : events;
     const changed = this.runtime.sketches.changeTheNotes(
       sketch.id,

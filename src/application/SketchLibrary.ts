@@ -4,6 +4,7 @@ import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
 import { eachKeyOnce, sameKeys, theChordsMerged } from '../domain/harmony/chordsOfTheKey.js';
 import { SCALES, isAScale, type ScaleName } from '../domain/harmony/scales.js';
 import type { ISettingsStore } from './ports/ISettingsStore.js';
+import type { SketchVersion, SketchVersions } from './SketchVersions.js';
 import { pack, packBeat, theBeatsIfWhole, unpack } from './packedPlaying.js';
 import { rollAsEvents, rollBeganAtMs, rollOfTheScore } from './session/RunRoll.js';
 
@@ -193,6 +194,11 @@ export function sketchAsKept(sketch: StoredSketch): Record<string, unknown> {
   };
 }
 
+/** Whether two sketches say the same thing, as they are kept. */
+export function theSameSketch(one: StoredSketch, other: StoredSketch): boolean {
+  return JSON.stringify(sketchAsKept(one)) === JSON.stringify(sketchAsKept(other));
+}
+
 /** A sketch read back from the form it is kept in, or `null` where it does not hold together. */
 export function sketchFromKept(value: unknown): StoredSketch | null {
   return readSketch(value);
@@ -269,6 +275,8 @@ function sketchOf(
 export class SketchLibrary {
   private readonly store: ISettingsStore;
   private readonly now: () => number;
+  /** Where a sketch is kept as it was before something takes its place: see `SketchVersions`. */
+  private readonly versions: SketchVersions | null;
   private sketches: StoredSketch[] = [];
   private readonly revisions = new Map<string, number>();
   private readonly unsent = new Set<string>();
@@ -278,9 +286,10 @@ export class SketchLibrary {
   private chordsInStep: (readonly number[])[] | null = null;
   private lastOpened: { readonly id: string; readonly atMs: number } | null = null;
 
-  constructor(store: ISettingsStore, now: () => number) {
+  constructor(store: ISettingsStore, now: () => number, versions: SketchVersions | null = null) {
     this.store = store;
     this.now = now;
+    this.versions = versions;
   }
 
   /** Reads what previous visits kept. A bad entry costs a sketch, not the app. */
@@ -445,6 +454,24 @@ export class SketchLibrary {
     return changed;
   }
 
+  /**
+   * Puts the music of an earlier version of a sketch back in its place - its
+   * notes, its bars and its key, under the name it has now - what it is now
+   * kept as a version first, so the restoring can itself be undone.
+   */
+  restore(id: string, version: SketchVersion): StoredSketch | null {
+    const found = this.find(id);
+    if (found === null) {
+      return null;
+    }
+    this.versions?.keep(found, 'restoring');
+    const { events, beats, key } = version.sketch;
+    const changed = sketchOf(found.id, found.title, found.begunAtMs, events, beats, key, found.author);
+    this.sketches = this.sketches.map((sketch) => (sketch.id === id ? changed : sketch));
+    this.changedHere(id);
+    return changed;
+  }
+
   /** Gives a sketch another name, its music as it was. */
   rename(id: string, title: string): StoredSketch | null {
     const found = this.find(id);
@@ -480,6 +507,7 @@ export class SketchLibrary {
     }
     this.revisions.delete(id);
     this.unsent.delete(id);
+    this.versions?.forget(id);
     this.persist();
   }
 
@@ -515,10 +543,17 @@ export class SketchLibrary {
     this.persist();
   }
 
-  /** A sketch as the drive has it, at its revision, over or beside what is here. */
+  /**
+   * A sketch as the drive has it, at its revision, over or beside what is
+   * here - what was here kept as a version first, where it said anything else.
+   */
   takeFromTheDrive(sketch: StoredSketch, revision: number): void {
     const there = sketchOf(sketch.id, sketch.title, sketch.begunAtMs, sketch.events, sketch.beats, sketch.key, sketch.author);
-    const here = this.find(sketch.id) !== null;
+    const found = this.find(sketch.id);
+    const here = found !== null;
+    if (found !== null && !theSameSketch(found, there)) {
+      this.versions?.keep(found, 'drive');
+    }
     this.sketches = here
       ? this.sketches.map((each) => (each.id === sketch.id ? there : each))
       : [...this.sketches, there];

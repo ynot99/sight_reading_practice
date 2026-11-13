@@ -39,6 +39,7 @@ import { ControlBinding } from '../../src/application/ControlBinding.js';
 import { DrillProgress } from '../../src/application/drill/DrillProgress.js';
 import { TakeLibrary } from '../../src/application/TakeLibrary.js';
 import { SketchLibrary, aKeyInTheScale } from '../../src/application/SketchLibrary.js';
+import { SketchVersions } from '../../src/application/SketchVersions.js';
 import { TakeOnOffer } from '../../src/application/TakeOnOffer.js';
 import { TakePlayer } from '../../src/application/TakePlayer.js';
 import { BackupService } from '../../src/application/Backup.js';
@@ -256,6 +257,7 @@ interface Rig {
   readonly metronomeKnob: ControlBinding;
   readonly takes: TakeLibrary;
   readonly sketches: SketchLibrary;
+  readonly sketchVersions: SketchVersions;
   readonly scores: ScoreLibrary;
   readonly scoreStore: InMemoryScoreStore;
   readonly files: RecordingFileSink;
@@ -387,7 +389,8 @@ function createRig(
   const metronomeKnob = new ControlBinding();
   metronomeKnob.listenTo(midi);
   const takes = new TakeLibrary(new InMemorySettingsStore());
-  const sketches = new SketchLibrary(new InMemorySettingsStore(), () => Date.now());
+  const sketchVersions = new SketchVersions(new InMemorySettingsStore(), () => Date.now());
+  const sketches = new SketchLibrary(new InMemorySettingsStore(), () => Date.now(), sketchVersions);
   const takeOnOffer = new TakeOnOffer(recorder, takes, () => Date.now());
   const files = new RecordingFileSink();
   const importer = new ScoreFileImporter();
@@ -522,6 +525,7 @@ function createRig(
     metronomeKnob,
     takes,
     sketches,
+    sketchVersions,
     takeOnOffer,
     scores,
     files,
@@ -582,6 +586,7 @@ function createRig(
     metronomeKnob,
     takes,
     sketches,
+    sketchVersions,
     scores,
     scoreStore,
     drive,
@@ -7588,6 +7593,49 @@ describe('AppView', () => {
       element<HTMLButtonElement>('scores-show-sketches').click();
       await editTheSketch();
       expect([view.theSliceShown()?.fromMs, view.theSliceShown()?.toMs, length()]).toEqual([0, 6_000, 11_000]);
+    });
+
+    it('keeps a sketch as it was before the first change since it was opened, and once', async () => {
+      const { view, sketches, sketchVersions, clock } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            { kind: 'drumOn', atMs: 0, midi: 36, velocity: 0.75 },
+            { kind: 'drumOff', atMs: 100, midi: 36 },
+          ],
+          beats: [0, 500, 1_000, 1_500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Versioned',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      await editTheSketch();
+      element<HTMLButtonElement>('roll-drums').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const kept = (): unknown[] => sketchVersions.of(sketch.id).map((version) => [version.why, version.sketch.events.length]);
+      const write = (seconds: number, midi: number): void => {
+        clock.advance(1_000);
+        const highest = view.rollScene?.highest ?? 0;
+        for (let tap = 0; tap < 2; tap += 1) {
+          tapTheDrawing({ pointerType: 'mouse', button: 0, isPrimary: true, clientX: seconds * zoom, clientY: (highest - midi + 0.5) * 13 });
+        }
+      };
+      // Opened and looked at, nothing is kept.
+      expect(kept()).toEqual([]);
+      write(0.6, 37);
+      expect(sketches.find(sketch.id)?.events).toHaveLength(4);
+      // As it was before: the one kick.
+      expect(kept()).toEqual([['editing', 2]]);
+      write(1.1, 38);
+      expect(kept()).toEqual([['editing', 2]]);
+      // Every change put back and one made again: it was already kept so.
+      element<HTMLButtonElement>('roll-undo').click();
+      element<HTMLButtonElement>('roll-undo').click();
+      expect(sketches.find(sketch.id)?.events).toHaveLength(2);
+      write(0.6, 39);
+      expect(kept()).toEqual([['editing', 2]]);
     });
 
     it('names no chord of the drums chosen, a drum being no pitch', async () => {

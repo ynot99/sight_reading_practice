@@ -44,6 +44,7 @@ import { ControlBinding } from '../application/ControlBinding.js';
 import { TakeLibrary } from '../application/TakeLibrary.js';
 import { TakeOnOffer } from '../application/TakeOnOffer.js';
 import { SketchLibrary } from '../application/SketchLibrary.js';
+import { SketchVersions } from '../application/SketchVersions.js';
 import { TakePlayer } from '../application/TakePlayer.js';
 import { BackupService } from '../application/Backup.js';
 import { ScoreLibrary } from '../application/ScoreLibrary.js';
@@ -90,6 +91,7 @@ import {
   HISTORY_STORAGE_KEY,
   KEPT_STORAGE_KEYS,
   SKETCHES_STORAGE_KEY,
+  SKETCH_VERSIONS_STORAGE_KEY,
   TAKES_STORAGE_KEY,
   TIME_STORAGE_KEY,
   LocalStorageSettingsStore,
@@ -157,6 +159,7 @@ export interface AppRuntimeOptions {
   readonly takeStore?: ISettingsStore;
   /** Where the sketches live; browser storage by default. */
   readonly sketchStore?: ISettingsStore;
+  readonly sketchVersionStore?: ISettingsStore;
   /** Where kept scores live; the browser's database by default. */
   readonly scoreStore?: IScoreStore;
   /** Where a finished file is handed over; a download by default. */
@@ -211,6 +214,8 @@ export interface AppRuntime {
   readonly takes: TakeLibrary;
   /** The sketches being written, each begun from a recording. */
   readonly sketches: SketchLibrary;
+  /** The earlier versions of each sketch, on this device. */
+  readonly sketchVersions: SketchVersions;
   /** The take the keep button offers, filed on the list as soon as it ends. */
   readonly takeOnOffer: TakeOnOffer;
   /**
@@ -459,7 +464,11 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   const takeOnOffer = new TakeOnOffer(recorder, takes, () => Date.now());
   const sketchStore =
     options.sketchStore ?? new LocalStorageSettingsStore(browserStorage(), SKETCHES_STORAGE_KEY);
-  const sketches = new SketchLibrary(sketchStore, () => Date.now());
+  const sketchVersionStore =
+    options.sketchVersionStore ?? new LocalStorageSettingsStore(browserStorage(), SKETCH_VERSIONS_STORAGE_KEY);
+  const sketchVersions = new SketchVersions(sketchVersionStore, () => Date.now());
+  sketchVersions.load();
+  const sketches = new SketchLibrary(sketchStore, () => Date.now(), sketchVersions);
   sketches.load();
 
   const historyStore =
@@ -487,6 +496,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
       { name: 'time today', key: TIME_STORAGE_KEY },
       { name: 'takes', key: TAKES_STORAGE_KEY },
       { name: 'sketches', key: SKETCHES_STORAGE_KEY },
+      { name: 'versions of sketches', key: SKETCH_VERSIONS_STORAGE_KEY },
       { name: 'section plans', key: DRILL_STORAGE_KEY },
     ],
     {
@@ -494,7 +504,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
         keptScores(scoreStore),
         keptWhole('readings', [historyStore], () => history.everyReading().length),
         keptWhole('takes', [takeStore], () => takes.list().length),
-        keptWhole('sketches', [sketchStore], () => sketches.list().length),
+        keptWhole('sketches', [sketchStore, sketchVersionStore], () => sketches.list().length),
         keptWhole('settings', [settingsStore, timeStore, drillStore], () => null),
       ],
       caches: browserCaches(),
@@ -528,6 +538,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     [DEFAULT_STORAGE_KEY, settingsStore],
     [TAKES_STORAGE_KEY, takeStore],
     [SKETCHES_STORAGE_KEY, sketchStore],
+    [SKETCH_VERSIONS_STORAGE_KEY, sketchVersionStore],
     [HISTORY_STORAGE_KEY, historyStore],
     [TIME_STORAGE_KEY, timeStore],
     [DRILL_STORAGE_KEY, drillStore],
@@ -615,6 +626,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     metronomeKnob,
     takes,
     sketches,
+    sketchVersions,
     takeOnOffer,
     history,
     timeToday,

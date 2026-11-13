@@ -18,11 +18,12 @@ const STORAGE_VERSION = 1;
 /**
  * What a version was kept before: the sketch about to be edited, the
  * drive's copy about to be taken over it, or a version about to be put back
- * in its place.
+ * in its place - or, `passed over`, that it is the drive's copy, offered and
+ * not taken.
  */
-export type WhyAVersionWasKept = 'editing' | 'drive' | 'restoring';
+export type WhyAVersionWasKept = 'editing' | 'drive' | 'restoring' | 'passed over';
 
-const WHYS: readonly WhyAVersionWasKept[] = ['editing', 'drive', 'restoring'];
+const WHYS: readonly WhyAVersionWasKept[] = ['editing', 'drive', 'restoring', 'passed over'];
 
 /** A sketch as it was, and when and why it was kept so. */
 export interface SketchVersion {

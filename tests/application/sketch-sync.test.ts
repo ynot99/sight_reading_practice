@@ -6,6 +6,7 @@ import { SketchVersions } from '../../src/application/SketchVersions.js';
 import {
   SKETCHES_FILE,
   SketchSync,
+  whatTheDriveHas,
   type SketchOnTheDrive,
   type SketchSyncOutcome,
 } from '../../src/application/SketchSync.js';
@@ -575,5 +576,71 @@ describe('the sketches kept the same on every device that has them', () => {
     fresh.sketches.begin({ events: PLAYED, beats: BEATS }, 'Mine', 1);
     expect((await fresh.sync()).sent).toBe(1);
     expect(other.holds().map(([, title]) => title)).toEqual(['Mine']);
+  });
+});
+
+describe('what the drive has of a sketch, against the one here', () => {
+  it('is newer only past the revision here, changed on both where this one was changed too, and newer at that revision where it was written over', () => {
+    const library = new SketchLibrary(new InMemorySettingsStore(), () => 0);
+    const mine = library.begin({ events: PLAYED, beats: BEATS }, 'Idea', 1);
+    const other = { ...mine, title: 'Elsewhere' };
+    for (const revision of [1, 2, 3]) {
+      for (const unsent of [false, true]) {
+        for (const theirs of [mine, other]) {
+          for (const theirRevision of [1, 2, 3]) {
+            const said = whatTheDriveHas({ sketch: mine, revision, unsent }, { sketch: theirs, revision: theirRevision });
+            const expected =
+              theirRevision > revision
+                ? unsent
+                  ? 'changed on both'
+                  : 'newer'
+                : theirRevision === revision && !unsent && theirs !== mine
+                  ? 'changed on both'
+                  : 'nothing new';
+            expect(said, `${String(revision)} ${String(unsent)} ${theirs.title} ${String(theirRevision)}`).toBe(expected);
+          }
+        }
+      }
+    }
+  });
+
+  it('is read for one sketch, with the revision the drive has it at', async () => {
+    const drive = new FolderDrive();
+    const ipad = device(drive);
+    const idea = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Idea', 1);
+    const sync = new SketchSync({ drive, sketches: ipad.sketches });
+    expect(await sync.theDrivesCopyOf(idea.id)).toBeNull();
+    await ipad.sync();
+    ipad.sketches.rename(idea.id, 'Again');
+    await ipad.sync();
+    const copy = await sync.theDrivesCopyOf(idea.id);
+    expect([copy?.sketch.title, copy?.revision]).toEqual(['Again', 2]);
+    expect(await sync.theDrivesCopyOf('nowhere')).toBeNull();
+  });
+
+  it('is passed over for the one here where that is asked: kept as a version, and this one sent over it next', async () => {
+    const drive = new FolderDrive();
+    const ipad = device(drive);
+    const pc = device(drive);
+    const idea = ipad.sketches.begin({ events: PLAYED, beats: BEATS }, 'Idea', 1);
+    await ipad.sync();
+    await pc.bring(idea.id);
+    pc.sketches.rename(idea.id, 'Idea, PC');
+    await pc.sync();
+    const theirs = await new SketchSync({ drive, sketches: ipad.sketches }).theDrivesCopyOf(idea.id);
+    if (theirs === null) {
+      throw new Error('expected the drive to have it');
+    }
+    ipad.sketches.keepThisOneOver(theirs.sketch, theirs.revision);
+    expect(ipad.versions.of(idea.id).map((version) => [version.why, version.sketch.title])).toEqual([['passed over', 'Idea, PC']]);
+    expect(said(ipad, await ipad.sync())).toEqual({ sent: 1, brought: 0, conflicts: 0, offered: [] });
+    expect(drive.holds()).toEqual([[idea.id, 'Idea', 3]]);
+    // And the other device takes it, as it would any newer one.
+    await pc.sync();
+    expect(pc.titles()).toEqual(['Idea']);
+    // Of a sketch not here, nothing.
+    ipad.sketches.keepThisOneOver({ ...theirs.sketch, id: 'nowhere' }, 9);
+    expect(ipad.sketches.find('nowhere')).toBeNull();
+    expect(ipad.versions.of('nowhere')).toEqual([]);
   });
 });

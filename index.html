@@ -647,6 +647,23 @@
       </div>
 
       <!--
+        The drive's newer copy of a sketch just opened, offered. Neither
+        answer loses anything: whichever copy is not kept is kept among the
+        sketch's versions. Not now leaves both for the next sync.
+      -->
+      <div id="sheet-offer" class="sheet sheet--over" hidden>
+        <div class="sheet__panel sheet__panel--narrow" role="dialog" aria-modal="true" aria-labelledby="offer-text">
+          <p id="offer-text" class="sheet__text"></p>
+          <p class="hint">Whichever is not kept stays among this sketch's versions.</p>
+          <div class="sheet__actions">
+            <button id="offer-later" type="button" data-shuts class="button button--ghost">Not now</button>
+            <button id="offer-keep" type="button" class="button button--ghost">Keep this one</button>
+            <button id="offer-take" type="button" class="button button--primary">Take the drive's</button>
+          </div>
+        </div>
+      </div>
+
+      <!--
         The earlier versions of one sketch, kept on this device: each as it
         was before something took its place, to be looked at and put back.
         Over the list of sketches, apart from it: a version is no sketch of

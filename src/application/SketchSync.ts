@@ -1,6 +1,14 @@
 import type { CloudFile, ICloudDrive } from './ports/ICloudDrive.js';
 import { sameKeys, theChordsMerged } from '../domain/harmony/chordsOfTheKey.js';
-import { readTheChords, sketchAsKept, sketchFromKept, theSameSketch, type SketchLibrary, type StoredSketch } from './SketchLibrary.js';
+import {
+  readTheChords,
+  sketchAsKept,
+  sketchFromKept,
+  theSameSketch,
+  type SketchHere,
+  type SketchLibrary,
+  type StoredSketch,
+} from './SketchLibrary.js';
 import type { SyncProgress } from './SyncProgress.js';
 
 /** The one file on the drive that holds every sketch. */
@@ -47,6 +55,28 @@ export interface SketchSyncOutcome {
   readonly conflicts: number;
   /** Every sketch the drive has, newest first: those here among them, as the drive has them. */
   readonly onTheDrive: readonly SketchOnTheDrive[];
+}
+
+/**
+ * What the drive's copy of a sketch is to the one here: newer, where another
+ * device has changed it since this one was in step and nothing has been
+ * changed here; changed on both, where something has been here too; or
+ * nothing new, where it is the revision this one was last in step with, or
+ * older. One answer, for a sync and for a sketch being opened.
+ *
+ * A copy at that same revision, with nothing changed here, that says
+ * something other than this one was written over by another device at that
+ * revision: two syncs at one moment, the second write taking the first's
+ * place. It is newer as well.
+ */
+export type WhatTheDriveHas = 'nothing new' | 'newer' | 'changed on both';
+
+export function whatTheDriveHas(here: SketchHere, theirs: { readonly sketch: StoredSketch; readonly revision: number }): WhatTheDriveHas {
+  const writtenOver = theirs.revision === here.revision && !here.unsent && !theSameSketch(theirs.sketch, here.sketch);
+  if (theirs.revision > here.revision) {
+    return here.unsent ? 'changed on both' : 'newer';
+  }
+  return writtenOver ? 'changed on both' : 'nothing new';
 }
 
 export interface SketchSyncDependencies {
@@ -186,13 +216,13 @@ export class SketchSync {
         send(mine.revision + 1);
         continue;
       }
-      const writtenOver = theirs.revision === mine.revision && !mine.unsent && !theSameSketch(theirs.sketch, sketch);
-      if (theirs.revision > mine.revision || writtenOver) {
+      const news = whatTheDriveHas(mine, theirs);
+      if (news !== 'nothing new') {
         if (sketch.id === open) {
           continue;
         }
         // This device's kept as a version as the drive's is taken over it.
-        if (mine.unsent || writtenOver) {
+        if (news === 'changed on both') {
           conflicts += 1;
         }
         library.takeFromTheDrive(theirs.sketch, theirs.revision);
@@ -202,6 +232,11 @@ export class SketchSync {
       }
     }
     return { next, sentAt, brought, conflicts };
+  }
+
+  /** The drive's copy of one sketch and the revision it is at, or `null` where the drive has none. */
+  async theDrivesCopyOf(id: string): Promise<{ readonly sketch: StoredSketch; readonly revision: number } | null> {
+    return (await this.readTheDrive(this.deps.drive)).there.get(id) ?? null;
   }
 
   /** Takes a sketch the drive has onto this device, as the drive has it now. */

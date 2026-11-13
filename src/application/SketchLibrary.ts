@@ -455,6 +455,20 @@ export class SketchLibrary {
   }
 
   /**
+   * Keeps the sketch here as it is over the drive's newer copy of it, offered
+   * and not taken: the drive's kept as a version, and this one in step with
+   * that revision and changed since, so the next sync sends it over it.
+   */
+  keepThisOneOver(theirs: StoredSketch, revision: number): void {
+    if (this.find(theirs.id) === null) {
+      return;
+    }
+    this.versions?.keep(theirs, 'passed over');
+    this.revisions.set(theirs.id, revision);
+    this.changedHere(theirs.id);
+  }
+
+  /**
    * Puts the music of an earlier version of a sketch back in its place - its
    * notes, its bars and its key, under the name it has now - what it is now
    * kept as a version first, so the restoring can itself be undone.

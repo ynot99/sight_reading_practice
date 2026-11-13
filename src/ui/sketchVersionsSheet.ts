@@ -15,6 +15,7 @@ const KEPT_BEFORE: Readonly<Record<WhyAVersionWasKept, string>> = {
   editing: 'before editing',
   drive: "before the drive's copy",
   restoring: 'before a version was put back',
+  'passed over': "the drive's copy, not taken",
 };
 
 /**

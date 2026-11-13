@@ -604,6 +604,8 @@ import { theDayItWas, whenItWas } from './moments.js';
 import { DRUM_KIT, theDrumOf, theNotesAndTheDrumsSwapped } from '../domain/midi/drums.js';
 import { takeWithTheDrumLoopsKeptInStep } from '../domain/midi/drumLoops.js';
 import { DrumLoopEditing } from './drumLoopEditing.js';
+import { DrivesNewerCopy } from './drivesNewerCopy.js';
+import { reportToTheConsole } from './reportToTheConsole.js';
 import { SketchVersionsSheet } from './sketchVersionsSheet.js';
 import { keepTheTrail, timeTheStart, traceTheStart } from '../shared/timeTheStart.js';
 import { noteAFrame, noteTheFramesStopped, thePlaybackTimingsText } from '../shared/playbackTimings.js';
@@ -1897,19 +1899,6 @@ function percent(value: number): string {
 }
 
 /**
- * Puts a failure where it can be copied from.
- *
- * The notice on the page says what went wrong in one sentence, which is what
- * a reader needs mid-practice and all there is room for. It cannot be
- * selected on a tablet and it carries no stack, so a fault the reader wants
- * to report has to be read off the screen by hand - the reader asked for
- * this after doing exactly that.
- */
-function reportToTheConsole(what: string, error: unknown): void {
-  console.error(what, error);
-}
-
-/**
  * How far a wheel turned, whichever way it turned.
  *
  * A wheel turns up and down; a trackpad swiped sideways turns only across.
@@ -2876,6 +2865,11 @@ export class AppView {
     readingClose: HTMLButtonElement;
     readingsClose: HTMLButtonElement;
     focusReadings: HTMLButtonElement;
+    sheetOffer: HTMLElement;
+    offerText: HTMLElement;
+    offerTake: HTMLButtonElement;
+    offerKeep: HTMLButtonElement;
+    offerLater: HTMLButtonElement;
     sheetVersions: HTMLElement;
     versionsText: HTMLElement;
     versionsList: HTMLElement;
@@ -2983,6 +2977,7 @@ export class AppView {
   /** The loops of a sketch's drums, drawn and pulled: see `DrumLoopEditing`. */
   private readonly drumLoops = new DrumLoopEditing(this);
   private readonly sketchVersionsSheet = new SketchVersionsSheet(this);
+  private readonly drivesNewerCopy = new DrivesNewerCopy(this);
 
   constructor(runtime: AppRuntime, doc: Document = document) {
     this.runtime = runtime;
@@ -3364,6 +3359,11 @@ export class AppView {
       readingClose: requireElement(doc, 'reading-close'),
       readingsClose: requireElement(doc, 'readings-close'),
       focusReadings: requireElement(doc, 'focus-readings'),
+      sheetOffer: requireElement(doc, 'sheet-offer'),
+      offerText: requireElement(doc, 'offer-text'),
+      offerTake: requireElement(doc, 'offer-take'),
+      offerKeep: requireElement(doc, 'offer-keep'),
+      offerLater: requireElement(doc, 'offer-later'),
       sheetVersions: requireElement(doc, 'sheet-versions'),
       versionsText: requireElement(doc, 'versions-text'),
       versionsList: requireElement(doc, 'versions-list'),
@@ -5517,6 +5517,16 @@ export class AppView {
 
     this.listen(this.el.versionsClose, 'click', () => {
       this.sketchVersionsSheet.shut();
+    });
+
+    this.listen(this.el.offerTake, 'click', () => {
+      this.drivesNewerCopy.take();
+    });
+    this.listen(this.el.offerKeep, 'click', () => {
+      this.drivesNewerCopy.keepThisOne();
+    });
+    this.listen(this.el.offerLater, 'click', () => {
+      this.drivesNewerCopy.notNow();
     });
 
     this.listen(this.el.scoresSearch, 'input', () => {
@@ -16936,6 +16946,8 @@ export class AppView {
     this.sayWhatWouldBePractised();
     this.sayWhatThePictureIsOf();
     this.editTheSketch(true);
+    // And whether another device has changed it since: asked as it opens, offered if so.
+    void this.drivesNewerCopy.askAbout(id);
   }
 
   /**

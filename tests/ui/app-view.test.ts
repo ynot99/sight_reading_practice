@@ -25897,6 +25897,125 @@ describe('the library on Google Drive', () => {
     expect(rig.sketches.list()).toEqual([]);
   });
 
+  it("offers the drive's newer copy of a sketch as it is opened, to take it or keep this one, and asks nothing where syncing was not asked for", async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+    const other = new SketchLibrary(new InMemorySettingsStore(), () => 1);
+    const otherSync = new SketchSync({ drive: rig.drive, sketches: other });
+    const played = (count: number): MidiFileEvent[] =>
+      Array.from({ length: count }, (_, at) => [
+        { kind: 'noteOn' as const, atMs: at * 500, midi: 60 + at, velocity: 0.5 },
+        { kind: 'noteOff' as const, atMs: at * 500 + 400, midi: 60 + at },
+      ]).flat();
+    const beats = [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 }));
+    const idea = other.begin({ events: played(1), beats }, 'Idea', 6);
+    await otherSync.sync(null);
+    await rig.runtime.sketchSync.bringHere(idea.id);
+    // Changed on the other device since.
+    other.changeTheNotes(idea.id, played(3));
+    await otherSync.sync(null);
+    const open = async (): Promise<void> => {
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      await editTheSketch();
+    };
+    const offered = async (): Promise<boolean> => {
+      await new Promise((done) => setTimeout(done, 0));
+      await new Promise((done) => setTimeout(done, 0));
+      return !element('sheet-offer').hidden;
+    };
+
+    // Syncing asked for and not signed in, which would ask for a window; or
+    // signed in and syncing not asked for: the drive is not asked.
+    for (const [signedIn, offerToSync] of [[false, true], [true, false]] as const) {
+      rig.drive.signedIn = signedIn;
+      rig.runtime.controller.updateSettings({ offerToSync });
+      await open();
+      expect(await offered(), `${String(signedIn)} ${String(offerToSync)}`).toBe(false);
+      element<HTMLButtonElement>('roll-close').click();
+    }
+    rig.drive.signedIn = true;
+    rig.runtime.controller.updateSettings({ offerToSync: true });
+
+    // Nothing changed here: newer, and taken - this one among its versions, the drawing of the drive's.
+    await open();
+    expect(await offered()).toBe(true);
+    expect(element('offer-text').textContent).toBe('The drive has a newer version of “Idea”, changed on another device.');
+    element<HTMLButtonElement>('offer-take').click();
+    expect(element('sheet-offer').hidden).toBe(true);
+    expect(rig.sketches.find(idea.id)?.noteCount).toBe(3);
+    expect(rig.view.rollScene?.notes).toHaveLength(3);
+    expect(rig.sketchVersions.of(idea.id).map((version) => [version.why, version.sketch.noteCount])).toEqual([['drive', 1]]);
+    element<HTMLButtonElement>('roll-close').click();
+    // In step now: nothing to offer.
+    await open();
+    expect(await offered()).toBe(false);
+    element<HTMLButtonElement>('roll-close').click();
+
+    // Changed on both: kept here, the drive's among its versions, and this one to be sent.
+    other.changeTheNotes(idea.id, played(4));
+    await otherSync.sync(null);
+    rig.sketches.rename(idea.id, 'Idea, here');
+    await open();
+    expect(await offered()).toBe(true);
+    expect(element('offer-text').textContent).toBe('“Idea, here” was changed here and on another device.');
+    element<HTMLButtonElement>('offer-keep').click();
+    expect(rig.sketches.find(idea.id)?.noteCount).toBe(3);
+    expect(rig.sketchVersions.of(idea.id)[0]?.why).toBe('passed over');
+    expect(rig.sketchVersions.of(idea.id)[0]?.sketch.noteCount).toBe(4);
+    expect(rig.sketches.forTheDrive()[0]?.unsent).toBe(true);
+    element<HTMLButtonElement>('roll-close').click();
+
+    // Not now, by Escape: both left as they are.
+    other.changeTheNotes(idea.id, played(2));
+    await otherSync.sync(null);
+    await rig.runtime.sketchSync.sync(null);
+    other.changeTheNotes(idea.id, played(5));
+    await otherSync.sync(null);
+    const before = rig.sketches.find(idea.id);
+    await open();
+    expect(await offered()).toBe(true);
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
+    expect(element('sheet-offer').hidden).toBe(true);
+    expect(rig.sketches.find(idea.id)).toEqual(before);
+    element<HTMLButtonElement>('roll-close').click();
+
+    // Another sketch opened before the drive answered: nothing offered over it.
+    // Drums only, so neither is written down first and each opens at once.
+    const kicks = (count: number): MidiFileEvent[] =>
+      Array.from({ length: count }, (_, at) => [
+        { kind: 'drumOn' as const, atMs: at * 500, midi: 36, velocity: 0.5 },
+        { kind: 'drumOff' as const, atMs: at * 500 + 100, midi: 36 },
+      ]).flat();
+    const drums = other.begin({ events: kicks(1), beats }, 'Drums', 7);
+    await otherSync.sync(null);
+    await rig.runtime.sketchSync.bringHere(drums.id);
+    other.changeTheNotes(drums.id, kicks(2));
+    await otherSync.sync(null);
+    rig.sketches.begin({ events: kicks(1), beats }, 'Mine', 8);
+    element<HTMLButtonElement>('focus-scores').click();
+    element<HTMLButtonElement>('scores-show-sketches').click();
+    const editOf = (title: string): HTMLButtonElement | null =>
+      element('sketches-list').querySelector<HTMLButtonElement>(`button[aria-label="Edit ${title}"]`);
+    editOf('Drums')?.click();
+    editOf('Mine')?.click();
+    expect(await offered()).toBe(false);
+    expect(rig.view.theOtherRollShowing?.what).toBe('Mine');
+
+    // A drive that cannot be reached says nothing on the page, and its reason in the console.
+    element<HTMLButtonElement>('roll-close').click();
+    const said = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    onTestFinished(() => {
+      said.mockRestore();
+    });
+    rig.drive.list = (): Promise<readonly CloudFile[]> => Promise.reject(new Error('offline'));
+    element<HTMLButtonElement>('focus-scores').click();
+    element<HTMLButtonElement>('scores-show-sketches').click();
+    editOf('Drums')?.click();
+    expect(await offered()).toBe(false);
+    expect(said).toHaveBeenCalledWith('Could not ask the drive about the sketch opened.', expect.any(Error));
+  });
+
   it('says where a sync kept the change made here to a sketch changed on two devices at once, and says nothing of it where there was none', async () => {
     const rig = createRig();
     await rig.view.initialize();

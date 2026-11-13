@@ -647,6 +647,24 @@
       </div>
 
       <!--
+        The earlier versions of one sketch, kept on this device: each as it
+        was before something took its place, to be looked at and put back.
+        Over the list of sketches, apart from it: a version is no sketch of
+        its own, and the list is of the sketches.
+      -->
+      <div id="sheet-versions" class="sheet sheet--over" hidden>
+        <div class="sheet__panel" role="dialog" aria-modal="true" aria-labelledby="versions-text">
+          <p id="versions-text" class="sheet__text"></p>
+          <ul id="versions-list" class="takes__list"></ul>
+          <p id="versions-empty" class="hint" hidden>None yet. One is kept before a sketch is edited,
+            before the drive's copy of it is taken over it, and before a version is put back.</p>
+          <div class="sheet__actions">
+            <button id="versions-close" type="button" data-shuts class="button button--ghost">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <!--
         Asking for a name, the same way the deletion asks for a yes. Neither
         `window.prompt` nor `window.confirm` is implemented in the environment
         the UI tests run in, so both would be paths no test could take - and

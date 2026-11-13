@@ -7638,6 +7638,87 @@ describe('AppView', () => {
       expect(kept()).toEqual([['editing', 2]]);
     });
 
+    it('lists the versions kept of a sketch in a sheet of its own, to be looked at and put back', async () => {
+      const { view, sketches, sketchVersions } = createRig();
+      await view.initialize();
+      const kicks = (count: number): MidiFileEvent[] =>
+        Array.from({ length: count }, (_, at) => [
+          { kind: 'noteOn' as const, atMs: at * 500, midi: 60 + at, velocity: 0.75 },
+          { kind: 'noteOff' as const, atMs: at * 500 + 100, midi: 60 + at },
+        ]).flat();
+      const beats = [0, 500, 1_000, 1_500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 }));
+      const sketch = sketches.begin({ events: kicks(3), beats }, 'Versioned', 1);
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      const versionsOf = (): HTMLButtonElement => {
+        const found = element('sketches-list').querySelector<HTMLButtonElement>('button[aria-label="Earlier versions of Versioned"]');
+        if (found === null) {
+          throw new Error('No Versions button on the row.');
+        }
+        return found;
+      };
+      // None yet: dimmed, saying when one is kept, and opening on that.
+      expect([versionsOf().dataset['idle'], versionsOf().title]).toEqual([
+        'true',
+        "Earlier versions of this sketch. None yet: one is kept before it is edited, before the drive's copy is taken over it, and before a version is put back.",
+      ]);
+      versionsOf().click();
+      expect([element('sheet-versions').hidden, element('versions-empty').hidden, element('versions-list').hidden]).toEqual([false, false, true]);
+      element<HTMLButtonElement>('versions-close').click();
+      expect(element('sheet-versions').hidden).toBe(true);
+
+      // The drive's copy taken over it: what was here is a version.
+      sketches.takeFromTheDrive({ ...sketch, events: kicks(5) }, 2);
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      expect(versionsOf().dataset['idle']).toBeUndefined();
+      versionsOf().click();
+      const rows = (): string[] => [...element('versions-list').querySelectorAll('li')].map((row) => row.querySelector('.takes__name')?.textContent ?? '');
+      expect(rows()).toHaveLength(1);
+      expect(rows()[0]).toMatch(/ · before the drive's copy · 3 notes$/);
+      expect(element('versions-text').textContent).toBe('Earlier versions of “Versioned”, kept on this device');
+
+      // Looked at: over the sheet it was asked from, and not to be edited there.
+      element('versions-list').querySelector<HTMLButtonElement>('button[title="Look at it as it was"]')?.click();
+      expect(element('sheet-roll').hidden).toBe(false);
+      expect(Number(element('sheet-roll').dataset['over'])).toBeGreaterThan(Number(element('sheet-versions').dataset['over']));
+      expect(view.rollScene?.lengthMs).toBeGreaterThan(0);
+      expect([element('roll-edit').dataset['idle'], element('roll-edit').title]).toEqual([
+        'true',
+        'Edit the notes. This is a version kept of a sketch: put it back first.',
+      ]);
+      element<HTMLButtonElement>('roll-close').click();
+      expect(element('sheet-versions').hidden).toBe(false);
+
+      // Put back: its notes, and what it was a moment ago kept as a version too.
+      element('versions-list').querySelector<HTMLButtonElement>('button[aria-label^="Put Versioned back"]')?.click();
+      expect(sketches.find(sketch.id)?.noteCount).toBe(3);
+      expect(rows()).toHaveLength(2);
+      expect(rows()[0]).toMatch(/ · before a version was put back · 5 notes$/);
+      expect(sketchVersions.of(sketch.id).map((version) => version.why)).toEqual(['restoring', 'drive']);
+      // The list of sketches says it too.
+      expect(element('sketches-list').textContent).toContain('Versioned · 3 notes');
+
+      // Put back while it is open in the editor, the drawing is of what was put back.
+      element<HTMLButtonElement>('versions-close').click();
+      await editTheSketch();
+      const drawn = (): number => view.rollScene?.notes.length ?? -1;
+      expect(drawn()).toBe(3);
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      versionsOf().click();
+      element('versions-list').querySelector<HTMLButtonElement>('button[aria-label^="Put Versioned back"]')?.click();
+      expect(sketches.find(sketch.id)?.noteCount).toBe(5);
+      expect(drawn()).toBe(5);
+      // Looked at with the editor open beneath the sheets, the drawing is
+      // raised over them: the innermost, which Escape shuts first.
+      element('versions-list').querySelector<HTMLButtonElement>('button[title="Look at it as it was"]')?.click();
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
+      expect([element('sheet-roll').hidden, element('sheet-versions').hidden]).toEqual([true, false]);
+      // Shut by Escape, as every sheet is.
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
+      expect(element('sheet-versions').hidden).toBe(true);
+    });
+
     it('names no chord of the drums chosen, a drum being no pitch', async () => {
       const { view, sketches } = createRig();
       await view.initialize();

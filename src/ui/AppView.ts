@@ -599,9 +599,12 @@ const TAKE_COUNTER_MS = 500;
 
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { fillSelect, requireElement, isFormControl } from './dom.js';
+import { LOOK_ICON, VERSIONS_ICON } from './icons.js';
+import { theDayItWas, whenItWas } from './moments.js';
 import { DRUM_KIT, theDrumOf, theNotesAndTheDrumsSwapped } from '../domain/midi/drums.js';
 import { takeWithTheDrumLoopsKeptInStep } from '../domain/midi/drumLoops.js';
 import { DrumLoopEditing } from './drumLoopEditing.js';
+import { SketchVersionsSheet } from './sketchVersionsSheet.js';
 import { keepTheTrail, timeTheStart, traceTheStart } from '../shared/timeTheStart.js';
 import { noteAFrame, noteTheFramesStopped, thePlaybackTimingsText } from '../shared/playbackTimings.js';
 
@@ -1619,23 +1622,6 @@ function takeTitle(savedAtMs: number): string {
   return `Take ${whenItWas(savedAtMs)}`;
 }
 
-/** A moment to the second, and its day: what a title made from one goes by. */
-function whenItWas(atMs: number): string {
-  const at = new Date(atMs);
-  const pad = (value: number): string => String(value).padStart(2, '0');
-  return `${pad(at.getHours())}:${pad(at.getMinutes())}:${pad(at.getSeconds())}, ${theDayItWas(atMs)}`;
-}
-
-/**
- * The day something was, without the time: what a sketch is named by, so its
- * name fits beside its buttons on a phone and still says when it was begun.
- */
-function theDayItWas(atMs: number): string {
-  const at = new Date(atMs);
-  const pad = (value: number): string => String(value).padStart(2, '0');
-  return `${pad(at.getDate())}.${pad(at.getMonth() + 1)}.${at.getFullYear()}`;
-}
-
 function takeFileName(savedAtMs: number): string {
   const at = new Date(savedAtMs);
   const pad = (value: number): string => String(value).padStart(2, '0');
@@ -1675,9 +1661,6 @@ function readPlayedNotes(value: string): PlayedNoteDisplay {
 const PLAY_ICON = 'M8 5l11 7-11 7z';
 /** An arrow down onto a line: what the drive has, brought down to this device. */
 const BRING_HERE_ICON = 'M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z';
-/** An eye: looked at, and not taken. */
-const LOOK_ICON =
-  'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z';
 /** A device with a cross on it: taken off this device, the drive keeping its own. */
 const TAKE_OFF_THIS_DEVICE_ICON =
   'M13 8.2l-1-1-4 4-4-4-1 1 4 4-4 4 1 1 4-4 4 4 1-1-4-4 4-4zM19 1H9c-1.1 0-2 .9-2 2v3h2V4h10v16H9v-2H7v3c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-2-2-2z';
@@ -2442,8 +2425,11 @@ export class AppView {
     readonly barLabel?: (positionTicks: number) => string | null;
     /** The recording it is, where it is one, which a sketch can be begun from. */
     readonly recording?: string;
-    /** Whether it is a sketch as the drive has it, looked at before it is brought here. */
-    readonly onTheDrive?: boolean;
+    /**
+     * Where it is a sketch only to be looked at - as the drive has it, or a
+     * version of one kept here - what the edit button says about it.
+     */
+    readonly onlyToLookAt?: string;
     /**
      * The recording it is, where it is one: which, the key chosen on it to be
      * changed, and what it was before each change, the last change last.
@@ -2890,6 +2876,11 @@ export class AppView {
     readingClose: HTMLButtonElement;
     readingsClose: HTMLButtonElement;
     focusReadings: HTMLButtonElement;
+    sheetVersions: HTMLElement;
+    versionsText: HTMLElement;
+    versionsList: HTMLElement;
+    versionsEmpty: HTMLElement;
+    versionsClose: HTMLButtonElement;
     sheetRename: HTMLElement;
     renameText: HTMLElement;
     renameName: HTMLInputElement;
@@ -2991,6 +2982,7 @@ export class AppView {
   private readonly sketchEditing = new SketchEditing(this);
   /** The loops of a sketch's drums, drawn and pulled: see `DrumLoopEditing`. */
   private readonly drumLoops = new DrumLoopEditing(this);
+  private readonly sketchVersionsSheet = new SketchVersionsSheet(this);
 
   constructor(runtime: AppRuntime, doc: Document = document) {
     this.runtime = runtime;
@@ -3372,6 +3364,11 @@ export class AppView {
       readingClose: requireElement(doc, 'reading-close'),
       readingsClose: requireElement(doc, 'readings-close'),
       focusReadings: requireElement(doc, 'focus-readings'),
+      sheetVersions: requireElement(doc, 'sheet-versions'),
+      versionsText: requireElement(doc, 'versions-text'),
+      versionsList: requireElement(doc, 'versions-list'),
+      versionsEmpty: requireElement(doc, 'versions-empty'),
+      versionsClose: requireElement(doc, 'versions-close'),
       sheetRename: requireElement(doc, 'sheet-rename'),
       renameText: requireElement(doc, 'rename-text'),
       renameName: requireElement(doc, 'rename-name'),
@@ -5518,6 +5515,10 @@ export class AppView {
       this.el.sheetReadings.hidden = true;
     });
 
+    this.listen(this.el.versionsClose, 'click', () => {
+      this.sketchVersionsSheet.shut();
+    });
+
     this.listen(this.el.scoresSearch, 'input', () => {
       this.renderScores();
     });
@@ -6983,7 +6984,7 @@ export class AppView {
    * stop - and a sheet is deep because of what the reader opened it from,
    * which is not something the markup can know.
    */
-  private showTheSheet(sheet: HTMLElement): void {
+  showTheSheet(sheet: HTMLElement): void {
     if (sheet.hidden) {
       sheet.dataset['over'] = String(
         this.doc.querySelectorAll('.sheet:not([hidden])').length + 1,
@@ -8798,14 +8799,23 @@ export class AppView {
 
   /**
    * Draws the sketch open in the editor again as the sync has left it, where
-   * the drive's was taken underneath it: the notes chosen let go of, since
-   * they were chosen among notes that are not there now.
+   * the drive's was taken underneath it: see `showTheSketchAgain`.
    */
   private showTheSketchTakenUnderTheEditor(): void {
-    const id = this.sketchTakenUnderTheEditor;
+    if (this.sketchTakenUnderTheEditor !== null) {
+      this.showTheSketchAgain(this.sketchTakenUnderTheEditor);
+    }
+  }
+
+  /**
+   * Draws a sketch again as it is kept now, where it is the one in the
+   * editor and something other than the editor changed it: the notes chosen
+   * let go of, since they were chosen among notes that are not there now.
+   */
+  showTheSketchAgain(id: string): void {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
-    const stored = id === null ? null : this.theSketchAsDrawn(id);
+    const stored = this.theSketchAsDrawn(id);
     if (showing === null || sketch?.id !== id || stored === null) {
       return;
     }
@@ -9065,21 +9075,37 @@ export class AppView {
    * recording is: what is edited is a sketch kept here.
    */
   private lookAtTheSketchOnTheDrive(sketch: StoredSketch): void {
-    this.stopTheRoll();
     // The settings step aside for the picture asked for from them.
     this.el.sheetSettings.hidden = true;
+    this.lookAtASketchAsItWas(
+      sketch,
+      'On the drive: bring it here to edit it.',
+      'Edit the notes. Only a sketch kept here is edited: bring this one here first.',
+    );
+  }
+
+  /**
+   * Opens the drawing on a sketch only to be looked at and listened to - as
+   * the drive has it, or a version of one kept here - saying why it is not
+   * edited there, and what the edit button says about it. Over whatever it
+   * was asked from, so shutting it goes back there.
+   */
+  lookAtASketchAsItWas(sketch: StoredSketch, why: string, onlyToLookAt: string): void {
+    this.stopTheRoll();
     const roll = rollOfTheTake(sketch, ROOM_IN_A_SKETCH);
     this.theOtherRollShowing = {
       roll,
       what: sketch.title,
-      why: 'On the drive: bring it here to edit it.',
+      why,
       ofTheOpenScore: false,
       barLabel: barsCountedOnItsBeats(roll),
-      onTheDrive: true,
+      onlyToLookAt,
     };
     this.rollAtMs = 0;
     this.rollScroller.to(0, 0);
     this.drawTheRollInto();
+    // Raised over the sheet it was asked from, where it was open beneath it.
+    this.el.sheetRoll.hidden = true;
     this.showTheSheet(this.el.sheetRoll);
     this.showTheView();
     this.sayWhatWouldBePractised();
@@ -9165,7 +9191,7 @@ export class AppView {
   }
 
   /** A button drawn as an icon alone, saying what it does in its title and to a screen reader. */
-  private anIconButton(icon: string, title: string, label: string): HTMLButtonElement {
+  anIconButton(icon: string, title: string, label: string): HTMLButtonElement {
     const button = this.doc.createElement('button');
     button.type = 'button';
     button.className = 'button button--ghost drive-only__way';
@@ -12190,7 +12216,7 @@ export class AppView {
     await this.openTheExercise(exercise);
   }
 
-  private renderSketches(): void {
+  renderSketches(): void {
     const sketches = this.runtime.sketches.list();
     this.el.sketchesEmpty.hidden = this.scoresListShown !== 'sketches' || sketches.length > 0;
     this.el.sketchesList.replaceChildren();
@@ -12229,6 +12255,24 @@ export class AppView {
       saveTheScore.title = 'Save this sketch as a MusicXML file, as its score is written';
       this.listen(saveTheScore, 'click', () => void this.saveTheSketchAsMusicXml(sketch.id));
 
+      // Its earlier versions, in a sheet of their own; dimmed, and saying
+      // when one is kept, while there are none.
+      // An icon, not a word: on a phone the row's words leave its name no room.
+      const kept = this.runtime.sketchVersions.of(sketch.id).length;
+      const versions = this.anIconButton(
+        VERSIONS_ICON,
+        kept === 0
+          ? "Earlier versions of this sketch. None yet: one is kept before it is edited, before the drive's copy is taken over it, and before a version is put back."
+          : `Earlier versions of this sketch, kept on this device: ${String(kept)}`,
+        `Earlier versions of ${sketch.title}`,
+      );
+      if (kept === 0) {
+        versions.dataset['idle'] = 'true';
+      }
+      this.listen(versions, 'click', () => {
+        this.sketchVersionsSheet.open(sketch.id);
+      });
+
       const remove = this.doc.createElement('button');
       remove.type = 'button';
       remove.textContent = '×';
@@ -12244,7 +12288,7 @@ export class AppView {
         });
       });
 
-      row.append(name, edit, write, save, saveTheScore, remove);
+      row.append(name, edit, write, save, saveTheScore, versions, remove);
       this.el.sketchesList.append(row);
     }
     // The drive's list says which of its sketches are here.
@@ -14655,9 +14699,9 @@ export class AppView {
       // And a score is what was written, for the same reason.
       delete this.el.rollEdit.dataset['idle'];
       this.el.rollEdit.title = 'Begin a sketch of this score to edit; the score stays as it is written';
-    } else if (this.theOtherRollShowing?.onTheDrive === true) {
+    } else if (this.theOtherRollShowing?.onlyToLookAt !== undefined) {
       this.el.rollEdit.dataset['idle'] = 'true';
-      this.el.rollEdit.title = 'Edit the notes. Only a sketch kept here is edited: bring this one here first.';
+      this.el.rollEdit.title = this.theOtherRollShowing.onlyToLookAt;
     } else if (sketch === undefined) {
       this.el.rollEdit.dataset['idle'] = 'true';
       this.el.rollEdit.title = 'Edit the notes. Only a sketch is edited: begin one from a recording or a score.';

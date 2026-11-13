@@ -117,14 +117,14 @@ describe('whether this device has something the drive has not', () => {
 });
 
 describe('when a sync nobody pressed for is due', () => {
-  it('is half a minute after the last change here', async () => {
+  it('is ten seconds after the last change here', async () => {
     const pc = device([kept('Clair de Lune')]);
     await pc.sync.sync();
 
     pc.shelf.push(kept('Shellwood', { savedAtMs: 20_000 }));
 
     expect(pc.sync.dueAtMs).toBe(20_000 + SYNC_AFTER_QUIET_MS);
-    expect(SYNC_AFTER_QUIET_MS).toBe(30_000);
+    expect(SYNC_AFTER_QUIET_MS).toBe(10_000);
   });
 
   it('is put off by every change after it', async () => {
@@ -157,7 +157,7 @@ describe('the sketches, synced with the rest', () => {
     expect(pc.sketches.open).toEqual(['sketch-open', null]);
   });
 
-  it('has something to sync while a sketch here is unsent, whatever the clocks say, and is due half a minute after it changed', async () => {
+  it('has something to sync while a sketch here is unsent, whatever the clocks say, and is due ten seconds after it changed', async () => {
     const pc = device([kept('Clair de Lune')]);
     await pc.sync.sync();
     expect(pc.sync.hasSomethingToSync).toBe(false);

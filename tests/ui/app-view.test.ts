@@ -7,7 +7,7 @@ import type { ITimingTrail } from '../../src/application/ports/ITimingTrail.js';
 import { timeTheStart } from '../../src/shared/timeTheStart.js';
 import { LibrarySync } from '../../src/application/LibrarySync.js';
 import { SettingsSync } from '../../src/application/SettingsSync.js';
-import { DriveSync } from '../../src/application/DriveSync.js';
+import { DriveSync, SYNC_AFTER_QUIET_MS } from '../../src/application/DriveSync.js';
 import { SKETCHES_FILE, SketchSync } from '../../src/application/SketchSync.js';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
@@ -26212,13 +26212,13 @@ describe('the Sync button pressing itself', () => {
     return rig;
   }
 
-  it('presses itself half a minute after the last change', async () => {
+  it('presses itself ten seconds after the last change', async () => {
     // His: "я хочу щоб ця кнопка сама натискалася 30 секунд".
     const rig = await signedInWithAScoreToSend();
     const button = element<HTMLButtonElement>('score-sync');
     expect(button.hidden).toBe(false);
 
-    await vi.advanceTimersByTimeAsync(29_000);
+    await vi.advanceTimersByTimeAsync(SYNC_AFTER_QUIET_MS - 1_000);
     expect(rig.drive.files.has('Clair de Lune.musicxml')).toBe(false);
 
     await vi.advanceTimersByTimeAsync(2_000);
@@ -26308,12 +26308,12 @@ describe('the Sync button pressing itself', () => {
     expect(listed).toBe(0);
   });
 
-  it('waits for half a minute of quiet, so a run of changes goes together', async () => {
+  it('waits for ten seconds of quiet, so a run of changes goes together', async () => {
     const rig = await signedInWithAScoreToSend();
 
-    await vi.advanceTimersByTimeAsync(20_000);
+    await vi.advanceTimersByTimeAsync(SYNC_AFTER_QUIET_MS - 3_000);
     rig.runtime.controller.updateSettings({ previewSeconds: 3 });
-    await vi.advanceTimersByTimeAsync(29_000);
+    await vi.advanceTimersByTimeAsync(SYNC_AFTER_QUIET_MS - 1_000);
     expect(rig.drive.files.has('Clair de Lune.musicxml')).toBe(false);
 
     await vi.advanceTimersByTimeAsync(2_000);
@@ -26340,7 +26340,7 @@ describe('the Sync button pressing itself', () => {
         };
       });
 
-    await vi.advanceTimersByTimeAsync(31_000);
+    await vi.advanceTimersByTimeAsync(SYNC_AFTER_QUIET_MS + 1_000);
 
     const button = element<HTMLButtonElement>('score-sync');
     expect(button.hidden).toBe(false);
@@ -26395,7 +26395,7 @@ describe('the Sync button pressing itself', () => {
       return Promise.reject(new Error('Google could not be reached.'));
     };
 
-    await vi.advanceTimersByTimeAsync(31_000);
+    await vi.advanceTimersByTimeAsync(SYNC_AFTER_QUIET_MS + 1_000);
     await vi.waitFor(() => {
       expect(element('score-sync-text').textContent).toBe('Sync failed');
     });
@@ -26406,7 +26406,7 @@ describe('the Sync button pressing itself', () => {
     expect(tries).toBe(1);
 
     rig.runtime.controller.updateSettings({ previewSeconds: 3 });
-    await vi.advanceTimersByTimeAsync(29_000);
+    await vi.advanceTimersByTimeAsync(SYNC_AFTER_QUIET_MS - 1_000);
     expect(tries).toBe(1);
     await vi.advanceTimersByTimeAsync(2_000);
     expect(tries).toBe(2);
@@ -26479,7 +26479,7 @@ describe('the Sync button pressing itself', () => {
     rig.runtime.controller.updateSettings({
       dimUnplayed: !rig.runtime.controller.settings.dimUnplayed,
     });
-    await vi.advanceTimersByTimeAsync(29_000);
+    await vi.advanceTimersByTimeAsync(SYNC_AFTER_QUIET_MS - 1_000);
     element<HTMLButtonElement>('focus-play').click();
     expect(rig.runtime.controller.session).not.toBeNull();
 

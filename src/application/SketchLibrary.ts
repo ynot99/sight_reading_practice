@@ -267,7 +267,7 @@ function sketchOf(
  * And what a sync of them between devices needs kept beside them: for each,
  * the revision of it the drive had when this copy was last in step with it,
  * and whether it has been changed here since; and when anything was last
- * changed here, for a sync to be pressed half a minute after. No clock is
+ * changed here, for a sync to be pressed a quiet while after. No clock is
  * compared with another device's: a revision is a count the drive keeps.
  * Deleting a sketch here takes it off this device only, as with a score:
  * the drive keeps it, and offers it back.
@@ -536,7 +536,7 @@ export class SketchLibrary {
 
   /**
    * When something changed here that the drive has not had, or `null` while
-   * it has had everything: for a sync to be pressed half a minute after.
+   * it has had everything: for a sync to be pressed a quiet while after.
    */
   get unsentSinceMs(): number | null {
     return this.unsent.size > 0 || this.chordsUnsent() ? this.changedAtMs : null;

@@ -1963,7 +1963,7 @@ export class AppView {
   /** The modes last drawn in the corner, so an unchanged set is left alone. */
   private modesShown: string | null = null;
   private timeTick: ReturnType<typeof setInterval> | null = null;
-  /** The Sync button pressing itself, set for half a minute after the last change. */
+  /** The Sync button pressing itself, set for `SYNC_AFTER_QUIET_MS` after the last change. */
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
   /** When a sync nobody pressed for last began as the page was opened or come back to: see `syncOnComingBack`. */
   private syncedOnComingBackAtMs: number | null = null;
@@ -8916,7 +8916,7 @@ export class AppView {
             : [
                 'on-its-own',
                 'Sync',
-                'Syncs on its own half a minute after the last change, or now if pressed.',
+                'Syncs on its own ten seconds after the last change, or now if pressed.',
               ];
     button.dataset['sync'] = state;
     if (this.syncEnded === null) {
@@ -8937,7 +8937,7 @@ export class AppView {
   }
 
   /**
-   * Presses the Sync button half a minute after the last change, where it is
+   * Presses the Sync button `SYNC_AFTER_QUIET_MS` after the last change, where it is
    * standing and can.
    *
    * Set from the moment of the change rather than from whenever this is

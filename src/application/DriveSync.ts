@@ -9,10 +9,13 @@ import { SyncProgress, type SyncProgressShown } from './SyncProgress.js';
  * How long after the last change here the Sync button presses itself.
  *
  * Long enough that a run of changes - stars given to three scores, a setting
- * tried and put back - goes in one sync rather than one each. His: "auto sync
- * з debounce у 30 секунд".
+ * tried and put back, the notes of a phrase written into a sketch - goes in
+ * one sync rather than one each. His: "auto sync з debounce у 30 секунд".
+ * Ten seconds since a sketch is edited on one device and opened on another
+ * a moment later: half a minute was long enough to get up and cross the
+ * room, and the other device then opened the sketch as it was before.
  */
-export const SYNC_AFTER_QUIET_MS = 30_000;
+export const SYNC_AFTER_QUIET_MS = 10_000;
 
 export interface DriveSyncOutcome {
   readonly library: SyncOutcome;
@@ -72,7 +75,7 @@ export class DriveSync {
   }
 
   /**
-   * When a sync nobody pressed for is due: half a minute after the last change
+   * When a sync nobody pressed for is due: `SYNC_AFTER_QUIET_MS` after the last change
    * here, and every change puts it off again. `null` while the drive has had
    * everything.
    */

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { readSoundFont, type SoundSettings, type SoundZone } from '../../src/infrastructure/audio/soundFont.js';
 import {
+  evenedWithTheBuiltInPiano,
   filterCornerHz,
   gainFor,
+  howLoudThePresetIs,
   levelAt,
-  loudnessForVelocity,
   panFor,
   playbackRateFor,
   releaseFrom,
@@ -13,7 +14,8 @@ import {
 } from '../../src/infrastructure/audio/soundFontSounds.js';
 import { SampledPitchPlayer } from '../../src/infrastructure/audio/SampledPitchPlayer.js';
 import type { IPitchPlayer } from '../../src/application/ports/IPitchPlayer.js';
-import { GEN, range, writeSoundFont, type FileDescription, type FileZone } from '../support/soundFontFile.js';
+import { loudnessFor } from '../../src/infrastructure/audio/keySound.js';
+import { GEN, range, writeSoundFont, type FileDescription, type FileSample, type FileZone } from '../support/soundFontFile.js';
 
 /** The settings a zone is given where it says nothing, as the reader gives them. */
 const NOTHING_SAID: SoundSettings = {
@@ -145,11 +147,11 @@ describe("a zone's sound, out of the soundfont's units", () => {
     expect(releaseFrom({ ...envelope, releaseSec: 0.001 }, 1)).toBe(0.02);
   });
 
-  it('is as loud as the square of how hard the key was struck', () => {
-    expect(loudnessForVelocity(1)).toBe(1);
-    expect(loudnessForVelocity(0.5)).toBeCloseTo(0.25, 10);
-    expect(loudnessForVelocity(2)).toBe(1);
-    expect(loudnessForVelocity(-1)).toBe(0);
+  it('is as loud as how hard the key was struck, as the built-in piano is, down to a twentieth', () => {
+    expect(loudnessFor(1)).toBe(1);
+    expect(loudnessFor(0.5)).toBe(0.5);
+    expect(loudnessFor(0.05)).toBe(0.05);
+    expect(loudnessFor(0.01)).toBe(0.05);
   });
 
   it('is turned down by its attenuation, two hundred centibels a tenth', () => {
@@ -180,6 +182,141 @@ describe("a zone's sound, out of the soundfont's units", () => {
     expect(panFor(saying({ pan: -500 }))).toBe(-1);
     expect(panFor(saying({ pan: 250 }))).toBe(0.5);
     expect(panFor(saying({ pan: 900 }))).toBe(1);
+  });
+});
+
+/** A recording `seconds` long at a hundred points a second, every point at `level` of full scale. */
+function steady(name: string, level: number, seconds = 1): FileSample {
+  return { name, points: Array.from({ length: 100 * seconds }, () => Math.round(level * 32_768)), sampleRate: 100 };
+}
+
+function thePreset(description: FileDescription) {
+  const font = readSoundFont(writeSoundFont(description));
+  const preset = font.presets[0];
+  if (preset === undefined) {
+    throw new Error('no preset');
+  }
+  return { font, preset };
+}
+
+/** One instrument of the zones said over the recordings given, one preset over it. */
+function oneInstrument(samples: readonly FileSample[], zones: readonly FileZone[]): FileDescription {
+  return {
+    samples,
+    instruments: [{ name: 'Only', zones }],
+    presets: [{ name: 'Only', zones: [[[GEN.instrument, 0]]] }],
+  };
+}
+
+const decibels = (gain: number): number => 20 * Math.log10(gain);
+
+describe('how loud a preset is, against the built-in piano', () => {
+  it('is how loud its recording is over its first second, with its attenuation', () => {
+    const { font, preset } = thePreset(oneInstrument([steady('Half', 0.5)], [[[GEN.initialAttenuation, 200], [GEN.sampleID, 0]]]));
+
+    expect(howLoudThePresetIs(font, preset)).toBeCloseTo(decibels(0.5) - 20, 1);
+  });
+
+  it('hears only the first second of a recording', () => {
+    const recording: FileSample = {
+      name: 'Dies',
+      points: [...Array.from({ length: 100 }, () => 16_384), ...Array.from({ length: 300 }, () => 0)],
+      sampleRate: 100,
+    };
+    const { font, preset } = thePreset(oneInstrument([recording], [[[GEN.sampleID, 0]]]));
+
+    expect(howLoudThePresetIs(font, preset)).toBeCloseTo(decibels(0.5), 1);
+  });
+
+  it('takes a key as the mean of the zones sounding it, left and right', () => {
+    const { font, preset } = thePreset(
+      oneInstrument([steady('Left', 0.5), steady('Right', 0.25)], [[[GEN.pan, -500], [GEN.sampleID, 0]], [[GEN.pan, 500], [GEN.sampleID, 1]]]),
+    );
+
+    expect(howLoudThePresetIs(font, preset)).toBeCloseTo(10 * Math.log10((0.5 ** 2 + 0.25 ** 2) / 2), 1);
+  });
+
+  it('is the middle of its keys by loudness, the loudest and the quietest counting for no more than any other', () => {
+    const { font, preset } = thePreset(
+      oneInstrument(
+        [steady('Lowest', 0.1), steady('Middle', 0.5), steady('Top', 0.25)],
+        [
+          [[GEN.keyRange, range(0, 9)], [GEN.sampleID, 0]],
+          [[GEN.keyRange, range(10, 69)], [GEN.sampleID, 1]],
+          [[GEN.keyRange, range(70, 127)], [GEN.sampleID, 2]],
+        ],
+      ),
+    );
+
+    // Ten keys at the quietest, 58 between and 60 at the loudest: the middle
+    // two of the 128 by loudness are both between - though the keys in the
+    // middle of the keyboard are the loudest.
+    expect(howLoudThePresetIs(font, preset)).toBeCloseTo(decibels(0.25), 1);
+  });
+
+  it('is between the middle two where the keys are even in number', () => {
+    const { font, preset } = thePreset(
+      oneInstrument(
+        [steady('Low', 0.5), steady('High', 0.25)],
+        [
+          [[GEN.keyRange, range(0, 63)], [GEN.sampleID, 0]],
+          [[GEN.keyRange, range(64, 127)], [GEN.sampleID, 1]],
+        ],
+      ),
+    );
+
+    expect(howLoudThePresetIs(font, preset)).toBeCloseTo((decibels(0.5) + decibels(0.25)) / 2, 1);
+  });
+
+  it('is the middle key itself where the keys are odd in number', () => {
+    const { font, preset } = thePreset(
+      oneInstrument(
+        [steady('Low', 0.5), steady('High', 0.1)],
+        [
+          [[GEN.keyRange, range(0, 1)], [GEN.sampleID, 0]],
+          [[GEN.keyRange, range(2, 2)], [GEN.sampleID, 1]],
+        ],
+      ),
+    );
+
+    expect(howLoudThePresetIs(font, preset)).toBeCloseTo(decibels(0.5), 1);
+  });
+
+  it('is heard where the keys are struck hardest', () => {
+    const { font, preset } = thePreset(
+      oneInstrument(
+        [steady('Soft', 0.5), steady('Hard', 0.1)],
+        [
+          [[GEN.velRange, range(0, 100)], [GEN.sampleID, 0]],
+          [[GEN.velRange, range(101, 127)], [GEN.sampleID, 1]],
+        ],
+      ),
+    );
+
+    expect(howLoudThePresetIs(font, preset)).toBeCloseTo(decibels(0.1), 1);
+  });
+
+  it('is nothing where it covers no key, or is silent on all of them', () => {
+    const silent = thePreset(oneInstrument([steady('Nothing', 0)], [[[GEN.sampleID, 0]]]));
+    const none = thePreset(oneInstrument([steady('A', 0.5)], [[[GEN.velRange, range(0, 100)], [GEN.sampleID, 0]]]));
+
+    expect(howLoudThePresetIs(silent.font, silent.preset)).toBeNull();
+    expect(howLoudThePresetIs(none.font, none.preset)).toBeNull();
+    expect(evenedWithTheBuiltInPiano(none.font, none.preset)).toBe(1);
+  });
+
+  it('is turned to sound as loud as the built-in piano, down or up', () => {
+    const loud = thePreset(oneInstrument([steady('Loud', 0.5)], [[[GEN.sampleID, 0]]]));
+    const quiet = thePreset(oneInstrument([steady('Quiet', 0.04)], [[[GEN.sampleID, 0]]]));
+
+    expect(decibels(0.5) + decibels(evenedWithTheBuiltInPiano(loud.font, loud.preset))).toBeCloseTo(-25.6, 1);
+    expect(decibels(0.04) + decibels(evenedWithTheBuiltInPiano(quiet.font, quiet.preset))).toBeCloseTo(-25.6, 1);
+  });
+
+  it('is turned up no more than four times, however quiet it was recorded', () => {
+    const faint = thePreset(oneInstrument([steady('Faint', 0.001)], [[[GEN.sampleID, 0]]]));
+
+    expect(evenedWithTheBuiltInPiano(faint.font, faint.preset)).toBe(4);
   });
 });
 
@@ -477,7 +614,9 @@ describe('a key sounded from a soundfont', () => {
     strike(sounds, context, { velocity: 0.75, level: 0.5 });
 
     const rise = context.gains[0]?.gain.events.find((event) => event.kind === 'linear');
-    expect(rise?.value).toBeCloseTo(0.5 * 0.75 ** 2 * 0.1, 10);
+    const font = readSoundFont(writeSoundFont(aPiano()));
+    const evened = font.presets[0] === undefined ? Number.NaN : evenedWithTheBuiltInPiano(font, font.presets[0]);
+    expect(rise?.value).toBeCloseTo(0.5 * 0.75 * 0.1 * evened, 10);
   });
 
   it('rises from nothing as it is struck and falls to where it settles, on the audio clock', () => {
@@ -493,9 +632,11 @@ describe('a key sounded from a soundfont', () => {
     const events = context.gains[0]?.gain.events ?? [];
     expect(events[0]).toEqual({ kind: 'set', value: 0, time: 5 });
     const risen = 5 + 2 ** (-12_000 / 1_200) + 0.002;
-    expect(events.find((event) => event.kind === 'linear')?.time).toBeCloseTo(risen, 10);
+    const rise = events.find((event) => event.kind === 'linear');
+    expect(rise?.time).toBeCloseTo(risen, 10);
+    // Forty decibels below its peak.
     const fall = events.find((event) => event.kind === 'exponential');
-    expect(fall?.value).toBeCloseTo(0.01, 10);
+    expect((fall?.value ?? 0) / (rise?.value ?? 1)).toBeCloseTo(0.01, 10);
     expect(fall?.time).toBeCloseTo(risen + 1 + 0.4, 10);
   });
 
@@ -549,9 +690,11 @@ describe('a key sounded from a soundfont', () => {
 
     const gain = context.gains[0]?.gain;
     expect(gain?.cancelledFrom).toBeCloseTo(at, 10);
+    const peak = gain?.events.find((event) => event.kind === 'linear')?.value ?? 1;
     const [from, fall] = gain?.events.slice(-2) ?? [];
     expect(from?.kind).toBe('set');
-    expect(from?.value).toBeCloseTo(0.1, 6);
+    // Twenty decibels below its peak.
+    expect((from?.value ?? 0) / peak).toBeCloseTo(0.1, 6);
     expect(from?.time).toBeCloseTo(at, 10);
     // Eighty of the hundred decibels left, of a two-second release.
     expect(fall?.kind).toBe('exponential');

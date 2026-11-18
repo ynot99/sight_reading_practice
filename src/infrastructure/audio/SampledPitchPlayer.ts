@@ -17,7 +17,7 @@ import {
   unplug,
 } from './audioTime.js';
 import { timeTheStart } from '../../shared/timeTheStart.js';
-import type { KeySounds, Strike, Voice } from './keySound.js';
+import { loudnessFor, type KeySounds, type Strike, type Voice } from './keySound.js';
 import type { SoundFont, SoundFontPreset } from './soundFont.js';
 import { SoundFontSounds } from './soundFontSounds.js';
 import { noteANoteHanded, noteAnEvent } from '../../shared/playbackTimings.js';
@@ -325,9 +325,7 @@ export class SampledPitchPlayer
     source.buffer = buffer;
     source.playbackRate.value = playbackRateFor(choice.semitones);
 
-    // The floor is where a note stops being heard at all rather than where
-    // it stops being loud: `ppp` is meant to be nearly nothing.
-    const peak = level * Math.max(0.05, velocity);
+    const peak = level * loudnessFor(velocity);
     // Brightness with loudness. The recordings are one velocity layer, so a
     // quiet note is the same recording turned down - which the ear hears as
     // the same note, not as a quieter touch. Rolling the top off it is the

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { IPitchPlayer, SampleLoading } from '../../src/application/ports/IPitchPlayer.js';
 import { SampledPitchPlayer } from '../../src/infrastructure/audio/SampledPitchPlayer.js';
 import { AudioClockReading } from '../../src/infrastructure/audio/audioTime.js';
+import { loudnessFor } from '../../src/infrastructure/audio/keySound.js';
 import { beginThePlaybackTimings, thePlaybackTimingsText } from '../../src/shared/playbackTimings.js';
 import { theLatestPlayback } from '../support/playbackTimings.js';
 import {
@@ -481,6 +482,18 @@ describe('SampledPitchPlayer', () => {
     expect(context.sources).toHaveLength(0);
     // The stand-in follows the same slider, so the sound cannot jump.
     expect(fallback.volume).toBe(0);
+  });
+
+  it('sounds a key as loud as the rule every instrument shares, the softest still heard', async () => {
+    const { player, context } = createPlayer();
+    await player.load();
+
+    player.play(60, 0.5);
+    player.play(64, 0.01);
+
+    const peaks = context.gains.map((gain) => gain.gain.ramps.find((ramp) => ramp.value > 0.001)?.value);
+    expect(peaks).toEqual([loudnessFor(0.5), loudnessFor(0.01)]);
+    expect(loudnessFor(0.01)).toBeGreaterThan(0);
   });
 
   describe('when to download', () => {

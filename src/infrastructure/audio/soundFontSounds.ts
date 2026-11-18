@@ -1,4 +1,4 @@
-import type { KeySounds, Strike, Voice } from './keySound.js';
+import { loudnessFor, type KeySounds, type Strike, type Voice } from './keySound.js';
 import type { MidiRange, SoundFont, SoundFontPreset, SoundSettings, SoundZone } from './soundFont.js';
 import { takeBack, unplug } from './audioTime.js';
 
@@ -109,14 +109,76 @@ export function releaseFrom(envelope: Envelope, level: number): number {
 }
 
 /**
- * How loud a key struck this hard sounds, as a share of the hardest: the
- * square of how hard, which is the curve the format's own rule from strength
- * to loudness follows near enough - forty decibels between the softest touch
- * that sounds and the hardest.
+ * How loud the built-in piano's recordings are: over the 88 keys, the median
+ * of how loud the first second of the recording each key plays is, in
+ * decibels of full scale. Measured from the files in `public/samples/piano`.
  */
-export function loudnessForVelocity(velocity: number): number {
-  const how = Math.min(1, Math.max(0, velocity));
-  return how * how;
+export const THE_BUILT_IN_PIANO_DB = -25.6;
+
+/**
+ * The most a soundfont is turned up to sound as loud as the built-in piano.
+ * One recorded very quietly is mostly its own noise, and turned up without
+ * end it would be that noise, loud.
+ */
+const MOST_TURNED_UP = 4;
+
+/** How much of a recording its loudness is heard from: its first second, where a struck note is loudest. */
+const HEARD_OVER_SEC = 1;
+
+/**
+ * How loud a preset is: the same measure as the built-in piano's, taken
+ * over the keys it covers where they are struck hardest, each key the mean
+ * of its zones there - left and right, or one in the middle - with their
+ * attenuation. `null` where it covers no key or is silent on all of them.
+ *
+ * The hardest stroke because that is where a soundfont's layers are least
+ * its author's shading: the softer ones are turned down and dulled on
+ * purpose, and that is the instrument and stays.
+ */
+export function howLoudThePresetIs(font: SoundFont, preset: SoundFontPreset): number | null {
+  const known = new Map<SoundZone, number>();
+  const powerOf = (zone: SoundZone): number => {
+    let power = known.get(zone);
+    if (power === undefined) {
+      const length = Math.min(zone.end - zone.start, Math.round(zone.sampleRate * HEARD_OVER_SEC));
+      let sum = 0;
+      for (let index = 0; index < length; index += 1) {
+        const point = (font.sampleData[zone.start + index] ?? 0) / 32_768;
+        sum += point * point;
+      }
+      power = length > 0 ? (sum / length) * gainFor(zone.settings.initialAttenuation) ** 2 : 0;
+      known.set(zone, power);
+    }
+    return power;
+  };
+  const keys: number[] = [];
+  for (let midi = 0; midi <= 127; midi += 1) {
+    const zones = preset.zones.filter((zone) => covers(zone.keys, midi) && covers(zone.velocities, 127));
+    const power = zones.reduce((sum, zone) => sum + powerOf(zone), 0) / zones.length;
+    if (zones.length > 0 && power > 0) {
+      keys.push(10 * Math.log10(power));
+    }
+  }
+  if (keys.length === 0) {
+    return null;
+  }
+  keys.sort((one, other) => one - other);
+  const middle = keys.length / 2;
+  return keys.length % 2 === 1
+    ? (keys[Math.floor(middle)] ?? 0)
+    : ((keys[middle - 1] ?? 0) + (keys[middle] ?? 0)) / 2;
+}
+
+/**
+ * What a preset is turned by to sound as loud as the built-in piano at the
+ * same setting of the slider: a soundfont's recordings are each made as loud
+ * as they can be, which measured nine decibels over the built-in piano's,
+ * and a reader changing what the keys sound as has not asked for them
+ * louder.
+ */
+export function evenedWithTheBuiltInPiano(font: SoundFont, preset: SoundFontPreset): number {
+  const loud = howLoudThePresetIs(font, preset);
+  return loud === null ? 1 : Math.min(MOST_TURNED_UP, 10 ** ((THE_BUILT_IN_PIANO_DB - loud) / 20));
 }
 
 /** The ratio a recording is played at: the cents from its own key to the one struck, and every tuning the zone says. */
@@ -174,12 +236,15 @@ interface ZoneSound {
 export class SoundFontSounds implements KeySounds {
   private readonly font: SoundFont;
   readonly preset: SoundFontPreset;
+  /** What every zone is turned by to sound as loud as the built-in piano: see `evenedWithTheBuiltInPiano`. */
+  private readonly evened: number;
   private readonly recordings = new Map<string, AudioBuffer | null>();
   private recordingsFor: BaseAudioContext | null = null;
 
   constructor(font: SoundFont, preset: SoundFontPreset) {
     this.font = font;
     this.preset = preset;
+    this.evened = evenedWithTheBuiltInPiano(font, preset);
   }
 
   strike({ context, midi, velocity, at, level, ended }: Strike): Voice | null {
@@ -240,7 +305,7 @@ export class SoundFontSounds implements KeySounds {
     }
 
     const shape = theEnvelope(settings, struck.midi);
-    const peak = struck.level * loudnessForVelocity(struck.velocity) * gainFor(settings.initialAttenuation);
+    const peak = struck.level * loudnessFor(struck.velocity) * gainFor(settings.initialAttenuation) * this.evened;
     const envelope = context.createGain();
     shapeTheEnvelope(envelope.gain, struck.at, shape, peak);
 

@@ -34,3 +34,19 @@ export interface Strike {
 export interface KeySounds {
   strike(strike: Strike): Voice | null;
 }
+
+/**
+ * How loud a key struck this hard sounds, as a share of the hardest: in step
+ * with how hard, down to a twentieth - where a note stops being heard at all
+ * rather than where it stops being loud, since `ppp` is meant to be nearly
+ * nothing.
+ *
+ * One rule for every instrument, so a dynamic means the same loudness
+ * whatever the keys sound as. A soundfont's own rule is the square of how
+ * hard, which made its `ff` about four decibels louder against its `mf`
+ * than the built-in piano's, and its `pp` six quieter: changing the sound
+ * of the keys changed how loud the reading was.
+ */
+export function loudnessFor(velocity: number): number {
+  return Math.max(0.05, velocity);
+}

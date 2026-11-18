@@ -52,7 +52,7 @@ import {
   IndexedDbScoreStore,
   browserIndexedDb,
 } from '../infrastructure/storage/IndexedDbScoreStore.js';
-import { openShelf, openShelfDatabase } from '../infrastructure/storage/DatabaseShelf.js';
+import { openShelf, openShelfDatabase, type ShelfDatabase } from '../infrastructure/storage/DatabaseShelf.js';
 import { GoogleDrive, loadGoogleIdentity } from '../infrastructure/cloud/GoogleDrive.js';
 import { LibrarySync } from '../application/LibrarySync.js';
 import { SettingsSync } from '../application/SettingsSync.js';
@@ -141,6 +141,8 @@ import { VerovioScoreRenderer } from '../infrastructure/rendering/verovio/Verovi
 import { engraverInAWorker } from '../infrastructure/rendering/verovio/workerLine.js';
 import { SystemClock } from '../infrastructure/time/SystemClock.js';
 import type { IClock } from '../application/ports/IClock.js';
+import type { ISoundFontShelf } from '../application/ports/ISoundFontShelf.js';
+import { SoundFontShelf } from '../infrastructure/audio/SoundFontShelf.js';
 
 export interface AppRuntimeOptions {
   readonly scoreContainer: HTMLElement;
@@ -166,6 +168,8 @@ export interface AppRuntimeOptions {
   readonly fileSink?: IFileSink;
   /** Where the piano samples live; resolved against the page by default. */
   readonly sampleBaseUrl?: string;
+  /** Where a soundfont of the reader's own is kept; for the visit only where there is none. */
+  readonly soundFontDatabase?: ShelfDatabase | null;
 }
 
 /**
@@ -311,6 +315,8 @@ export interface AppRuntime {
   readonly metronomeClick: IClickOnce;
   readonly metronomeVolume: IVolumeControl;
   readonly instrumentVolume: IVolumeControl;
+  /** A soundfont of the reader's own, and which of its presets the keys sound from. */
+  readonly soundFonts: ISoundFontShelf;
   dispose(): void;
 }
 
@@ -326,6 +332,8 @@ export interface KeptShelves {
   readonly takes: ISettingsStore;
   readonly sketches: ISettingsStore;
   readonly history: ISettingsStore;
+  /** The database itself, for what is too large to be read before the page is up: a soundfont. */
+  readonly database: ShelfDatabase | null;
 }
 
 /**
@@ -343,6 +351,7 @@ export async function openTheShelves(): Promise<KeptShelves> {
     takes: await openShelf(database, local, TAKES_STORAGE_KEY),
     sketches: await openShelf(database, local, SKETCHES_STORAGE_KEY),
     history: await openShelf(database, local, HISTORY_STORAGE_KEY),
+    database,
   };
 }
 
@@ -388,6 +397,9 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     fallback: new WebAudioPitchPlayer(audioContextFactory, { reading }),
     reading,
   });
+  // Read after the page is up: until then the keys sound from the piano above.
+  const soundFonts = new SoundFontShelf(options.soundFontDatabase ?? null, pitchPlayer);
+  void soundFonts.open();
   const hitSound = new WebAudioHitSound(audioContextFactory, () => pitchPlayer.volume, { reading });
   const drumKit = new WebAudioDrumKit(audioContextFactory, () => pitchPlayer.volume, { reading });
 
@@ -662,6 +674,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     metronomeClick: metronome,
     metronomeVolume: metronome,
     instrumentVolume: pitchPlayer,
+    soundFonts,
     dispose(): void {
       controller.dispose();
       takeOnOffer.dispose();

@@ -2298,6 +2298,22 @@
             </div>
           </div>
 
+          <!--
+            Where the keys get their sound: the piano that comes with the
+            app, or a preset of a soundfont of the reader's own, kept on this
+            device. Adding one is the last choice of the same list, so the
+            question stays one control.
+          -->
+          <div class="control-group" data-pane="sound">
+            <label for="instrument-sound">Notes sound as</label>
+            <select id="instrument-sound">
+              <option value="built-in">Built-in piano</option>
+              <option value="add">Add a soundfont (.sf2)…</option>
+            </select>
+            <input id="soundfont-file" type="file" accept=".sf2" hidden />
+            <p id="instrument-sound-hint" class="hint"></p>
+          </div>
+
           <div class="control-group" data-pane="sound">
             <label for="sample-loading">Piano samples</label>
             <select id="sample-loading">

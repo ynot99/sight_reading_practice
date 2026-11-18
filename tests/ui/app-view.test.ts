@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 import { A_LOUDNESS_HEARD_EVERY_MS } from '../../src/ui/loudnessHeard.js';
+import { SoundFontShelf } from '../../src/infrastructure/audio/SoundFontShelf.js';
+import { MemoryShelfDatabase, RecordingFontInstrument } from '../support/soundFontShelf.js';
+import { GEN, writeSoundFont } from '../support/soundFontFile.js';
 import { theScaleComplex } from '../../src/domain/solfege/scaleComplex.js';
 import { readFileSync } from 'node:fs';
 import type { CloudFile, ICloudDrive } from '../../src/application/ports/ICloudDrive.js';
@@ -253,6 +256,8 @@ interface Rig {
   readonly instrumentVolume: FakeVolume;
   readonly sustain: FakeSustain;
   readonly samples: FakeSampleLibrary;
+  readonly soundFonts: SoundFontShelf;
+  readonly fontInstrument: RecordingFontInstrument;
   readonly recorder: PerformanceRecorder;
   readonly volumeKnob: ControlBinding;
   readonly metronomeKnob: ControlBinding;
@@ -362,8 +367,11 @@ function createRig(
   store: InMemorySettingsStore = new InMemorySettingsStore(),
   scoreStore: InMemoryScoreStore = new InMemoryScoreStore(),
   drillStore: InMemorySettingsStore = new InMemorySettingsStore(),
+  fontDatabase: MemoryShelfDatabase = new MemoryShelfDatabase(),
 ): Rig {
   const clock = new ManualClock();
+  const fontInstrument = new RecordingFontInstrument();
+  const soundFonts = new SoundFontShelf(fontDatabase, fontInstrument);
   const midi = new MockMidiAdapter({ clock });
   const metronome = new ManualMetronome(clock);
   const renderer = new FakeScoreRenderer();
@@ -558,6 +566,7 @@ function createRig(
     metronomeClick: metronome,
     metronomeVolume,
     instrumentVolume,
+    soundFonts,
     dispose: () => undefined,
   };
 
@@ -582,6 +591,8 @@ function createRig(
     instrumentVolume,
     sustain,
     samples,
+    soundFonts,
+    fontInstrument,
     recorder,
     volumeKnob,
     metronomeKnob,
@@ -18147,6 +18158,7 @@ describe('AppView', () => {
       expect(inPane('sound')).toEqual([
         'instrument-volume',
         'sound-metronome-volume',
+        'instrument-sound',
         'sample-loading',
         'audio-feedback',
         'cursor-listening',
@@ -23009,6 +23021,153 @@ describe('AppView', () => {
 
       expect(second.runtime.controller.settings.zoom).toBe(1.2);
       expect(element<HTMLInputElement>('zoom').value).toBe('120');
+    });
+  });
+
+  describe('the instrument the keys sound from', () => {
+    /** A soundfont of two presets, as a file the reader picks. */
+    function aSoundFontFile(name = 'akai.sf2'): File {
+      const bytes = writeSoundFont({
+        samples: [{ name: 'A', points: [1, 2, 3, 4] }],
+        instruments: [{ name: 'Only', zones: [[[GEN.sampleID, 0]]] }],
+        presets: [
+          { name: 'piano2', bank: 0, program: 1, zones: [[[GEN.instrument, 0]]] },
+          { name: 'piano1', bank: 0, program: 0, zones: [[[GEN.instrument, 0]]] },
+        ],
+      });
+      return new File([bytes.slice().buffer], name);
+    }
+
+    /** What the file box's value was set to, which a browser keeps and jsdom does not. */
+    let valuesSet: string[] = [];
+
+    function pick(file: File): Promise<void> {
+      const input = element<HTMLInputElement>('soundfont-file');
+      Object.defineProperty(input, 'files', { value: [file], configurable: true });
+      valuesSet = [];
+      Object.defineProperty(input, 'value', {
+        get: () => `C:\\fakepath\\${file.name}`,
+        set: (value: string) => valuesSet.push(value),
+        configurable: true,
+      });
+      input.dispatchEvent(new Event('change'));
+      return vi.waitFor(() => {
+        expect(element('instrument-sound-hint').textContent).not.toMatch(/^Reading/);
+      });
+    }
+
+    function listed(): string[] {
+      return [...element<HTMLSelectElement>('instrument-sound').options].map((option) => option.textContent ?? '');
+    }
+
+    it('offers the built-in piano and a way to add a soundfont, the piano sounding', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+
+      expect(listed()).toEqual(['Built-in piano', 'Add a soundfont (.sf2)…']);
+      expect(element<HTMLSelectElement>('instrument-sound').value).toBe('built-in');
+      expect(element('instrument-sound').closest('[data-pane~="sound"]')).not.toBeNull();
+    });
+
+    it('asks for a file when adding one is chosen, and goes back to what sounds', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      const input = element<HTMLInputElement>('soundfont-file');
+      let asked = 0;
+      input.addEventListener('click', () => (asked += 1));
+      const list = element<HTMLSelectElement>('instrument-sound');
+
+      list.value = 'add';
+      list.dispatchEvent(new Event('change'));
+
+      expect(asked).toBe(1);
+      expect(list.value).toBe('built-in');
+    });
+
+    it('keeps the soundfont picked and sounds its first preset, listing every one', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+
+      await pick(aSoundFontFile());
+
+      expect(listed()).toEqual(['Built-in piano', 'akai - piano1', 'akai - piano2', 'Add a soundfont (.sf2)…']);
+      expect(element<HTMLSelectElement>('instrument-sound').value).toBe('preset:0:0');
+      expect(rig.fontInstrument.sounding).toBe('piano1');
+      expect(element('instrument-sound-hint').textContent).toContain('Played from akai');
+      // Cleared, so the same file picked again is still a change.
+      expect(valuesSet).toEqual(['']);
+    });
+
+    it('sounds the preset chosen from the list, and the built-in piano again', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      await pick(aSoundFontFile());
+      const list = element<HTMLSelectElement>('instrument-sound');
+
+      list.value = 'preset:0:1';
+      list.dispatchEvent(new Event('change'));
+      expect(rig.fontInstrument.sounding).toBe('piano2');
+
+      list.value = 'built-in';
+      list.dispatchEvent(new Event('change'));
+      expect(rig.fontInstrument.sounding).toBeNull();
+      expect(element('instrument-sound-hint').textContent).toBe('');
+    });
+
+    it('dims the download of the piano recordings while a soundfont sounds, saying why', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      const samples = element('sample-loading').closest<HTMLElement>('.control-group');
+
+      await pick(aSoundFontFile());
+      expect(samples?.dataset['idle']).toBe('true');
+      expect(samples?.title).toContain('soundfont');
+
+      rig.soundFonts.choose(null);
+      expect(samples?.dataset['idle']).toBeUndefined();
+      expect(samples?.hasAttribute('title')).toBe(false);
+    });
+
+    it('says why a file was refused, and the instrument stays as it was', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+
+      await pick(new File(['<score-partwise/>'], 'notes.sf2'));
+
+      expect(element('instrument-sound-hint').textContent).toContain('not a soundfont');
+      expect(listed()).toEqual(['Built-in piano', 'Add a soundfont (.sf2)…']);
+      expect(rig.fontInstrument.used).toEqual([]);
+    });
+
+    it('shows a soundfont read before the page is drawn', async () => {
+      const fontDatabase = new MemoryShelfDatabase();
+      const first = createRig(undefined, undefined, undefined, undefined, fontDatabase);
+      await first.view.initialize();
+      await pick(aSoundFontFile());
+
+      mountRealMarkup();
+      const second = createRig(undefined, undefined, undefined, undefined, fontDatabase);
+      await second.soundFonts.open();
+      await second.view.initialize();
+
+      expect(listed()).toContain('akai - piano2');
+      expect(element<HTMLSelectElement>('instrument-sound').value).toBe('preset:0:0');
+    });
+
+    it('shows the soundfont kept on an earlier visit once it has been read', async () => {
+      const fontDatabase = new MemoryShelfDatabase();
+      const first = createRig(undefined, undefined, undefined, undefined, fontDatabase);
+      await first.view.initialize();
+      await pick(aSoundFontFile());
+
+      mountRealMarkup();
+      const second = createRig(undefined, undefined, undefined, undefined, fontDatabase);
+      await second.view.initialize();
+      expect(listed()).toEqual(['Built-in piano', 'Add a soundfont (.sf2)…']);
+      await second.soundFonts.open();
+
+      expect(listed()).toContain('akai - piano1');
+      expect(element<HTMLSelectElement>('instrument-sound').value).toBe('preset:0:0');
     });
   });
 

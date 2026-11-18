@@ -610,6 +610,8 @@ import { DrivesNewerCopy } from './drivesNewerCopy.js';
 import { reportToTheConsole } from './reportToTheConsole.js';
 import { SketchVersionsSheet } from './sketchVersionsSheet.js';
 import { LoudnessHeard } from './loudnessHeard.js';
+import type { PresetChoice } from '../application/ports/ISoundFontShelf.js';
+import { SightReadingError } from '../shared/errors.js';
 import { keepTheTrail, timeTheStart, traceTheStart } from '../shared/timeTheStart.js';
 import { noteAFrame, noteTheFramesStopped, thePlaybackTimingsText } from '../shared/playbackTimings.js';
 
@@ -646,6 +648,22 @@ const THE_WAY_ROUND_SHOWN = 4;
 
 /** How long a chord tapped in the lane sounds at most: long enough to be heard as a chord, short of a bar of one. */
 const A_CHORD_TAPPED_SOUNDS_MS = 1_200;
+
+/** What the instrument list says for the piano that comes with the app, and for adding a soundfont. */
+const BUILT_IN_PIANO = 'built-in';
+const ADD_A_SOUNDFONT = 'add';
+
+/** A preset of the kept soundfont as the instrument list says it. */
+function presetValue(preset: PresetChoice): string {
+  return `preset:${String(preset.bank)}:${String(preset.program)}`;
+}
+
+function presetChosen(value: string): PresetChoice | null {
+  const [, bank, program] = value.split(':').map(Number);
+  return bank === undefined || program === undefined || Number.isNaN(bank) || Number.isNaN(program)
+    ? null
+    : { bank, program };
+}
 
 /** The key a loudness being set is heard on: middle C, where the piano's middle is. */
 const A_LOUDNESS_HEARD_KEY = 60;
@@ -2981,6 +2999,9 @@ export class AppView {
     cursorListening: HTMLInputElement;
     cursorRest: HTMLInputElement;
     sampleLoading: HTMLSelectElement;
+    instrumentSound: HTMLSelectElement;
+    soundFontFile: HTMLInputElement;
+    instrumentSoundHint: HTMLElement;
     sampleLoadingHint: HTMLElement;
     networkState: HTMLElement;
     metronomeVolume: HTMLInputElement;
@@ -3475,6 +3496,9 @@ export class AppView {
       cursorListening: requireElement(doc, 'cursor-listening'),
       cursorRest: requireElement(doc, 'cursor-rest'),
       sampleLoading: requireElement(doc, 'sample-loading'),
+      instrumentSound: requireElement(doc, 'instrument-sound'),
+      soundFontFile: requireElement(doc, 'soundfont-file'),
+      instrumentSoundHint: requireElement(doc, 'instrument-sound-hint'),
       sampleLoadingHint: requireElement(doc, 'sample-loading-hint'),
       networkState: requireElement(doc, 'network-state'),
       metronomeVolume: requireElement(doc, 'metronome-volume'),
@@ -5401,6 +5425,15 @@ export class AppView {
     this.listen(this.el.sampleLoading, 'change', () => {
       this.applySampleLoading(readSampleLoading(this.el.sampleLoading.value));
     });
+
+    this.listen(this.el.instrumentSound, 'change', () => {
+      this.chooseTheInstrument(this.el.instrumentSound.value);
+    });
+    this.listen(this.el.soundFontFile, 'change', () => {
+      void this.keepTheSoundFont();
+    });
+    this.subscriptions.push(this.runtime.soundFonts.onChange(() => this.showTheInstrument()));
+    this.showTheInstrument();
 
     // Two sliders for the metronome's loudness, one in its sheet and one
     // beside the notes' in Sound. Either one moved is the value, and the
@@ -8535,6 +8568,75 @@ export class AppView {
   }
 
   /** Applies and remembers when the recordings should be fetched. */
+  /**
+   * The instruments the keys may sound from: the built-in piano, every
+   * preset of the soundfont kept, and a way to add one - the one chosen
+   * showing, and `said` under them where something was refused.
+   *
+   * The piano's own recordings are not played while a soundfont is, so
+   * whether to download them says nothing then: dimmed, with the reason.
+   */
+  private showTheInstrument(said?: string): void {
+    const { kept, chosen } = this.runtime.soundFonts;
+    const select = this.el.instrumentSound;
+    const option = (value: string, text: string): HTMLOptionElement => {
+      const made = select.ownerDocument.createElement('option');
+      made.value = value;
+      made.textContent = text;
+      return made;
+    };
+    select.replaceChildren(
+      option(BUILT_IN_PIANO, 'Built-in piano'),
+      ...(kept?.presets.map((preset) => option(presetValue(preset), `${kept.name} - ${preset.name}`)) ?? []),
+      option(ADD_A_SOUNDFONT, 'Add a soundfont (.sf2)…'),
+    );
+    select.value = chosen === null ? BUILT_IN_PIANO : presetValue(chosen);
+    this.el.instrumentSoundHint.textContent =
+      said ??
+      (chosen === null || kept === null
+        ? ''
+        : `Played from ${kept.name}, kept on this device. A soundfont added takes its place.`);
+
+    const samples = this.el.sampleLoading.closest('.control-group');
+    if (samples instanceof HTMLElement) {
+      if (chosen === null) {
+        delete samples.dataset['idle'];
+        samples.removeAttribute('title');
+      } else {
+        samples.dataset['idle'] = 'true';
+        samples.title = 'Not played while the keys sound from a soundfont.';
+      }
+    }
+  }
+
+  private chooseTheInstrument(value: string): void {
+    if (value === ADD_A_SOUNDFONT) {
+      // The list goes back to what sounds now: adding is asked for here,
+      // and is not itself an instrument.
+      this.showTheInstrument();
+      this.el.soundFontFile.click();
+      return;
+    }
+    this.runtime.soundFonts.choose(value === BUILT_IN_PIANO ? null : presetChosen(value));
+  }
+
+  /** The soundfont the reader picked, kept in place of the one before, or why it could not be. */
+  private async keepTheSoundFont(): Promise<void> {
+    const [file] = [...(this.el.soundFontFile.files ?? [])];
+    // Cleared so that choosing the same file twice still fires a change.
+    this.el.soundFontFile.value = '';
+    if (file === undefined) {
+      return;
+    }
+    this.el.instrumentSoundHint.textContent = `Reading ${file.name}…`;
+    try {
+      await this.runtime.soundFonts.keep(file.name, await file.arrayBuffer());
+    } catch (error) {
+      reportToTheConsole(`Could not keep ${file.name}.`, error);
+      this.showTheInstrument(error instanceof SightReadingError ? error.message : `${file.name} could not be read.`);
+    }
+  }
+
   private applySampleLoading(mode: SampleLoading): void {
     this.el.sampleLoading.value = mode;
     this.el.sampleLoadingHint.textContent = SAMPLE_LOADING_HINTS[mode];

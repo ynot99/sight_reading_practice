@@ -24,6 +24,7 @@ async function bootstrap(): Promise<void> {
     takeStore: shelves.takes,
     sketchStore: shelves.sketches,
     historyStore: shelves.history,
+    soundFontDatabase: shelves.database,
     // The DOM's overloaded listener signature is wider than the port needs.
     keyboardTarget: document as unknown as KeyboardTarget,
     location: window.location,

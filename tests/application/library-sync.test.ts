@@ -137,6 +137,42 @@ describe('keeping the library the same on every device', () => {
     expect(kept?.stars).toBe(4);
   });
 
+  it('carries how hard a piece looks with its document, as a newer document brings its own', async () => {
+    const { drive, device } = await devices();
+    const pc = await device([score('Shellwood', { howHardItLooks: 5.2 })]);
+    await pc.sync.sync();
+    expect(drive.index()[0]).toMatchObject({ title: 'Shellwood', howHardItLooks: 5.2 });
+
+    const ipad = await device([]);
+    const [shellwood] = (await ipad.sync.sync()).onlyOnTheDrive;
+    if (shellwood === undefined) {
+      throw new Error('listed');
+    }
+    await ipad.sync.bringHere(shellwood);
+    expect((await ipad.store.read('score:Shellwood'))?.howHardItLooks).toBe(5.2);
+
+    // Imported again on the computer, from a file changed since.
+    await pc.store.write(score('Shellwood', { savedAtMs: 4_000, howHardItLooks: 6.4 }));
+    await pc.sync.sync();
+    await ipad.sync.sync();
+    expect((await ipad.store.read('score:Shellwood'))?.howHardItLooks).toBe(6.4);
+  });
+
+  it('reads how hard a piece looks off the drive only where it is a number', async () => {
+    const { drive, device } = await devices();
+    await (await device([score('Shellwood', { howHardItLooks: 5.2 })])).sync.sync();
+    const index = drive.index().map((entry) => ({ ...entry, howHardItLooks: 'hard' }));
+    drive.files.set('library.json', {
+      id: drive.files.get('library.json')?.id ?? 'index',
+      content: JSON.stringify({ version: 1, scores: index }),
+    });
+
+    const [shellwood] = (await (await device([])).sync.sync()).onlyOnTheDrive;
+
+    expect(shellwood?.title).toBe('Shellwood');
+    expect(shellwood).not.toHaveProperty('howHardItLooks');
+  });
+
   it('takes the newer word on the marks, from whichever side said it', async () => {
     const { device } = await devices();
     const pc = await device([score('Shellwood', { stars: 3, markedAtMs: 2_000 })]);

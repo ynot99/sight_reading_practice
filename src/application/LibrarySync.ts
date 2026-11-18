@@ -21,6 +21,8 @@ export interface DriveScore {
   readonly passages: readonly SavedPassage[];
   readonly clickPattern?: ClickPattern;
   readonly stars?: number;
+  /** How hard the document looks from its notes: carried with it, as `bars` is. */
+  readonly howHardItLooks?: number;
   /** The document's file on the drive, by name. */
   readonly file: string;
 }
@@ -204,6 +206,7 @@ function theSettlingOf(mine: StoredScoreSummary, theirs: DriveScore | undefined)
     id: mine.id,
     title: document.title,
     bars: document.bars,
+    ...(document.howHardItLooks === undefined ? {} : { howHardItLooks: document.howHardItLooks }),
     savedAtMs: document.savedAtMs,
     openedAtMs: Math.max(mine.openedAtMs, theirs?.openedAtMs ?? 0),
     markedAtMs: Math.max(markedAt(mine), theirs?.markedAtMs ?? 0),
@@ -296,6 +299,7 @@ function readIndex(text: string): Map<string, DriveScore> {
       passages: (score.passages as unknown[]).filter(isPassage),
       ...(click === undefined ? {} : { clickPattern: click }),
       ...(typeof score.stars === 'number' ? { stars: score.stars } : {}),
+      ...(typeof score.howHardItLooks === 'number' ? { howHardItLooks: score.howHardItLooks } : {}),
     });
   }
   return read;

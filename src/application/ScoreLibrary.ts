@@ -4,8 +4,15 @@ import type { IMusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.
 import type { ClickPattern } from './ports/IMetronome.js';
 import type { IScoreImporter } from './ports/IScoreImporter.js';
 import { timeTheStart } from '../shared/timeTheStart.js';
-import type { IScoreStore, SavedPassage, StoredScoreSummary } from './ports/IScoreStore.js';
+import type { IScoreStore, SavedPassage, StoredScore, StoredScoreSummary } from './ports/IScoreStore.js';
 import type { IKeepsTheStore } from './ports/IStorageGauge.js';
+import { howHardItLooks } from '../domain/difficulty/howHardItLooks.js';
+
+/** How hard a score looks from its notes, to be kept with it, where they say anything. */
+function lookingAs(exercise: Exercise): { readonly howHardItLooks?: number } {
+  const looks = howHardItLooks(exercise);
+  return looks === null ? {} : { howHardItLooks: looks };
+}
 
 /**
  * What the reader wants in front of them when the page opens.
@@ -65,14 +72,36 @@ export function theStarBand(stars: number): number {
   return Math.min(HARDEST_STARS, Math.max(EASIEST_STARS, Math.floor(stars)));
 }
 
+/** How hard a piece is, and who said so: the reader, or its notes. */
+export interface HowHard {
+  readonly stars: number;
+  readonly saidBy: 'the reader' | 'its notes';
+}
+
+/**
+ * How hard a piece is: what the reader said, or where they have said
+ * nothing, what its notes suggest. One number, so the row, the order of the
+ * shelf and the order of the readings cannot come to disagree about it.
+ */
+export function howHardItIs(score: StoredScoreSummary): HowHard | null {
+  if (score.stars !== undefined) {
+    return { stars: score.stars, saidBy: 'the reader' };
+  }
+  if (score.howHardItLooks !== undefined) {
+    return { stars: score.howHardItLooks, saidBy: 'its notes' };
+  }
+  return null;
+}
+
 /**
  * The shelf in the order asked for.
  *
- * A piece nobody has judged goes last in either difficulty order, never first
- * and never treated as nought: unmarked is not easy, and the reader looking for
- * something gentle would be handed the whole of what they have never opened.
- * Among equals, and among the unmarked, the recent order is what is left -
- * every row still has a reason to be where it is.
+ * A piece with no difficulty - nobody has judged it, and its notes have not
+ * been read for one yet - goes last in either difficulty order, never first
+ * and never treated as nought: unmarked is not easy, and the reader looking
+ * for something gentle would be handed what nothing is known about. Among
+ * equals, and among the unmarked, the recent order is what is left - every
+ * row still has a reason to be where it is.
  */
 export function scoresInOrder(
   scores: readonly StoredScoreSummary[],
@@ -84,10 +113,12 @@ export function scoresInOrder(
   }
   const harder = order === 'hardest' ? -1 : 1;
   return byRecent.sort((left, right) => {
-    if (left.stars === undefined || right.stars === undefined) {
-      return left.stars === right.stars ? 0 : left.stars === undefined ? 1 : -1;
+    const leftIs = howHardItIs(left)?.stars;
+    const rightIs = howHardItIs(right)?.stars;
+    if (leftIs === undefined || rightIs === undefined) {
+      return leftIs === rightIs ? 0 : leftIs === undefined ? 1 : -1;
     }
-    return (left.stars - right.stars) * harder;
+    return (leftIs - rightIs) * harder;
   });
 }
 
@@ -228,6 +259,7 @@ export class ScoreLibrary {
       // A piece re-imported keeps the stretches its reader marked out: the
       // file changed, the places they are learning did not.
       passages: this.summaries.find((summary) => summary.title === exercise.title)?.passages ?? [],
+      ...lookingAs(exercise),
     };
     await this.deps.store.write({
       ...summary,
@@ -250,7 +282,45 @@ export class ScoreLibrary {
     // second way in would be a second set of rules to keep in step.
     const { exercise } = this.deps.importer.read(stored.musicXml);
     timeTheStart('score: read as music');
+    await this.rememberHowHardItLooks(stored, exercise);
     return exercise;
+  }
+
+  /**
+   * How hard a kept score looks from its notes, read from them now where it
+   * was kept before that was worked out: once, and kept from then on.
+   */
+  async howHardItLooks(id: string): Promise<number | null> {
+    const known = this.summaries.find((summary) => summary.id === id)?.howHardItLooks;
+    if (known !== undefined) {
+      return known;
+    }
+    const stored = await this.deps.store.read(id);
+    if (stored === null) {
+      return null;
+    }
+    const { exercise } = this.deps.importer.read(stored.musicXml);
+    return this.rememberHowHardItLooks(stored, exercise);
+  }
+
+  /**
+   * Keeps how hard a score looks beside it, where it has not been yet: a
+   * piece kept before that was worked out is given it the first time its
+   * notes are read again, rather than all of them read at once on a visit.
+   */
+  private async rememberHowHardItLooks(stored: StoredScore, exercise: Exercise): Promise<number | null> {
+    if (stored.howHardItLooks !== undefined) {
+      return stored.howHardItLooks;
+    }
+    const looks = howHardItLooks(exercise);
+    if (looks === null) {
+      return null;
+    }
+    await this.deps.store.write({ ...stored, howHardItLooks: looks });
+    this.summaries = this.summaries.map((summary) =>
+      summary.id === stored.id ? { ...summary, howHardItLooks: looks } : summary,
+    );
+    return looks;
   }
 
   /**
@@ -408,9 +478,15 @@ export class ScoreLibrary {
     });
   }
 
-  /** How hard a score is said to be, or `null` where nobody has said. */
+  /** How hard the reader has said a score is, or `null` where they have not. */
   theStarsFor(title: string): number | null {
     return this.summaries.find((summary) => summary.title === title)?.stars ?? null;
+  }
+
+  /** How hard a score is, by the reader or by its notes: see `howHardItIs`. */
+  howHardIs(title: string): HowHard | null {
+    const found = this.summaries.find((summary) => summary.title === title);
+    return found === undefined ? null : howHardItIs(found);
   }
 
   /**

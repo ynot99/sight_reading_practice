@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { ScoreLibrary, scoresInOrder, theStarBand, theStarsIn } from '../../src/application/ScoreLibrary.js';
+import { howHardItIs, ScoreLibrary, scoresInOrder, theStarBand, theStarsIn } from '../../src/application/ScoreLibrary.js';
+import { howHardItLooks } from '../../src/domain/difficulty/howHardItLooks.js';
 import type { StoredScoreSummary } from '../../src/application/ports/IScoreStore.js';
 import { InMemoryScoreStore } from '../../src/application/ports/IScoreStore.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
@@ -29,9 +30,7 @@ function library(store = new InMemoryScoreStore()) {
 
 describe('how hard a piece is said to be', () => {
   it('keeps the reader own judgement with the piece', async () => {
-    // Theirs and nothing computed: a number worked out from the notes would be
-    // wrong about what actually makes a piece hard to read, and wrong with an
-    // authority nobody could argue with. His: "як в osu! від 1 до 10 зірочок".
+    // His: "як в osu! від 1 до 10 зірочок".
     const { scores } = library();
     const kept = await scores.keep(twoBarExercise({ title: 'City of Tears' }), 1_000);
 
@@ -67,6 +66,112 @@ describe('how hard a piece is said to be', () => {
     await later.scores.load();
 
     expect(later.scores.theStarsFor('City of Tears')).toBe(7.3);
+  });
+});
+
+describe('how hard a piece looks, where nobody has said', () => {
+  it('is worked out from the notes as a piece is kept, and kept with it', async () => {
+    const { scores, store } = library();
+    const exercise = twoBarExercise({ title: 'City of Tears' });
+
+    const kept = await scores.keep(exercise, 1_000);
+
+    const looks = howHardItLooks(exercise);
+    expect(looks).not.toBeNull();
+    expect(kept.howHardItLooks).toBe(looks);
+    expect((await store.read(kept.id))?.howHardItLooks).toBe(looks);
+    expect(scores.howHardIs('City of Tears')).toEqual({ stars: looks, saidBy: 'its notes' });
+  });
+
+  it('gives way to the reader, and comes back when their mark is taken off', async () => {
+    const { scores } = library();
+    const kept = await scores.keep(twoBarExercise({ title: 'City of Tears' }), 1_000);
+
+    await scores.keepTheStars(kept.id, 7.3, 2_000);
+    expect(scores.howHardIs('City of Tears')).toEqual({ stars: 7.3, saidBy: 'the reader' });
+
+    await scores.keepTheStars(kept.id, null, 3_000);
+    expect(scores.howHardIs('City of Tears')).toEqual({ stars: kept.howHardItLooks, saidBy: 'its notes' });
+  });
+
+  it('is read from the notes of a piece kept before it was worked out, once, as it is opened', async () => {
+    const store = new InMemoryScoreStore();
+    const first = library(store);
+    const kept = await first.scores.keep(twoBarExercise({ title: 'City of Tears' }), 1_000);
+    const stored = await store.read(kept.id);
+    const { howHardItLooks: _taken, ...older } = stored ?? kept;
+    await store.write({ ...older, musicXml: stored?.musicXml ?? '' });
+    const later = library(store);
+    await later.scores.load();
+    expect(later.scores.howHardIs('City of Tears')).toBeNull();
+
+    await later.scores.open(kept.id);
+
+    expect(later.scores.howHardIs('City of Tears')).toEqual({ stars: kept.howHardItLooks, saidBy: 'its notes' });
+    expect((await store.read(kept.id))?.howHardItLooks).toBe(kept.howHardItLooks);
+  });
+
+  it('is read from the notes when asked for, where it is not known, and not again', async () => {
+    const store = new InMemoryScoreStore();
+    const first = library(store);
+    const kept = await first.scores.keep(twoBarExercise({ title: 'City of Tears' }), 1_000);
+    const stored = await store.read(kept.id);
+    const { howHardItLooks: _taken, ...older } = stored ?? kept;
+    await store.write({ ...older, musicXml: stored?.musicXml ?? '' });
+    let reads = 0;
+    const counted = Object.assign(Object.create(store) as InMemoryScoreStore, {
+      read: (id: string) => {
+        reads += 1;
+        return store.read(id);
+      },
+    });
+    const later = library(counted);
+    await later.scores.load();
+
+    expect(await later.scores.howHardItLooks(kept.id)).toBe(kept.howHardItLooks);
+    expect(await later.scores.howHardItLooks(kept.id)).toBe(kept.howHardItLooks);
+    expect(reads).toBe(1);
+    expect(await later.scores.howHardItLooks('score:Nothing kept by this name')).toBeNull();
+  });
+});
+
+describe('how hard a piece is, by whoever said', () => {
+  const piece = (marks: Partial<StoredScoreSummary>): StoredScoreSummary => ({
+    id: 'score:Piece',
+    title: 'Piece',
+    savedAtMs: 0,
+    openedAtMs: 0,
+    bars: 2,
+    passages: [],
+    ...marks,
+  });
+
+  it('is the reader where they have said, the notes where only they have, and nothing else', () => {
+    expect(howHardItIs(piece({ stars: 2.5, howHardItLooks: 6.1 }))).toEqual({ stars: 2.5, saidBy: 'the reader' });
+    expect(howHardItIs(piece({ howHardItLooks: 6.1 }))).toEqual({ stars: 6.1, saidBy: 'its notes' });
+    expect(howHardItIs(piece({}))).toBeNull();
+  });
+
+  it('orders the shelf by it, the notes standing in for the reader, and the unknown last', () => {
+    const shelf = [
+      piece({ id: 'a', title: 'Unknown', openedAtMs: 4 }),
+      piece({ id: 'b', title: 'Looks hard', openedAtMs: 3, howHardItLooks: 8.2 }),
+      piece({ id: 'c', title: 'Said easy', openedAtMs: 2, stars: 1.5, howHardItLooks: 9.9 }),
+      piece({ id: 'd', title: 'Looks middling', openedAtMs: 1, howHardItLooks: 4.4 }),
+    ];
+
+    expect(scoresInOrder(shelf, 'easiest').map((score) => score.title)).toEqual([
+      'Said easy',
+      'Looks middling',
+      'Looks hard',
+      'Unknown',
+    ]);
+    expect(scoresInOrder(shelf, 'hardest').map((score) => score.title)).toEqual([
+      'Looks hard',
+      'Looks middling',
+      'Said easy',
+      'Unknown',
+    ]);
   });
 });
 

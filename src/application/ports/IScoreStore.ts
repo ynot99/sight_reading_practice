@@ -51,19 +51,20 @@ export interface StoredScoreSummary {
   /**
    * How hard the reader has said this piece is, from one to ten.
    *
-   * Their own judgement and nothing computed. A number this program worked out
-   * from the notes would be wrong about the thing that actually makes a piece
-   * hard to read - an awkward key, a hand that has to leap, a rhythm written
-   * across the beat - and it would be wrong with an authority the reader has no
-   * way to argue with. Theirs is the only number that knows what they find
-   * difficult.
-   *
-   * Absent where they have not said, which is not the same as easy: a shelf
-   * ordered by difficulty puts what nobody has judged at the end rather than at
-   * the bottom. His: "як в osu! від 1 до 10 зірочок... можна давати й проміжні
-   * значення як 2.2 2.3 2.7".
+   * Their own judgement, and it stands over `howHardItLooks`: the notes cannot
+   * know the reader's hands, or what they have played before. His: "як в osu!
+   * від 1 до 10 зірочок... можна давати й проміжні значення як 2.2 2.3 2.7".
    */
   readonly stars?: number;
+  /**
+   * How hard the piece looks from its notes, from one to ten: see
+   * `howHardItLooks`. The answer where the reader has given none.
+   *
+   * Worked out from the document and kept beside it, as `bars` is, so a list
+   * is drawn without reading every piece again. Absent on a piece kept before
+   * it was worked out, until it is next opened, and on one with no notes.
+   */
+  readonly howHardItLooks?: number;
   /**
    * When the reader last said something about it - its stars, its click, its
    * passages - on the wall clock.

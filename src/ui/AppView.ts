@@ -140,8 +140,10 @@ import {
 } from '../application/rhythmRuler.js';
 import { PLAYBACK_GOES_ON, PiecesInTurn, type PlaybackGoesOn } from '../application/PiecesInTurn.js';
 import {
+  howHardItIs,
   scoresInOrder,
   theStarBand,
+  type HowHard,
   theStarsIn,
   WHAT_OPENS,
   type ScoreOrder,
@@ -679,6 +681,14 @@ const SYNC_ENDING_SHOWN_MS = 1_000;
 
 /** What the pencil says where it begins a sketch of a take: in its viewer, and on the page written from it. */
 const BEGIN_A_SKETCH_OF_A_TAKE = 'Begin a sketch of this recording to edit; the recording stays as it was played';
+
+/** A score the drive has, by name and how hard it is - a hollow star where only its notes say. */
+function theTitleWithItsStars(score: DriveScore): string {
+  const hard = howHardItIs(score);
+  return hard === null
+    ? score.title
+    : `${score.title} · ${String(hard.stars)}${hard.saidBy === 'the reader' ? '★' : '☆'}`;
+}
 
 /**
  * What a sync did with the sketches, in a sentence: what went and came, and
@@ -3921,7 +3931,7 @@ export class AppView {
       : undefined;
     const through = this.el.readingsThrough.checked;
     const readings = best
-      ? history.bestReadings(50, piece, (key) => this.howHardThePieceIs(key), through)
+      ? history.bestReadings(50, piece, (key) => this.howHardThePieceIs(key)?.stars ?? null, through)
       : history.lastReadings(50, piece, through);
     this.el.readingsEmpty.hidden = readings.length > 0;
     // Whichever order, the list is empty only when nothing has been read:
@@ -4061,14 +4071,9 @@ export class AppView {
 
     const hard = this.howHardThePieceIs(reading.key);
     if (hard !== null) {
-      const stars = this.doc.createElement('span');
       // The shelf's own mark, colour and all: how hard a piece is has one
       // answer, and a second way of drawing it would drift from the first.
-      stars.className = 'scores__stars';
-      stars.dataset['band'] = String(theStarBand(hard));
-      stars.textContent = `★ ${hard.toFixed(1)}`;
-      stars.title = 'How hard you marked this piece';
-      marks.push(stars);
+      marks.push(this.aDifficultyMark(hard));
     }
 
     if (!reading.completed) {
@@ -4133,11 +4138,27 @@ export class AppView {
   }
 
   /** How hard the piece of a reading was marked, or nothing for one nobody marked. */
-  private howHardThePieceIs(key: string): number | null {
+  private howHardThePieceIs(key: string): HowHard | null {
     const [what = ''] = key.split(' bars:');
-    return what.startsWith('score:')
-      ? this.runtime.scores.theStarsFor(what.slice('score:'.length))
-      : null;
+    return what.startsWith('score:') ? this.runtime.scores.howHardIs(what.slice('score:'.length)) : null;
+  }
+
+  /**
+   * How hard a piece is, as the shelf draws it: a full star where the reader
+   * said so, a hollow one where only its notes have, so a guess never passes
+   * for a judgement. The colour is the band either way - the same difficulty
+   * is the same colour, whoever gave it.
+   */
+  private aDifficultyMark(hard: HowHard): HTMLSpanElement {
+    const stars = this.doc.createElement('span');
+    stars.className = 'scores__stars';
+    stars.dataset['band'] = String(theStarBand(hard.stars));
+    stars.textContent = `${hard.saidBy === 'the reader' ? '★' : '☆'} ${hard.stars.toFixed(1)}`;
+    stars.title =
+      hard.saidBy === 'the reader'
+        ? 'How hard you marked this piece'
+        : 'How hard its notes look: how many come in its busiest few seconds, and how long it is. A mark of your own stands over it.';
+    return stars;
   }
 
   /**
@@ -4348,17 +4369,12 @@ export class AppView {
       when.className = 'takes__when';
       when.textContent = describeWhen(score.openedAtMs, now);
 
-      // Nothing at all where nobody has said, rather than a nought or a dash:
-      // an unmarked piece and an easy one must not look alike, and the column
-      // keeps its width either way so the rows do not go ragged.
-      const stars = this.doc.createElement('span');
+      // Nothing at all where nothing is known, rather than a nought or a
+      // dash: an unmarked piece and an easy one must not look alike, and the
+      // column keeps its width either way so the rows do not go ragged.
+      const hard = howHardItIs(score);
+      const stars = hard === null ? this.doc.createElement('span') : this.aDifficultyMark(hard);
       stars.className = 'scores__stars';
-      stars.textContent = score.stars === undefined ? '' : `★ ${score.stars.toFixed(1)}`;
-      // Which colour it wears is the sheet's business; this says only which
-      // rung of the ladder the piece is on.
-      if (score.stars !== undefined) {
-        stars.dataset['band'] = String(theStarBand(score.stars));
-      }
 
       const open = this.doc.createElement('button');
       open.type = 'button';
@@ -9128,7 +9144,7 @@ export class AppView {
     list.replaceChildren(
       ...scores.map((score) =>
         this.anOfferFromTheDrive({
-          said: score.stars === undefined ? score.title : `${score.title} · ${String(score.stars)}★`,
+          said: theTitleWithItsStars(score),
           name: score.title,
           bring: () =>
             this.runtime.librarySync.bringHere(score).then(() => {
@@ -11013,16 +11029,17 @@ export class AppView {
    * Asks how hard a piece is, and keeps the answer with the piece.
    *
    * Nothing is written where the reader backs out, which is what makes Cancel
-   * different from Unrated: one leaves the mark as it was and the other takes
-   * it off. Two ways out of a dialog that both do nothing would be one too
-   * many. His: "кнопка щоб редагувати складність знаходиться у списку на
-   * кожному itemі".
+   * different from Auto: one leaves the mark as it was and the other takes
+   * the reader's off, leaving what the notes say. Two ways out of a dialog
+   * that both do nothing would be one too many. His: "кнопка щоб редагувати
+   * складність знаходиться у списку на кожному itemі".
    */
   private async judgeScore(id: string, title: string): Promise<void> {
     // Read now rather than captured when the row was drawn: the row outlives
     // the drawing of it, and a box opening on a mark the piece no longer has
     // is a box that quietly puts it back.
-    const wanted = await this.askHowHard(title, this.runtime.scores.theStarsFor(title));
+    const looks = await this.runtime.scores.howHardItLooks(id);
+    const wanted = await this.askHowHard(title, this.runtime.scores.theStarsFor(title) ?? looks, looks);
     if (wanted === 'left alone') {
       return;
     }
@@ -11031,12 +11048,17 @@ export class AppView {
   }
 
   /**
-   * The sheet that asks, answering with a number, `null` for unrated, or
-   * `'left alone'` where the reader backed out.
+   * The sheet that asks, answering with a number, `null` for what the notes
+   * say, or `'left alone'` where the reader backed out.
    */
-  private askHowHard(title: string, current: number | null): Promise<number | null | 'left alone'> {
+  private askHowHard(
+    title: string,
+    current: number | null,
+    looks: number | null,
+  ): Promise<number | null | 'left alone'> {
     this.el.starsText.textContent = `How hard is “${title}”, from one to ten?`;
     this.el.starsValue.value = current === null ? '' : current.toFixed(1);
+    this.el.starsNone.textContent = looks === null ? 'Auto' : `Auto · ${looks.toFixed(1)}`;
     this.showTheSheet(this.el.sheetStars);
     this.el.starsValue.focus();
     this.el.starsValue.select();

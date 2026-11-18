@@ -19005,14 +19005,23 @@ describe('AppView', () => {
       );
     }
 
+    /** Presses a row's star and waits for the sheet: it asks the notes first. */
+    async function askedHowHard(): Promise<void> {
+      rowButton('scores-list', 'How hard is this score?').click();
+      await waitFor(() => !element('sheet-stars').hidden);
+    }
+
+    const looksOf = (rig: Rig, title: string): number =>
+      rig.runtime.scores.list().find((score) => score.title === title)?.howHardItLooks ?? Number.NaN;
+
     it('asks the reader, and keeps what they say on the row', async () => {
       // His: "кнопка щоб редагувати складність знаходиться у списку на кожному
       // itemі", and the number is his - "від 1 до 10 зірочок... 2.2 2.3 2.7".
       const rig = createRig();
       await shelved(rig, ['City of Tears']);
-      expect(marks()).toEqual(['']);
+      expect(marks()).toEqual([`☆ ${looksOf(rig, 'City of Tears').toFixed(1)}`]);
 
-      rowButton('scores-list', 'How hard is this score?').click();
+      await askedHowHard();
       element<HTMLInputElement>('stars-value').value = '2.7';
       element<HTMLButtonElement>('stars-yes').click();
       await waitFor(() => rig.runtime.scores.theStarsFor('City of Tears') === 2.7);
@@ -19036,32 +19045,56 @@ describe('AppView', () => {
         (mark) => mark.getAttribute('data-band'),
       );
 
-      // Newest first, which is the order they were shelved in reverse.
-      expect(bands).toEqual([null, '9', '2']);
+      // Newest first, which is the order they were shelved in reverse; the
+      // one nobody judged wears the band its notes put it in.
+      expect(bands).toEqual([String(Math.floor(looksOf(rig, 'Unjudged'))), '9', '2']);
     });
 
-    it('takes the mark off again, which is not marking it easy', async () => {
+    it('takes the reader mark off with Auto, which says and leaves what the notes say', async () => {
       const rig = createRig();
       await shelved(rig, ['City of Tears']);
       const kept = rig.runtime.scores.list()[0];
       await rig.runtime.scores.keepTheStars(kept?.id ?? '', 9.4, 1_000);
+      const looks = looksOf(rig, 'City of Tears').toFixed(1);
 
-      rowButton('scores-list', 'How hard is this score?').click();
+      await askedHowHard();
+      expect(element('stars-none').textContent).toBe(`Auto · ${looks}`);
       element<HTMLButtonElement>('stars-none').click();
       await waitFor(() => rig.runtime.scores.theStarsFor('City of Tears') === null);
 
+      expect(marks()).toEqual([`☆ ${looks}`]);
+    });
+
+    it('works out how hard a piece kept before this looks as the box opens, and offers it', async () => {
+      const rig = createRig();
+      await rig.runtime.scores.keep(twoBarExercise({ title: 'City of Tears' }), 1_000);
+      const looks = looksOf(rig, 'City of Tears');
+      const stored = await rig.scoreStore.read('score:City of Tears');
+      if (stored === null) {
+        throw new Error('kept');
+      }
+      const { howHardItLooks: _taken, ...older } = stored;
+      await rig.scoreStore.write(older);
+      await rig.runtime.scores.load();
+      await rig.view.initialize();
+      await new Promise((resolve) => setTimeout(resolve, 0));
       expect(marks()).toEqual(['']);
+
+      await askedHowHard();
+
+      expect(element('stars-none').textContent).toBe(`Auto · ${looks.toFixed(1)}`);
+      expect(element<HTMLInputElement>('stars-value').value).toBe(looks.toFixed(1));
     });
 
     it('leaves the mark alone when the reader backs out', async () => {
-      // Which is the whole difference between Cancel and Unrated. Two ways out
+      // Which is the whole difference between Cancel and Auto. Two ways out
       // of a dialog that both do nothing would be one too many.
       const rig = createRig();
       await shelved(rig, ['City of Tears']);
       const kept = rig.runtime.scores.list()[0];
       await rig.runtime.scores.keepTheStars(kept?.id ?? '', 9.4, 1_000);
 
-      rowButton('scores-list', 'How hard is this score?').click();
+      await askedHowHard();
       element<HTMLInputElement>('stars-value').value = '1';
       element<HTMLButtonElement>('stars-no').click();
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -19070,15 +19103,15 @@ describe('AppView', () => {
       expect(element('sheet-stars').hidden).toBe(true);
     });
 
-    it('treats Set over an empty box as nothing to say, not as unrated', async () => {
-      // Unrated is a button of its own. Emptying the box and pressing Set is a
+    it('treats Set over an empty box as nothing to say, not as Auto', async () => {
+      // Auto is a button of its own. Emptying the box and pressing Set is a
       // reader who has not decided, and the mark they had stands.
       const rig = createRig();
       await shelved(rig, ['City of Tears']);
       const kept = rig.runtime.scores.list()[0];
       await rig.runtime.scores.keepTheStars(kept?.id ?? '', 9.4, 1_000);
 
-      rowButton('scores-list', 'How hard is this score?').click();
+      await askedHowHard();
       element<HTMLInputElement>('stars-value').value = '';
       element<HTMLButtonElement>('stars-yes').click();
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -19093,9 +19126,18 @@ describe('AppView', () => {
       const kept = rig.runtime.scores.list()[0];
       await rig.runtime.scores.keepTheStars(kept?.id ?? '', 9.4, 1_000);
 
-      rowButton('scores-list', 'How hard is this score?').click();
+      await askedHowHard();
 
       expect(element<HTMLInputElement>('stars-value').value).toBe('9.4');
+    });
+
+    it('opens the box on what the notes say, where the reader has said nothing', async () => {
+      const rig = createRig();
+      await shelved(rig, ['City of Tears']);
+
+      await askedHowHard();
+
+      expect(element<HTMLInputElement>('stars-value').value).toBe(looksOf(rig, 'City of Tears').toFixed(1));
     });
 
     it('orders the shelf by what the reader said, and remembers the order', async () => {
@@ -20216,6 +20258,19 @@ describe('AppView', () => {
       expect(row.querySelector('.pill--stopped')?.textContent).toBe('stopped at bar 12');
       expect(row.querySelector('.scores__stars')?.textContent).toBe('★ 4.5');
       expect(row.querySelector('.scores__stars')?.getAttribute('data-band')).not.toBeNull();
+    });
+
+    it('wears how hard the notes say a piece is, hollow, where the reader has said nothing', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      const kept = await rig.runtime.scores.keep(twoBarExercise({ title: 'Clair de Lune' }), 1_000);
+      rig.runtime.history.record('score:Clair de Lune', { atMs: Date.now(), overall: 0.4, grade: 'D', completed: true });
+
+      element<HTMLButtonElement>('focus-readings').click();
+
+      const mark = element('readings-list').querySelector('.scores__stars');
+      expect(mark?.textContent).toBe(`☆ ${(kept.howHardItLooks ?? Number.NaN).toFixed(1)}`);
+      expect(mark?.getAttribute('title')).toContain('notes');
     });
 
     it('lists only the readings played through when asked, and says where one picked up partway began', async () => {
@@ -25531,6 +25586,45 @@ describe('the library on Google Drive', () => {
     await waitFor(() => only.hidden === true);
 
     expect((await rig.scoreStore.read('score:City of Tears'))?.stars).toBe(4);
+  });
+
+  it('says how hard each score only the drive has is, a hollow star where only its notes say', async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+    const offeredScore = (title: string, marks: { stars?: number; howHardItLooks?: number }) => ({
+      id: `score:${title}`,
+      title,
+      bars: 8,
+      savedAtMs: 1_000,
+      openedAtMs: 1_000,
+      markedAtMs: 2_000,
+      passages: [],
+      file: `${title}.musicxml`,
+      ...marks,
+    });
+    await rig.drive.write('Said.musicxml', '<score/>', null);
+    await rig.drive.write('Looks.musicxml', '<score/>', null);
+    await rig.drive.write('Unknown.musicxml', '<score/>', null);
+    await rig.drive.write(
+      'library.json',
+      JSON.stringify({
+        version: 1,
+        scores: [
+          offeredScore('Said', { stars: 4, howHardItLooks: 6.1 }),
+          offeredScore('Looks', { howHardItLooks: 5.2 }),
+          offeredScore('Unknown', {}),
+        ],
+      }),
+      null,
+    );
+
+    element<HTMLButtonElement>('drive-sync').click();
+    await waitFor(() => element('drive-status').textContent?.startsWith('Synced') === true);
+
+    const said = [...element('drive-only').querySelectorAll('li')].map((row) => row.textContent ?? '');
+    expect(said.some((row) => row.includes('Said · 4★'))).toBe(true);
+    expect(said.some((row) => row.includes('Looks · 5.2☆'))).toBe(true);
+    expect(said.some((row) => row.includes('Unknown') && !row.includes('·'))).toBe(true);
   });
 
   it('offers a score only the drive has by two icons, and takes it off the drive when the word is typed', async () => {

@@ -609,6 +609,7 @@ import { DrumLoopEditing } from './drumLoopEditing.js';
 import { DrivesNewerCopy } from './drivesNewerCopy.js';
 import { reportToTheConsole } from './reportToTheConsole.js';
 import { SketchVersionsSheet } from './sketchVersionsSheet.js';
+import { LoudnessHeard } from './loudnessHeard.js';
 import { keepTheTrail, timeTheStart, traceTheStart } from '../shared/timeTheStart.js';
 import { noteAFrame, noteTheFramesStopped, thePlaybackTimingsText } from '../shared/playbackTimings.js';
 
@@ -645,6 +646,12 @@ const THE_WAY_ROUND_SHOWN = 4;
 
 /** How long a chord tapped in the lane sounds at most: long enough to be heard as a chord, short of a bar of one. */
 const A_CHORD_TAPPED_SOUNDS_MS = 1_200;
+
+/** The key a loudness being set is heard on: middle C, where the piano's middle is. */
+const A_LOUDNESS_HEARD_KEY = 60;
+
+/** How long that note sounds: let go of before the next may come, so each is heard on its own. */
+const A_LOUDNESS_NOTE_MS = 300;
 
 /** How long each note of a scale asked to be heard sounds before the next: brisk, as a scale is run up. */
 export const A_SCALE_NOTE_MS = 220;
@@ -2131,6 +2138,15 @@ export class AppView {
   private chordTappedSounds: readonly number[] = [];
   /** The scale asked to be heard while it runs: the timers of its notes to come, and the key down now. */
   private scaleHeard: { readonly timers: ReturnType<typeof setTimeout>[]; sounding: number | null } | null = null;
+  /** The notes' loudness heard as its slider is moved: see `soundTheLoudness`. */
+  private readonly notesLoudnessHeard = new LoudnessHeard((atMs) => {
+    this.runtime.pitchPlayer.play(A_LOUDNESS_HEARD_KEY, DYNAMIC_VELOCITY.mf, atMs);
+    this.runtime.pitchPlayer.stop(A_LOUDNESS_HEARD_KEY, atMs + A_LOUDNESS_NOTE_MS);
+  });
+  /** The click's, one for both its sliders, since they are one loudness. */
+  private readonly clickLoudnessHeard = new LoudnessHeard((atMs) => {
+    this.runtime.metronomeClick.click(atMs, 'beat');
+  });
   /**
    * A chord drafted on the keys under the circle to write over the chord of
    * the lane chosen - the one beginning where this says - as the pitches
@@ -5393,11 +5409,19 @@ export class AppView {
       this.listen(slider, 'input', () => {
         this.el.metronomeVolume.value = slider.value;
         this.applyVolumes(true);
+        this.soundTheLoudness(this.clickLoudnessHeard, slider, 'moved');
+      });
+      this.listen(slider, 'change', () => {
+        this.soundTheLoudness(this.clickLoudnessHeard, slider, 'letGo');
       });
     }
 
     this.listen(this.el.instrumentVolume, 'input', () => {
       this.applyVolumes(true);
+      this.soundTheLoudness(this.notesLoudnessHeard, this.el.instrumentVolume, 'moved');
+    });
+    this.listen(this.el.instrumentVolume, 'change', () => {
+      this.soundTheLoudness(this.notesLoudnessHeard, this.el.instrumentVolume, 'letGo');
     });
 
     for (const place of this.theKnobs()) {
@@ -8573,6 +8597,23 @@ export class AppView {
         computerKeyboard: this.el.computerKeyboard.checked,
       });
     }
+  }
+
+  /**
+   * A loudness heard while its slider is moved, so it is set by ear and not
+   * by its number.
+   *
+   * Not while anything is playing: the music is then sounding at that
+   * loudness already, and a note or a click dropped into it off the beat
+   * would be heard as a wrong one. Nor from a knob, which is turned with the
+   * other hand while playing, for the same reason - it writes the slider
+   * without the slider being moved.
+   */
+  private soundTheLoudness(heard: LoudnessHeard, slider: HTMLInputElement, how: 'moved' | 'letGo'): void {
+    if (this.somethingIsPlaying()) {
+      return;
+    }
+    heard[how](slider.value, this.runtime.clock.now());
   }
 
   private applyVolumes(persist: boolean): void {

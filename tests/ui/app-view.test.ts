@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { A_LOUDNESS_HEARD_EVERY_MS } from '../../src/ui/loudnessHeard.js';
 import { theScaleComplex } from '../../src/domain/solfege/scaleComplex.js';
 import { readFileSync } from 'node:fs';
 import type { CloudFile, ICloudDrive } from '../../src/application/ports/ICloudDrive.js';
@@ -23053,6 +23054,78 @@ describe('AppView', () => {
       expect(rig.metronomeVolume.volume).toBeCloseTo(0.8, 10);
       expect(inSound.value).toBe('80');
       expect(element<HTMLOutputElement>('sound-metronome-volume-value').value).toBe('80');
+    });
+
+    it("sounds the notes' loudness as its slider is dragged, a note at a time", async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      const slider = element<HTMLInputElement>('instrument-volume');
+      const from = rig.clock.now();
+      const before = rig.instrument.played.length;
+
+      for (const value of ['50', '45', '40', '35']) {
+        slider.value = value;
+        slider.dispatchEvent(new Event('input'));
+        rig.clock.advance(A_LOUDNESS_HEARD_EVERY_MS / 2);
+      }
+      slider.dispatchEvent(new Event('change'));
+
+      // The last value moved to fell inside a gap, so it is heard where the
+      // slider is let go of.
+      const struck = rig.instrument.played.slice(before);
+      expect(struck.map((note) => note.atMs)).toEqual([
+        from,
+        from + A_LOUDNESS_HEARD_EVERY_MS,
+        from + 2 * A_LOUDNESS_HEARD_EVERY_MS,
+      ]);
+      // Each let go of before the next, or the fallback tone holds it for ever.
+      for (const note of struck) {
+        const released = rig.instrument.stopped.find(
+          (stop) => stop.midi === note.midi && (stop.atMs ?? 0) > (note.atMs ?? 0),
+        );
+        expect(released?.atMs ?? Infinity).toBeLessThanOrEqual((note.atMs ?? 0) + A_LOUDNESS_HEARD_EVERY_MS);
+      }
+    });
+
+    it("sounds the click's loudness from either of its sliders, one gap between them", async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      const inTheSheet = element<HTMLInputElement>('metronome-volume');
+      const inSound = element<HTMLInputElement>('sound-metronome-volume');
+      const from = rig.clock.now();
+      const before = rig.metronome.clicks.length;
+
+      inTheSheet.value = '50';
+      inTheSheet.dispatchEvent(new Event('input'));
+      rig.clock.advance(100);
+      inSound.value = '40';
+      inSound.dispatchEvent(new Event('input'));
+      inSound.dispatchEvent(new Event('change'));
+
+      // One loudness, so one gap: the second slider waits for the first's
+      // click, and is heard where it was let go of.
+      expect(rig.metronome.clicks.slice(before).map((click) => click.atMs)).toEqual([
+        from,
+        from + A_LOUDNESS_HEARD_EVERY_MS,
+      ]);
+    });
+
+    it('sounds no loudness over a run, which is sounding at it already', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.runtime.controller.start();
+      const notes = rig.instrument.played.length;
+      const clicks = rig.metronome.clicks.length;
+
+      for (const id of ['instrument-volume', 'metronome-volume']) {
+        const slider = element<HTMLInputElement>(id);
+        slider.value = '20';
+        slider.dispatchEvent(new Event('input'));
+        slider.dispatchEvent(new Event('change'));
+      }
+
+      expect(rig.instrument.played.length).toBe(notes);
+      expect(rig.metronome.clicks.length).toBe(clicks);
     });
 
     it('draws the metronome slider in Sound from what was saved', async () => {

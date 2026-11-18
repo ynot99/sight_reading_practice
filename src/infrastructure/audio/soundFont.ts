@@ -64,7 +64,7 @@ export interface SoundZone {
   readonly loop: SoundLoop;
   /** The key it sounds as when played as recorded. */
   readonly rootKey: number;
-  /** Cents the recording is out by, to be taken back: the file's correction for it. */
+  /** Cents added to the recording's pitch as it is played: the file's correction of how it was recorded. */
   readonly correctionCents: number;
   /**
    * What the zone says about pitch, loudness, colour and shape, in the file's

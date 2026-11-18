@@ -17,6 +17,9 @@ import {
   unplug,
 } from './audioTime.js';
 import { timeTheStart } from '../../shared/timeTheStart.js';
+import type { KeySounds, Strike, Voice } from './keySound.js';
+import type { SoundFont, SoundFontPreset } from './soundFont.js';
+import { SoundFontSounds } from './soundFontSounds.js';
 import { noteANoteHanded, noteAnEvent } from '../../shared/playbackTimings.js';
 
 export type AudioFetcher = (url: string) => Promise<ArrayBuffer>;
@@ -66,15 +69,6 @@ export interface SampledPitchPlayerOptions {
 
 /** Fade applied at the end of a recording, which is cut rather than faded. */
 const END_FADE_SEC = 0.4;
-
-interface Voice {
-  readonly source: AudioBufferSourceNode;
-  readonly envelope: GainNode;
-  /** Level the envelope holds between attack and release. */
-  readonly peak: number;
-  /** When it begins, on the audio clock: later than now for a note handed over ahead. */
-  readonly startsAt: number;
-}
 
 /**
  * A real piano, from thirty recordings of one.
@@ -137,6 +131,10 @@ export class SampledPitchPlayer
    */
   private readonly sounding = new Set<Voice>();
   private readonly onFallback = new Set<number>();
+  /** The built-in recordings, as a source of the keys' sound like any other. */
+  private readonly theRecordings: KeySounds = { strike: (strike) => this.strikeTheRecording(strike) };
+  /** Where the keys get their sound: the built-in recordings unless another was chosen. */
+  private keySounds: KeySounds = this.theRecordings;
 
   /** Keys released while the pedal was down; the dampers are still up. */
   private readonly heldByPedal = new Set<number>();
@@ -197,6 +195,18 @@ export class SampledPitchPlayer
     if (mode === 'eager') {
       void this.load();
     }
+  }
+
+  /**
+   * Sounds the keys from one preset of a soundfont, or from the built-in
+   * recordings again for `null`.
+   *
+   * Whatever is sounding is let go of first: a note struck on one
+   * instrument and released on another would never be released.
+   */
+  useSoundFont(chosen: { readonly font: SoundFont; readonly preset: SoundFontPreset } | null): void {
+    this.stopAll();
+    this.keySounds = chosen === null ? this.theRecordings : new SoundFontSounds(chosen.font, chosen.preset);
   }
 
   get volume(): number {
@@ -268,29 +278,48 @@ export class SampledPitchPlayer
       );
       return;
     }
-    // First key press is what starts the download, so nothing is fetched for
-    // a reader who never turns the sound on.
-    void this.load();
     this.heldByPedal.delete(midi);
-
-    const choice = nearestSample(midi);
-    const buffer = this.buffers.get(choice.sample.midi);
-    if (buffer === undefined) {
-      timeTheStart('instrument: a note on the stand-in tone, the samples still loading');
-      this.onFallback.add(midi);
-      this.fallback.play(midi, velocity, atMs);
-      return;
-    }
 
     // Striking the key again re-hits the string, pedal or no pedal, so this
     // must not go through stop(), which would hand the voice to the pedal.
     // It happens when the new note sounds, not when it was handed over: a
     // playback hands notes a quarter of a second early, and damping the
     // ringing note *there* is a hole in the sound before every repeat.
+    let voice: Voice | null = null;
+    const ended = (): void => {
+      if (voice !== null && this.voices.get(midi) === voice) {
+        this.voices.delete(midi);
+      }
+      if (voice !== null) {
+        this.sounding.delete(voice);
+      }
+    };
+    voice = this.keySounds.strike({ context, midi, velocity, at: audioTimeFor(context, atMs, this.reading), level, ended });
+    if (voice === null) {
+      timeTheStart('instrument: a note on the stand-in tone, the samples still loading');
+      this.onFallback.add(midi);
+      this.fallback.play(midi, velocity, atMs);
+      return;
+    }
+    // The one ringing is still the key's until the new one is put there.
     this.releaseNow(midi, atMs);
     this.evictOldestIfFull();
+    timeTheStart('first note sounded');
+    this.voices.set(midi, voice);
+    this.sounding.add(voice);
+  }
 
-    const now = audioTimeFor(context, atMs, this.reading);
+  /** A key struck on the built-in recordings, or `null` while its recording has not arrived. */
+  private strikeTheRecording({ context, midi, velocity, at: now, level, ended }: Strike): Voice | null {
+    // First key press is what starts the download, so nothing is fetched for
+    // a reader who never turns the sound on.
+    void this.load();
+    const choice = nearestSample(midi);
+    const buffer = this.buffers.get(choice.sample.midi);
+    if (buffer === undefined) {
+      return null;
+    }
+
     const source = context.createBufferSource();
     const envelope = context.createGain();
     source.buffer = buffer;
@@ -324,17 +353,25 @@ export class SampledPitchPlayer
       source.connect(tone).connect(envelope).connect(context.destination);
     }
     source.start(now);
-    timeTheStart('first note sounded');
-    const voice: Voice = { source, envelope, peak, startsAt: now };
     source.onended = () => {
-      if (this.voices.get(midi)?.source === source) {
-        this.voices.delete(midi);
-      }
-      this.sounding.delete(voice);
       unplug(source, ...(tone === null ? [] : [tone]), envelope);
+      ended();
     };
-    this.voices.set(midi, voice);
-    this.sounding.add(voice);
+    const releaseSec = this.options.releaseSec;
+    return {
+      startsAt: now,
+      release: (at, current) => {
+        try {
+          beginRelease(envelope.gain, at, releaseSec, { now: current, peak });
+          source.stop(at + releaseSec + 0.02);
+        } catch {
+          // The source had already finished on its own.
+        }
+      },
+      takeBack: (current) => {
+        takeBack(source, envelope, current);
+      },
+    };
   }
 
   stop(midi: number, atMs?: number): void {
@@ -359,7 +396,7 @@ export class SampledPitchPlayer
       return;
     }
     this.voices.delete(midi);
-    this.release(voice, audioTimeFor(this.context, atMs, this.reading));
+    voice.release(audioTimeFor(this.context, atMs, this.reading), this.context.currentTime);
   }
 
   stopAll(): void {
@@ -379,9 +416,9 @@ export class SampledPitchPlayer
     for (const voice of [...this.sounding]) {
       this.sounding.delete(voice);
       if (voice.startsAt > now) {
-        takeBack(voice.source, voice.envelope, now);
+        voice.takeBack(now);
       } else {
-        this.release(voice, now);
+        voice.release(now, now);
       }
     }
   }
@@ -399,21 +436,8 @@ export class SampledPitchPlayer
     for (const voice of [...this.sounding]) {
       if (voice.startsAt > from) {
         this.sounding.delete(voice);
-        takeBack(voice.source, voice.envelope, now);
+        voice.takeBack(now);
       }
-    }
-  }
-
-  private release(voice: Voice, now: number): void {
-    const release = this.options.releaseSec;
-    try {
-      beginRelease(voice.envelope.gain, now, release, {
-        now: this.context?.currentTime ?? now,
-        peak: voice.peak,
-      });
-      voice.source.stop(now + release + 0.02);
-    } catch {
-      // The source had already finished on its own.
     }
   }
 

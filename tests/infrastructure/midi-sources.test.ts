@@ -273,18 +273,25 @@ describe('ComputerKeyboardMidiSource', () => {
   });
 
   describe('as pads', () => {
-    function withPads(inUse = true): ReturnType<typeof setup> & { struck: [number, number, number][]; use: (now: boolean) => void } {
+    function withPads(inUse = true): ReturnType<typeof setup> & {
+      struck: [number, number, number][];
+      letGo: [number, number][];
+      use: (now: boolean) => void;
+    } {
       const rig = setup();
       const struck: [number, number, number][] = [];
+      const letGo: [number, number][] = [];
       let using = inUse;
       rig.source.strikeThePadsWith({
         inUse: () => using,
         strike: (pad, velocity, atMs) => struck.push([pad, velocity, atMs]),
+        letGo: (pad, atMs) => letGo.push([pad, atMs]),
       });
       rig.source.enable();
       return {
         ...rig,
         struck,
+        letGo,
         use: (now) => {
           using = now;
         },
@@ -345,6 +352,55 @@ describe('ComputerKeyboardMidiSource', () => {
         ['noteoff', 48],
       ]);
       expect(struck.map(([pad]) => pad)).toEqual([1]);
+    });
+
+    it('lets a pad go as its key comes up, once, to what struck it whatever the keys are now', () => {
+      const { target, source, struck, letGo, events, clock, use } = withPads();
+      target.press('KeyQ');
+      target.press('KeyQ');
+      clock.set(400);
+      target.release('KeyQ');
+      target.release('KeyQ');
+      target.press('KeyW');
+      use(false);
+      clock.set(600);
+      target.release('KeyW');
+      // Down as the pads are taken away or given to another, let go of on what struck it.
+      use(true);
+      target.press('KeyE');
+      source.strikeThePadsWith(null);
+      target.release('KeyE');
+      const others: number[] = [];
+      source.strikeThePadsWith({ inUse: () => true, strike: () => undefined, letGo: (pad) => others.push(pad) });
+      target.release('KeyR');
+      source.strikeThePadsWith({
+        inUse: () => true,
+        strike: (pad, velocity, atMs) => struck.push([pad, velocity, atMs]),
+        letGo: (pad, atMs) => letGo.push([pad, atMs]),
+      });
+      target.press('KeyR');
+      source.strikeThePadsWith({ inUse: () => true, strike: () => undefined, letGo: (pad) => others.push(pad) });
+      target.release('KeyR');
+
+      expect(struck.map(([pad]) => pad)).toEqual([0, 1, 2, 3]);
+      expect(letGo).toEqual([
+        [0, 400],
+        [1, 600],
+        [2, 600],
+        [3, 600],
+      ]);
+      expect(others).toEqual([]);
+      expect(events).toEqual([]);
+    });
+
+    it('forgets the pads down when it is switched off, so a key is a pad again once it is back', () => {
+      const { target, source, struck } = withPads();
+      target.press('KeyQ');
+      source.disable();
+      source.enable();
+      target.press('KeyQ');
+
+      expect(struck.map(([pad]) => pad)).toEqual([0, 0]);
     });
 
     it('gives the keys back to the notes when the pads are taken away', () => {

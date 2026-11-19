@@ -2204,6 +2204,10 @@ export class AppView {
     readonly fromMs: number;
     readonly beginsAtMs: number;
     readonly played: MidiFileEvent[];
+    /** Recorded into the drums, struck on the letters of the computer keyboard, rather than into the notes from the keys. */
+    readonly drums: boolean;
+    /** Takes in a key struck or let go of, at a moment on the page's clock: see `recordIntoTheSketch`. */
+    readonly hear: (event: MidiFileEvent) => void;
     readonly clicks: readonly { readonly atMs: number; readonly weight: BeatWeight }[];
     nextClick: number;
     readonly stopListening: () => void;
@@ -8275,10 +8279,23 @@ export class AppView {
     // keyboard strike them, heard as its notes are: see `PAD_KEYS`.
     this.runtime.computerKeyboard.strikeThePadsWith({
       inUse: () => !this.el.sheetRoll.hidden && this.theDrumsAreWritten(),
-      strike: (pad, velocity) => {
+      strike: (pad, velocity, atMs) => {
         const drum = DRUM_KIT[pad];
-        if (drum !== undefined && this.audioFeedbackEnabled) {
+        if (drum === undefined) {
+          return;
+        }
+        if (this.audioFeedbackEnabled) {
           this.runtime.drumKit.play(drum.midi, velocity);
+        }
+        // Written as the drawing shows the drums: as keys, each drum its row.
+        if (this.recording?.drums === true) {
+          this.recording.hear({ kind: 'noteOn', atMs, midi: drum.midi, velocity });
+        }
+      },
+      letGo: (pad, atMs) => {
+        const drum = DRUM_KIT[pad];
+        if (drum !== undefined && this.recording?.drums === true) {
+          this.recording.hear({ kind: 'noteOff', atMs, midi: drum.midi });
         }
       },
     });
@@ -18083,13 +18100,16 @@ export class AppView {
    * sketch's pace and metre there, and then whatever is played, heard over
    * what is already written and the sketch's own beat. Nothing is written
    * until it stops: see `writeInWhatWasRecorded`.
+   *
+   * While the drums are written, what is recorded is the drums struck on
+   * the letters of the computer keyboard, and the keys are not: a key is no
+   * drum, and among the drums it would be a row of the kit by chance.
    */
   private recordIntoTheSketch(): void {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
-    // Played into the notes: the keys are no drums.
-    if (showing === null || sketch === undefined || !sketch.editing || sketch.drums || stored === null) {
+    if (showing === null || sketch === undefined || !sketch.editing || stored === null) {
       return;
     }
     if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
@@ -18118,24 +18138,43 @@ export class AppView {
     // A key struck a little before the first beat, as a downbeat often is, is the first beat's.
     const earliest = beginsAtMs - (beatMs > 0 ? beatMs / 2 : EARLY_BY_AT_MOST_MS);
     const played: MidiFileEvent[] = [];
-    const stopListening = this.runtime.midi.subscribe((event) => {
-      const atMs = event.timestampMs;
-      if (atMs < earliest) {
+    const hear = (event: MidiFileEvent): void => {
+      if (event.atMs < earliest) {
         return;
       }
-      if (event.type === 'noteon') {
-        played.push({ kind: 'noteOn', atMs: atMs - beginsAtMs, midi: event.midi, velocity: event.velocity });
-      } else if (event.type === 'noteoff') {
-        played.push({ kind: 'noteOff', atMs: atMs - beginsAtMs, midi: event.midi });
-      } else if (event.type === 'pedal') {
-        played.push({ kind: 'sustain', atMs: atMs - beginsAtMs, value: event.value });
-      }
+      played.push({ ...event, atMs: event.atMs - beginsAtMs });
       // Seen as it is played, not a tick later.
-      if (event.type === 'noteon' || event.type === 'noteoff') {
+      if (event.kind === 'noteOn' || event.kind === 'noteOff') {
         this.showWhatIsBeingRecorded();
       }
+    };
+    const drums = sketch.drums;
+    const stopListening = this.runtime.midi.subscribe((event) => {
+      if (drums) {
+        return;
+      }
+      const atMs = event.timestampMs;
+      if (event.type === 'noteon') {
+        hear({ kind: 'noteOn', atMs, midi: event.midi, velocity: event.velocity });
+      } else if (event.type === 'noteoff') {
+        hear({ kind: 'noteOff', atMs, midi: event.midi });
+      } else if (event.type === 'pedal') {
+        hear({ kind: 'sustain', atMs, value: event.value });
+      }
     });
-    this.recording = { sketchId: sketch.id, fromMs, beginsAtMs, played, clicks, nextClick: 0, stopListening, begins: null, tick: null };
+    this.recording = {
+      sketchId: sketch.id,
+      fromMs,
+      beginsAtMs,
+      played,
+      drums,
+      hear,
+      clicks,
+      nextClick: 0,
+      stopListening,
+      begins: null,
+      tick: null,
+    };
     const recording = this.recording;
     recording.begins = setTimeout(() => {
       recording.begins = null;
@@ -18194,7 +18233,7 @@ export class AppView {
     const recording = this.recording;
     const scene = this.drawnScene;
     const showing = this.theOtherRollShowing;
-    const stored = recording === null ? null : this.runtime.sketches.find(recording.sketchId);
+    const stored = recording === null ? null : this.theSketchAsDrawn(recording.sketchId);
     const now = this.runtime.clock.now() - (recording?.beginsAtMs ?? 0);
     this.notesBeingRecorded =
       recording === null || scene === null || showing === null || stored === null
@@ -18234,7 +18273,7 @@ export class AppView {
     const stoppedAtMs = this.runtime.clock.now() - recording.beginsAtMs;
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
-    const stored = this.runtime.sketches.find(recording.sketchId);
+    const stored = this.theSketchAsDrawn(recording.sketchId);
     this.sayWhetherItRecords();
     if (stoppedAtMs < 0 || showing === null || sketch === undefined || sketch.id !== recording.sketchId || stored === null) {
       this.describeTheRoll();
@@ -18254,18 +18293,14 @@ export class AppView {
   private sayWhetherItRecords(): void {
     const recording = this.recording !== null;
     const bars = this.runtime.controller.settings.countInBars;
+    const what = this.theDrumsAreWritten() ? 'Record the drums, struck on the letters Q to O or Z to the full stop,' : 'Record into the sketch';
     this.el.rollRecord.setAttribute('aria-pressed', String(recording));
     this.el.rollRecord.title = recording
       ? 'Stop recording, and write in what was played'
       : bars > 0
-        ? `Record into the sketch from the cursor, after ${String(bars)} ${bars === 1 ? 'bar' : 'bars'} counted in`
-        : 'Record into the sketch from the cursor';
-    // The keys are recorded into the notes, so not while the drums are written.
-    sayWhetherIdle(
-      this.el.rollRecord,
-      this.theDrumsAreWritten() && !recording ? `${this.el.rollRecord.title}. The keys go into the notes: back to them first.` : this.el.rollRecord.title,
-      this.theDrumsAreWritten() && !recording,
-    );
+        ? `${what} from the cursor, after ${String(bars)} ${bars === 1 ? 'bar' : 'bars'} counted in`
+        : `${what} from the cursor`;
+    this.el.rollRecord.setAttribute('aria-label', this.el.rollRecord.title);
   }
 
   /** Says on its switches whether the drums are written, and whether they are heard. */

@@ -63,6 +63,8 @@ export interface KeyPads {
   readonly inUse: () => boolean;
   /** A pad struck - its place along a row - this hard, at this moment on the page's clock. */
   strike(pad: number, velocity: number, atMs: number): void;
+  /** And its key let go of, which ends it where it is written down. */
+  letGo(pad: number, atMs: number): void;
 }
 
 export interface ComputerKeyboardOptions {
@@ -131,6 +133,8 @@ export class ComputerKeyboardMidiSource implements IMidiSource {
   private readonly velocity: number;
   private readonly held = new Set<string>();
   private pads: KeyPads | null = null;
+  /** The keys down as pads, each with what it struck, so it is let go of there whatever the keys have become since. */
+  private readonly padsHeld = new Map<string, { readonly pad: number; readonly on: KeyPads }>();
 
   private enabled = false;
   private readonly onKeyDown = (event: KeyboardEventLike): void => {
@@ -149,8 +153,9 @@ export class ComputerKeyboardMidiSource implements IMidiSource {
     // drums it would be a note nobody asked for.
     if (this.pads?.inUse() === true) {
       const pad = THE_PAD_OF_A_KEY.get(event.code);
-      if (pad !== undefined) {
+      if (pad !== undefined && !this.padsHeld.has(event.code)) {
         event.preventDefault();
+        this.padsHeld.set(event.code, { pad, on: this.pads });
         this.pads.strike(pad, this.velocity, theMomentOf(event, this.clock));
       }
       return;
@@ -179,6 +184,13 @@ export class ComputerKeyboardMidiSource implements IMidiSource {
    * while typing finds nothing to stop and stops nothing.
    */
   private readonly onKeyUp = (event: KeyboardEventLike): void => {
+    // A key is held as a pad or as a note, never both: one let go of as a
+    // pad finds no note held below.
+    const struck = this.padsHeld.get(event.code);
+    if (struck !== undefined) {
+      this.padsHeld.delete(event.code);
+      struck.on.letGo(struck.pad, theMomentOf(event, this.clock));
+    }
     const offset = this.keyMap[event.code];
     if (offset === undefined || !this.held.delete(event.code)) {
       return;
@@ -232,6 +244,7 @@ export class ComputerKeyboardMidiSource implements IMidiSource {
     this.target.removeEventListener('keydown', this.onKeyDown);
     this.target.removeEventListener('keyup', this.onKeyUp);
     this.held.clear();
+    this.padsHeld.clear();
     this.enabled = false;
   }
 }

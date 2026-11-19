@@ -7280,18 +7280,14 @@ describe('AppView', () => {
       expect(strip()).toEqual([...DRUM_KIT].reverse().map((drum) => drum.short));
       expect(element('roll-body').closest<HTMLElement>('.roll-stage')?.dataset['drums']).toBe('true');
       expect(view.rollScene?.notes).toEqual([]);
-      // What reads the notes as pitches waits for them.
-      expect([element('roll-chords-open').dataset['idle'], element('roll-record').dataset['idle']]).toEqual(['true', 'true']);
+      // What reads the notes as pitches waits for them; the recording is of the drums.
+      expect([element('roll-chords-open').dataset['idle'], element('roll-record').dataset['idle']]).toEqual(['true', undefined]);
       expect([view.rollScene?.scaleSpans, view.rollScene?.octaves, view.rollScene?.blackRows, litInTheScale()]).toEqual([[], [], [], 0]);
       // The chords are put away while the drums are written, and kept to come
-      // back to: not shut by a press there. Nor are the keys recorded among the drums.
+      // back to: not shut by a press there.
       expect(stage()?.dataset['chords']).toBe('false');
       element<HTMLButtonElement>('roll-chords-open').click();
-      element<HTMLButtonElement>('roll-record').click();
-      expect([element('roll-chords-open').getAttribute('aria-pressed'), element('roll-record').getAttribute('aria-pressed')]).toEqual([
-        'true',
-        'false',
-      ]);
+      expect(element('roll-chords-open').getAttribute('aria-pressed')).toBe('true');
 
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const highest = view.rollScene?.highest ?? 0;
@@ -7416,6 +7412,89 @@ describe('AppView', () => {
       expect(element('sheet-roll').hidden).toBe(true);
       typed('KeyQ');
       expect(heard()).toEqual({ drums: [], notes: [60] });
+    });
+
+    it('records the drums struck on the letters into the drums, and not the keys', async () => {
+      const { view, sketches, runtime, clock, midi } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ countInBars: 0 });
+      const sketch = sketches.begin(
+        {
+          events: [
+            { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: 400, midi: 60 },
+            // A clap written already, which a clap struck while it sounds is not written over.
+            { kind: 'drumOn' as const, atMs: 700, midi: 38, velocity: 0.5 },
+            { kind: 'drumOff' as const, atMs: 900, midi: 38 },
+          ],
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Drums',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      await editTheSketch();
+      const record = element<HTMLButtonElement>('roll-record');
+      expect(record.title).toBe('Record into the sketch from the cursor');
+      element<HTMLButtonElement>('roll-drums').click();
+      expect([record.dataset['idle'], record.title]).toEqual([
+        undefined,
+        'Record the drums, struck on the letters Q to O or Z to the full stop, from the cursor',
+      ]);
+      // A key on the page's clock as the test's clock says, its own stamp being none.
+      const key = (type: 'keydown' | 'keyup', code: string, atMs: number): void => {
+        clock.set(atMs);
+        const event = new KeyboardEvent(type, { bubbles: true, cancelable: true, code });
+        Object.defineProperty(event, 'timeStamp', { value: 0 });
+        document.body.dispatchEvent(event);
+      };
+      const kept = (): string[] =>
+        (sketches.find(sketch.id)?.events ?? []).flatMap((event) =>
+          event.kind === 'noteOn' || event.kind === 'drumOn' || event.kind === 'noteOff' || event.kind === 'drumOff'
+            ? [`${event.kind} ${String(event.midi)} ${String(event.atMs)}`]
+            : [],
+        );
+
+      vi.useFakeTimers();
+      try {
+        const pressedAt = clock.now();
+        record.click();
+        expect(record.getAttribute('aria-pressed')).toBe('true');
+        vi.advanceTimersByTime(0);
+        key('keydown', 'KeyW', pressedAt + 250);
+        // A key of the instrument, among the drums, is not recorded.
+        midi.noteOn(64, pressedAt + 300);
+        midi.noteOff(64, pressedAt + 350);
+        key('keyup', 'KeyW', pressedAt + 350);
+        key('keydown', 'KeyZ', pressedAt + 500);
+        key('keydown', 'KeyE', pressedAt + 800);
+        key('keyup', 'KeyE', pressedAt + 850);
+        // Seen as it is struck, on its row, one still down as far as now; the clap struck over the clap there, not at all.
+        expect(view.rollNotesBeingRecorded.map((note) => [(view.rollScene?.highest ?? 0) - note.row, note.fromMs, note.untilMs])).toEqual([
+          [37, 250, 350],
+          [36, 500, 850],
+        ]);
+        key('keyup', 'KeyZ', pressedAt + 900);
+        clock.set(pressedAt + 1_000);
+        record.click();
+      } finally {
+        vi.useRealTimers();
+      }
+
+      // Written in among the drums, the notes as they were: one change, put back as one.
+      expect(kept()).toEqual([
+        'noteOn 60 0',
+        'drumOn 37 250',
+        'drumOff 37 350',
+        'noteOff 60 400',
+        'drumOn 36 500',
+        'drumOn 38 700',
+        'drumOff 38 900',
+        'drumOff 36 900',
+      ]);
+      element<HTMLButtonElement>('roll-undo').click();
+      expect(kept()).toEqual(['noteOn 60 0', 'noteOff 60 400', 'drumOn 38 700', 'drumOff 38 900']);
     });
 
     it('gives the letters back to the notes as the view goes, with the drums written', async () => {

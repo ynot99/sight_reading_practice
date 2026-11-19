@@ -7050,7 +7050,10 @@ describe('AppView', () => {
       } finally {
         giveBack();
       }
-    });
+      // Its own time allowed: it opens the editor over the sketch written
+      // down, and paints a drawing given a size at every step - measured from
+      // 1.6 to 5.8 s on one machine in one day, by how busy it was.
+    }, 20_000);
 
     it('writes a note in the cell of the grid it is tapped in, never on or over another of its pitch', async () => {
       const { view, sketches, clock } = createRig();

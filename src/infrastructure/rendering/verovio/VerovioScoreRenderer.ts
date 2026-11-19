@@ -2139,6 +2139,7 @@ export class VerovioScoreRenderer
     const x = String((from + (to - from) * mark.fraction) * read.scale);
     const line = doc.createElementNS(SVG_NAMESPACE, 'line');
     line.setAttribute('class', `ruler-line ruler-line--${mark.weight}`);
+    line.dataset['depth'] = String(mark.depth);
     line.setAttribute('x1', x);
     line.setAttribute('x2', x);
     line.setAttribute('y1', String(system.top * read.scale));

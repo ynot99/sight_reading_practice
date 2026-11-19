@@ -1266,6 +1266,27 @@ describe('the stylesheet', () => {
     }
   });
 
+  it('colours the ruler by how deep into the beat a line lies, in no colour of a verdict and not the ink', () => {
+    // Each depth its own colour, read from the page's tokens so a dark page
+    // has its own; and none of them the ink of the bar lines and stems, nor
+    // red or yellow, which under a note would read as its mark.
+    const rules_ = rules();
+    const strokes = [0, 1, 2, 3].map(
+      (depth) => /stroke\s*:\s*var\((--[\w-]+)\)/.exec(rules_.find((rule) => rule.selector === `.ruler-line[data-depth='${String(depth)}']`)?.body ?? '')?.[1],
+    );
+    expect(strokes).toEqual(['--ink-muted', '--ruler-part', '--ruler-part-of-a-part', '--ruler-finer']);
+    const base = rules_.find((rule) => rule.selector === '.ruler-line');
+    expect(base?.body).not.toMatch(/(^|[^-])stroke\s*:/);
+    for (const token of ['--ruler-part', '--ruler-part-of-a-part', '--ruler-finer']) {
+      const values = [...CSS.matchAll(new RegExp(`${token}:\\s*(#[0-9a-f]+)`, 'g'))].map((match) => match[1]);
+      // Light, the system's dark and Dark's own.
+      expect(values).toHaveLength(3);
+      for (const value of values) {
+        expect(['#b91c1c', '#f87171', '#ca8a04', '#fde047', '#000000', '#d5dae2']).not.toContain(value);
+      }
+    }
+  });
+
   it('lets a touch through the middle of the page to the music under it', () => {
     // The card covering the score is transparent and covers all of it, so
     // taking touches would kill the two gestures the page is read with - a

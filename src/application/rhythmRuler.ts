@@ -68,6 +68,32 @@ function stepIn(
 /** What a ruled line is marking, which is how strongly it is drawn. */
 export type RulerWeight = 'downbeat' | 'beat' | 'division';
 
+/**
+ * How many times the beat is divided to reach a line: nought on a beat, one
+ * on its halves - its thirds in a compound metre - two on their halves, and
+ * three for anything finer. Which is the colour it is drawn in, so the
+ * rhythm a note stands on is seen by the line under it: a quaver off the
+ * beat in one colour, a semiquaver in another.
+ *
+ * Counted from the felt beat rather than named by note value: in six-eight
+ * the quavers are the beat's first parts, and named as quavers the second of
+ * each beat - a crotchet from the bar's start - would be drawn as a beat.
+ */
+export type RulerDepth = 0 | 1 | 2 | 3;
+
+/** How deep into its beat a moment so far into its bar lies: see `RulerDepth`. */
+function theDepthOf(into: number, timeSignature: TimeSignature): RulerDepth {
+  const pulse = timeSignature.ticksPerPulse;
+  if (into % pulse === 0) {
+    return 0;
+  }
+  const part = pulse / timeSignature.divisionsPerPulse;
+  if (into % part === 0) {
+    return 1;
+  }
+  return into % (part / 2) === 0 ? 2 : 3;
+}
+
 /** A line of the ruler at the moment a performance reaches it. */
 export interface RuledMoment {
   readonly weight: RulerWeight;
@@ -104,6 +130,7 @@ export interface RulerMark {
   /** Nought at `fromStep`, one at the far side. */
   readonly fraction: number;
   readonly weight: RulerWeight;
+  readonly depth: RulerDepth;
   /** The moment it stands for, which is what a marker running along it needs. */
   readonly ticks: number;
   /** The bar it is drawn in, whose right edge is the far side when there is no step. */
@@ -172,6 +199,7 @@ export function rulerMarksBetween(
         ticks: at,
         bar: bars.indexOf(bar),
         weight: into === 0 ? 'downbeat' : into % pulse === 0 ? 'beat' : 'division',
+        depth: theDepthOf(into, bar.timeSignature),
       });
     }
   }

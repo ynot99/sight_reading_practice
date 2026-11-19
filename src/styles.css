@@ -44,6 +44,15 @@
   --mark-wrong: #b91c1c;
   --mark-sounding: #7c3aed;
   --mark-extra: #6b7280;
+  /*
+   * The ruler's lines by how deep into the beat they lie: a beat grey,
+   * its first parts magenta, theirs blue, finer teal. Grey and not the ink,
+   * which is the bar lines' and the stems'; and none in a verdict's colour,
+   * red or yellow, which under a note would read as that note's mark.
+   */
+  --ruler-part: #c026d3;
+  --ruler-part-of-a-part: #2563eb;
+  --ruler-finer: #0d9488;
   --radius: 10px;
   --shadow: 0 1px 2px rgb(16 24 40 / 8%), 0 8px 24px rgb(16 24 40 / 6%);
   /*
@@ -172,6 +181,9 @@
     --mark-wrong: #f87171;
     --mark-sounding: #a78bfa;
     --mark-extra: #9ca3af;
+    --ruler-part: #e879f9;
+    --ruler-part-of-a-part: #60a5fa;
+    --ruler-finer: #2dd4bf;
   }
 }
 
@@ -225,6 +237,9 @@
   --mark-wrong: #f87171;
   --mark-sounding: #a78bfa;
   --mark-extra: #9ca3af;
+  --ruler-part: #e879f9;
+  --ruler-part-of-a-part: #60a5fa;
+  --ruler-finer: #2dd4bf;
 }
 
 /*
@@ -6601,7 +6616,6 @@ body[data-take-on-keys='true'] #take-off-the-keys {
  * drift apart.
  */
 .ruler-line {
-  stroke: var(--accent);
   stroke-width: 1.1px;
   /* Dashed, which is what tells a division from a beat at a glance - the two
      were only a shade apart in weight, and a shade is not a difference when
@@ -6620,6 +6634,26 @@ body[data-take-on-keys='true'] #take-off-the-keys {
   stroke-width: 3px;
   stroke-dasharray: none;
   opacity: calc(0.6 * var(--ruler-strength, 1));
+}
+
+/*
+ * Coloured by how deep into the beat a line lies, so the rhythm a note
+ * stands on is seen by the line under it: see `RulerDepth`.
+ */
+.ruler-line[data-depth='0'] {
+  stroke: var(--ink-muted);
+}
+
+.ruler-line[data-depth='1'] {
+  stroke: var(--ruler-part);
+}
+
+.ruler-line[data-depth='2'] {
+  stroke: var(--ruler-part-of-a-part);
+}
+
+.ruler-line[data-depth='3'] {
+  stroke: var(--ruler-finer);
 }
 
 /*

@@ -296,6 +296,19 @@ describe('the rhythm ruler', () => {
     expect(ruled[1]?.weight).toBe('beat');
   });
 
+  it('says on each line how deep into the beat it lies, for the colour it is drawn in', async () => {
+    const { renderer, surface } = await aScore(EIGHT_PRINTED);
+    const sixteenths = rulerMarks(buildTimeline(EIGHT), 'sixteenth', 'pulse');
+
+    renderer.showRhythmRuler(sixteenths);
+
+    const depths = [...(sheets(surface)[0]?.querySelectorAll<SVGLineElement>('g.rhythm-ruler line') ?? [])].map(
+      (line) => line.dataset['depth'],
+    );
+    expect(depths.slice(0, 4)).toEqual(['0', '2', '1', '2']);
+    expect(depths).toHaveLength(sixteenths.length);
+  });
+
   it('stands a line that falls on a note on that note', async () => {
     const { renderer, surface } = await aScore(EIGHT_PRINTED);
 
@@ -336,7 +349,7 @@ describe('the rhythm ruler', () => {
     const from = steps.map((step) => step.barId).lastIndexOf(lastOfFirst ?? '');
     expect(from).toBeGreaterThan(0);
 
-    renderer.showRhythmRuler([{ fromStep: from, toStep: from + 1, fraction: 0.5, weight: 'beat', ticks: 0, bar: 0 }]);
+    renderer.showRhythmRuler([{ fromStep: from, toStep: from + 1, fraction: 0.5, weight: 'beat', depth: 0, ticks: 0, bar: 0 }]);
 
     expect(lines(surface)).toHaveLength(0);
   });

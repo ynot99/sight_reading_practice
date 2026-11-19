@@ -132,6 +132,35 @@ describe('ruling the beat through the bars', () => {
       expect(ruled('notes')).toEqual(ruled('pulse'));
     });
 
+    it('says how deep into the beat each line lies, the quavers of six-eight its first parts', () => {
+      const deep = (division: Parameters<typeof rulerMarks>[1]): [number, number][] =>
+        rulerMarks(changing, division, 'pulse').map((mark) => [mark.ticks, mark.depth]);
+      const S = Duration.SIXTEENTH.ticks;
+      const T = S / 2;
+
+      // Four-four in thirty-seconds: the beat, its half, its quarters, the rest finer.
+      expect(deep('thirty-second').filter(([at]) => at < Duration.QUARTER.ticks)).toEqual([
+        [0, 0],
+        [T, 3],
+        [S, 2],
+        [S + T, 3],
+        [E, 1],
+        [E + T, 3],
+        [E + S, 2],
+        [E + S + T, 3],
+      ]);
+      // Six-eight in sixteenths: each quaver of the beat is a first part, a crotchet from the bar's start among them.
+      expect(deep('sixteenth').filter(([at]) => at >= BAR && at < BAR + 3 * E)).toEqual([
+        [BAR, 0],
+        [BAR + S, 2],
+        [BAR + E, 1],
+        [BAR + E + S, 2],
+        [BAR + 2 * E, 1],
+        [BAR + 2 * E + S, 2],
+      ]);
+      expect(deep('quarter').every(([, depth]) => depth === 0 || depth === 1)).toBe(true);
+    });
+
     it('leaves a ruler of note values as it was, whatever the click', () => {
       expect(rulerMarks(changing, 'eighth', 'subdivision')).toEqual(rulerMarks(changing, 'eighth', 'pulse'));
     });

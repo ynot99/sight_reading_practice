@@ -149,6 +149,7 @@ import type { SampleLoading } from '../../src/application/ports/IPitchPlayer.js'
 import { WebMidiAdapter } from '../../src/infrastructure/midi/WebMidiAdapter.js';
 import {
   A_SCALE_ARRIVES_MS,
+  BEATS_A_PACE_IS_HEARD_BY,
   A_SCALE_NOTE_MS,
   AppView,
   describeTendency,
@@ -27237,6 +27238,75 @@ describe('searching the settings', () => {
       view.CSS = hadCss;
     }
   });
+});
+
+describe('hearing a pace before it is chosen', () => {
+  beforeEach(() => {
+    mountRealMarkup();
+  });
+
+  // Beside each box a pace is written in: the sketch's own, and a change of pace over a bar.
+  for (const [where, tempoId, metreId, buttonId] of [
+    ['the sketch', 'roll-tempo', 'roll-metre', 'roll-hear-pace'],
+    ['a change over a bar', 'roll-mark-tempo', 'roll-mark-metre', 'roll-mark-hear-pace'],
+  ] as const) {
+    it(`clicks four beats at the pace written for ${where}, the first the bar's, in the beat it is felt in`, async () => {
+      const { view, metronome, clock, sketches } = createRig();
+      await view.initialize();
+      sketches.begin(
+        {
+          events: [
+            { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: 400, midi: 60 },
+          ],
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Paced',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      await editTheSketch();
+      element<HTMLButtonElement>('roll-mark').click();
+      const tempo = element<HTMLInputElement>(tempoId);
+      const metre = element<HTMLSelectElement>(metreId);
+      const button = element<HTMLButtonElement>(buttonId);
+      const heard = (): [number, string][] => {
+        const clicks = metronome.clicks.map((click): [number, string] => [(click.atMs ?? 0) - clock.now(), click.weight ?? '']);
+        metronome.clicks.length = 0;
+        return clicks;
+      };
+      heard();
+      expect(button.title).toBe(button.getAttribute('aria-label'));
+
+      tempo.value = '120';
+      metre.value = '4/4';
+      button.click();
+      expect(BEATS_A_PACE_IS_HEARD_BY).toBe(4);
+      expect(heard()).toEqual([
+        [0, 'downbeat'],
+        [500, 'beat'],
+        [1_000, 'beat'],
+        [1_500, 'beat'],
+      ]);
+      // In six-eight a beat is a dotted crotchet: at sixty crotchets, a second and a half.
+      tempo.value = '60';
+      metre.value = '6/8';
+      button.click();
+      expect(heard().map(([at]) => at)).toEqual([0, 1_500, 3_000, 4_500]);
+      // No faster or slower than the box goes, and nothing with no pace in it.
+      tempo.value = '1000';
+      metre.value = '4/4';
+      button.click();
+      expect(heard().map(([at]) => at)).toEqual([0, 150, 300, 450]);
+      tempo.value = '5';
+      button.click();
+      expect(heard().map(([at]) => at)).toEqual([0, 3_000, 6_000, 9_000]);
+      tempo.value = '';
+      button.click();
+      expect(heard()).toEqual([]);
+    });
+  }
 });
 
 describe('hearing the scale a key is chosen in', () => {

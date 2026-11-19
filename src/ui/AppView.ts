@@ -675,6 +675,9 @@ const A_LOUDNESS_NOTE_MS = 300;
 /** How long each note of a scale asked to be heard sounds before the next: brisk, as a scale is run up. */
 export const A_SCALE_NOTE_MS = 220;
 
+/** How many beats of the click a pace is heard by before it is chosen: enough to feel it, and over before a hand is back on the keys. */
+export const BEATS_A_PACE_IS_HEARD_BY = 4;
+
 /** How long the tonic at the top of a scale heard is held: long enough to be heard as where it arrived. */
 export const A_SCALE_ARRIVES_MS = 700;
 
@@ -2764,6 +2767,7 @@ export class AppView {
     rollHearScale: HTMLButtonElement;
     rollMetre: HTMLSelectElement;
     rollTempo: HTMLInputElement;
+    rollHearPace: HTMLButtonElement;
     rollHandLeft: HTMLButtonElement;
     rollHandPitch: HTMLButtonElement;
     rollHandRight: HTMLButtonElement;
@@ -2790,6 +2794,7 @@ export class AppView {
     rollMarkHearScale: HTMLButtonElement;
     rollMarkTempo: HTMLInputElement;
     rollMarkTap: HTMLButtonElement;
+    rollMarkHearPace: HTMLButtonElement;
     rollMarkDynamic: HTMLSelectElement;
     rollMarkSection: HTMLInputElement;
     rollMarkReached: HTMLSelectElement;
@@ -3259,6 +3264,7 @@ export class AppView {
       rollHearScale: requireElement(doc, 'roll-hear-scale'),
       rollMetre: requireElement(doc, 'roll-metre'),
       rollTempo: requireElement(doc, 'roll-tempo'),
+      rollHearPace: requireElement(doc, 'roll-hear-pace'),
       rollHandLeft: requireElement(doc, 'roll-hand-left'),
       rollHandPitch: requireElement(doc, 'roll-hand-pitch'),
       rollHandRight: requireElement(doc, 'roll-hand-right'),
@@ -3285,6 +3291,7 @@ export class AppView {
       rollMarkHearScale: requireElement(doc, 'roll-mark-hear-scale'),
       rollMarkTempo: requireElement(doc, 'roll-mark-tempo'),
       rollMarkTap: requireElement(doc, 'roll-mark-tap'),
+      rollMarkHearPace: requireElement(doc, 'roll-mark-hear-pace'),
       rollMarkDynamic: requireElement(doc, 'roll-mark-dynamic'),
       rollMarkSection: requireElement(doc, 'roll-mark-section'),
       rollMarkReached: requireElement(doc, 'roll-mark-reached'),
@@ -10434,6 +10441,15 @@ export class AppView {
     this.listen(this.el.rollMetre, 'change', () => {
       this.countTheSketchIn(this.el.rollMetre.value);
     });
+    // Beside each box a pace is written in, with the metre it is felt in.
+    for (const [button, tempo, metre] of [
+      [this.el.rollHearPace, this.el.rollTempo, this.el.rollMetre],
+      [this.el.rollMarkHearPace, this.el.rollMarkTempo, this.el.rollMarkMetre],
+    ] as const) {
+      this.listen(button, 'click', () => {
+        this.hearThePace(tempo, metre.value);
+      });
+    }
     this.listen(this.el.rollTempo, 'change', () => {
       const asked = Math.round(Number(this.el.rollTempo.value));
       if (Number.isFinite(asked) && asked > 0) {
@@ -17396,6 +17412,26 @@ export class AppView {
    * and an instrument can take back only everything it holds, a playback's
    * notes with them.
    */
+  /**
+   * Clicks the pace written in a box a few beats, the first the bar's, to be
+   * heard before it is chosen: in the beat its metre is felt in, as a pace
+   * is tapped - a dotted crotchet in six-eight - and no faster or slower
+   * than the box goes. Nothing for a box with no pace in it.
+   */
+  private hearThePace(field: HTMLInputElement, metre: string): void {
+    // A number box holds a number or nothing, and nothing is nought.
+    const asked = Number(field.value);
+    if (asked <= 0) {
+      return;
+    }
+    const pace = Math.min(Number(field.max), Math.max(Number(field.min), asked));
+    const beatMs = (MILLISECONDS_A_MINUTE / pace) * (TimeSignature.parse(metre).ticksPerPulse / Duration.QUARTER.ticks);
+    const now = this.runtime.clock.now();
+    for (let beat = 0; beat < BEATS_A_PACE_IS_HEARD_BY; beat += 1) {
+      this.runtime.metronomeClick.click(now + beat * beatMs, beat === 0 ? 'downbeat' : 'beat');
+    }
+  }
+
   private soundTheScale(tonicPitchClass: number, scale: ScaleName): void {
     this.letGoOfTheScale();
     const keys = theScaleUpAnOctave(tonicPitchClass, scale);

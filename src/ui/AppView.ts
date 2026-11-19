@@ -333,6 +333,7 @@ import {
   type RollGhost,
   type RollHeads,
 } from './rollView.js';
+import { whatWasChanged, whereToSeeTheChange, type SketchDrawn } from './theChangeInView.js';
 import { theBrightnessOfTheChord, theTensionOfTheChord } from '../domain/harmony/chordFeeling.js';
 import { GOALS_OF_THE_NEXT_CHORD, theChordsTowards, type GoalOfTheNextChord } from '../domain/harmony/nextChord.js';
 import { drawTheChart, showWhereOnTheChart, theChartOfTheChords, theCurvesOfTheChords, theMomentOnTheCurves } from './chordChart.js';
@@ -17564,6 +17565,35 @@ export class AppView {
     this.drawTheRollInto();
     this.sayWhatCanBeChanged();
     this.renderSketches();
+  }
+
+  /**
+   * Scrolls the drawing to what an undo or a redo changed in the sketch
+   * shown, where none of it is on the screen - otherwise the change is made
+   * out of sight, and nothing says where: see `whereToSeeTheChange`.
+   */
+  showWhereTheSketchChanged(was: SketchDrawn): void {
+    const showing = this.theOtherRollShowing;
+    const now = showing?.sketch === undefined ? null : this.theSketchAsDrawn(showing.sketch.id);
+    const scene = this.drawnScene;
+    if (showing === null || now === null || scene === null) {
+      return;
+    }
+    // Measured as the sketch changed was drawn again, just before.
+    const scrolled = this.rollScroller;
+    const to = whereToSeeTheChange(
+      whatWasChanged(was, now),
+      { x: scrolled.x, y: scrolled.y, widePx: scrolled.viewWidePx, tallPx: scrolled.viewTallPx },
+      {
+        beganAtMs: rollBeganAtMs(showing.roll),
+        pxPerSecond: Number(this.el.rollZoom.value),
+        rowPx: this.rollLook.rowPx,
+        highest: scene.highest,
+      },
+    );
+    if (to !== null && scrolled.to(to.x, to.y)) {
+      this.askWhereTheViewIs();
+    }
   }
 
   /** Says which bars the buttons have settled on, and whether there is one. */

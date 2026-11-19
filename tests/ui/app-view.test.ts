@@ -6967,6 +6967,91 @@ describe('AppView', () => {
       expect(element('sheet-roll').hidden).toBe(true);
     });
 
+    it('scrolls to what an undo or a redo changed where none of it is on the screen, and nowhere where some is', async () => {
+      // A hundred pixels of the drawing on the screen: the note at the start
+      // is on it, the one ten seconds in is far off it. One more past it, so
+      // the drawing is as long without that one. Begun two seconds into its
+      // clock, so the drawing's nought is not the clock's.
+      const giveBack = lendTheDrawingASize({ wide: 100, tall: 200 });
+      try {
+        const { view, sketches, clock } = createRig();
+        await view.initialize();
+        const sketch = sketches.begin(
+          {
+            events: [2_000, 12_000, 22_000].flatMap((atMs) => [
+              { kind: 'noteOn' as const, atMs, midi: 60, velocity: 0.5 },
+              { kind: 'noteOff' as const, atMs: atMs + 400, midi: 60 },
+            ]),
+            beats: [2_000, 2_500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+          },
+          'Keys',
+          1,
+        );
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-sketches').click();
+        await editTheSketch();
+        const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+        const far = (10_000 / 1000) * zoom;
+        const scrolledAlong = (): number =>
+          (Number.parseFloat(/translateX\((-?[\d.]+)%\)/.exec(element('roll-map-window').style.transform)?.[1] ?? 'NaN') / 100) *
+          100;
+        const scrolledDown = (): number =>
+          Number.parseFloat(
+            element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+          ) || 0;
+        const key = (init: KeyboardEventInit): void => {
+          document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
+        };
+        const struck = (): number[] =>
+          (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'noteOn' ? [event.atMs] : []));
+
+        // Scrolled to the far note, it is taken out there.
+        wheel(far - 50);
+        await aFrame();
+        expect(scrolledAlong()).toBeCloseTo(far - 50, 3);
+        clock.advance(1_000);
+        tapTheDrawing({
+          pointerType: 'mouse',
+          button: 0,
+          clientX: 55,
+          clientY: ((view.rollScene?.highest ?? 0) - 60 + 0.5) * 13 - scrolledDown(),
+        });
+        key({ key: 'Delete' });
+        expect(struck()).toEqual([2_000, 22_000]);
+
+        // Back at the start, the undo puts it back out of sight: the drawing
+        // goes to it, a tenth of the screen in.
+        wheel(-far);
+        await aFrame();
+        expect(scrolledAlong()).toBe(0);
+        const down = scrolledDown();
+        key({ key: 'z', code: 'KeyZ', ctrlKey: true });
+        await aFrame();
+        expect(struck()).toEqual([2_000, 12_000, 22_000]);
+        expect(scrolledAlong()).toBeCloseTo(far - 10, 3);
+        expect(scrolledDown()).toBe(down);
+
+        // Taken out again by the redo, it is on the screen: nothing moves.
+        key({ key: 'Z', code: 'KeyZ', ctrlKey: true, shiftKey: true });
+        await aFrame();
+        expect(struck()).toEqual([2_000, 22_000]);
+        expect(scrolledAlong()).toBeCloseTo(far - 10, 3);
+
+        // Put back and taken out by a redo from the start, the drawing goes
+        // to it as it did for the undo.
+        key({ key: 'z', code: 'KeyZ', ctrlKey: true });
+        wheel(-far);
+        await aFrame();
+        expect(scrolledAlong()).toBe(0);
+        key({ key: 'y', code: 'KeyY', ctrlKey: true });
+        await aFrame();
+        expect(struck()).toEqual([2_000, 22_000]);
+        expect(scrolledAlong()).toBeCloseTo(far - 10, 3);
+      } finally {
+        giveBack();
+      }
+    });
+
     it('writes a note in the cell of the grid it is tapped in, never on or over another of its pitch', async () => {
       const { view, sketches, clock } = createRig();
       await view.initialize();

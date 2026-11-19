@@ -191,6 +191,7 @@ export type TheViewOfTheSketch = Pick<
   | 'boxOnTheViewer'
   | 'changeCopiedHere'
   | 'changeTheSketchShowing'
+  | 'showWhereTheSketchChanged'
   | 'chooseTheMark'
   | 'chordsBeingForgotten'
   | 'copyTheMarkChosen'
@@ -1479,6 +1480,7 @@ export class SketchEditing {
       last.beats,
       [...sketch.after, asItWas(stored, sketch.chosen)],
     );
+    this.host.showWhereTheSketchChanged(stored);
   }
 
   /** Brings back what the last undo put back, while nothing has changed since. */
@@ -1496,6 +1498,7 @@ export class SketchEditing {
       last.beats,
       sketch.after.slice(0, -1),
     );
+    this.host.showWhereTheSketchChanged(stored);
   }
 
   /**

@@ -7401,6 +7401,32 @@ describe('AppView', () => {
       typed('KeyQ', 'KeyW', 'KeyO', 'KeyZ', 'Period');
       expect(heard()).toEqual({ drums: [36, 37, 44, 36, 44], notes: [] });
 
+      // Its row lit while its letter is down - on both rows, until both are up.
+      const lit = (): string[] =>
+        [...element('roll-body').querySelectorAll<HTMLElement>('.roll__key[data-sounding]')].map((key) => key.textContent ?? '');
+      const down = (code: string): void => {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, code }));
+      };
+      const up = (code: string): void => {
+        document.body.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, cancelable: true, code }));
+      };
+      down('KeyQ');
+      down('KeyX');
+      expect(lit()).toEqual(['Snare', 'Kick']);
+      down('KeyZ');
+      up('KeyQ');
+      up('KeyX');
+      expect(lit()).toEqual(['Kick']);
+      up('KeyZ');
+      expect(lit()).toEqual([]);
+      // Back to the notes with a drum down, its number lights no key.
+      down('KeyQ');
+      element<HTMLButtonElement>('roll-drums').click();
+      expect(lit()).toEqual([]);
+      up('KeyQ');
+      element<HTMLButtonElement>('roll-drums').click();
+      heard();
+
       // Heard as the keys' notes are: not while they are not.
       const monitor = element<HTMLInputElement>('audio-feedback');
       monitor.checked = false;

@@ -2287,6 +2287,12 @@ export class AppView {
   private notesBeingRecorded: readonly NoteShownAhead[] = [];
   /** What the rows sounding last were, so a frame that changes nothing draws nothing. */
   private soundingRowsSaid = '';
+  /**
+   * The drums whose letters are down, one for each: a drum held on both
+   * rows of letters is down until both come up. Lit on their rows as keys
+   * held are, and nothing else's - not a chord's, which they would be as keys.
+   */
+  private readonly drumsDown: number[] = [];
   /** The stretch of the run the map down the side last marked, to mark again when a key sounds. */
   private pitchWindow: { readonly fromShare: number; readonly widthShare: number } | null = null;
   /** The sketch the score on the page was written down from, as it was then, and the score it gave. */
@@ -8287,6 +8293,8 @@ export class AppView {
         if (this.audioFeedbackEnabled) {
           this.runtime.drumKit.play(drum.midi, velocity);
         }
+        this.drumsDown.push(drum.midi);
+        this.lightTheSoundingRows();
         // Written as the drawing shows the drums: as keys, each drum its row.
         if (this.recording?.drums === true) {
           this.recording.hear({ kind: 'noteOn', atMs, midi: drum.midi, velocity });
@@ -8294,7 +8302,13 @@ export class AppView {
       },
       letGo: (pad, atMs) => {
         const drum = DRUM_KIT[pad];
-        if (drum !== undefined && this.recording?.drums === true) {
+        if (drum === undefined) {
+          return;
+        }
+        // Each letting go is of a drum struck, which put it here.
+        this.drumsDown.splice(this.drumsDown.indexOf(drum.midi), 1);
+        this.lightTheSoundingRows();
+        if (this.recording?.drums === true) {
           this.recording.hear({ kind: 'noteOff', atMs, midi: drum.midi });
         }
       },
@@ -18872,7 +18886,7 @@ export class AppView {
     this.nameTheChordHeld();
     this.showTheCircle();
     if (scene !== null && !this.el.sheetRoll.hidden) {
-      for (const midi of held) {
+      for (const midi of [...held, ...(this.theDrumsAreWritten() ? this.drumsDown : [])]) {
         const row = scene.highest - midi;
         if (row >= 0 && row < scene.rows) {
           rows.add(row);

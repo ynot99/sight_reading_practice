@@ -8271,6 +8271,22 @@ export class AppView {
     this.bindBridge();
 
     this.subscriptions.push(this.subscribeAudioFeedback());
+    // While a sketch's drums are written, the letters of the computer
+    // keyboard strike them, heard as its notes are: see `PAD_KEYS`.
+    this.runtime.computerKeyboard.strikeThePadsWith({
+      inUse: () => !this.el.sheetRoll.hidden && this.theDrumsAreWritten(),
+      strike: (pad, velocity) => {
+        const drum = DRUM_KIT[pad];
+        if (drum !== undefined && this.audioFeedbackEnabled) {
+          this.runtime.drumKit.play(drum.midi, velocity);
+        }
+      },
+    });
+    // Given back as the view goes: the keyboard outlives it, and holding
+    // the pads would hold the view and every page it drew.
+    this.subscriptions.push(() => {
+      this.runtime.computerKeyboard.strikeThePadsWith(null);
+    });
     this.subscriptions.push(
       // Dragging a marker is how a passage is chosen at the stand, where the
       // bar boxes are out of reach and reading their numbers off the page is

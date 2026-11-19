@@ -271,6 +271,92 @@ describe('ComputerKeyboardMidiSource', () => {
     source.enable();
     expect(target.listenerCount).toBe(2);
   });
+
+  describe('as pads', () => {
+    function withPads(inUse = true): ReturnType<typeof setup> & { struck: [number, number, number][]; use: (now: boolean) => void } {
+      const rig = setup();
+      const struck: [number, number, number][] = [];
+      let using = inUse;
+      rig.source.strikeThePadsWith({
+        inUse: () => using,
+        strike: (pad, velocity, atMs) => struck.push([pad, velocity, atMs]),
+      });
+      rig.source.enable();
+      return {
+        ...rig,
+        struck,
+        use: (now) => {
+          using = now;
+        },
+      };
+    }
+
+    it('strikes a pad by each letter of the top row and the bottom one, the two rows the same pads', () => {
+      const { target, struck, events, clock } = withPads();
+      clock.set(250);
+      let swallowed = 0;
+      const top = ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY', 'KeyU', 'KeyI', 'KeyO'];
+      const bottom = ['KeyZ', 'KeyX', 'KeyC', 'KeyV', 'KeyB', 'KeyN', 'KeyM', 'Comma', 'Period'];
+      for (const code of [...top, ...bottom]) {
+        target.press(code, {
+          preventDefault: () => {
+            swallowed += 1;
+          },
+        });
+      }
+
+      expect(struck).toEqual([...top, ...bottom].map((_, index) => [index % 9, 0.7, 250]));
+      // Taken by the pads, the keys are no notes and nothing else's.
+      expect(swallowed).toBe(18);
+      expect(events).toEqual([]);
+    });
+
+    it('strikes nothing, and says no note, by a key that is no pad - a digit sharp among them', () => {
+      const { target, struck, events } = withPads();
+
+      target.press('Digit2');
+      target.press('KeyP');
+
+      expect([struck, events]).toEqual([[], []]);
+    });
+
+    it('strikes none while typing, by a held key repeating, or with a modifier', () => {
+      const { target, struck } = withPads();
+
+      target.press('KeyQ', { target: { tagName: 'INPUT', type: 'text' } });
+      target.press('KeyQ', { repeat: true });
+      target.press('KeyQ', { ctrlKey: true });
+
+      expect(struck).toEqual([]);
+    });
+
+    it('says notes again while the pads are not in use, and lets go as a note a key pressed as one', () => {
+      const { target, struck, events, use } = withPads(false);
+
+      target.press('KeyZ');
+      use(true);
+      target.release('KeyZ');
+      target.press('KeyX');
+      use(false);
+      target.release('KeyX');
+
+      expect(events.map((event) => [event.type, 'midi' in event ? event.midi : null])).toEqual([
+        ['noteon', 48],
+        ['noteoff', 48],
+      ]);
+      expect(struck.map(([pad]) => pad)).toEqual([1]);
+    });
+
+    it('gives the keys back to the notes when the pads are taken away', () => {
+      const { target, source, struck, events } = withPads();
+      source.strikeThePadsWith(null);
+
+      target.press('KeyZ');
+
+      expect(struck).toEqual([]);
+      expect(events.map((event) => event.type)).toEqual(['noteon']);
+    });
+  });
 });
 
 describe('ScreenKeysMidiSource', () => {

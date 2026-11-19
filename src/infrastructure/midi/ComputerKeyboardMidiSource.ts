@@ -33,6 +33,38 @@ export const DEFAULT_KEY_MAP: Readonly<Record<string, number>> = {
   KeyI: 24,
 };
 
+/**
+ * The keys struck as pads while pads are asked for, counted from the left:
+ * the top row of letters and the bottom one, the same pads in the same order
+ * on each, so either hand - or both - plays every one of them.
+ */
+export const PAD_KEYS: readonly (readonly [string, string])[] = [
+  ['KeyQ', 'KeyZ'],
+  ['KeyW', 'KeyX'],
+  ['KeyE', 'KeyC'],
+  ['KeyR', 'KeyV'],
+  ['KeyT', 'KeyB'],
+  ['KeyY', 'KeyN'],
+  ['KeyU', 'KeyM'],
+  ['KeyI', 'Comma'],
+  ['KeyO', 'Period'],
+];
+
+const THE_PAD_OF_A_KEY = new Map(PAD_KEYS.flatMap((keys, pad) => keys.map((code) => [code, pad] as const)));
+
+/**
+ * What plays the keys as pads where anything does: drums, while a sketch's
+ * drums are written. Struck here rather than said as notes, since a drum is
+ * no note: said as one, it would be a low note to the recordings kept of
+ * everything played, to a run and to the chords heard.
+ */
+export interface KeyPads {
+  /** Whether the keys are pads now: asked as each goes down, so it is never out of step. */
+  readonly inUse: () => boolean;
+  /** A pad struck - its place along a row - this hard, at this moment on the page's clock. */
+  strike(pad: number, velocity: number, atMs: number): void;
+}
+
 export interface ComputerKeyboardOptions {
   /** MIDI note the lowest mapped key produces. C3 by default. */
   readonly baseMidi?: number;
@@ -98,6 +130,7 @@ export class ComputerKeyboardMidiSource implements IMidiSource {
   private readonly baseMidi: number;
   private readonly velocity: number;
   private readonly held = new Set<string>();
+  private pads: KeyPads | null = null;
 
   private enabled = false;
   private readonly onKeyDown = (event: KeyboardEventLike): void => {
@@ -110,6 +143,16 @@ export class ComputerKeyboardMidiSource implements IMidiSource {
     // missing. His: "щоб клавіатура не грала піаніно коли я щось вводжу в
     // input? Бо піаніно перехоплює event".
     if (isTypedInto(event.target)) {
+      return;
+    }
+    // As pads every note is silent, a digit's sharp as well: alone among
+    // drums it would be a note nobody asked for.
+    if (this.pads?.inUse() === true) {
+      const pad = THE_PAD_OF_A_KEY.get(event.code);
+      if (pad !== undefined) {
+        event.preventDefault();
+        this.pads.strike(pad, this.velocity, theMomentOf(event, this.clock));
+      }
       return;
     }
     const offset = this.keyMap[event.code];
@@ -158,6 +201,15 @@ export class ComputerKeyboardMidiSource implements IMidiSource {
 
   get isEnabled(): boolean {
     return this.enabled;
+  }
+
+  /**
+   * Strikes the pads given with the keys whenever they say they are in use,
+   * instead of saying notes; `null` leaves the keys to the notes. A key
+   * pressed as a note is let go of as one, whatever the keys have become.
+   */
+  strikeThePadsWith(pads: KeyPads | null): void {
+    this.pads = pads;
   }
 
   subscribe(listener: (event: MidiEvent) => void): Unsubscribe {

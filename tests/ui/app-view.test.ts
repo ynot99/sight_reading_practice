@@ -7361,6 +7361,78 @@ describe('AppView', () => {
       expect(kept()).toEqual(['noteOn 60 0', `drumOn ${String(THE_KITS_RANGE.high)} 1000`]);
     });
 
+    it('strikes the drums by the letters of the computer keyboard while they are written, and the notes otherwise', async () => {
+      const { view, sketches, drumKit, instrument } = createRig();
+      await view.initialize();
+      sketches.begin(
+        {
+          events: [
+            { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: 400, midi: 60 },
+          ],
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Drums',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      await editTheSketch();
+      const typed = (...codes: string[]): void => {
+        for (const code of codes) {
+          document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, code }));
+          document.body.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, cancelable: true, code }));
+        }
+      };
+      const heard = (): { drums: number[]; notes: number[] } => {
+        const struck = { drums: drumKit.played.map((hit) => hit.midi), notes: instrument.played.map((note) => note.midi) };
+        drumKit.played.length = 0;
+        instrument.played.length = 0;
+        return struck;
+      };
+      heard();
+
+      // The notes written, a letter is a note.
+      typed('KeyQ');
+      expect(heard()).toEqual({ drums: [], notes: [60] });
+
+      // The drums written, each row of letters is the kit from the kick.
+      element<HTMLButtonElement>('roll-drums').click();
+      heard();
+      typed('KeyQ', 'KeyW', 'KeyO', 'KeyZ', 'Period');
+      expect(heard()).toEqual({ drums: [36, 37, 44, 36, 44], notes: [] });
+
+      // Heard as the keys' notes are: not while they are not.
+      const monitor = element<HTMLInputElement>('audio-feedback');
+      monitor.checked = false;
+      monitor.dispatchEvent(new Event('change'));
+      typed('KeyQ');
+      expect(heard()).toEqual({ drums: [], notes: [] });
+      monitor.checked = true;
+      monitor.dispatchEvent(new Event('change'));
+
+      // The sheet shut, a letter is a note again, the drums still written in it.
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
+      expect(element('sheet-roll').hidden).toBe(true);
+      typed('KeyQ');
+      expect(heard()).toEqual({ drums: [], notes: [60] });
+    });
+
+    it('gives the letters back to the notes as the view goes, with the drums written', async () => {
+      const { view, sketches, drumKit } = createRig();
+      await view.initialize();
+      sketches.begin({ events: [], beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })) }, 'Drums', 1);
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      await editTheSketch();
+      element<HTMLButtonElement>('roll-drums').click();
+
+      view.dispose();
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, code: 'KeyQ' }));
+
+      expect(drumKit.played).toEqual([]);
+    });
+
     it('plays a sketch with its drums on the kit and its notes on the instrument, and silences the drums when asked', async () => {
       vi.useFakeTimers();
       try {

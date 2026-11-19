@@ -267,7 +267,7 @@ export interface AppRuntime {
   readonly webMidi: IMidiSource & IMidiConnection & IMidiDeviceDirectory;
   /** `null` when the page cannot reach a bridge, e.g. on the public site. */
   readonly bridge: IMidiBridge | null;
-  readonly computerKeyboard: IMidiSource & IToggleableInput;
+  readonly computerKeyboard: IMidiSource & IToggleableInput & Pick<ComputerKeyboardMidiSource, 'strikeThePadsWith'>;
   /** The keys drawn on the screen, which play where the reader plays freely. */
   readonly screenKeys: IMidiSource & IPlayableKeys;
   readonly pitchPlayer: IPitchPlayer;

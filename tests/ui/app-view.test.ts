@@ -3889,6 +3889,34 @@ describe('AppView', () => {
       }
     });
 
+    it('holds the moment under the pointer where it is as a wheel zooms along the run', async () => {
+      // Zoomed by the left edge, the bar pointed at slid off the screen and
+      // had to be hunted for again after every turn.
+      const giveBack = lendTheDrawingASize({ wide: 100, tall: 200 });
+      try {
+        await openThePictureOfARun();
+        const box = element('roll-map-window');
+        const scrolledTo = (): number => Number.parseFloat(/translateX\((-?[\d.]+)%\)/.exec(box.style.transform)?.[1] ?? 'NaN');
+        const zoom = element<HTMLInputElement>('roll-zoom');
+        wheel(30);
+        await aFrame();
+        expect(scrolledTo()).toBeCloseTo(30, 3);
+        const was = Number(zoom.value);
+
+        // Fifty pixels into the view, which jsdom puts at the page's left edge.
+        element('roll-body').dispatchEvent(
+          new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -120, ctrlKey: true, clientX: 50 }),
+        );
+
+        const now = Number(zoom.value);
+        expect(now).toBeGreaterThan(was);
+        // What was eighty pixels along the run is eighty at the new zoom, and still fifty in.
+        expect(scrolledTo()).toBeCloseTo(((30 + 50) * now) / was - 50, 1);
+      } finally {
+        giveBack();
+      }
+    });
+
     it('marks down the side among every key of the piano while a sketch is edited', async () => {
       const giveBack = lendTheDrawingASize({ wide: 100, tall: 0 });
       try {

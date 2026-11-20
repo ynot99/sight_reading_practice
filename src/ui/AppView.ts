@@ -231,6 +231,7 @@ import {
   theBeatAt,
   TAP_SLOP_PX,
 } from './sketchEditing.js';
+import { RollNavigation } from './rollNavigation.js';
 
 /** What happened to the settings, as the status line says it. */
 const SETTINGS_WENT: Readonly<Record<SettingsSyncOutcome, string>> = {
@@ -291,7 +292,7 @@ import {
   type RollViewport,
   type Surface,
 } from './rollPainter.js';
-import { RollScroller, speedOf, type FingerAt } from './rollScroller.js';
+import { RollScroller } from './rollScroller.js';
 import {
   drawTheMap,
   drawThePitchMap,
@@ -315,22 +316,13 @@ import {
   type SceneChord,
   type RollPitches,
   type RollScene,
-  scrollAfterZoom,
   shareOfTheRun,
-  zoomAfterWheel,
-  LEAST_ROW,
-  LEAST_ZOOM,
-  MOST_ROW,
-  MOST_ZOOM,
   keepTheHeadInView,
   theRunScrolledUnderTheHead,
   scrollForTheWindowAt,
   theWindowOnTheRun,
-  pinchedTo,
   timeFromTap,
   theHeadsOf,
-  type FingerSpan,
-  type PinchedFrom,
   type RollGhost,
   type RollHeads,
 } from './rollView.js';
@@ -617,8 +609,6 @@ import { SightReadingError } from '../shared/errors.js';
 import { keepTheTrail, timeTheStart, traceTheStart } from '../shared/timeTheStart.js';
 import { noteAFrame, noteTheFramesStopped, thePlaybackTimingsText } from '../shared/playbackTimings.js';
 
-/** How far a wheel's line is, for a wheel that counts in lines. */
-const LINE_PX = 16;
 /** The viewer's Back button as a rewind, and as a stop. */
 const REWIND_ICON = 'M6 6h2v12H6zM9.5 12l8.5 6V6z';
 const STOP_ICON = 'M6 6h12v12H6z';
@@ -733,14 +723,6 @@ function theSketchesSynced(sketches: SketchSyncOutcome): string {
     );
   }
   return `${said.join('; ')}.`;
-}
-
-/** How far down the run the view stood, and the place down it a change of row height is held at. */
-interface RowsHeld {
-  readonly scrolledDownPx: number;
-  readonly viewTallPx: number;
-  readonly wholeTallPx: number;
-  readonly atPx: number;
 }
 
 /**
@@ -1938,16 +1920,6 @@ function percent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
 
-/**
- * How far a wheel turned, whichever way it turned.
- *
- * A wheel turns up and down; a trackpad swiped sideways turns only across.
- * Where a turn means a size rather than a place, either way is the same ask.
- */
-function theWheelsTurn(event: WheelEvent): number {
-  return event.deltaY !== 0 ? event.deltaY : event.deltaX;
-}
-
 /** What the keyboard's button says each of its answers is. */
 const KEYS_SHOWN_SAID: Readonly<Record<KeysShown, string>> = {
   'falling-notes': 'Falling notes and keyboard',
@@ -2053,10 +2025,10 @@ export class AppView {
   /** What the drawing shows, placed in the run's own time: see `RollScene`. */
   drawnScene: RollScene | null = null;
   /** The canvases it is painted on and the strip of keys, found once as it is drawn. */
-  private rollCanvases: RollCanvases | null = null;
+  rollCanvases: RollCanvases | null = null;
   private rollKeysStrip: HTMLElement | null = null;
   /** Where the view stands on the drawing: see `RollScroller`. */
-  private readonly rollScroller = new RollScroller();
+  readonly rollScroller = new RollScroller();
   /** The keys a run is shown again over. See `showTheReplaysKeys`. */
   private readonly replayKeyboard: ReplayKeyboard;
   /** The circle of fifths beside a sketch's chords. See `showTheCircle`. */
@@ -2125,22 +2097,6 @@ export class AppView {
   private heardTimer: ReturnType<typeof setTimeout> | undefined = undefined;
   /** How tall a row is, and the ruler and the pedal lane, as last measured. */
   rollLook = { rowPx: 13, rulerTallPx: 0, chordsTallPx: 0, pedalTallPx: 0 };
-  /** The frame a fling is going on in, if one is. */
-  private flingFrame: number | null = null;
-  /**
-   * A finger moving the drawing: where the view stood when it came down, where
-   * it came down, and where it has been lately - which is how fast it was
-   * going when it lets go.
-   */
-  private rollPan: {
-    readonly pointerId: number;
-    readonly fromX: number;
-    readonly fromY: number;
-    readonly clientX: number;
-    readonly clientY: number;
-    readonly trail: FingerAt[];
-    moved: boolean;
-  } | null = null;
   /** The colours it is painted in, read off the stylesheet once and again when those change. */
   private rollInks: RollInks | null = null;
   /** What that map last drew, so a scroll that changes nothing on it redraws nothing. */
@@ -2248,21 +2204,12 @@ export class AppView {
   /** Puts the speed in the row or the drawer, as fits now. See `bindNarrowLayout`. */
   private placeTheSpeed: () => void = () => {};
   /**
-   * Fingers down on the drawing, and what the zoom was when the second arrived.
-   *
-   * Two are a pinch. Kept by pointer id rather than counted, because a finger
-   * lifted is a particular finger and the one still down has to go on meaning
-   * what it meant.
-   */
-  private readonly rollFingers = new Map<number, { readonly x: number; readonly y: number }>();
-  /**
    * Every finger down on the drawing and where it is, whatever it is doing
    * there - holding a note, the pedal or a box as well as moving the drawing:
    * what a second finger needs to make a pinch of the first one's gesture.
    * The mouse and a pen are counted as a first finger.
    */
   private readonly fingersOnTheDrawing = new Map<number, { readonly x: number; readonly y: number }>();
-  private pinchedFrom: PinchedFrom | null = null;
   /**
    * How tall a row of pitch is drawn, in pixels.
    *
@@ -2272,7 +2219,14 @@ export class AppView {
    * for anywhere but under two fingers. The stylesheet's own value is the same
    * number, and is what is drawn until the first pinch.
    */
-  private rollRowPx = 13;
+  rollRowPx = 13;
+  /**
+   * Whether the gesture that is ending moved something - the drawing under a
+   * finger, a note or the pedal dragged. A finger coming up off an element is
+   * a click as far as the page is concerned, and a press that moved something
+   * was not one.
+   */
+  panned = false;
   /** A key of the strip beside the drawing held down by a pointer, and sounding till it is let go of. */
   private keyHeldOnTheStrip: { readonly pointerId: number; readonly midi: number; readonly velocity: number } | null = null;
   /** The rows of the keys sounding now: see `lightTheSoundingRows`. */
@@ -2305,16 +2259,6 @@ export class AppView {
   private theTakeOnThePage: { readonly takeId: string; readonly exercise: Exercise } | null = null;
   /** The sketch whose name is being written over, while it is. */
   private sketchBeingRenamed: string | null = null;
-  /**
-   * Whether the gesture that is ending was a pinch.
-   *
-   * A pinch ends with fingers coming up, and a finger coming up off an element
-   * is a click as far as the page is concerned - so without this, every pinch
-   * also moved the head to wherever the last finger happened to be.
-   */
-  private pinched = false;
-  /** And whether it was a finger moving the drawing, which ends the same way. */
-  panned = false;
   /**
    * Where the head stands while nothing is sounding, in milliseconds.
    *
@@ -3039,6 +2983,7 @@ export class AppView {
 
   /** What a pointer and the keys do to the notes of a sketch being edited: see `SketchEditing`. */
   private readonly sketchEditing = new SketchEditing(this);
+  private readonly rollNavigation = new RollNavigation(this);
   /** The loops of a sketch's drums, drawn and pulled: see `DrumLoopEditing`. */
   private readonly drumLoops = new DrumLoopEditing(this);
   private readonly sketchVersionsSheet = new SketchVersionsSheet(this);
@@ -3707,7 +3652,7 @@ export class AppView {
       this.doc.defaultView?.cancelAnimationFrame(this.closingFrame);
       this.closingFrame = null;
     }
-    this.stopTheFling();
+    this.rollNavigation.stopTheFling();
     if (this.timeTick !== null) {
       clearInterval(this.timeTick);
       this.timeTick = null;
@@ -10240,7 +10185,7 @@ export class AppView {
     this.el.rollBody.addEventListener(
       'wheel',
       (event) => {
-        this.scrollOrZoomTheRollByWheel(event);
+        this.rollNavigation.scrollOrZoomTheRollByWheel(event);
       },
       // Said, so that a zoom does not zoom the page under it as well.
       { passive: false },
@@ -10250,14 +10195,14 @@ export class AppView {
     this.el.rollMap.addEventListener(
       'wheel',
       (event) => {
-        this.zoomByAWheelOverAMap(event, 'along');
+        this.rollNavigation.zoomByAWheelOverAMap(event, 'along');
       },
       { passive: false },
     );
     this.el.rollPitchMap.addEventListener(
       'wheel',
       (event) => {
-        this.zoomByAWheelOverAMap(event, 'down');
+        this.rollNavigation.zoomByAWheelOverAMap(event, 'down');
       },
       { passive: false },
     );
@@ -10317,7 +10262,7 @@ export class AppView {
       const on = this.pressedOn ?? event.target;
       const pressedWith = this.pressedWith;
       this.pressedOn = null;
-      if (this.pinched || this.panned) {
+      if (this.rollNavigation.pinched || this.panned) {
         return;
       }
       // The end of a loop pulled, which is not a tap on the drums under it.
@@ -11028,9 +10973,7 @@ export class AppView {
     this.listen(this.el.rollBody, 'pointerdown', (event) => {
       this.pressedOn = event.target;
       this.pressedWith = event.pointerType;
-      this.pinched = false;
-      this.panned = false;
-      this.stopTheFling();
+      this.rollNavigation.aPressBegins();
       this.countTheFingerIn(event);
       // The middle button moves the drawing wherever it goes down; the right
       // one is the menu's, which a note being edited answers.
@@ -11060,7 +11003,7 @@ export class AppView {
       }
       if (
         !middle &&
-        this.rollFingers.size === 0 &&
+        this.rollNavigation.fingersDown === 0 &&
         (this.holdTheKeyOnTheStrip(event) ||
           this.sketchEditing.takeHoldOfThePedal(event) ||
           // A note is read off where the pointer is, which over the lane of
@@ -11074,26 +11017,13 @@ export class AppView {
         event.preventDefault();
       }
       this.sketchEditing.holdTheRowPressed(event);
-      this.rollFingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-      this.beginAPinch();
       // One finger, or a pen, moves the drawing, and so does a mouse over a
       // sketch being edited without the selection tool, as over any editor's
       // empty space; listening, a mouse points at it, as it always has. A
       // second finger makes a pan a pinch.
       const editingWithThePencil =
         this.theOtherRollShowing?.sketch?.editing === true && this.theOtherRollShowing.sketch.tool === 'pencil';
-      this.rollPan =
-        (event.pointerType !== 'mouse' || middle || editingWithThePencil) && this.rollFingers.size === 1
-          ? {
-              pointerId: event.pointerId,
-              fromX: this.rollScroller.x,
-              fromY: this.rollScroller.y,
-              clientX: event.clientX,
-              clientY: event.clientY,
-              trail: [{ atMs: event.timeStamp, x: event.clientX, y: event.clientY }],
-              moved: false,
-            }
-          : null;
+      this.rollNavigation.fingerDown(event, event.pointerType !== 'mouse' || middle || editingWithThePencil);
     });
     this.listen(this.el.rollBody, 'pointermove', (event) => {
       if (this.fingersOnTheDrawing.has(event.pointerId)) {
@@ -11118,15 +11048,12 @@ export class AppView {
         this.sketchEditing.drawTheBox(event);
         return;
       }
-      if (event.pointerType === 'mouse' && this.sketchEditing.rollDrag === null && !this.rollFingers.has(event.pointerId)) {
+      if (event.pointerType === 'mouse' && this.sketchEditing.rollDrag === null && !this.rollNavigation.isAFinger(event.pointerId)) {
         this.sketchEditing.showTheGrip(event);
       }
-      if (!this.rollFingers.has(event.pointerId)) {
+      if (!this.rollNavigation.fingerMoved(event)) {
         return;
       }
-      this.rollFingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-      this.pinchTheRoll();
-      this.panTheRoll(event);
       // A press that moves the drawing was not on a key.
       if (this.panned) {
         this.sketchEditing.letGoOfTheRowHeld();
@@ -11157,14 +11084,7 @@ export class AppView {
         if (this.sketchEditing.rowHeld?.pointerId === event.pointerId) {
           this.sketchEditing.letGoOfTheRowHeld();
         }
-        if (!this.rollFingers.has(event.pointerId)) {
-          return;
-        }
-        this.rollFingers.delete(event.pointerId);
-        this.beginAPinch();
-        if (this.rollPan?.pointerId === event.pointerId) {
-          this.letThePanGo(event, ending === 'pointerup');
-        }
+        this.rollNavigation.fingerUp(event, ending === 'pointerup');
       });
     }
     this.listen(this.el.rollZoom, 'input', () => {
@@ -14069,245 +13989,6 @@ export class AppView {
   }
 
   /**
-   * Moves the zoom by a wheel, leaving what is under the pointer under it.
-   *
-   * The pointer and not the left edge: pointing at the bar that went wrong and
-   * zooming in used to slide that bar off the screen, so every turn of the
-   * wheel had to be followed by hunting for the place again.
-   *
-   * One turn moves the zoom by a small step whatever the wheel says. A notch
-   * and a trackpad flick arrive as tens against ones, and a zoom taken straight
-   * from either jumps; a flick becomes a run of small steps instead, which is
-   * the same gesture arriving smoothly. His: "по скролу робити зум".
-   */
-  private scrollOrZoomTheRollByWheel(event: WheelEvent): void {
-    if (this.drawnScene === null) {
-      return;
-    }
-    // Held down, the wheel zooms: the convention every drawing program and the
-    // browser's own page zoom use, and the one a trackpad pinch already
-    // arrives as. His: "горизонтальний та вертикальний скроли зробити
-    // звичайними скролами, а ctrl+скрол зробити zoom in/zoom out".
-    if (event.ctrlKey || event.metaKey) {
-      // Taken from the browser, which would zoom the whole page with it.
-      event.preventDefault();
-      this.zoomAlongTheRunByWheel(event.deltaY, event.clientX);
-      return;
-    }
-    // And with Alt held it makes the rows taller or shorter: the height a
-    // pinch changes on a screen, which a desk has no pinch for. Taken from
-    // the browser too, which may otherwise go back a page on it.
-    if (event.altKey) {
-      event.preventDefault();
-      this.zoomTheRowsByWheel(theWheelsTurn(event), event.clientY);
-      return;
-    }
-    // Otherwise it scrolls, as it would have scrolled the page: both ways from
-    // a trackpad, which keeps its own momentum, and along the run with shift
-    // held where a mouse wheel only turns one way.
-    //
-    // And the browser is left the wheel, having nothing to do with it: nothing
-    // around the drawing scrolls, and the page will not take a swipe for
-    // "back". Taken from it, the first message of a gesture made the browser
-    // wait on the page for every message after it, each then handled on its
-    // own and drawn a frame later than the frame it arrived for. Measured on
-    // his trackpad, a message waited a frame and more before it was drawn, on
-    // either axis. His: "реагує canvas на скрол повільно". Left alone, the rest
-    // of the gesture comes with the frame it is drawn in.
-    this.stopTheFling();
-    const unit =
-      event.deltaMode === 1 ? LINE_PX : event.deltaMode === 2 ? this.rollScroller.viewWidePx : 1;
-    const sideways = event.shiftKey && event.deltaX === 0;
-    if (
-      this.rollScroller.by(
-        (sideways ? event.deltaY : event.deltaX) * unit,
-        (sideways ? 0 : event.deltaY) * unit,
-      )
-    ) {
-      this.askWhereTheViewIs();
-    }
-  }
-
-  /** Zooms along the run by a wheel, holding the music under `clientX` where it is. */
-  private zoomAlongTheRunByWheel(deltaPx: number, clientX: number): void {
-    const was = Number(this.el.rollZoom.value);
-    const now = zoomAfterWheel(was, deltaPx, LEAST_ZOOM, MOST_ZOOM);
-    if (now !== was) {
-      this.el.rollZoom.value = String(now);
-      this.holdTheZoomAround(clientX, was, now);
-    }
-  }
-
-  /**
-   * Makes the rows taller or shorter by a wheel.
-   *
-   * From the row as drawn, as a pinch starts from it: the stylesheet never
-   * lets the rows fall short of the room they have, and scaled from a smaller
-   * row asked for, a turn up would move nothing until it had made up the
-   * difference.
-   */
-  private zoomTheRowsByWheel(deltaPx: number, clientY: number | null): void {
-    const was = Math.round(this.theRowAsDrawn());
-    const now = zoomAfterWheel(was, deltaPx, LEAST_ROW, MOST_ROW);
-    if (now !== was) {
-      const held = this.theRowsHeldAt(clientY);
-      this.rollRowPx = now;
-      this.applyTheZoom();
-      this.holdTheRows(held);
-    }
-  }
-
-  /**
-   * The pitch under a place down the view, as the rows are about to grow or
-   * shrink: under `clientY`, or under the middle of the view where nothing on
-   * the drawing was pointed at.
-   *
-   * Read before anything is written, as `holdTheZoomAround` reads its widths.
-   */
-  private theRowsHeldAt(clientY: number | null): RowsHeld {
-    const heights = this.theRunsHeights();
-    const top = clientY === null ? null : this.rollCanvases?.grid.getBoundingClientRect().top;
-    return {
-      ...heights,
-      atPx: top === null || top === undefined || clientY === null ? heights.viewTallPx / 2 : clientY - top,
-    };
-  }
-
-  /**
-   * Scrolls the view down or up so the pitch that was under the place held is
-   * under it again, now that the rows are a new height.
-   *
-   * Without it the top of the view stayed where it was in pixels, so a taller
-   * row pushed what was in the middle down the view and out of it.
-   */
-  private holdTheRows(held: RowsHeld): void {
-    const to = scrollAfterZoom(held.scrolledDownPx, held.atPx, held.wholeTallPx, this.rollScroller.wholeTallPx);
-    if (this.rollScroller.to(this.rollScroller.x, to)) {
-      this.askWhereTheViewIs();
-    }
-  }
-
-  /**
-   * A wheel over one of the maps: zooms along the axis that map is of.
-   *
-   * Along the run around the middle of the view, since the pointer is on the
-   * map and not over any moment of the drawing. A plain wheel is left to the
-   * browser, as over the drawing - nothing around the maps scrolls - and one
-   * with Ctrl held is taken, being how a trackpad pinch arrives and what the
-   * browser would zoom the whole page by.
-   */
-  private zoomByAWheelOverAMap(event: WheelEvent, axis: 'along' | 'down'): void {
-    if (this.drawnScene === null) {
-      return;
-    }
-    if (event.ctrlKey || event.metaKey) {
-      event.preventDefault();
-    }
-    if (axis === 'down') {
-      this.zoomTheRowsByWheel(theWheelsTurn(event), null);
-      return;
-    }
-    const grid = this.rollCanvases?.grid.getBoundingClientRect();
-    this.zoomAlongTheRunByWheel(
-      theWheelsTurn(event),
-      grid === undefined ? 0 : grid.left + grid.width / 2,
-    );
-  }
-
-  /** Moves the drawing with a finger, where one is moving it. */
-  private panTheRoll(event: PointerEvent): void {
-    const pan = this.rollPan;
-    if (pan?.pointerId !== event.pointerId || this.rollFingers.size !== 1) {
-      return;
-    }
-    const acrossPx = event.clientX - pan.clientX;
-    const downPx = event.clientY - pan.clientY;
-    // A finger is never quite still: until it has gone somewhere it is a tap,
-    // and a tap puts the head down.
-    if (!pan.moved && Math.hypot(acrossPx, downPx) < TAP_SLOP_PX) {
-      return;
-    }
-    pan.moved = true;
-    this.panned = true;
-    pan.trail.push({ atMs: event.timeStamp, x: event.clientX, y: event.clientY });
-    if (pan.trail.length > 32) {
-      pan.trail.splice(0, pan.trail.length - 32);
-    }
-    if (this.rollScroller.to(pan.fromX - acrossPx, pan.fromY - downPx)) {
-      this.askWhereTheViewIs();
-    }
-  }
-
-  /** A finger lets go: thrown, the drawing goes on and slows; put down, it stays. */
-  private letThePanGo(event: PointerEvent, thrown: boolean): void {
-    const pan = this.rollPan;
-    this.rollPan = null;
-    // A mouse lets go where it is, as a desktop editor's drawing stops under
-    // it; a finger's throw is what keeps a drawing going.
-    if (pan === null || !pan.moved || !thrown || event.pointerType === 'mouse') {
-      return;
-    }
-    const speed = speedOf(pan.trail, event.timeStamp);
-    this.rollScroller.fling(-speed.x, -speed.y);
-    this.carryTheFling();
-  }
-
-  /** Carries a fling on, a frame at a time, until it has slowed to nothing. */
-  private carryTheFling(): void {
-    const view = this.doc.defaultView;
-    if (view === null || typeof view.requestAnimationFrame !== 'function') {
-      return;
-    }
-    if (this.flingFrame !== null) {
-      view.cancelAnimationFrame(this.flingFrame);
-    }
-    let last: number | null = null;
-    const frame = (now: number): void => {
-      // The first frame has no frame before it; call it one frame's worth.
-      const moved = this.rollScroller.step(last === null ? 16 : now - last);
-      last = now;
-      if (moved) {
-        this.showTheView();
-      }
-      this.flingFrame = this.rollScroller.flinging ? view.requestAnimationFrame(frame) : null;
-    };
-    this.flingFrame = this.rollScroller.flinging ? view.requestAnimationFrame(frame) : null;
-  }
-
-  private stopTheFling(): void {
-    this.rollScroller.stop();
-    const view = this.doc.defaultView;
-    if (this.flingFrame !== null && view !== null) {
-      view.cancelAnimationFrame(this.flingFrame);
-    }
-    this.flingFrame = null;
-  }
-
-  /**
-   * Applies a zoom and scrolls so the music under a point stays under it.
-   *
-   * The widths are the drawing's, so the column of key names is taken off both
-   * - it does not stretch with the music and would drag the anchor sideways by
-   * its own width every time.
-   */
-  private holdTheZoomAround(clientX: number, was: number, now: number): void {
-    // Everything read before anything is written. The width that follows from
-    // the new zoom is arithmetic, so nothing has to be asked twice.
-    const widths = this.theRunsWidths();
-    const at = clientX - (this.rollCanvases?.grid.getBoundingClientRect().left ?? clientX + 1);
-
-    this.applyTheZoom();
-
-    const widened = (widths.wholeWidePx * now) / was;
-    const to =
-      widths.wholeWidePx > 0 && at >= 0
-        ? scrollAfterZoom(widths.scrolledToPx, at, widths.wholeWidePx, widened)
-        : widths.scrolledToPx;
-    this.rollScroller.to(to, this.rollScroller.y);
-    this.showTheWindow(theWindowOnTheRun(this.rollScroller.x, widths.viewWidePx, widened));
-  }
-
-  /**
    * Asks for the view to be shown again - the tiles and the boxes - and at
    * most once a frame.
    *
@@ -14322,7 +14003,7 @@ export class AppView {
    * opening show it straight away, being single events with nothing to
    * coalesce.
    */
-  private askWhereTheViewIs(): void {
+  askWhereTheViewIs(): void {
     const view = this.doc.defaultView;
     if (view === null || typeof view.requestAnimationFrame !== 'function') {
       this.showTheView();
@@ -14346,7 +14027,7 @@ export class AppView {
    * other way round, the boxes' writes made the tiles' measuring lay the page
    * out a second time.
    */
-  private showTheView(): void {
+  showTheView(): void {
     this.measureTheRoll();
     this.paintTheRoll();
     this.sayWhereTheViewIs();
@@ -14414,7 +14095,7 @@ export class AppView {
    * Told rather than measuring for itself, so that a zoom can hand it numbers
    * it has already read and nothing reads the drawing after writing to it.
    */
-  private showTheWindow(window: { readonly fromShare: number; readonly widthShare: number } | null): void {
+  showTheWindow(window: { readonly fromShare: number; readonly widthShare: number } | null): void {
     // Whatever moves this box moves the stretch of time on the screen, and
     // that is what the map down the side marks the notes of.
     this.markThePitchesIn(window);
@@ -14508,7 +14189,7 @@ export class AppView {
   }
 
   /** The drawing measured along the run: where the view stands, how wide it is, and the whole. */
-  private theRunsWidths(): {
+  theRunsWidths(): {
     readonly scrolledToPx: number;
     readonly viewWidePx: number;
     readonly wholeWidePx: number;
@@ -14522,7 +14203,7 @@ export class AppView {
   }
 
   /** And down it, as rows of pitch. */
-  private theRunsHeights(): {
+  theRunsHeights(): {
     readonly scrolledDownPx: number;
     readonly viewTallPx: number;
     readonly wholeTallPx: number;
@@ -18640,8 +18321,8 @@ export class AppView {
       return;
     }
     hold.held = true;
-    this.rollFingers.delete(hold.pointerId);
-    this.rollPan = null;
+    this.rollNavigation.forgetTheFinger(hold.pointerId);
+    this.rollNavigation.letGoOfThePan();
     const shown = this.theSliceShown();
     if (shown !== null && at >= shown.fromMs && at < shown.toMs) {
       this.sliceTheDrawing(null);
@@ -19087,27 +18768,6 @@ export class AppView {
   }
 
   /**
-   * The gap between two fingers, or `null` unless there are exactly two.
-   *
-   * Exactly two: a third finger on the drawing is not a wider pinch, it is a
-   * hand resting, and taking a gap from whichever two arrived first would zoom
-   * on a gesture nobody made.
-   */
-  private theFingerSpan(): FingerSpan | null {
-    if (this.rollFingers.size !== 2) {
-      return null;
-    }
-    const [first, second] = [...this.rollFingers.values()];
-    if (first === undefined || second === undefined) {
-      return null;
-    }
-    return {
-      acrossPx: Math.abs(first.x - second.x),
-      downPx: Math.abs(first.y - second.y),
-    };
-  }
-
-  /**
    * Counts a finger going down on the drawing in.
    *
    * A second finger is a pinch, whatever the first was doing: what it held -
@@ -19126,9 +18786,9 @@ export class AppView {
     for (const [pointerId, at] of this.fingersOnTheDrawing) {
       this.letGoOfWhatTheFingerHeld(pointerId, event);
       if (event.isPrimary) {
-        this.rollFingers.delete(pointerId);
+        this.rollNavigation.forgetTheFinger(pointerId);
       } else {
-        this.rollFingers.set(pointerId, at);
+        this.rollNavigation.countAsAFinger(pointerId, at);
       }
     }
     if (event.isPrimary) {
@@ -19150,15 +18810,6 @@ export class AppView {
     }
   }
 
-  /** Remembers where a pinch started from, or forgets there is one. */
-  private beginAPinch(): void {
-    const span = this.theFingerSpan();
-    this.pinchedFrom =
-      span === null
-        ? null
-        : { ...span, zoom: Number(this.el.rollZoom.value), row: this.theRowAsDrawn() };
-  }
-
   /**
    * How tall a row stands on the screen, which is not always what was asked.
    *
@@ -19168,58 +18819,10 @@ export class AppView {
    * until it had made up the difference; the fingers are stretching what they
    * can see.
    */
-  private theRowAsDrawn(): number {
+  theRowAsDrawn(): number {
     const key = this.el.rollBody.querySelector<HTMLElement>('.roll__key');
     const drawnPx = key?.getBoundingClientRect().height ?? 0;
     return drawnPx > 0 ? drawnPx : this.rollRowPx;
-  }
-
-  /**
-   * Zooms the drawing by how much wider the fingers have got.
-   *
-   * The slider is moved with it rather than left behind: it is the same
-   * question, and two controls disagreeing about the answer is the fault this
-   * interface keeps removing. His: "zoom слайдер маленький, та не дуже зручно
-   * їм користуватись".
-   *
-   * And down the page as well, which has no slider: "зробити vertical pinch щоб
-   * все зробити менше по висоті". A run of a wide part is sixty rows of pitch,
-   * and at thirteen pixels each that is most of a tall screen before a note is
-   * drawn.
-   */
-  private pinchTheRoll(): void {
-    const from = this.pinchedFrom;
-    const now = this.theFingerSpan();
-    if (from === null || now === null) {
-      return;
-    }
-    this.pinched = true;
-    const asked = pinchedTo(from, now);
-    const was = Number(this.el.rollZoom.value);
-    const middle = this.theMiddleOfTheFingers();
-    const held = asked.row === this.rollRowPx ? null : this.theRowsHeldAt(middle.y);
-    this.el.rollZoom.value = String(asked.zoom);
-    this.rollRowPx = asked.row;
-    // Held around the point between the fingers, for the same reason the wheel
-    // is held around the pointer: a pinch aimed at a bar means that bar, and
-    // one aimed at a pitch that pitch.
-    if (asked.zoom !== was) {
-      this.holdTheZoomAround(middle.x, was, asked.zoom);
-    } else {
-      this.applyTheZoom();
-    }
-    if (held !== null) {
-      this.holdTheRows(held);
-    }
-  }
-
-  /** Where the point between two fingers is on the screen. */
-  private theMiddleOfTheFingers(): { readonly x: number; readonly y: number } {
-    const [first, second] = [...this.rollFingers.values()];
-    return {
-      x: ((first?.x ?? 0) + (second?.x ?? first?.x ?? 0)) / 2,
-      y: ((first?.y ?? 0) + (second?.y ?? first?.y ?? 0)) / 2,
-    };
   }
 
   /** How fast the reader has asked to hear the run, as a multiple of its own time. */
@@ -19228,7 +18831,7 @@ export class AppView {
     return Number.isFinite(percent) && percent > 0 ? percent / 100 : 1;
   }
 
-  private applyTheZoom(): void {
+  applyTheZoom(): void {
     const roll = this.el.rollBody.firstElementChild;
     if (roll instanceof HTMLElement) {
       const second = `${this.el.rollZoom.value}px`;

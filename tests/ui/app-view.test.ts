@@ -68,7 +68,7 @@ import {
 import { beginThePlaybackTimings } from '../../src/shared/playbackTimings.js';
 import { theLatestPlayback } from '../support/playbackTimings.js';
 import { Duration } from '../../src/domain/model/Duration.js';
-import { DYNAMIC_VELOCITY, noteEntry, restEntry } from '../../src/domain/model/Exercise.js';
+import { DYNAMIC_VELOCITY, noteEntry, restEntry, spanMs } from '../../src/domain/model/Exercise.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { theKeyChangesOf, type MidiFileEvent } from '../../src/domain/midi/MidiFile.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
@@ -2541,6 +2541,44 @@ describe('AppView', () => {
       expect(renderer.cursor.position).toBe(0);
       expect(mediaKeys.now?.placeNow()?.positionMs).toBe(0);
       expect(mediaKeys.now?.playing).toBe(false);
+    });
+
+    it('plays on from a bar held on the page while the music plays, holds a held one there, and only places the start otherwise', async () => {
+      const { view, runtime, mediaKeys, renderer } = createRig();
+      await view.initialize();
+      await pressListen(runtime.controller);
+      const firstOf = (bar: number): number =>
+        runtime.controller.currentTimeline?.steps.find((step) => step.measureIndex === bar)?.index ?? -1;
+      expect(firstOf(2)).toBeGreaterThan(firstOf(1));
+
+      // Where the sound is, not only the marker: a moment of the performance.
+      const heardAt = (): number => mediaKeys.now?.placeNow()?.positionMs ?? -1;
+      const exercise = runtime.controller.currentExercise;
+      const barAt = (bar: number): number => {
+        const step = runtime.controller.currentTimeline?.steps.find((each) => each.measureIndex === bar);
+        return exercise === null || step === undefined ? -1 : spanMs(exercise, 0, step.onsetTicks);
+      };
+      expect(heardAt()).toBe(0);
+
+      // Playing: on from the bar at once, and no passage begun by the hold.
+      renderer.holdBar(2);
+      expect(runtime.controller.isListening).toBe(true);
+      expect([renderer.cursor.position, heardAt()]).toEqual([firstOf(2), barAt(2)]);
+      expect(runtime.controller.settings.rangeFromBar).toBeNull();
+
+      // Held: picked up from there, the marker on it.
+      mediaKeys.now?.pause();
+      renderer.holdBar(1);
+      expect([runtime.controller.isListeningPaused, renderer.cursor.position, heardAt()]).toEqual([true, firstOf(1), barAt(1)]);
+      expect(runtime.controller.settings.rangeFromBar).toBeNull();
+      // Hearing it from there is not where the next run begins.
+      expect(runtime.controller.beginsAt).toBe(0);
+
+      // Nothing played: the start is placed there, as it always was.
+      mediaKeys.now?.stop();
+      expect([runtime.controller.isListening, runtime.controller.isListeningPaused]).toEqual([false, false]);
+      renderer.holdBar(2);
+      expect(runtime.controller.beginsAt).toBe(firstOf(2));
     });
 
     it('tells the panel where the performance stands at every step', async () => {

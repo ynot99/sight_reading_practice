@@ -2831,9 +2831,31 @@ export class PracticeController {
    * road - or, held, to be picked up from it, the marker standing on it.
    */
   movePerformanceTo(positionMs: number): void {
+    const index = this.player?.stepAt(positionMs) ?? null;
+    if (index !== null) {
+      this.movePerformanceToStep(index);
+    }
+  }
+
+  /**
+   * Moves a performance playing or held to the first step of a bar - the
+   * bar held on the page while the music is played - and says whether there
+   * was one to move. Kept inside the passage, as any playback is.
+   */
+  movePerformanceToBar(measureIndex: number): boolean {
     const player = this.player;
-    const index = player?.stepAt(positionMs) ?? null;
-    if (player === null || index === null) {
+    const step = this.timeline?.steps.find((each) => each.measureIndex >= measureIndex);
+    if (player === null || step === undefined || (!player.isPlaying && player.pausedAt === null)) {
+      return false;
+    }
+    this.movePerformanceToStep(step.index);
+    return true;
+  }
+
+  /** Plays on from a step, picked up as a held one is; or, held, to be picked up from it, the marker standing on it. */
+  private movePerformanceToStep(index: number): void {
+    const player = this.player;
+    if (player === null) {
       return;
     }
     if (player.isPlaying) {

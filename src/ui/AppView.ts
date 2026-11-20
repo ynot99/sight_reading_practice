@@ -8290,10 +8290,14 @@ export class AppView {
       // Held on a bar: the reader is filling in the next mark that is
       // missing - where to start, then the two ends of the passage.
       // While a run is shown again it is the reader asking to see it from
-      // there, not setting up the next one.
+      // there, not setting up the next one; and while the music is played,
+      // or held, to hear it from there - at once, the playback going on.
       this.runtime.renderer.onBarHeld((measureIndex) => {
         if (this.replayRoll !== null) {
           this.replayFromBar(measureIndex);
+          return;
+        }
+        if (this.runtime.controller.movePerformanceToBar(measureIndex)) {
           return;
         }
         this.placeNextMark(measureIndex);

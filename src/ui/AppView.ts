@@ -76,7 +76,6 @@ import {
   dropoutCycleBars,
   type ChosenClickWhen,
   type ClickPattern,
-  type BeatWeight,
 } from '../application/ports/IMetronome.js';
 import type { SessionScore } from '../domain/scoring/IScoringStrategy.js';
 import {
@@ -232,6 +231,8 @@ import {
   TAP_SLOP_PX,
 } from './sketchEditing.js';
 import { RollNavigation } from './rollNavigation.js';
+import { SketchRecording } from './sketchRecording.js';
+import { MILLISECONDS_A_MINUTE, ROLL_CLICK_LEAD_MS, RUN_ROLL_ID, SLICE_EDGE_MS, TAKE_TICK_MS } from './rollTiming.js';
 
 /** What happened to the settings, as the status line says it. */
 const SETTINGS_WENT: Readonly<Record<SettingsSyncOutcome, string>> = {
@@ -258,8 +259,6 @@ import {
   type ArpeggioWay,
   theBarsAcross,
   theFurthestASliceGoes,
-  takeWithThePlayingRecorded,
-  theNotesRecorded,
   theClipboardTextOfTheChange,
   type ChangeCopied,
   theKeysOfTheTake,
@@ -531,22 +530,10 @@ export function isRealTendency(meanMs: number, spreadMs: number, presses: number
 /** Written out rather than escaped inline, where it has been mangled before. */
 const NEWLINE = String.fromCharCode(10);
 
-/** How often the take slider is moved while something is sounding. */
-const TAKE_TICK_MS = 80;
 
-/**
- * How near a slice's end a moment is to be on it: the beats and bar lines it
- * is laid on are whole milliseconds, worked out from crotchets.
- */
-const SLICE_EDGE_MS = 1;
 
-const MILLISECONDS_A_MINUTE = 60_000;
 
-/** How far a sketch's beat is carried on past its end to be clicked under a recording: a quarter of an hour at 120. */
-const RECORDED_BEATS_PAST_THE_END = 2_000;
 
-/** How early a key may be struck and still be recorded, where there is no beat to say: as a downbeat is often struck. */
-const EARLY_BY_AT_MOST_MS = 150;
 
 /**
  * How long a held step button waits before its `count`th step after the
@@ -557,14 +544,6 @@ const EARLY_BY_AT_MOST_MS = 150;
 function repeatGapMs(count: number): number {
   return Math.max(30, 150 - 12 * (count - 1));
 }
-/**
- * What the player is asked to call the run it is sounding.
- *
- * A roll is not a take and has no id of its own, but the player is addressed by
- * one - and this is also what lets everything else tell whether the thing
- * sounding is the drawing's or the shelf's.
- */
-const RUN_ROLL_ID = 'the run just played';
 /** What the player is sounding while a run is shown again on the notes. */
 const RUN_REPLAY_ID = 'a run shown again on the page';
 
@@ -577,13 +556,6 @@ const RUN_REPLAY_ID = 'a run shown again on the page';
  * tapping to see the strip empty. A few beats at any tempo a rhythm is read.
  */
 const LIVE_TICK_MS = 3_000;
-/**
- * How far ahead of the sound the clicks over a playback are laid out.
- *
- * Long enough that a click is placed rather than raced for, short enough that
- * stopping does not leave one sounding after the picture has gone quiet.
- */
-const ROLL_CLICK_LEAD_MS = 100;
 /**
  * How often the keep pill's counter is redrawn while a take is open.
  *
@@ -2153,28 +2125,6 @@ export class AppView {
   /** Whether the click that ends a press which laid a slice is to be let pass. */
   private sliceLaidByThePress = false;
   /**
-   * Playing being recorded into the sketch shown, while it is: which sketch,
-   * the moment of it it goes in at, from the drawing's beginning, and when
-   * on the clock that moment falls - after the count-in. What has been
-   * played, timed from then; and the clicks of the sketch's beat to sound
-   * under it, the next of them still to be handed over.
-   */
-  private recording: {
-    readonly sketchId: string;
-    readonly fromMs: number;
-    readonly beginsAtMs: number;
-    readonly played: MidiFileEvent[];
-    /** Recorded into the drums, struck on the letters of the computer keyboard, rather than into the notes from the keys. */
-    readonly drums: boolean;
-    /** Takes in a key struck or let go of, at a moment on the page's clock: see `recordIntoTheSketch`. */
-    readonly hear: (event: MidiFileEvent) => void;
-    readonly clicks: readonly { readonly atMs: number; readonly weight: BeatWeight }[];
-    nextClick: number;
-    readonly stopListening: () => void;
-    begins: ReturnType<typeof setTimeout> | null;
-    tick: ReturnType<typeof setInterval> | null;
-  } | null = null;
-  /**
    * A run being shown again on the notes, and where the showing has got to.
    * See `replayTheRun`.
    */
@@ -2241,8 +2191,6 @@ export class AppView {
   private chordPointedAt: ChordAskedFor | null = null;
   /** Those notes, where they would go: painted dashed over the drawing until the pointer leaves the chord. */
   private notesShownAhead: readonly NoteShownAhead[] = [];
-  /** The notes played into a recording under way, where they go, painted as they are played: see `showWhatIsBeingRecorded`. */
-  private notesBeingRecorded: readonly NoteShownAhead[] = [];
   /** What the rows sounding last were, so a frame that changes nothing draws nothing. */
   private soundingRowsSaid = '';
   /**
@@ -2984,6 +2932,7 @@ export class AppView {
   /** What a pointer and the keys do to the notes of a sketch being edited: see `SketchEditing`. */
   private readonly sketchEditing = new SketchEditing(this);
   private readonly rollNavigation = new RollNavigation(this);
+  private readonly sketchRecording = new SketchRecording(this);
   /** The loops of a sketch's drums, drawn and pulled: see `DrumLoopEditing`. */
   private readonly drumLoops = new DrumLoopEditing(this);
   private readonly sketchVersionsSheet = new SketchVersionsSheet(this);
@@ -6957,7 +6906,7 @@ export class AppView {
 
   /** And those of a recording under way: see `showWhatIsBeingRecorded`. */
   get rollNotesBeingRecorded(): readonly NoteShownAhead[] {
-    return this.notesBeingRecorded;
+    return this.sketchRecording.notesBeingRecorded;
   }
 
   /** True while the reader is being given their look at the page. */
@@ -7059,8 +7008,8 @@ export class AppView {
 
   /** Starts the drawing playing, or holds it where it has got to. */
   private togglePlayingTheRoll(): void {
-    if (this.recording !== null) {
-      this.writeInWhatWasRecorded();
+    if (this.sketchRecording.isRecording) {
+      this.sketchRecording.writeInWhatWasRecorded();
       return;
     }
     if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
@@ -8251,9 +8200,7 @@ export class AppView {
         this.drumsDown.push(drum.midi);
         this.lightTheSoundingRows();
         // Written as the drawing shows the drums: as keys, each drum its row.
-        if (this.recording?.drums === true) {
-          this.recording.hear({ kind: 'noteOn', atMs, midi: drum.midi, velocity });
-        }
+        this.sketchRecording.hearTheDrums({ kind: 'noteOn', atMs, midi: drum.midi, velocity });
       },
       letGo: (pad, atMs) => {
         const drum = DRUM_KIT[pad];
@@ -8263,9 +8210,7 @@ export class AppView {
         // Each letting go is of a drum struck, which put it here.
         this.drumsDown.splice(this.drumsDown.indexOf(drum.midi), 1);
         this.lightTheSoundingRows();
-        if (this.recording?.drums === true) {
-          this.recording.hear({ kind: 'noteOff', atMs, midi: drum.midi });
-        }
+        this.sketchRecording.hearTheDrums({ kind: 'noteOff', atMs, midi: drum.midi });
       },
     });
     // Given back as the view goes: the keyboard outlives it, and holding
@@ -10180,10 +10125,10 @@ export class AppView {
       this.goBackInTheRoll();
     });
     this.listen(this.el.rollRecord, 'click', () => {
-      if (this.recording === null) {
-        this.recordIntoTheSketch();
+      if (this.sketchRecording.isRecording) {
+        this.sketchRecording.writeInWhatWasRecorded();
       } else {
-        this.writeInWhatWasRecorded();
+        this.sketchRecording.recordIntoTheSketch();
       }
     });
     this.el.rollBody.addEventListener(
@@ -14661,7 +14606,7 @@ export class AppView {
         button.dataset['away'] = 'true';
       }
     }
-    this.sayWhetherItRecords();
+    this.sketchRecording.sayWhetherItRecords();
     this.sayWhetherTheDrumsAreWritten();
     // The box chooses notes on any drawing: on a sketch while it is edited,
     // and on anything else to copy them out of.
@@ -15135,7 +15080,7 @@ export class AppView {
    * notes. Nothing that reads the notes as pitches - the chords, the scale,
    * a chord's name - is asked of them then: a drum is no pitch.
    */
-  private theDrumsAreWritten(): boolean {
+  theDrumsAreWritten(): boolean {
     return this.theOtherRollShowing?.sketch?.drums === true;
   }
 
@@ -16919,7 +16864,7 @@ export class AppView {
    */
   private editTheSketch(editing: boolean): void {
     // Listened to from here, what was being recorded is written in first.
-    this.writeInWhatWasRecorded();
+    this.sketchRecording.writeInWhatWasRecorded();
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
     if (showing === null || sketch === undefined) {
@@ -17305,7 +17250,7 @@ export class AppView {
    */
   private writeTheDrums(drums: boolean): void {
     // What was being recorded is written in first, among the notes.
-    this.writeInWhatWasRecorded();
+    this.sketchRecording.writeInWhatWasRecorded();
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
     if (showing === null || sketch === undefined || sketch.drums === drums) {
@@ -17593,7 +17538,7 @@ export class AppView {
       density,
       this.soundingRows,
       this.notesShownAhead,
-      this.notesBeingRecorded,
+      this.sketchRecording.notesBeingRecorded,
     );
     paintTheRuler(sized(canvases.ruler, scrolled.viewWidePx, look.rulerTallPx), scene, view, this.rollInks, density);
     paintTheChords(sized(canvases.chords, scrolled.viewWidePx, look.chordsTallPx), scene, view, this.rollInks, density);
@@ -17827,7 +17772,7 @@ export class AppView {
    * stopping: a reader working out what happened in one bar plays it, holds it,
    * looks, and plays on from the same place.
    */
-  private holdTheRoll(): void {
+  holdTheRoll(): void {
     const player = this.runtime.takePlayer;
     if (player.playing === RUN_ROLL_ID) {
       player.pause();
@@ -17843,8 +17788,8 @@ export class AppView {
    * transport's rewind and stop as one button.
    */
   private goBackInTheRoll(): void {
-    if (this.recording !== null) {
-      this.writeInWhatWasRecorded();
+    if (this.sketchRecording.isRecording) {
+      this.sketchRecording.writeInWhatWasRecorded();
       return;
     }
     const sounding = this.runtime.takePlayer.playing === RUN_ROLL_ID;
@@ -17876,215 +17821,6 @@ export class AppView {
     this.clicksHandedOver(0);
     this.letTheRollTickGo();
     this.describeTheRoll();
-  }
-
-  /**
-   * Records the instrument into the sketch being edited from where the
-   * cursor is: a count-in of as many bars as the settings say, at the
-   * sketch's pace and metre there, and then whatever is played, heard over
-   * what is already written and the sketch's own beat. Nothing is written
-   * until it stops: see `writeInWhatWasRecorded`.
-   *
-   * While the drums are written, what is recorded is the drums struck on
-   * the letters of the computer keyboard, and the keys are not: a key is no
-   * drum, and among the drums it would be a row of the kit by chance.
-   */
-  private recordIntoTheSketch(): void {
-    const showing = this.theOtherRollShowing;
-    const sketch = showing?.sketch;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
-    if (showing === null || sketch === undefined || !sketch.editing || stored === null) {
-      return;
-    }
-    if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
-      this.holdTheRoll();
-    }
-    const origin = rollBeganAtMs(showing.roll);
-    const fromMs = this.headIsAtMs();
-    const now = this.runtime.clock.now();
-    // The beat where it goes in, which the count-in is counted at; a sketch
-    // with no beat is recorded into at once.
-    const beat = theBeatOfTheClickAt(stored.events, stored.beats, fromMs + origin);
-    const beatMs = beat === null ? 0 : ((MILLISECONDS_A_MINUTE / beat.crotchetsPerMinute) * 4) / beat.metre.beatType;
-    const countIn = beat === null ? 0 : this.runtime.controller.settings.countInBars * beat.metre.beatsInBar;
-    const beginsAtMs = now + countIn * beatMs;
-    for (let at = 0; at < countIn; at += 1) {
-      this.runtime.metronomeClick.click(now + at * beatMs, beat !== null && at % beat.metre.beatsInBar === 0 ? 'downbeat' : 'beat');
-    }
-    // The sketch's beat from there on, carried past its end, to be clicked under the playing.
-    const carried = theClickOfTheTake(stored.events, stored.beats, RECORDED_BEATS_PAST_THE_END) ?? [];
-    const clicks = carried
-      .filter((each) => each.atMs >= fromMs + origin - SLICE_EDGE_MS)
-      .map((each) => ({
-        atMs: beginsAtMs + (each.atMs - origin - fromMs),
-        weight: (each.beat === 0 ? 'downbeat' : 'beat') as BeatWeight,
-      }));
-    // A key struck a little before the first beat, as a downbeat often is, is the first beat's.
-    const earliest = beginsAtMs - (beatMs > 0 ? beatMs / 2 : EARLY_BY_AT_MOST_MS);
-    const played: MidiFileEvent[] = [];
-    const hear = (event: MidiFileEvent): void => {
-      if (event.atMs < earliest) {
-        return;
-      }
-      played.push({ ...event, atMs: event.atMs - beginsAtMs });
-      // Seen as it is played, not a tick later.
-      if (event.kind === 'noteOn' || event.kind === 'noteOff') {
-        this.showWhatIsBeingRecorded();
-      }
-    };
-    const drums = sketch.drums;
-    const stopListening = this.runtime.midi.subscribe((event) => {
-      if (drums) {
-        return;
-      }
-      const atMs = event.timestampMs;
-      if (event.type === 'noteon') {
-        hear({ kind: 'noteOn', atMs, midi: event.midi, velocity: event.velocity });
-      } else if (event.type === 'noteoff') {
-        hear({ kind: 'noteOff', atMs, midi: event.midi });
-      } else if (event.type === 'pedal') {
-        hear({ kind: 'sustain', atMs, value: event.value });
-      }
-    });
-    this.recording = {
-      sketchId: sketch.id,
-      fromMs,
-      beginsAtMs,
-      played,
-      drums,
-      hear,
-      clicks,
-      nextClick: 0,
-      stopListening,
-      begins: null,
-      tick: null,
-    };
-    const recording = this.recording;
-    recording.begins = setTimeout(() => {
-      recording.begins = null;
-      this.goOnRecording();
-    }, beginsAtMs - now);
-    this.sayWhetherItRecords();
-  }
-
-  /**
-   * The recording under way: what is written sounds from where the cursor
-   * is now, as the cursor walks on, and the beat is handed over a little
-   * ahead, as a playback's is. Started when the count-in ends, and then a
-   * tick at a time.
-   */
-  private goOnRecording(): void {
-    const recording = this.recording;
-    const roll = this.theRoll();
-    if (recording === null || roll === null) {
-      return;
-    }
-    const now = this.runtime.clock.now();
-    const atMs = recording.fromMs + Math.max(0, now - recording.beginsAtMs);
-    const player = this.runtime.takePlayer;
-    if (recording.tick === null) {
-      if (roll.presses.length > 0) {
-        player.setSpeed(1);
-        player.play(RUN_ROLL_ID, rollAsEvents(roll), atMs);
-      }
-      recording.tick = setInterval(() => this.goOnRecording(), TAKE_TICK_MS);
-    } else if (player.playing === RUN_ROLL_ID) {
-      player.pump();
-      // Past what was written, the cursor goes on by itself.
-      if (player.finished) {
-        player.stop();
-      }
-    }
-    if (this.el.rollClick.checked) {
-      for (let next = recording.clicks[recording.nextClick]; next !== undefined && next.atMs <= now + ROLL_CLICK_LEAD_MS; ) {
-        this.runtime.metronomeClick.click(next.atMs, next.weight);
-        recording.nextClick += 1;
-        next = recording.clicks[recording.nextClick];
-      }
-    }
-    this.rollAtMs = atMs;
-    this.describeTheRoll();
-    this.showWhatIsBeingRecorded();
-  }
-
-  /**
-   * Paints the notes the recording under way comes to where they go, a key
-   * still down as far as now, so the playing is seen as it is played - and
-   * as it will be written in, by the same answer; nothing while none is
-   * under way. It is written in only once the recording stops.
-   */
-  private showWhatIsBeingRecorded(): void {
-    const recording = this.recording;
-    const scene = this.drawnScene;
-    const showing = this.theOtherRollShowing;
-    const stored = recording === null ? null : this.theSketchAsDrawn(recording.sketchId);
-    const now = this.runtime.clock.now() - (recording?.beginsAtMs ?? 0);
-    this.notesBeingRecorded =
-      recording === null || scene === null || showing === null || stored === null
-        ? []
-        : theNotesRecorded(stored.events, recording.played, recording.fromMs + rollBeganAtMs(showing.roll), now).map((note) => ({
-            row: scene.highest - note.midi,
-            fromMs: recording.fromMs + note.afterMs,
-            untilMs: recording.fromMs + note.afterMs + note.lengthMs,
-          }));
-    this.paintTheRoll();
-  }
-
-  /**
-   * Stops recording and writes in what was played, from where it went in,
-   * over what is there: one change, put back as one, the keys of it chosen.
-   * Stopped during the count-in, nothing was recorded. The cursor stays
-   * where the recording stopped, and the marker where it began.
-   */
-  private writeInWhatWasRecorded(): void {
-    const recording = this.recording;
-    if (recording === null) {
-      return;
-    }
-    this.recording = null;
-    this.showWhatIsBeingRecorded();
-    recording.stopListening();
-    if (recording.begins !== null) {
-      clearTimeout(recording.begins);
-    }
-    if (recording.tick !== null) {
-      clearInterval(recording.tick);
-    }
-    this.runtime.metronomeClick.takeBackTheClicks();
-    if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
-      this.runtime.takePlayer.stop();
-    }
-    const stoppedAtMs = this.runtime.clock.now() - recording.beginsAtMs;
-    const showing = this.theOtherRollShowing;
-    const sketch = showing?.sketch;
-    const stored = this.theSketchAsDrawn(recording.sketchId);
-    this.sayWhetherItRecords();
-    if (stoppedAtMs < 0 || showing === null || sketch === undefined || sketch.id !== recording.sketchId || stored === null) {
-      this.describeTheRoll();
-      return;
-    }
-    const origin = rollBeganAtMs(showing.roll);
-    const { events, pasted } = takeWithThePlayingRecorded(stored.events, recording.played, recording.fromMs + origin, stoppedAtMs);
-    this.rollPlacedAtMs = recording.fromMs;
-    this.rollAtMs = recording.fromMs + stoppedAtMs;
-    if (events !== stored.events) {
-      this.changeTheSketchShowing(events, [...sketch.before, asItWas(stored, sketch.chosen)], pasted);
-    }
-    this.describeTheRoll();
-  }
-
-  /** The record button pressed while it records - counting in or under way - and saying what a press would do. */
-  private sayWhetherItRecords(): void {
-    const recording = this.recording !== null;
-    const bars = this.runtime.controller.settings.countInBars;
-    const what = this.theDrumsAreWritten() ? 'Record the drums, struck on the letters Q to O or Z to the full stop,' : 'Record into the sketch';
-    this.el.rollRecord.setAttribute('aria-pressed', String(recording));
-    this.el.rollRecord.title = recording
-      ? 'Stop recording, and write in what was played'
-      : bars > 0
-        ? `${what} from the cursor, after ${String(bars)} ${bars === 1 ? 'bar' : 'bars'} counted in`
-        : `${what} from the cursor`;
-    this.el.rollRecord.setAttribute('aria-label', this.el.rollRecord.title);
   }
 
   /** Says on its switches whether the drums are written, and whether they are heard. */
@@ -18421,7 +18157,7 @@ export class AppView {
   }
 
   private stopTheRoll(): void {
-    this.writeInWhatWasRecorded();
+    this.sketchRecording.writeInWhatWasRecorded();
     if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
       this.runtime.takePlayer.stop();
     }
@@ -18696,7 +18432,7 @@ export class AppView {
    * frame: a grid that re-centres continuously is unreadable, and on a long
    * piece a head that never scrolls is a performance watched off-screen.
    */
-  private describeTheRoll(): void {
+  describeTheRoll(): void {
     const player = this.runtime.takePlayer;
     const sounding = player.playing === RUN_ROLL_ID;
     // Only when it turns over: the same icon set again is a new drawing to the page.

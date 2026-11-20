@@ -7,10 +7,12 @@ import {
   theBarOfTheTakeAt,
   theClickOfTheTake,
   theLevelOfTheNote,
+  theNoteOwn,
   type Hand,
   type HeardBeat,
   type MidiFileEvent,
   type NoteLoudness,
+  type NoteOwn,
 } from '../../domain/midi/MidiFile.js';
 import { elementAt } from '../../shared/asserts.js';
 import { Duration } from '../../domain/model/Duration.js';
@@ -1038,12 +1040,9 @@ export function rollOfTheTake(
 }
 
 /** A key of a take, and where in its events it went down and came up, if it did. */
-export interface KeyOfTheTake {
+export interface KeyOfTheTake extends NoteOwn {
   readonly midi: number;
   readonly velocity: number;
-  readonly hand?: Hand;
-  readonly loudness?: NoteLoudness;
-  readonly muted?: true;
   readonly downAtMs: number;
   readonly upAtMs: number | null;
   readonly on: number;
@@ -1071,9 +1070,7 @@ export function theKeysOfTheTake(events: readonly MidiFileEvent[], of: 'keys' | 
       keys.push({
         midi: event.midi,
         velocity: event.velocity,
-        ...(event.hand === undefined ? {} : { hand: event.hand }),
-        ...(event.loudness === undefined ? {} : { loudness: event.loudness }),
-        ...(event.muted === true ? { muted: true as const } : {}),
+        ...theNoteOwn(event),
         downAtMs: event.atMs,
         upAtMs: null,
         on: at,
@@ -1538,15 +1535,11 @@ export function takeWithTheKeysCopied(
  * copied begins, how long it is held, its pitch, how hard and in which hand.
  * Counted from the first, so pasted they begin wherever they are put.
  */
-export interface NoteCopied {
+export interface NoteCopied extends NoteOwn {
   readonly afterMs: number;
   readonly lengthMs: number;
   readonly midi: number;
   readonly velocity: number;
-  readonly hand?: Hand;
-  readonly loudness?: NoteLoudness;
-  /** Silenced in the editor, and so silenced where it is pasted. */
-  readonly muted?: true;
 }
 
 /**
@@ -1571,9 +1564,7 @@ export function theNotesCopied(events: readonly MidiFileEvent[], named: readonly
       lengthMs: (key.upAtMs ?? key.downAtMs) - key.downAtMs,
       midi: key.midi,
       velocity: key.velocity,
-      ...(key.hand === undefined ? {} : { hand: key.hand }),
-      ...(key.loudness === undefined ? {} : { loudness: key.loudness }),
-      ...(key.muted === true ? { muted: true as const } : {}),
+      ...theNoteOwn(key),
     }));
 }
 
@@ -1627,9 +1618,7 @@ export function theNotesOnTheClipboard(text: string): readonly NoteCopied[] | nu
       lengthMs: note.lengthMs,
       midi: note.midi,
       velocity: note.velocity,
-      ...(note.hand === undefined ? {} : { hand: note.hand }),
-      ...(note.loudness === undefined ? {} : { loudness: note.loudness }),
-      ...(note.muted === true ? { muted: true as const } : {}),
+      ...theNoteOwn({ hand: note.hand, loudness: note.loudness, muted: note.muted }),
     });
   }
   return notes.length === 0 ? null : notes;
@@ -1758,9 +1747,7 @@ export function takeWithTheNotesPasted(
       atMs: key.downAtMs,
       midi: note.midi,
       velocity: note.velocity,
-      ...(note.hand === undefined ? {} : { hand: note.hand }),
-      ...(note.loudness === undefined ? {} : { loudness: note.loudness }),
-      ...(note.muted === true ? { muted: true as const } : {}),
+      ...theNoteOwn(note),
     };
     const released: MidiFileEvent = { kind: 'noteOff', atMs: Math.round(atMs + note.afterMs + note.lengthMs), midi: note.midi };
     const withIt = inTheOrderPlayed([...taken, struck, released]);
@@ -1891,9 +1878,7 @@ export function takeWithTheChordsBroken(
               lengthMs: (steps[at + 1] ?? untilMs) - stepMs,
               midi: struck.midi,
               velocity: struck.velocity,
-              ...(struck.hand === undefined ? {} : { hand: struck.hand }),
-              ...(struck.loudness === undefined ? {} : { loudness: struck.loudness }),
-              ...(struck.muted === true ? { muted: true as const } : {}),
+              ...theNoteOwn(struck),
             },
           ];
     });

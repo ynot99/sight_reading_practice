@@ -26,6 +26,7 @@ import {
   type HeardBeat,
   type MidiFileEvent,
   type NoteLoudness,
+  theNoteOwn,
 } from '../../src/domain/midi/MidiFile.js';
 import { DomainError } from '../../src/shared/errors.js';
 import { readMidiFile } from '../../src/domain/midi/readMidiFile.js';
@@ -1181,5 +1182,18 @@ describe('the dynamics printed for one hand alone', () => {
     expect(twoTracks.trackNames).toEqual([TRACK_OF_A_HAND.right, TRACK_OF_A_HAND.left]);
     expect(twoTracks.dynamics).toEqual(expected);
     expect(read(marked(() => undefined)).dynamics).toEqual(expected);
+  });
+});
+
+describe("a note's own", () => {
+  it('is its hand, its written loudness and whether it is silenced, and nothing else of it', () => {
+    expect(
+      theNoteOwn({ kind: 'noteOn', atMs: 5, midi: 60, velocity: 0.5, hand: 'left', loudness: { level: 'p', shade: 10 }, muted: true } as never),
+    ).toEqual({ hand: 'left', loudness: { level: 'p', shade: 10 }, muted: true });
+  });
+
+  it('says none of what the note does not, not even as nothing', () => {
+    expect(Object.keys(theNoteOwn({}))).toEqual([]);
+    expect(Object.keys(theNoteOwn({ hand: undefined, loudness: undefined }))).toEqual([]);
   });
 });

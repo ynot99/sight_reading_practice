@@ -114,8 +114,8 @@ This file is how the work is done here, and the rules that are easy to break.
   properties - its hand, its written loudness, whether it is silenced - go
   wherever it is moved, copied, pasted, broken or written in a lap. Each new
   one added by hand to every place that rebuilds a note is a place forgotten.
-  Rebuild a note through the one helper that carries them, and add a new
-  property there.
+  Rebuild a note with `...theNoteOwn(it)`, and add a new property to
+  `NoteOwn` and there.
 - **A judgement is a pure function; the view only measures and applies.**
   Where to scroll, what changed, whether a line is on the screen: worked out
   from numbers in a function of its own module and tested there, as

@@ -1,4 +1,4 @@
-import { inTheOrderPlayed, type Hand, type MidiFileEvent, type NoteLoudness } from './MidiFile.js';
+import { inTheOrderPlayed, theNoteOwn, type MidiFileEvent, type NoteOwn } from './MidiFile.js';
 
 /*
  * Loops of a sketch's drums.
@@ -146,14 +146,11 @@ export function takeWithTheDrumLoopsKeptInStep(
 }
 
 /** A drum struck in a sketch, and where in its events it is. */
-interface Hit {
+interface Hit extends NoteOwn {
   readonly atMs: number;
   readonly upAtMs: number | null;
   readonly midi: number;
   readonly velocity: number;
-  readonly hand?: Hand;
-  readonly loudness?: NoteLoudness;
-  readonly muted?: true;
   readonly on: number;
   readonly off: number | null;
 }
@@ -170,9 +167,7 @@ function theHitsOf(events: readonly MidiFileEvent[]): readonly Hit[] {
         upAtMs: null,
         midi: event.midi,
         velocity: event.velocity,
-        ...(event.hand === undefined ? {} : { hand: event.hand }),
-        ...(event.loudness === undefined ? {} : { loudness: event.loudness }),
-        ...(event.muted === true ? { muted: true as const } : {}),
+        ...theNoteOwn(event),
         on: at,
         off: null,
       });
@@ -203,14 +198,11 @@ function theLapsOf(loop: DrumLoop): readonly Lap[] {
 }
 
 /** A hit of a lap, from its beginning, and held no further than its end. */
-interface InALap {
+interface InALap extends NoteOwn {
   readonly afterMs: number;
   readonly lengthMs: number;
   readonly midi: number;
   readonly velocity: number;
-  readonly hand?: Hand;
-  readonly loudness?: NoteLoudness;
-  readonly muted?: true;
 }
 
 function theContentOf(hits: readonly Hit[], lap: Lap): readonly InALap[] {
@@ -221,9 +213,7 @@ function theContentOf(hits: readonly Hit[], lap: Lap): readonly InALap[] {
       lengthMs: Math.min(hit.upAtMs ?? lap.untilMs, lap.untilMs) - hit.atMs,
       midi: hit.midi,
       velocity: hit.velocity,
-      ...(hit.hand === undefined ? {} : { hand: hit.hand }),
-      ...(hit.loudness === undefined ? {} : { loudness: hit.loudness }),
-      ...(hit.muted === true ? { muted: true as const } : {}),
+      ...theNoteOwn(hit),
     }));
 }
 
@@ -281,9 +271,7 @@ function theLapsWritten(
           atMs,
           midi: hit.midi,
           velocity: hit.velocity,
-          ...(hit.hand === undefined ? {} : { hand: hit.hand }),
-          ...(hit.loudness === undefined ? {} : { loudness: hit.loudness }),
-          ...(hit.muted === true ? { muted: true as const } : {}),
+          ...theNoteOwn(hit),
         },
         { kind: 'drumOff', atMs: atMs + hit.lengthMs, midi: hit.midi },
       ];

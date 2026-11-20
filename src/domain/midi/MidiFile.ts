@@ -64,10 +64,19 @@ export type MidiFileEvent =
   | { readonly kind: 'section'; readonly atMs: number; readonly name: string };
 
 /** What a key struck says, or a drum: when, which, how hard, and by whom. */
-export interface Struck {
+export interface Struck extends NoteOwn {
   readonly atMs: number;
   readonly midi: number;
   readonly velocity: number;
+}
+
+/**
+ * What a note carries of its own wherever it goes - moved, copied, pasted,
+ * broken from a chord, written in a lap of a loop of drums. Copied by
+ * `theNoteOwn`, which is the one place a new one is added: each added by
+ * hand to every place that rebuilds a note was a place forgotten.
+ */
+export interface NoteOwn {
   /** Which hand plays it, where that has been said: see {@link HANDS_SPLIT_AT_MIDI}. */
   readonly hand?: Hand;
   /**
@@ -83,6 +92,15 @@ export interface Struck {
    * `withoutTheMuted`.
    */
   readonly muted?: true;
+}
+
+/** A note's own, from anything that has them, for a note rebuilt: only those it says, none said as nothing. */
+export function theNoteOwn(from: NoteOwn): NoteOwn {
+  return {
+    ...(from.hand === undefined ? {} : { hand: from.hand }),
+    ...(from.loudness === undefined ? {} : { loudness: from.loudness }),
+    ...(from.muted === true ? { muted: true as const } : {}),
+  };
 }
 
 /**

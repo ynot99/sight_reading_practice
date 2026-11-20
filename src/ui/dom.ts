@@ -62,3 +62,14 @@ export function usesTheArrows(element: Element | null): boolean {
   const type = element.tagName === 'INPUT' ? (element.getAttribute('type') ?? 'text') : null;
   return isFormControl(element) && element.tagName !== 'BUTTON' && !['button', 'checkbox', 'submit', 'reset'].includes(type ?? '');
 }
+
+/** A button's title and label, and whether it is dimmed for the reason the title gives. */
+export function sayWhetherIdle(button: HTMLElement, says: string, idle: boolean): void {
+  button.title = says;
+  button.setAttribute('aria-label', says);
+  if (idle) {
+    button.dataset['idle'] = 'true';
+  } else {
+    delete button.dataset['idle'];
+  }
+}

@@ -194,7 +194,7 @@ export type TheViewOfTheSketch = Pick<
   | 'showWhereTheSketchChanged'
   | 'silenceTheChosen'
   | 'chooseTheMark'
-  | 'chordsBeingForgotten'
+  | 'chordsBeside'
   | 'copyTheMarkChosen'
   | 'doc'
   | 'drawTheRollInto'
@@ -217,7 +217,6 @@ export type TheViewOfTheSketch = Pick<
   | 'runtime'
   | 'sayWhatCanBeChanged'
   | 'sayWhetherThereIsAnythingToPaste'
-  | 'showTheChordsOfTheKey'
   | 'takeTheMarkAway'
   | 'theGripOnTheSlice'
   | 'theKeyUnder'
@@ -1243,12 +1242,12 @@ export class SketchEditing {
       this.host.copyTheMarkChosen(event.code === 'KeyX');
       return;
     }
-    if (event.key === 'Escape' && this.host.chordsBeingForgotten) {
+    if (event.key === 'Escape' && this.host.chordsBeside.chordsBeingForgotten) {
       // The deleting ends first, then what is chosen, then the sheet.
       event.preventDefault();
       event.stopImmediatePropagation();
-      this.host.chordsBeingForgotten = false;
-      this.host.showTheChordsOfTheKey();
+      this.host.chordsBeside.chordsBeingForgotten = false;
+      this.host.chordsBeside.showTheChordsOfTheKey();
       return;
     }
     const command = (event.ctrlKey || event.metaKey) && !event.altKey;

@@ -8,18 +8,9 @@ import {
   type PlayedWith,
 } from '../application/modes/challengeModes.js';
 import { barCells } from '../domain/scoring/barCells.js';
-import {
-  nameOfThePitchClass,
-  nameTheChord,
-  theChordTheKeysMake,
-  theChordTheNotesMake,
-  theNumeralOfTheChord,
-  type ChordKind,
-} from '../domain/harmony/chordName.js';
 import { DYNAMIC_LEVELS, DYNAMIC_VELOCITY, type DynamicLevel } from '../domain/model/Exercise.js';
 import { eachKeyOnce, sameKeys, theChordsOfTheScale } from '../domain/harmony/chordsOfTheKey.js';
 import type { KeyFrom } from '../domain/harmony/chordsAlong.js';
-import { theChordMovedTo } from '../domain/harmony/chordMoved.js';
 import {
   SCALES,
   SCALE_NAMES,
@@ -106,7 +97,6 @@ import {
   takeWithTheSectionAt,
   LOUDNESS_UNMARKED,
   type NoteLoudness,
-  theHandThatPlays,
   thePaceOfTheClick,
   thePlayingAtAnotherPace,
   withoutTheMuted,
@@ -226,12 +216,13 @@ import {
   type SketchAsItWas,
   asItWas,
   theLoudnessWrittenAt,
-  oneKeyForEachPitch,
   theBeatAt,
   TAP_SLOP_PX,
 } from './sketchEditing.js';
 import { RollNavigation } from './rollNavigation.js';
 import { SketchRecording } from './sketchRecording.js';
+import { ChordsBeside, theChordAskedForOnTheCircle, theNameOfTheKeys, theUsualLoudness, type ChordWritten } from './chordsBeside.js';
+import { sayWhetherIdle } from './dom.js';
 import { MILLISECONDS_A_MINUTE, ROLL_CLICK_LEAD_MS, RUN_ROLL_ID, SLICE_EDGE_MS, TAKE_TICK_MS } from './rollTiming.js';
 
 /** What happened to the settings, as the status line says it. */
@@ -254,7 +245,6 @@ import {
   takeWithTheKeysChanged,
   takeWithTheNotesPasted,
   thePlayingWithABarTakenOut,
-  takeWithTheChordsBroken,
   theMusicsBeats,
   type ArpeggioWay,
   theBarsAcross,
@@ -298,9 +288,6 @@ import {
   drawTheRoll,
   rowFromTap,
   theCanvasesOf,
-  theChordAt,
-  theNotesOfTheChord,
-  theNotesHeldIntoTheChord,
   theKeysStripOf,
   theMapOfThePitches,
   stretchesIn,
@@ -312,7 +299,6 @@ import {
   whatTheGridSaysAt,
   whatTheRulerSaysAt,
   type RollCanvases,
-  type SceneChord,
   type RollPitches,
   type RollScene,
   shareOfTheRun,
@@ -326,49 +312,11 @@ import {
   type RollHeads,
 } from './rollView.js';
 import { whatWasChanged, whereToSeeTheChange, type SketchDrawn } from './theChangeInView.js';
-import { theBrightnessOfTheChord, theTensionOfTheChord } from '../domain/harmony/chordFeeling.js';
-import { GOALS_OF_THE_NEXT_CHORD, theChordsTowards, type GoalOfTheNextChord } from '../domain/harmony/nextChord.js';
-import { drawTheChart, showWhereOnTheChart, theChartOfTheChords, theCurvesOfTheChords, theMomentOnTheCurves } from './chordChart.js';
-import {
-  drawTheCircle,
-  drawTheKeysUnderTheCircle,
-  isTheMiddleOfTheCircle,
-  showOnTheCircle,
-  showTheChordOnTheKeys,
-  thePlaceOnTheCircle,
-} from './circleView.js';
+import { GOALS_OF_THE_NEXT_CHORD } from '../domain/harmony/nextChord.js';
+import { theMomentOnTheCurves } from './chordChart.js';
+import { drawTheCircle, drawTheKeysUnderTheCircle } from './circleView.js';
 
-/**
- * A chord pressed or pointed at: one of the drawer, by its place there; one
- * of the circle, by its slice; or the one sounding, named in the circle's
- * middle (see `theChordSounding`).
- */
-type ChordAskedFor =
-  | { readonly inTheDrawer: number }
-  | { readonly onTheCircle: PlaceOnTheCircle }
-  | { readonly inTheMiddle: true };
-
-/** Whether two chords asked for are the same one. */
-function theSameChordAskedFor(one: ChordAskedFor | null, other: ChordAskedFor | null): boolean {
-  return JSON.stringify(one) === JSON.stringify(other);
-}
-
-/** The chord of the circle a pointer or a key is on: a slice's, or the middle's; none off them. */
-function theChordAskedForOnTheCircle(target: EventTarget | null): ChordAskedFor | null {
-  if (isTheMiddleOfTheCircle(target)) {
-    return { inTheMiddle: true };
-  }
-  const place = thePlaceOnTheCircle(target);
-  return place === null ? null : { onTheCircle: place };
-}
-import {
-  theKeysAtThePlace,
-  theKeysOfTheChord,
-  theKeysOwnPlaces,
-  theWayRoundTheCircle,
-  whereOnTheCircle,
-  type PlaceOnTheCircle,
-} from '../domain/harmony/circleOfFifths.js';
+import { theKeysOfTheChord } from '../domain/harmony/circleOfFifths.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
 import { readBackup } from '../application/Backup.js';
 import { calibrationExercise } from '../domain/generation/calibrationExercise.js';
@@ -607,12 +555,6 @@ function clampTheLoudness(level: number): number {
   return Math.min(127, Math.max(1, level));
 }
 
-/** How many chords the way round the circle is drawn through, the one the music is on last: enough for a phrase's turn, few enough to read. */
-const THE_WAY_ROUND_SHOWN = 4;
-
-/** How long a chord tapped in the lane sounds at most: long enough to be heard as a chord, short of a bar of one. */
-const A_CHORD_TAPPED_SOUNDS_MS = 1_200;
-
 /** What the instrument list says for the piano that comes with the app, and for adding a soundfont. */
 const BUILT_IN_PIANO = 'built-in';
 const ADD_A_SOUNDFONT = 'add';
@@ -643,24 +585,6 @@ export const BEATS_A_PACE_IS_HEARD_BY = 4;
 
 /** How long the tonic at the top of a scale heard is held: long enough to be heard as where it arrived. */
 export const A_SCALE_ARRIVES_MS = 700;
-
-/** What each goal for the next chord makes the music, said where none of the circle does. */
-const GOAL_SAID: Readonly<Record<Exclude<GoalOfTheNextChord, 'release'>, string>> = {
-  tension: 'tenser',
-  brighter: 'brighter',
-  darker: 'darker',
-};
-
-/**
- * The notes heard in a chord of the lane: its own, and those held into it
- * from before - heard whole, though only its own are chosen with it.
- */
-function theNotesHeardInTheChord(roll: RunRoll, chord: SceneChord): readonly RolledPress[] {
-  return [...theNotesOfTheChord(roll, chord.fromMs, chord.untilMs), ...theNotesHeldIntoTheChord(roll, chord.fromMs, chord.untilMs)];
-}
-
-/** The fewest notes a chord drafted on the keys under the circle is written with. */
-const A_DRAFT_HAS_AT_LEAST = 2;
 
 /** The grid of bar lines alone, which a slice's ends go to. */
 const BAR_LINES_ONLY: GridChoice = { beats: false, parts: 1 };
@@ -696,36 +620,6 @@ function theSketchesSynced(sketches: SketchSyncOutcome): string {
   }
   return `${said.join('; ')}.`;
 }
-
-/**
- * What a chord of the drawer would do to the sketch: the keys heard as it is
- * held, and struck by a key's press of its button; the sketch with it; the
- * notes chosen after; the notes it puts or moves, to show ahead; how loud,
- * how long it sounds, and where the cursor goes, or nowhere.
- */
-interface ChordWritten {
-  /** Whether it changes the sketch at all: a chord written where it already is changes nothing, but is still heard. */
-  readonly changes: boolean;
-  readonly heard: readonly number[];
-  readonly struck: readonly number[];
-  readonly events: readonly MidiFileEvent[];
-  readonly chosen: readonly KeyNamed[];
-  readonly shown: readonly { readonly midi: number; readonly fromMs: number; readonly untilMs: number }[];
-  readonly velocity: number;
-  readonly lengthMs: number;
-  readonly headAfterMs: number | null;
-}
-
-/**
- * How long a finger rests on a chord of the drawer before moving for the
- * move to slide over the others, each heard, rather than scroll the column
- * they stand in: a scroll is a finger moving as it comes down, a slide one
- * that has stopped to listen first.
- */
-const A_FINGER_LISTENS_MS = 250;
-
-/** How far a finger on a chord of the drawer goes before it is moving at all, and not only resting unsteadily. */
-const A_FINGER_MOVES_PX = 8;
 
 /**
  * The dynamic marked on a moment, and whether reached gradually, as a change
@@ -766,39 +660,9 @@ const ARPEGGIO_WAYS: Readonly<Record<ArpeggioWay, string>> = {
   upAndDown: 'up and back down',
 };
 
-/** A chord as the drawer offers it: its name, what is said under it, and its keys. */
-interface ChordInTheDrawer {
-  readonly name: string;
-  readonly under: string;
-  readonly midis: readonly number[];
-  readonly kept: boolean;
-}
-
-/** What a chord's keys are called: the chord they make, or where they make none, each key's name. */
-function theNameOfTheKeys(midis: readonly number[], fifths: number): string {
-  return nameTheChord(midis, fifths) ?? eachKeyOnce(midis).map((midi) => nameOfThePitchClass(midi, fifths)).join(' ');
-}
-
-/** A button's title and label, and whether it is dimmed for the reason the title gives. */
-function sayWhetherIdle(button: HTMLElement, says: string, idle: boolean): void {
-  button.title = says;
-  button.setAttribute('aria-label', says);
-  if (idle) {
-    button.dataset['idle'] = 'true';
-  } else {
-    delete button.dataset['idle'];
-  }
-}
-
 /** Where a beat is, as a change on it is named: "bar 3", or "bar 3, beat 2" inside the bar. */
 function thePlaceOfTheBeat(beat: { readonly bar: number; readonly beat: number }): string {
   return beat.beat === 0 ? `bar ${String(beat.bar)}` : `bar ${String(beat.bar)}, beat ${String(beat.beat + 1)}`;
-}
-
-/** How loud a note is written: as the sketch's notes are on the whole, and moderately where it has none. */
-function theUsualLoudness(events: readonly MidiFileEvent[]): number {
-  const loudness = events.flatMap((event) => (event.kind === 'noteOn' ? [event.velocity] : [])).sort((a, b) => a - b);
-  return loudness[Math.floor(loudness.length / 2)] ?? 0.7;
 }
 
 /**
@@ -2004,11 +1868,9 @@ export class AppView {
   /** The keys a run is shown again over. See `showTheReplaysKeys`. */
   private readonly replayKeyboard: ReplayKeyboard;
   /** The circle of fifths beside a sketch's chords. See `showTheCircle`. */
-  private readonly circleDrawing: SVGSVGElement;
+  readonly circleDrawing: SVGSVGElement;
   /** The octave of keys under it, by their pitch. */
-  private readonly circleKeys: ReadonlyMap<number, HTMLElement>;
-  /** What the circle was last written to show, so a step of a playback that changes nothing writes nothing. */
-  private circleShows = '';
+  readonly circleKeys: ReadonlyMap<number, HTMLElement>;
   /** The frame the notes over the keys are painted on next, while any fall. */
   private fallingFrame: number | null = null;
   /** The frame the keys under a take or a run shown again are next lit in, while it sounds. */
@@ -2085,8 +1947,6 @@ export class AppView {
    * none until one is laid on it. Kept while the page is, and no longer.
    */
   private rollSlice: { readonly of: string; readonly fromMs: number; readonly toMs: number } | null = null;
-  /** The keys of the chord last tapped in the lane, sounding for a moment: see `soundTheChordTapped`. */
-  private chordTappedSounds: readonly number[] = [];
   /** The scale asked to be heard while it runs: the timers of its notes to come, and the key down now. */
   private scaleHeard: { readonly timers: ReturnType<typeof setTimeout>[]; sounding: number | null } | null = null;
   /** The notes' loudness heard as its slider is moved: see `soundTheLoudness`. */
@@ -2098,13 +1958,6 @@ export class AppView {
   private readonly clickLoudnessHeard = new LoudnessHeard((atMs) => {
     this.runtime.metronomeClick.click(atMs, 'beat');
   });
-  /**
-   * A chord drafted on the keys under the circle to write over the chord of
-   * the lane chosen - the one beginning where this says - as the pitches
-   * pressed into it there; none while nothing is drafted. Only that chord's:
-   * see `theDraft`.
-   */
-  private chordDraft: { readonly overFromMs: number; readonly pitchClasses: readonly number[] } | null = null;
   /** An end of the slice held by a pointer on the ruler, and where its other end stays: see `takeHoldOfAnEndOfTheSlice`. */
   private sliceEndHeld: { readonly pointerId: number; readonly otherMs: number } | null = null;
   /** Where the marker stood as the drawing was shown, so shutting it carries the marker only where it was put: see `closeTheRoll`. */
@@ -2184,13 +2037,6 @@ export class AppView {
   /** The moments the pace of a bar was tapped at in the sheet that asks for it, the latest few. */
   private paceTapped: readonly number[] = [];
 
-  /**
-   * The chord the pointer is on, whose notes are shown where it would write
-   * them; or none.
-   */
-  private chordPointedAt: ChordAskedFor | null = null;
-  /** Those notes, where they would go: painted dashed over the drawing until the pointer leaves the chord. */
-  private notesShownAhead: readonly NoteShownAhead[] = [];
   /** What the rows sounding last were, so a frame that changes nothing draws nothing. */
   private soundingRowsSaid = '';
   /**
@@ -2219,17 +2065,6 @@ export class AppView {
   /** The sketch and the key the head was last found in, so it is followed into another only when it gets there. */
   private keyAtTheHeadFollowed = '';
 
-  /**
-   * Whether the drawer of the chords of the key is open beside a sketch being
-   * edited: kept from one sketch to the next, as a tool laid out on the desk.
-   */
-  private chordsOfTheKeyOpen = false;
-  /** What the next chord should do, asked of the circle; none while nothing is. */
-  private goalOfTheNextChord: GoalOfTheNextChord | null = null;
-  /** Whether the chart of the chords is open over the drawing, while the chords are; and what it last drew. */
-  private chartOpen = false;
-  private chartShows = '';
-
   /** The beat a change is being asked about, while the sheet asking is open. */
   private beatAskedAbout: ReturnType<typeof theBeatOfTheClickAt> = null;
 
@@ -2248,20 +2083,8 @@ export class AppView {
     readonly graduallyHere: boolean;
   } | null = null;
 
-  /** Whether a tap on a chord kept in the drawer deletes it, rather than writing it. */
-  chordsBeingForgotten = false;
-
   /** What last went down on the drawer's chords, so a menu asked by a finger deletes nothing. */
   private pointerOnTheChords = '';
-
-  /**
-   * Where the chord last tapped in the lane begins: a chord of the drawer is
-   * written over it while its notes are the ones chosen, and nothing else
-   * (see `theChordChosenInTheLane`). Only a tap there says so - the notes of
-   * a chord just written are chosen too, and the next one tapped follows
-   * them rather than replacing them.
-   */
-  private chordTappedAt: number | null = null;
 
   /**
    * What the last press on the drawing went down on, which is what its
@@ -2273,25 +2096,6 @@ export class AppView {
   private pressedOn: EventTarget | null = null;
   /** What the last press on the drawing was made with, which is what its click was. */
   private pressedWith: string | null = null;
-
-  /**
-   * The chord of the drawer or the circle a pointer is held down on,
-   * sounding until it is let go of, or none where the pointer has slid off
-   * the chords; its keys, and when they were struck. And what its moving
-   * is, once it moves (see `A_FINGER_LISTENS_MS`): a slide over the chords,
-   * or the column scrolled, from where it was and where the pointer went
-   * down.
-   */
-  private chordHeld: {
-    readonly pointerId: number;
-    readonly at: ChordAskedFor | null;
-    readonly keys: readonly number[];
-    readonly struckAtMs: number;
-    readonly downAtMs: number;
-    readonly downY: number;
-    readonly scrolledFrom: number;
-    readonly moving: 'not yet' | 'slides' | 'scrolls';
-  } | null = null;
 
   /**
    * The notes last copied in this page, for the paste button where the
@@ -2930,9 +2734,10 @@ export class AppView {
   };
 
   /** What a pointer and the keys do to the notes of a sketch being edited: see `SketchEditing`. */
-  private readonly sketchEditing = new SketchEditing(this);
+  readonly sketchEditing = new SketchEditing(this);
   private readonly rollNavigation = new RollNavigation(this);
   private readonly sketchRecording = new SketchRecording(this);
+  readonly chordsBeside = new ChordsBeside(this);
   /** The loops of a sketch's drums, drawn and pulled: see `DrumLoopEditing`. */
   private readonly drumLoops = new DrumLoopEditing(this);
   private readonly sketchVersionsSheet = new SketchVersionsSheet(this);
@@ -6901,7 +6706,7 @@ export class AppView {
 
   /** And the notes it shows ahead, where a chord pointed at would write them: see `showTheChordAhead`. */
   get rollNotesShownAhead(): readonly NoteShownAhead[] {
-    return this.notesShownAhead;
+    return this.chordsBeside.notesShownAhead;
   }
 
   /** And those of a recording under way: see `showWhatIsBeingRecorded`. */
@@ -7783,7 +7588,7 @@ export class AppView {
       controller.events.on('settingsChanged', () => {
         this.showTheListening();
         // Asked from the circle of fifths as well: the button in free play says so.
-        this.showWhetherTheChordIsNamed();
+        this.chordsBeside.showWhetherTheChordIsNamed();
         // The rung and the readings in a row at it are both settings.
         this.showTheRung();
         // A shared setting changed is something the drive has not had.
@@ -8860,7 +8665,7 @@ export class AppView {
       this.renderScores();
       this.renderSketches();
       // Chords kept on another device are in the drawer, if it is open.
-      this.showTheChordsOfTheKey();
+      this.chordsBeside.showTheChordsOfTheKey();
     } catch (error) {
       const why = error instanceof Error ? error.message : 'Google Drive could not be reached.';
       this.el.driveStatus.textContent = why;
@@ -9471,7 +9276,7 @@ export class AppView {
     this.runtime.renderer.turnPagesWithTheMusic(settings.pageTurns !== 'manual');
     this.showThePages();
     this.el.hearOtherHand.checked = settings.hearTheOtherHand;
-    this.showWhetherTheChordIsNamed();
+    this.chordsBeside.showWhetherTheChordIsNamed();
     this.el.rushingCounts.checked = settings.rushingCounts;
     this.el.markListening.checked = settings.markWhileListening;
     this.showTheModes();
@@ -10250,7 +10055,7 @@ export class AppView {
         this.askForAChangeAtTheHead();
         return;
       }
-      if (onTheChords && this.chooseTheChordTapped(event)) {
+      if (onTheChords && this.chordsBeside.chooseTheChordTapped(event)) {
         return;
       }
       // The lane of chords is not the notes: a tap there puts the marker, as
@@ -10727,9 +10532,9 @@ export class AppView {
       if (this.theDrumsAreWritten()) {
         return;
       }
-      this.chordsOfTheKeyOpen = !this.chordsOfTheKeyOpen;
-      this.chordsBeingForgotten = false;
-      this.showTheChordsOfTheKey();
+      this.chordsBeside.chordsOfTheKeyOpen = !this.chordsBeside.chordsOfTheKeyOpen;
+      this.chordsBeside.chordsBeingForgotten = false;
+      this.chordsBeside.showTheChordsOfTheKey();
       // The lane under the notes naming the chords they make comes and goes with them.
       this.drawTheRollInto();
     });
@@ -10737,15 +10542,15 @@ export class AppView {
     for (const button of this.el.rollGoals) {
       this.listen(button, 'click', () => {
         const goal = GOALS_OF_THE_NEXT_CHORD.find((each) => each === button.dataset['goal']) ?? null;
-        this.goalOfTheNextChord = goal === this.goalOfTheNextChord ? null : goal;
-        this.showTheCircle();
+        this.chordsBeside.goalOfTheNextChord = goal === this.chordsBeside.goalOfTheNextChord ? null : goal;
+        this.chordsBeside.showTheCircle();
       });
     }
     this.listen(this.el.rollChartOpen, 'click', () => {
-      this.chartOpen = !this.chartOpen;
-      this.showTheChart();
+      this.chordsBeside.chartOpen = !this.chordsBeside.chartOpen;
+      this.chordsBeside.showTheChart();
       // Back on the notes where the chart left the cursor.
-      if (!this.chartOpen) {
+      if (!this.chordsBeside.chartOpen) {
         this.bringTheHeadIntoView();
       }
     });
@@ -10764,7 +10569,7 @@ export class AppView {
           : this.drawnScene?.chords.find((each) => each.fromMs === Number(pressed.dataset['from']));
       const at = curves === null || curves === undefined ? null : theMomentOnTheCurves(curves, mouse.clientX);
       if (chord !== undefined) {
-        this.pressTheChordOfTheLane(chord, mouse.ctrlKey || mouse.metaKey || mouse.shiftKey);
+        this.chordsBeside.pressTheChordOfTheLane(chord, mouse.ctrlKey || mouse.metaKey || mouse.shiftKey);
       } else if (at !== null) {
         this.putTheHeadAt(at);
       }
@@ -10774,13 +10579,13 @@ export class AppView {
       if (chord === null || chord === undefined) {
         return;
       }
-      if (this.chordsBeingForgotten) {
-        this.forgetTheChordInTheDrawer(Number(chord.dataset['chord']));
+      if (this.chordsBeside.chordsBeingForgotten) {
+        this.chordsBeside.forgetTheChordInTheDrawer(Number(chord.dataset['chord']));
       } else if (event.detail === 0) {
         // A key's click - Enter or Space on a chord - counts no presses. A
         // pointer's writes the chord it is let go of on, and was answered
         // there: see `letGoOfTheChord`.
-        this.soundTheChordWritten(this.writeTheChordAtTheHead({ inTheDrawer: Number(chord.dataset['chord']) }));
+        this.chordsBeside.soundTheChordWritten(this.chordsBeside.writeTheChordAtTheHead({ inTheDrawer: Number(chord.dataset['chord']) }));
       }
     });
     // A chord of the circle written as one of the drawer is, and heard: any
@@ -10790,7 +10595,7 @@ export class AppView {
     const writeFromTheCircle = (target: EventTarget | null): void => {
       const asked = theChordAskedForOnTheCircle(target);
       if (asked !== null) {
-        this.soundTheChordWritten(this.writeTheChordAtTheHead(asked));
+        this.chordsBeside.soundTheChordWritten(this.chordsBeside.writeTheChordAtTheHead(asked));
       }
     };
     this.listen(this.el.rollCircle, 'click', (event) => {
@@ -10799,7 +10604,7 @@ export class AppView {
       }
     });
     this.listen(this.el.rollCircle, 'pointerdown', (event) => {
-      this.holdTheChord(event);
+      this.chordsBeside.holdTheChord(event);
     });
     this.listen(this.el.focusChordNames, 'click', () => {
       this.runtime.controller.updateSettings({ circleNamesTheChord: !this.runtime.controller.settings.circleNamesTheChord });
@@ -10807,7 +10612,7 @@ export class AppView {
     });
     this.listen(this.el.rollCircleNames, 'click', () => {
       this.runtime.controller.updateSettings({ circleNamesTheChord: !this.runtime.controller.settings.circleNamesTheChord });
-      this.showTheCircle();
+      this.chordsBeside.showTheCircle();
     });
     // A key under the circle pressed, while a chord of the lane is chosen, drafts another.
     this.listen(this.el.rollCircleKeys, 'click', (event) => {
@@ -10827,24 +10632,24 @@ export class AppView {
       }
     });
     this.listen(this.el.rollCircleDraftYes, 'click', () => {
-      this.writeTheDraft();
+      this.chordsBeside.writeTheDraft();
     });
     this.listen(this.el.rollCircleDraftNo, 'click', () => {
-      this.chordDraft = null;
-      this.soundTheChordTapped([], 0);
-      this.showTheCircle();
+      this.chordsBeside.chordDraft = null;
+      this.chordsBeside.soundTheChordTapped([], 0);
+      this.chordsBeside.showTheCircle();
     });
     this.listen(this.el.rollCircleKeysShown, 'click', () => {
       this.runtime.controller.updateSettings({ circleShowsTheKeys: !this.runtime.controller.settings.circleShowsTheKeys });
-      this.showTheCircle();
+      this.chordsBeside.showTheCircle();
     });
     // Over a slice or the middle, its notes are shown where it would write them, as a chord of the drawer's are.
     this.listen(this.el.rollCircle, 'pointerover', (event) => {
-      this.pointAtTheChord(theChordAskedForOnTheCircle(event.target));
+      this.chordsBeside.pointAtTheChord(theChordAskedForOnTheCircle(event.target));
     });
     // Off it, onto another slice or anything else - out of the window, even.
     this.listen(this.el.rollCircle, 'pointerout', (event) => {
-      this.pointAtTheChord(theChordAskedForOnTheCircle((event as PointerEvent).relatedTarget));
+      this.chordsBeside.pointAtTheChord(theChordAskedForOnTheCircle((event as PointerEvent).relatedTarget));
     });
     // Enter or the space bar on a slice or the middle writes its chord, the key the slice's and not the
     // drawing's to play; on anything else in the circle - its buttons - it is that thing's own.
@@ -10858,20 +10663,20 @@ export class AppView {
     });
     this.listen(this.el.rollChordsList, 'pointerdown', (event) => {
       this.pointerOnTheChords = event.pointerType;
-      this.holdTheChord(event);
+      this.chordsBeside.holdTheChord(event);
     });
     // Asked of the document, as the keys on the screen are: a finger's
     // events keep going to the chord it went down on, wherever it has slid.
     this.listen(this.doc, 'pointermove', (event) => {
-      if (event instanceof PointerEvent && this.chordHeld?.pointerId === event.pointerId) {
-        this.slideOverTheChords(event);
+      if (event instanceof PointerEvent && this.chordsBeside.chordHeld?.pointerId === event.pointerId) {
+        this.chordsBeside.slideOverTheChords(event);
       }
     });
     for (const type of ['pointerup', 'pointercancel'] as const) {
       this.listen(this.doc, type, (event) => {
-        const held = this.chordHeld;
+        const held = this.chordsBeside.chordHeld;
         if (event instanceof PointerEvent && held?.pointerId === event.pointerId) {
-          this.letGoOfTheChord(type === 'pointerup' && held.moving !== 'scrolls' ? this.theChordUnder(event) : null);
+          this.chordsBeside.letGoOfTheChord(type === 'pointerup' && held.moving !== 'scrolls' ? this.chordsBeside.theChordUnder(event) : null);
         }
       });
     }
@@ -10880,12 +10685,12 @@ export class AppView {
     // finger leaves it, and the click writes them there.
     this.listen(this.el.rollChordsList, 'pointerover', (event) => {
       const chord = (event.target as Element | null)?.closest<HTMLElement>('[data-chord]');
-      this.pointAtTheChord(chord === null || chord === undefined ? null : { inTheDrawer: Number(chord.dataset['chord']) });
+      this.chordsBeside.pointAtTheChord(chord === null || chord === undefined ? null : { inTheDrawer: Number(chord.dataset['chord']) });
     });
     this.listen(this.el.rollChordsList, 'pointerout', (event) => {
       const into = (event as PointerEvent).relatedTarget;
       const chord = into instanceof Element ? into.closest<HTMLElement>('[data-chord]') : null;
-      this.pointAtTheChord(chord === null || !this.el.rollChordsList.contains(chord) ? null : { inTheDrawer: Number(chord.dataset['chord']) });
+      this.chordsBeside.pointAtTheChord(chord === null || !this.el.rollChordsList.contains(chord) ? null : { inTheDrawer: Number(chord.dataset['chord']) });
     });
     // The right button deletes a chord kept, as it deletes a note on the
     // drawing; a finger held there asks for nothing.
@@ -10895,15 +10700,15 @@ export class AppView {
         return;
       }
       event.preventDefault();
-      this.forgetTheChordInTheDrawer(Number(chord.dataset['chord']));
+      this.chordsBeside.forgetTheChordInTheDrawer(Number(chord.dataset['chord']));
     });
     this.listen(this.el.rollChordsForget, 'click', () => {
       // With none kept it ends as it is drawn: see `showTheChordsOfTheKey`.
-      this.chordsBeingForgotten = !this.chordsBeingForgotten;
-      this.showTheChordsOfTheKey();
+      this.chordsBeside.chordsBeingForgotten = !this.chordsBeside.chordsBeingForgotten;
+      this.chordsBeside.showTheChordsOfTheKey();
     });
     this.listen(this.el.rollChordsKeep, 'click', () => {
-      this.keepOrLetGoOfTheChosenChord();
+      this.chordsBeside.keepOrLetGoOfTheChosenChord();
     });
     this.listen(this.el.rollCopyChosen, 'click', () => {
       this.sketchEditing.copyTheChosenKeys(false);
@@ -10913,7 +10718,7 @@ export class AppView {
     });
     for (const [button, way] of this.theArpeggioButtons()) {
       this.listen(button, 'click', () => {
-        this.breakTheChosenChords(way);
+        this.chordsBeside.breakTheChosenChords(way);
       });
     }
     this.listen(this.el.rollRedo, 'click', () => {
@@ -13414,15 +13219,6 @@ export class AppView {
     );
   }
 
-  /** Says on its button in free play whether the chord held is named, and what a press does. */
-  private showWhetherTheChordIsNamed(): void {
-    const named = this.runtime.controller.settings.circleNamesTheChord;
-    const button = this.el.focusChordNames;
-    button.setAttribute('aria-pressed', String(named));
-    button.title = named ? 'The chord held is named: press to hide it' : 'The chord held is not named: press to name it';
-    button.setAttribute('aria-label', button.title);
-  }
-
   /** Lights the keys down in free play, and the pedal, as heard: nobody judged them. */
   private lightTheFreePlay(): void {
     const controller = this.runtime.controller;
@@ -13433,7 +13229,7 @@ export class AppView {
     const chord = named ? controller.freePlayChord : null;
     this.el.freeChord.textContent = chord ?? '';
     this.el.freeChord.hidden = chord === null;
-    this.showWhetherTheChordIsNamed();
+    this.chordsBeside.showWhetherTheChordIsNamed();
     const down = controller.freePlayKeysDown;
     lightTheKeys(
       this.replayKeyboard,
@@ -14658,8 +14454,8 @@ export class AppView {
     this.el.rollDelete.setAttribute('aria-label', this.el.rollDelete.title);
 
     this.sayHowLoudTheChosenAre();
-    this.nameTheChosenChord();
-    this.showTheChordsOfTheKey();
+    this.chordsBeside.nameTheChosenChord();
+    this.chordsBeside.showTheChordsOfTheKey();
 
     if ((sketch?.before.length ?? 0) > 0) {
       delete this.el.rollUndo.dataset['idle'];
@@ -14680,54 +14476,8 @@ export class AppView {
     this.el.rollRedo.setAttribute('aria-label', this.el.rollRedo.title);
   }
 
-  /**
-   * The name of the chord the chosen notes make, over the drawing, wherever
-   * in time each is: a chord broken into a figure is still that chord - and
-   * one with a melody passing over it is mostly that chord, said with "≈",
-   * each note weighing as long as it sounds (see `theChordTheNotesMake`).
-   * Spelled as a sketch's key spells its black keys. Not there while they
-   * make none with a name - and on a sketch none is chosen but while it is
-   * edited.
-   */
-  private nameTheChosenChord(): void {
-    const roll = this.theRoll();
-    const chosen = this.sketchEditing.theNotesChosen();
-    // How long each sounds, off the drawing: a key still down when the run ended, to its end.
-    const lengthOf = new Map<string, number>();
-    if (roll !== null && chosen.length > 0) {
-      const ended = rollEndedAtMs(roll);
-      for (const press of roll.presses) {
-        lengthOf.set(`${String(press.midi)} ${String(press.downAtMs)}`, (press.upAtMs ?? ended) - press.downAtMs);
-      }
-    }
-    const spelling = this.theKeyTheDrawingSpellsIn();
-    const chord = this.theDrumsAreWritten()
-      ? null
-      : theChordTheNotesMake(
-          chosen.map((key) => ({ midi: key.midi, lengthMs: lengthOf.get(`${String(key.midi)} ${String(key.downAtMs)}`) ?? 0 })),
-          spelling?.fifths ?? null,
-          spelling?.scale,
-        );
-    this.el.rollChord.textContent = chord === null ? '' : chord.exactly ? chord.name : `≈ ${chord.name}`;
-    this.el.rollChord.title =
-      chord?.exactly === false ? 'The chord most of the chosen notes make, by how long they sound' : 'The chord the chosen notes make';
-    this.el.rollChord.hidden = chord === null;
-  }
-
-  /**
-   * Names the chord the keys held make, on any input and on the strip beside
-   * the drawing. Not there while they make none with a name, nor while the
-   * circle is open, which names it in its middle.
-   */
-  private nameTheChordHeld(): void {
-    const spelling = this.theKeyTheDrawingSpellsIn();
-    const chord = nameTheChord(this.theKeysHeld(), spelling?.fifths ?? null, spelling?.scale);
-    this.el.rollChordHeldName.textContent = chord ?? '';
-    this.el.rollChordHeld.hidden = chord === null || this.theChordsOfTheKeyAreOpen();
-  }
-
   /** The keys held down now: on any input, on the strip beside the drawing, and on a row of it. */
-  private theKeysHeld(): readonly number[] {
+  theKeysHeld(): readonly number[] {
     return [
       ...this.runtime.recorder.keysDown,
       ...[this.keyHeldOnTheStrip, this.sketchEditing.rowHeld].flatMap((key) => (key === null ? [] : [key.midi])),
@@ -14739,7 +14489,7 @@ export class AppView {
    * sketch's where the cursor is; anything else's none, so as chord charts
    * spell it.
    */
-  private theKeyTheDrawingSpellsIn(): { readonly fifths: number; readonly scale: ScaleName } | null {
+  theKeyTheDrawingSpellsIn(): { readonly fifths: number; readonly scale: ScaleName } | null {
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     if (stored === null) {
@@ -14747,117 +14497,6 @@ export class AppView {
     }
     const key = this.theKeyAtTheHead(stored);
     return { fifths: key.fifths, scale: theScaleOfTheKey(key) };
-  }
-
-  /**
-   * The chords the drawer offers for a sketch: the key's seven, then the
-   * writer's own kept ones, each with what its button says under its name -
-   * the key's numeral, or the bass of one kept.
-   */
-  private theChordsInTheDrawer(key: SketchKey): readonly ChordInTheDrawer[] {
-    const { fifths } = key;
-    const ofTheKey = theChordsOfTheScale(fifths, theScaleOfTheKey(key)).map(
-      ({ name, numeral, midis }): ChordInTheDrawer => ({ name, under: numeral, midis, kept: false }),
-    );
-    const kept = this.runtime.sketches.keptChords().map(
-      (midis): ChordInTheDrawer => ({
-        name: theNameOfTheKeys(midis, fifths),
-        under: midiToLabel(Math.min(...midis)),
-        midis,
-        kept: true,
-      }),
-    );
-    return [...ofTheKey, ...kept];
-  }
-
-  /**
-   * The drawer of chords, open beside a sketch being edited once asked for:
-   * a button for each chord, its name and what is under it, built again only
-   * when the key or the chords kept change, so a finger on one is not lost
-   * from under it by a change it made; and its copy, paste and keep, which
-   * the notes chosen decide.
-   */
-  showTheChordsOfTheKey(): void {
-    const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
-    const open = this.theChordsOfTheKeyAreOpen();
-    const written = this.theChordsAreWritten();
-    // There for any music whose keys are known; read only, but beside a sketch being edited.
-    this.el.rollChordsOpen.hidden = !this.theKeysOfTheMusicAreKnown();
-    this.el.rollChordsOpen.setAttribute('aria-pressed', String(this.chordsOfTheKeyOpen));
-    this.el.rollChordsOpen.title = this.chordsOfTheKeyOpen
-      ? 'Put the chords away'
-      : written
-        ? 'Chords, to write where the cursor is'
-        : 'The chords of the music: the circle of fifths and their chart';
-    this.el.rollChordsOpen.setAttribute('aria-label', this.el.rollChordsOpen.title);
-    if (this.theDrumsAreWritten()) {
-      sayWhetherIdle(this.el.rollChordsOpen, 'The chords are of the notes: back to them to see the chords', true);
-    } else {
-      delete this.el.rollChordsOpen.dataset['idle'];
-    }
-    this.el.rollSide.hidden = !open;
-    // What writes - the drawer, the goals, the circle's slices - only where it can.
-    this.el.rollSide.dataset['writes'] = String(written);
-    this.el.rollChords.hidden = !written;
-    if (!open || !written || stored === null || sketch === undefined) {
-      this.pointAtTheChord(null);
-      return;
-    }
-    const keyHere = this.theKeyAtTheHead(stored);
-    const { fifths } = keyHere;
-    // Nothing kept, nothing to delete: the deleting ends with the last of them.
-    const anyKept = this.runtime.sketches.keptChords().length > 0;
-    this.chordsBeingForgotten = this.chordsBeingForgotten && anyKept;
-    const forgetting = this.chordsBeingForgotten;
-    this.el.rollChordsForget.setAttribute('aria-pressed', String(forgetting));
-    sayWhetherIdle(
-      this.el.rollChordsForget,
-      forgetting
-        ? 'Done deleting chords'
-        : anyKept
-          ? 'Delete chords you kept: then a tap on one deletes it'
-          : 'Delete chords you kept. None is kept yet.',
-      !anyKept,
-    );
-    this.el.rollChordsList.dataset['forgetting'] = String(forgetting);
-    const over = this.theChordChosenInTheLane();
-    const shows = `${String(fifths)}:${theScaleOfTheKey(keyHere)} ${JSON.stringify(this.runtime.sketches.keptChords())} ${String(forgetting)} ${over?.name ?? ''}`;
-    if (this.el.rollChordsList.dataset['shows'] !== shows) {
-      this.el.rollChordsList.dataset['shows'] = shows;
-      this.el.rollChordsList.replaceChildren(
-        ...this.theChordsInTheDrawer(keyHere).map((chord, at) => {
-          const button = this.doc.createElement('button');
-          button.type = 'button';
-          button.className = chord.kept ? 'button roll-chords__chord roll-chords__chord--kept' : 'button roll-chords__chord';
-          button.dataset['chord'] = String(at);
-          button.title = !forgetting
-            ? over !== null
-              ? `Make the chosen ${over.name} ${chord.name} (${chord.under}), moving its notes as little as they can`
-              : `Write ${chord.name} (${chord.under}) where the cursor is, to the next line of the grid`
-            : chord.kept
-              ? `Delete ${chord.name} (${chord.under}) from the chords kept`
-              : `${chord.name} is the key's own, and is not deleted`;
-          button.setAttribute('aria-label', button.title);
-          const name = this.doc.createElement('span');
-          name.className = 'roll-chords__name';
-          name.textContent = chord.name;
-          const under = this.doc.createElement('span');
-          under.className = 'roll-chords__numeral';
-          under.textContent = forgetting && chord.kept ? '\u00d7' : chord.under;
-          button.append(name, under);
-          return button;
-        }),
-      );
-    }
-
-    const keeping = this.whatKeepingWouldDo();
-    this.el.rollChordsKeep.textContent = keeping.lettingGo ? '\u2212' : '+';
-    sayWhetherIdle(this.el.rollChordsKeep, keeping.says, keeping.idle);
-    // The cursor moved on, the chords of another key, or the drawer deleting: what is shown ahead follows.
-    if (this.chordPointedAt !== null) {
-      this.showTheChordAhead();
-    }
   }
 
   /** Dims the paste where there is nothing to paste: no clipboard to read, and nothing copied here. */
@@ -14876,7 +14515,7 @@ export class AppView {
    * chord, let go of the kept chord they are, or nothing, and why. A chord is
    * two keys or more, and the key's own are always there.
    */
-  private whatKeepingWouldDo(): { readonly says: string; readonly idle: boolean; readonly lettingGo: boolean } {
+  whatKeepingWouldDo(): { readonly says: string; readonly idle: boolean; readonly lettingGo: boolean } {
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     const chosen = eachKeyOnce(sketch?.chosen.map((key) => key.midi) ?? []);
@@ -14904,25 +14543,6 @@ export class AppView {
       [this.el.rollArpeggioDown, 'down'],
       [this.el.rollArpeggioUpAndDown, 'upAndDown'],
     ];
-  }
-
-  /**
-   * Breaks each chosen chord into one key a step of the grid as it is drawn,
-   * over the chord's length: one change, put back as one, and the keys it
-   * became chosen, to be broken another way after an undo or moved.
-   */
-  private breakTheChosenChords(way: ArpeggioWay): void {
-    const showing = this.theOtherRollShowing;
-    const sketch = showing?.sketch;
-    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
-    if (showing === null || sketch === undefined || stored === null) {
-      return;
-    }
-    const lines = theMusicsBeats(showing.roll, this.theRollsGrid()).map((line) => line.atMs);
-    const broken = takeWithTheChordsBroken(stored.events, sketch.chosen, lines, way);
-    if (broken !== null) {
-      this.changeTheSketchShowing(broken.events, [...sketch.before, asItWas(stored, sketch.chosen)], broken.keys);
-    }
   }
 
   /** Where the sketch shown changes key, metre or pace, from its first beat, and what a mark there says: "G major 3/4 ♩=90". */
@@ -14983,7 +14603,7 @@ export class AppView {
    * The key of the sketch shown where the cursor is, as a sketch keeps one:
    * what the drawer's chords are of, and the strip marks.
    */
-  private theKeyAtTheHead(stored: StoredSketch): SketchKey {
+  theKeyAtTheHead(stored: StoredSketch): SketchKey {
     const roll = this.theRoll();
     const atMs = roll === null ? Number.NEGATIVE_INFINITY : this.headIsAtMs() + rollBeganAtMs(roll);
     const key = theKeyOfTheMusicAt(stored.events, this.theKeyTheSketchBeginsIn(stored), atMs);
@@ -15037,8 +14657,8 @@ export class AppView {
   /** What follows the cursor into another key: the drawer's chords, the strip's marks, the chosen chord's spelling. */
   private followTheKeyAtTheHead(): void {
     this.markTheScaleOnTheStrip();
-    this.showTheChordsOfTheKey();
-    this.nameTheChosenChord();
+    this.chordsBeside.showTheChordsOfTheKey();
+    this.chordsBeside.nameTheChosenChord();
   }
 
   /** The scales the sketch shown is written in, each from where it begins, or none where no sketch is shown. */
@@ -15068,26 +14688,12 @@ export class AppView {
   }
 
   /**
-   * Whether the chords are open beside the drawing: asked for, of music
-   * whose keys are known - a sketch's, or the open score's.
-   */
-  private theChordsOfTheKeyAreOpen(): boolean {
-    return this.chordsOfTheKeyOpen && this.theKeysOfTheMusicAreKnown() && !this.theDrumsAreWritten();
-  }
-
-  /**
    * Whether the drums of the sketch shown are being written rather than its
    * notes. Nothing that reads the notes as pitches - the chords, the scale,
    * a chord's name - is asked of them then: a drum is no pitch.
    */
   theDrumsAreWritten(): boolean {
     return this.theOtherRollShowing?.sketch?.drums === true;
-  }
-
-  /** Whether the chords open are written with as well as read: only beside a sketch being edited. */
-  private theChordsAreWritten(): boolean {
-    const sketch = this.theOtherRollShowing?.sketch;
-    return sketch?.editing === true && this.theSketchAsDrawn(sketch.id) !== null;
   }
 
   /**
@@ -15127,7 +14733,7 @@ export class AppView {
    * its music reads its every chord, which is wanted only where the chords
    * are open.
    */
-  private theKeysOfTheMusicAreKnown(): boolean {
+  theKeysOfTheMusicAreKnown(): boolean {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
     if (sketch !== undefined) {
@@ -15141,7 +14747,7 @@ export class AppView {
    * drawing's clock, as its bars and chords are: a sketch's sections, or the
    * open score's rehearsal marks where the drawing is of its music.
    */
-  private theSectionsOfTheMusicShown(): readonly { readonly atMs: number; readonly name: string }[] {
+  theSectionsOfTheMusicShown(): readonly { readonly atMs: number; readonly name: string }[] {
     const roll = this.theRoll();
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
@@ -15164,7 +14770,7 @@ export class AppView {
   }
 
   /** The key the music drawn is in where the cursor is: see `theKeysOfTheMusicShown`. None where its keys are not known. */
-  private theKeyAtTheCursor(): { readonly fifths: number; readonly scale: ScaleName } | null {
+  theKeyAtTheCursor(): { readonly fifths: number; readonly scale: ScaleName } | null {
     const keys = this.theKeysOfTheMusicShown();
     const roll = this.theRoll();
     if (keys === null || roll === null) {
@@ -15190,8 +14796,8 @@ export class AppView {
     // The key spells the black keys of the chord's name, is what the drawer's
     // chords are of, and lights the rows of its notes.
     this.sayHowLoudTheChosenAre();
-    this.nameTheChosenChord();
-    this.showTheChordsOfTheKey();
+    this.chordsBeside.nameTheChosenChord();
+    this.chordsBeside.showTheChordsOfTheKey();
     this.drawTheRollInto();
   }
 
@@ -15221,326 +14827,40 @@ export class AppView {
   }
 
   /**
-   * Deletes a chord of the drawer the writer kept. One of the key's own is
-   * never among those kept - the keep button will not keep one - so asked of
-   * one, nothing goes.
-   */
-  private forgetTheChordInTheDrawer(at: number): void {
-    const stored = this.theOtherRollShowing?.sketch === undefined ? null : this.theSketchAsDrawn(this.theOtherRollShowing.sketch.id);
-    const chord = stored === null ? undefined : this.theChordsInTheDrawer(this.theKeyAtTheHead(stored))[at];
-    if (chord === undefined) {
-      return;
-    }
-    this.runtime.sketches.letGoOfTheChord(chord.midis);
-    this.showTheChordsOfTheKey();
-  }
-
-  /** Keeps the chosen notes as a chord, or lets go of the kept chord they are. */
-  private keepOrLetGoOfTheChosenChord(): void {
-    const sketch = this.theOtherRollShowing?.sketch;
-    const keeping = this.whatKeepingWouldDo();
-    if (sketch === undefined || keeping.idle) {
-      return;
-    }
-    const chosen = sketch.chosen.map((key) => key.midi);
-    if (keeping.lettingGo) {
-      this.runtime.sketches.letGoOfTheChord(chosen);
-    } else {
-      this.runtime.sketches.keepTheChord(chosen);
-    }
-    this.showTheChordsOfTheKey();
-  }
-
-  /**
-   * Writes a chord of the drawer into the sketch where the cursor is - from
-   * the line of the grid it is in where the marker is put on one - to the
-   * next line, as loud as the sketch is on the whole: one change, put back as
-   * one, heard as it is written, and chosen, to be moved where it was not
-   * quite meant. The cursor goes on to where it ends, so the next chord tapped
-   * follows it, and a progression is written by tapping it through. A key of
-   * it already sounding there is left out, as a paste leaves it.
-   */
-  private writeTheChordAtTheHead(at: ChordAskedFor): ChordWritten | null {
-    return this.writeTheChordWritten(this.theChordAskedForWritten(at));
-  }
-
-  /** Writes what a chord would make of the sketch, as `writeTheChordAtTheHead` says; what was written, or none. */
-  private writeTheChordWritten(written: ChordWritten | null): ChordWritten | null {
-    const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
-    if (sketch === undefined || stored === null || written === null || !written.changes) {
-      return null;
-    }
-    this.changeTheSketchShowing(written.events, [...sketch.before, asItWas(stored, sketch.chosen)], written.chosen);
-    // Moved on, the cursor takes what is shown ahead with it: the chord still
-    // pointed at is shown where it would go next, not where it has just gone.
-    if (written.headAfterMs !== null) {
-      this.putTheHeadAt(written.headAfterMs);
-      this.showTheChordAhead();
-    }
-    return written;
-  }
-
-  /**
-   * Strikes the chord of the drawer or the circle a pointer goes down on -
-   * the mouse's left button, a finger or a pen - to sound until it is let go
-   * of, and holds it there to slide over the others. Deleting, the drawer
-   * only deletes: the sound is a hearing of what would be written.
-   */
-  private holdTheChord(event: PointerEvent): void {
-    const chord = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-chord]') : null;
-    const asked: ChordAskedFor | null =
-      chord === null ? theChordAskedForOnTheCircle(event.target) : this.chordsBeingForgotten ? null : { inTheDrawer: Number(chord.dataset['chord']) };
-    if (asked === null || (event.pointerType === 'mouse' && event.button !== 0)) {
-      return;
-    }
-    this.letGoOfTheChord(null);
-    this.chordHeld = {
-      pointerId: event.pointerId,
-      at: null,
-      keys: [],
-      struckAtMs: 0,
-      downAtMs: this.runtime.clock.now(),
-      downY: event.clientY,
-      scrolledFrom: this.el.rollChords.scrollTop,
-      // A mouse scrolls with its wheel, and the circle not at all, so moving there is always a slide.
-      moving: event.pointerType === 'mouse' || chord === null ? 'slides' : 'not yet',
-    };
-    this.strikeTheChord(asked);
-  }
-
-  /**
-   * Takes the chord held to the one the pointer has slid onto, letting go of
-   * the one before as a hand sliding over keys does - and to none, silent,
-   * off the chords - and shows where it would be written.
-   */
-  private slideOverTheChords(event: PointerEvent): void {
-    const held = this.chordHeld;
-    if (held === null) {
-      return;
-    }
-    if (held.moving === 'not yet') {
-      if (Math.abs(event.clientY - held.downY) < A_FINGER_MOVES_PX) {
-        return;
-      }
-      // A column with nothing to scroll is slid over at once.
-      const scrolls =
-        this.el.rollChords.scrollHeight > this.el.rollChords.clientHeight &&
-        this.runtime.clock.now() - held.downAtMs < A_FINGER_LISTENS_MS;
-      if (scrolls) {
-        // The chord struck as it came down was not asked for: silenced, and nothing written.
-        this.strikeTheChord(null);
-        this.pointAtTheChord(null);
-      }
-      this.chordHeld = { ...(this.chordHeld ?? held), moving: scrolls ? 'scrolls' : 'slides' };
-    }
-    if (this.chordHeld?.moving === 'scrolls') {
-      this.el.rollChords.scrollTop = held.scrolledFrom - (event.clientY - held.downY);
-      return;
-    }
-    const at = this.theChordUnder(event);
-    if (!theSameChordAskedFor(at, this.chordHeld?.at ?? null)) {
-      this.strikeTheChord(at);
-      this.pointAtTheChord(at);
-    }
-  }
-
-  /**
-   * Silences the chord held, if one is sounding, and strikes the one asked
-   * for, as loud as the sketch is on the whole: all its keys, those the
-   * sketch already has there too, so the chord is heard whole.
-   */
-  private strikeTheChord(at: ChordAskedFor | null): void {
-    const held = this.chordHeld;
-    if (held === null) {
-      return;
-    }
-    for (const midi of held.keys) {
-      this.runtime.pitchPlayer.stop(midi);
-    }
-    const written = at === null ? null : this.theChordAskedForWritten(at);
-    const keys = written === null ? [] : written.heard;
-    const now = this.runtime.clock.now();
-    for (const midi of keys) {
-      this.sketchEditing.theEditingsInstrument.play(midi, written?.velocity ?? 0, now);
-    }
-    this.chordHeld = { ...held, at: written === null ? null : at, keys, struckAtMs: now };
-  }
-
-  /**
-   * Lets go of the chord held, writing the one the pointer is let go of on,
-   * or none. Written, it sounds on for as long as it is written, so a quick
-   * tap is heard as a note of it and not cut short; held longer, it ends as
-   * it is let go of. Its one strike is the hearing: the writing strikes
-   * nothing again.
-   */
-  private letGoOfTheChord(at: ChordAskedFor | null): void {
-    const held = this.chordHeld;
-    if (held === null) {
-      return;
-    }
-    this.chordHeld = null;
-    const written = at === null ? null : this.writeTheChordAtTheHead(at);
-    const endsAtMs = Math.max(this.runtime.clock.now(), held.struckAtMs + (written?.lengthMs ?? 0));
-    for (const midi of held.keys) {
-      this.runtime.pitchPlayer.stop(midi, endsAtMs);
-    }
-  }
-
-  /** The chord of the drawer or the circle under a point; `null` off the chords. */
-  private theChordUnder(event: PointerEvent): ChordAskedFor | null {
-    const under = this.doc.elementFromPoint(event.clientX, event.clientY);
-    const chord = under?.closest<HTMLElement>('[data-chord]') ?? null;
-    return chord === null ? theChordAskedForOnTheCircle(under) : this.chordsBeingForgotten ? null : { inTheDrawer: Number(chord.dataset['chord']) };
-  }
-
-  /**
-   * What a chord asked for would make of the sketch: see
-   * `theChordWrittenAtTheHead`. None for one of the drawer while it is
-   * deleting what it keeps, since a press there then writes nothing.
-   */
-  private theChordAskedForWritten(at: ChordAskedFor): ChordWritten | null {
-    if ('inTheDrawer' in at) {
-      return this.chordsBeingForgotten ? null : this.theChordWrittenAtTheHead(at.inTheDrawer);
-    }
-    const keys = 'onTheCircle' in at ? theKeysAtThePlace(at.onTheCircle) : (this.theChordSounding()?.keys ?? null);
-    return keys === null ? null : this.theKeysWrittenAtTheHead(keys);
-  }
-
-  /**
-   * The chord drafted on the keys under the circle, as its pitch classes:
-   * only while the chord it is to be written over is still the one chosen
-   * in the lane, so choosing another, or none, leaves no draft behind.
-   */
-  private theDraft(): readonly number[] | null {
-    const draft = this.chordDraft;
-    const over = draft === null ? null : this.theChordChosenInTheLane();
-    return over !== null && draft !== null && over.fromMs === draft.overFromMs ? draft.pitchClasses : null;
-  }
-
-  /**
    * A key under the circle pressed while a chord of the lane is chosen: the
    * draft - begun as the chosen chord's own notes - takes the key in, or
    * gives it back where it has it, and is heard as it now is.
    */
   private draftTheKey(midi: number): void {
-    const over = this.theChordChosenInTheLane();
+    const over = this.chordsBeside.theChordChosenInTheLane();
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     if (over === null || stored === null) {
       return;
     }
-    const was = this.theDraft() ?? theKeysOfTheChord(over.root, over.kind).map((key) => key % 12);
+    const was = this.chordsBeside.theDraft() ?? theKeysOfTheChord(over.root, over.kind).map((key) => key % 12);
     const pitchClass = ((midi % 12) + 12) % 12;
     const now = was.includes(pitchClass) ? was.filter((each) => each !== pitchClass) : [...was, pitchClass];
-    this.chordDraft = { overFromMs: over.fromMs, pitchClasses: now };
+    this.chordsBeside.chordDraft = { overFromMs: over.fromMs, pitchClasses: now };
     const velocity = theUsualLoudness(stored.events);
-    this.soundTheChordTapped(
-      this.theKeysOfTheDraft(now).map((key) => ({ midi: key, velocity })),
+    this.chordsBeside.soundTheChordTapped(
+      this.chordsBeside.theKeysOfTheDraft(now).map((key) => ({ midi: key, velocity })),
       over.untilMs - over.fromMs,
     );
-    this.showTheCircle();
-  }
-
-  /**
-   * The keys a draft is written and heard as: its pitches upward from the
-   * root of the chord chosen, from middle C's octave - so a draft of the
-   * chord's own notes is in its own root position, and named as itself
-   * rather than over whichever of them is nearest C.
-   */
-  private theKeysOfTheDraft(pitchClasses: readonly number[]): readonly number[] {
-    const root = this.theChordChosenInTheLane()?.root ?? 0;
-    return pitchClasses.map((pitchClass) => MIDDLE_C + root + ((((pitchClass - root) % 12) + 12) % 12));
-  }
-
-  /**
-   * Writes the draft over the chosen chord, as a chord of the circle is
-   * written over it - its notes moved as little as they can - and heard; the
-   * chord stays chosen, to draft another over it.
-   */
-  private writeTheDraft(): void {
-    const draft = this.theDraft();
-    if (draft === null || draft.length < A_DRAFT_HAS_AT_LEAST) {
-      return;
-    }
-    this.chordDraft = null;
-    this.soundTheChordWritten(this.writeTheChordWritten(this.theKeysWrittenAtTheHead(this.theKeysOfTheDraft(draft))));
-    this.showTheCircle();
-  }
-
-  /** A chord as named and numbered in the key the cursor is in, from its keys; none where they make none. */
-  private theChordOfTheKeys(keys: readonly number[]): {
-    readonly name: string;
-    readonly numeral: string;
-    readonly root: number;
-    readonly kind: ChordKind;
-    readonly keys: readonly number[];
-  } | null {
-    const key = this.theKeyAtTheCursor();
-    const made = key === null ? null : theChordTheKeysMake(keys, key.fifths, key.scale);
-    if (key === null || made === null) {
-      return null;
-    }
-    const numeral = theNumeralOfTheChord(made, key);
-    return { name: made.name, numeral, root: made.root, kind: made.kind, keys };
-  }
-
-  /**
-   * The chord sounding, as the middle of the circle names it: the one
-   * drafted on the keys under it while there is a draft; the one the keys
-   * held make, where they make one, as they are held and numbered in the
-   * key the cursor is in, as the lane numbers the music there; and
-   * otherwise the one the lane names at the cursor, its root in the octave
-   * of middle C. None where the music's keys are not known.
-   */
-  private theChordSounding(): {
-    readonly name: string;
-    readonly numeral: string;
-    readonly root: number;
-    readonly kind: ChordKind;
-    readonly keys: readonly number[];
-  } | null {
-    const draft = this.theDraft();
-    if (draft !== null) {
-      return this.theChordOfTheKeys(this.theKeysOfTheDraft(draft));
-    }
-    const held = this.theChordOfTheKeys([...new Set(this.theKeysHeld())]);
-    if (held !== null) {
-      return held;
-    }
-    const scene = this.drawnScene;
-    const chord = scene === null ? null : theChordAt(scene, this.headIsAtMs());
-    return chord === null
-      ? null
-      : { name: chord.name, numeral: chord.numeral, root: chord.root, kind: chord.kind, keys: theKeysOfTheChord(chord.root, chord.kind) };
-  }
-
-  /**
-   * What a chord of the drawer would make of the sketch: written over the
-   * chord chosen in the lane, where one is (see `theChordWrittenOver`), and
-   * where the cursor is otherwise - its notes from the line of the grid the
-   * cursor is in, where the marker is put on one, to the next, as loud as
-   * the sketch is on the whole, the cursor going on to where they end. One
-   * answer, for writing it, hearing it and showing it ahead.
-   */
-  private theChordWrittenAtTheHead(at: number): ChordWritten | null {
-    const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
-    const chord = stored === null ? undefined : this.theChordsInTheDrawer(this.theKeyAtTheHead(stored))[at];
-    return chord === undefined ? null : this.theKeysWrittenAtTheHead(chord.midis);
+    this.chordsBeside.showTheCircle();
   }
 
   /** What a chord's keys would make of the sketch: see `theChordWrittenAtTheHead`. */
-  private theKeysWrittenAtTheHead(keys: readonly number[]): ChordWritten | null {
+  theKeysWrittenAtTheHead(keys: readonly number[]): ChordWritten | null {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
     const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
     if (showing === null || sketch === undefined || stored === null) {
       return null;
     }
-    const over = this.theChordChosenInTheLane();
+    const over = this.chordsBeside.theChordChosenInTheLane();
     if (over !== null) {
-      return this.theChordWrittenOver(over, keys);
+      return this.chordsBeside.theChordWrittenOver(over, keys);
     }
     const roll = showing.roll;
     const origin = rollBeganAtMs(roll);
@@ -15565,284 +14885,6 @@ export class AppView {
       lengthMs: untilMs - fromMs,
       headAfterMs: untilMs,
     };
-  }
-
-  /**
-   * The chord tapped in the lane, while the notes chosen are its notes and
-   * nothing else - what a chord of the drawer is written over rather than at
-   * the cursor; `null` where the choice is anything else. Read off the
-   * choice each time it is asked, so it is never out of step with it.
-   */
-  private theChordChosenInTheLane(): SceneChord | null {
-    const scene = this.drawnScene;
-    const roll = this.theRoll();
-    const sketch = this.theOtherRollShowing?.sketch;
-    const at = this.chordTappedAt;
-    const chord = scene === null || at === null ? null : theChordAt(scene, at);
-    if (chord === null || !chord.chosen || roll === null || sketch === undefined) {
-      return null;
-    }
-    return theNotesOfTheChord(roll, chord.fromMs, chord.untilMs).length === sketch.chosen.length ? chord : null;
-  }
-
-  /**
-   * A chord of the drawer written over a chord of the lane: its notes moved
-   * to the drawer's, as a hand moves from one chord to the next (see
-   * `theChordMovedTo`), in the time and the rhythm they have. Only the
-   * notes that make the chord move - those that are its tones - and of
-   * those, where both hands play in it, only the left hand's, which carry
-   * it: a melody over it is the right hand's, and stays. The whole chord
-   * stays chosen and the cursor where it begins, so another can be tried
-   * over it at once.
-   */
-  private theChordWrittenOver(over: SceneChord, drawn: readonly number[]): ChordWritten | null {
-    const sketch = this.theOtherRollShowing?.sketch;
-    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
-    const roll = this.theRoll();
-    const to = theChordTheNotesMake(drawn.map((midi) => ({ midi, lengthMs: 1 })));
-    if (stored === null || roll === null || to === null) {
-      return null;
-    }
-    const origin = rollBeganAtMs(roll);
-    const notes = theNotesOfTheChord(roll, over.fromMs, over.untilMs);
-    const bothHands = new Set(notes.map((note) => theHandThatPlays(note))).size > 1;
-    const tones = new Set(over.kind.intervals.map((step) => (over.root + step) % 12));
-    const moving = notes.filter(
-      (note) => (!bothHands || theHandThatPlays(note) === 'left') && tones.has(((note.midi % 12) + 12) % 12),
-    );
-    const moved = theChordMovedTo(
-      moving.map((note) => note.midi),
-      to,
-      notes.filter((note) => !moving.includes(note)).map((note) => note.midi),
-    );
-    const changing = moving.filter((note) => (moved.get(note.midi) ?? note.midi) !== note.midi);
-    const events =
-      changing.length === 0
-        ? stored.events
-        : takeWithTheKeysChanged(
-            stored.events,
-            changing.map((note) => ({
-              key: { midi: note.midi, downAtMs: note.downAtMs },
-              midi: moved.get(note.midi) ?? note.midi,
-              downAtMs: note.downAtMs,
-              upAtMs: note.upAtMs,
-            })),
-          );
-    if (events === null) {
-      return null;
-    }
-    const endMs = rollEndedAtMs(roll);
-    const heard = [...new Set(moving.map((note) => moved.get(note.midi) ?? note.midi))].sort((low, high) => low - high);
-    return {
-      changes: changing.length > 0,
-      heard,
-      struck: heard,
-      events,
-      chosen: notes.map((note) => ({ midi: moved.get(note.midi) ?? note.midi, downAtMs: note.downAtMs })),
-      shown: changing.map((note) => ({
-        midi: moved.get(note.midi) ?? note.midi,
-        fromMs: note.downAtMs - origin,
-        untilMs: (note.upAtMs ?? endMs) - origin,
-      })),
-      velocity: theUsualLoudness(stored.events),
-      lengthMs: over.untilMs - over.fromMs,
-      headAfterMs: null,
-    };
-  }
-
-  /** Sounds the keys a chord written put in, for as long as it is written: a chord pressed by a key, or tapped on the circle. */
-  private soundTheChordWritten(written: ChordWritten | null): void {
-    const now = this.runtime.clock.now();
-    for (const midi of written === null ? [] : written.struck) {
-      this.sketchEditing.theEditingsInstrument.play(midi, written?.velocity ?? 0, now);
-      this.runtime.pitchPlayer.stop(midi, now + (written?.lengthMs ?? 0));
-    }
-  }
-
-  /**
-   * The circle of fifths, open with the chords beside a sketch being edited:
-   * the key the cursor is in lit, with its numerals, and the chord sounding
-   * named in the middle with its numeral, and lit more - the keys held where they make one,
-   * otherwise the chord the music makes where the cursor is, the one the
-   * lane under the notes names there - with the way the music came to it
-   * drawn fading behind, so a playback is watched going round it. The keys
-   * held take no step of the way: they are not the music. Asked on every
-   * step of a playback and every key, and written only when what it shows
-   * has changed.
-   */
-  private showTheCircle(): void {
-    const open = this.theChordsOfTheKeyAreOpen();
-    const key = this.theKeyAtTheCursor();
-    if (!open || key === null) {
-      return;
-    }
-    const scene = this.drawnScene;
-    const chord = this.theChordSounding();
-    const here = chord === null ? null : whereOnTheCircle(chord.root, chord.kind);
-    const sounding = chord === null ? null : { name: chord.name, numeral: chord.numeral };
-    const named = this.runtime.controller.settings.circleNamesTheChord;
-    this.el.rollCircleNames.setAttribute('aria-pressed', String(named));
-    this.el.rollCircleNames.title = named
-      ? 'The chord sounding is named in the middle: press to hide it'
-      : 'The chord sounding is not named in the middle: press to name it';
-    this.el.rollCircleNames.setAttribute('aria-label', this.el.rollCircleNames.title);
-    const onTheKeys = this.runtime.controller.settings.circleShowsTheKeys;
-    this.el.rollCircleKeysShown.setAttribute('aria-pressed', String(onTheKeys));
-    this.el.rollCircleKeysShown.title = onTheKeys
-      ? 'The chord sounding is shown on the keys under the circle: press to hide them'
-      : 'The keys under the circle are hidden: press to show the chord sounding on them';
-    this.el.rollCircleKeysShown.setAttribute('aria-label', this.el.rollCircleKeysShown.title);
-    this.el.rollCircleKeys.hidden = !onTheKeys;
-    // Pressed to draft another over the chord chosen in the lane, while one is.
-    const draft = this.theDraft();
-    const drafts = this.theChordChosenInTheLane() !== null;
-    this.el.rollCircleKeys.dataset['drafts'] = String(drafts);
-    this.el.rollCircleKeys.dataset['draft'] = String(draft !== null);
-    this.el.rollCircleKeys.title = drafts ? 'Press keys to make the chosen chord another, heard as it changes' : '';
-    // While they draft, each key is a button a key reaches, saying whether its note is in the chord drafted.
-    const chosenInTheLane = this.theChordChosenInTheLane();
-    const drafted = new Set(
-      draft ?? (chosenInTheLane === null ? [] : theKeysOfTheChord(chosenInTheLane.root, chosenInTheLane.kind).map((each) => each % 12)),
-    );
-    for (const [midi, pressable] of this.circleKeys) {
-      if (drafts) {
-        const name = nameOfThePitchClass(midi, key.fifths);
-        const inIt = drafted.has(midi % 12);
-        pressable.tabIndex = 0;
-        pressable.setAttribute('role', 'button');
-        pressable.setAttribute('aria-pressed', String(inIt));
-        pressable.setAttribute('aria-label', inIt ? `${name}, in the chord: press to leave it out` : `${name}: press to put it in the chord`);
-      } else {
-        pressable.removeAttribute('tabindex');
-        pressable.removeAttribute('role');
-        pressable.removeAttribute('aria-pressed');
-        pressable.removeAttribute('aria-label');
-      }
-    }
-    this.el.rollCircleDraft.hidden = draft === null;
-    sayWhetherIdle(
-      this.el.rollCircleDraftYes,
-      draft !== null && draft.length < A_DRAFT_HAS_AT_LEAST
-        ? 'Write this chord over the chosen one. A chord has two notes at least.'
-        : 'Write this chord over the chosen one',
-      draft !== null && draft.length < A_DRAFT_HAS_AT_LEAST,
-    );
-    // And the room they take given back to the circle: see `--circle-keys`.
-    this.el.rollCircle.dataset['keys'] = String(onTheKeys);
-    const way = scene === null ? [] : theWayRoundTheCircle(scene.chords, this.headIsAtMs(), THE_WAY_ROUND_SHOWN);
-    const hints = this.theChordsOffered();
-    const writes = this.theChordsAreWritten();
-    const shows = JSON.stringify([key.fifths, key.scale, here, sounding, chord?.keys, draft, named, way, hints, writes]);
-    if (shows === this.circleShows) {
-      return;
-    }
-    this.circleShows = shows;
-    // A draft that makes no chord yet still shows its keys, with no root.
-    showTheChordOnTheKeys(
-      this.circleKeys,
-      chord ?? (draft === null ? null : { root: Number.NaN, keys: this.theKeysOfTheDraft(draft) }),
-    );
-    showOnTheCircle(this.circleDrawing, {
-      fifths: key.fifths,
-      ofTheKey: theKeysOwnPlaces(key.fifths, key.scale),
-      writes,
-      here,
-      sounding,
-      named,
-      way,
-      hints,
-    });
-  }
-
-  /**
-   * The chord the next one goes on from: the last of the lane begun before
-   * where it would be written - before the chord chosen, where one is, which
-   * it would be written over, and before the cursor otherwise.
-   */
-  private theChordBeforeTheNext(): SceneChord | null {
-    const scene = this.drawnScene;
-    const until = this.theChordChosenInTheLane()?.fromMs ?? this.headIsAtMs();
-    return scene?.chords.filter((chord) => chord.fromMs < until).at(-1) ?? null;
-  }
-
-  /**
-   * The chords of the circle offered as the next, with what each would do
-   * (see `theChordsTowards`), for the goal asked: after the chord before the
-   * next, in its own key. And says over the drawer what it was asked, and
-   * why there is nothing where there is nothing.
-   */
-  private theChordsOffered(): readonly { readonly place: PlaceOnTheCircle; readonly says: string }[] {
-    const goal = this.goalOfTheNextChord;
-    for (const button of this.el.rollGoals) {
-      button.setAttribute('aria-pressed', String(button.dataset['goal'] === goal));
-    }
-    const before = goal === null ? null : this.theChordBeforeTheNext();
-    const hints = goal === null || before === null ? [] : theChordsTowards(goal, before, before.key);
-    const was = before === null ? null : { tension: theTensionOfTheChord(before, before.key), brightness: theBrightnessOfTheChord(before, before.key) };
-    this.el.rollGoalsSays.hidden = goal === null;
-    this.el.rollGoalsSays.textContent =
-      goal === null
-        ? ''
-        : before === null
-          ? 'No chord before the cursor to go on from.'
-          : hints.length > 0
-            ? `After ${before.name}:`
-            : goal === 'release'
-              ? `Nothing to let go: ${before.name} is at rest already.`
-              : `No chord of the circle makes it ${GOAL_SAID[goal]} after ${before.name}.`;
-    return hints.map((hint) => ({
-      place: hint.place,
-      says: `Tension ${(was?.tension ?? 0).toFixed(1)} to ${hint.tension.toFixed(1)}, brightness ${(was?.brightness ?? 0).toFixed(1)} to ${hint.brightness.toFixed(1)}.`,
-    }));
-  }
-
-  /**
-   * The chart of the chords, over the drawing while it is open with the
-   * chords: drawn again only when the chords or the bars have changed, and
-   * the chord the cursor is in marked on every step of a playback.
-   */
-  private showTheChart(): void {
-    const withTheChords = this.theChordsOfTheKeyAreOpen();
-    this.el.rollChartOpen.hidden = !withTheChords;
-    this.el.rollChartOpen.setAttribute('aria-pressed', String(this.chartOpen));
-    this.el.rollChartOpen.title = this.chartOpen ? 'Back to the notes' : 'The chart of the chords';
-    this.el.rollChartOpen.setAttribute('aria-label', this.el.rollChartOpen.title);
-    const scene = this.drawnScene;
-    const open = withTheChords && this.chartOpen && scene !== null;
-    this.el.rollChart.hidden = !open;
-    if (!open) {
-      return;
-    }
-    const chart = theChartOfTheChords(scene.bars, scene.chords, this.theSectionsOfTheMusicShown());
-    const shows = JSON.stringify(chart);
-    if (shows !== this.chartShows) {
-      this.chartShows = shows;
-      drawTheChart(this.el.rollChart, chart, theCurvesOfTheChords(scene.chords));
-    }
-    showWhereOnTheChart(this.el.rollChart, this.headIsAtMs());
-  }
-
-  /** Points at a chord, or at none, and shows its notes where it would write them. */
-  private pointAtTheChord(at: ChordAskedFor | null): void {
-    this.chordPointedAt = at;
-    this.showTheChordAhead();
-  }
-
-  /**
-   * Shows the notes of the chord pointed at where it would write them - the
-   * keys it would put in, and none already sounding there - or, for one of
-   * the drawer, none while the drawer is deleting what it keeps, since a
-   * press there then writes nothing. Put away, it points at none.
-   */
-  private showTheChordAhead(): void {
-    const pointed = this.chordPointedAt;
-    const scene = this.drawnScene;
-    const written = pointed === null || scene === null ? null : this.theChordAskedForWritten(pointed);
-    this.notesShownAhead =
-      written === null || scene === null
-        ? []
-        : written.shown.map((key) => ({ row: scene.highest - key.midi, fromMs: key.fromMs, untilMs: key.untilMs }));
-    this.paintTheRoll();
   }
 
   /**
@@ -16510,8 +15552,8 @@ export class AppView {
     if (paced.events === stored.events && paced.beats === stored.beats) {
       // Only the sketch's own key changed, which the lists say and the drawing lights.
       this.sayHowLoudTheChosenAre();
-      this.nameTheChosenChord();
-      this.showTheChordsOfTheKey();
+      this.chordsBeside.nameTheChosenChord();
+      this.chordsBeside.showTheChordsOfTheKey();
       this.drawTheRollInto();
       return;
     }
@@ -17007,79 +16049,6 @@ export class AppView {
   }
 
   /**
-   * Chooses the notes of the chord tapped in the lane - added to those
-   * chosen, with a key held, as a note tapped is - and puts the marker where
-   * the chord begins, to be heard from there. Says whether there was one.
-   */
-  private chooseTheChordTapped(event: MouseEvent): boolean {
-    const scene = this.drawnScene;
-    const at = this.thePointOnTheDrawing(event);
-    const chord = scene === null || at === null ? null : theChordAt(scene, at.atMs);
-    return chord !== null && this.pressTheChordOfTheLane(chord, event.ctrlKey || event.metaKey || event.shiftKey);
-  }
-
-  /**
-   * A chord of the lane tapped there or pressed on the chart: chosen where
-   * the sketch is edited (see `chooseTheChordOfTheLane`); and anywhere else
-   * - a score read, a sketch listened to - the cursor put where it begins.
-   * Heard either way. Says whether there was a drawing to do it in.
-   */
-  private pressTheChordOfTheLane(chord: SceneChord, adds: boolean): boolean {
-    if (this.chooseTheChordOfTheLane(chord, adds)) {
-      return true;
-    }
-    const roll = this.theRoll();
-    if (roll === null) {
-      return false;
-    }
-    this.putTheHeadAt(chord.fromMs);
-    this.soundTheChordTapped(theNotesHeardInTheChord(roll, chord), chord.untilMs - chord.fromMs);
-    return true;
-  }
-
-  /**
-   * Chooses the notes of a chord of the lane - tapped there, or pressed on
-   * the chart of the chords - added to those chosen where asked, puts the
-   * marker where it begins, and sounds it: chosen so, a chord of the drawer
-   * or of the circle is written over it. Says whether it could.
-   */
-  private chooseTheChordOfTheLane(chord: SceneChord, adds: boolean): boolean {
-    const roll = this.theRoll();
-    const sketch = this.theOtherRollShowing?.sketch;
-    if (roll === null || sketch?.editing !== true) {
-      return false;
-    }
-    const notes = theNotesOfTheChord(roll, chord.fromMs, chord.untilMs).map((press) => ({ midi: press.midi, downAtMs: press.downAtMs }));
-    const heard = theNotesHeardInTheChord(roll, chord);
-    this.sketchEditing.choose(adds ? [...sketch.chosen.filter((key) => !notes.some((note) => sameKey(note, key))), ...notes] : notes);
-    this.chordTappedAt = chord.fromMs;
-    this.showTheChordsOfTheKey();
-    this.putTheHeadAt(chord.fromMs);
-    this.soundTheChordTapped(heard, chord.untilMs - chord.fromMs);
-    return true;
-  }
-
-  /**
-   * Sounds the notes of a chord tapped in the lane, so it is heard as well
-   * as chosen, those held into it from before as well: each pitch once, as
-   * hard as it is struck hardest there, all at once, for as long as the
-   * chord lasts or a moment, whichever is less. The one tapped before is
-   * silenced first.
-   */
-  private soundTheChordTapped(presses: readonly { readonly midi: number; readonly velocity: number }[], lastsMs: number): void {
-    for (const midi of this.chordTappedSounds) {
-      this.runtime.pitchPlayer.stop(midi);
-    }
-    const now = this.runtime.clock.now();
-    const keys = oneKeyForEachPitch(presses);
-    for (const { midi, velocity } of keys) {
-      this.sketchEditing.theEditingsInstrument.play(midi, velocity, now);
-      this.runtime.pitchPlayer.stop(midi, now + Math.min(lastsMs, A_CHORD_TAPPED_SOUNDS_MS));
-    }
-    this.chordTappedSounds = keys.map(({ midi }) => midi);
-  }
-
-  /**
    * Runs up the scale chosen, from its tonic to the tonic an octave above,
    * one note after another and the top one held. A scale asked for again
    * begins again, the one running let go of. Heard whether or not editing
@@ -17388,7 +16357,7 @@ export class AppView {
       freely: this.nothingOnTheDrawingIsJudged(),
       scales: this.theScalesOfTheSketchShown(),
       marks: this.theMarksOfTheSketchShown(),
-      chordsIn: this.theChordsOfTheKeyAreOpen() ? (this.theKeysOfTheMusicShown() ?? undefined) : undefined,
+      chordsIn: this.chordsBeside.theChordsOfTheKeyAreOpen() ? (this.theKeysOfTheMusicShown() ?? undefined) : undefined,
     });
   }
 
@@ -17416,8 +16385,8 @@ export class AppView {
       stage.dataset['drums'] = String(this.theDrumsAreWritten());
       // And with the chords open, the lane naming those the notes make -
       // said on the sheet as well, for the rows under the drawing.
-      stage.dataset['chords'] = String(this.theChordsOfTheKeyAreOpen());
-      this.el.sheetRoll.dataset['chords'] = String(this.theChordsOfTheKeyAreOpen());
+      stage.dataset['chords'] = String(this.chordsBeside.theChordsOfTheKeyAreOpen());
+      this.el.sheetRoll.dataset['chords'] = String(this.chordsBeside.theChordsOfTheKeyAreOpen());
     }
     this.el.rollBody.replaceChildren(drawTheRoll(scene));
     this.rollHeads = theHeadsOf(this.el.rollBody);
@@ -17537,7 +16506,7 @@ export class AppView {
       this.rollInks,
       density,
       this.soundingRows,
-      this.notesShownAhead,
+      this.chordsBeside.notesShownAhead,
       this.sketchRecording.notesBeingRecorded,
     );
     paintTheRuler(sized(canvases.ruler, scrolled.viewWidePx, look.rulerTallPx), scene, view, this.rollInks, density);
@@ -18389,8 +17358,8 @@ export class AppView {
     const scene = this.drawnScene;
     const rows = new Set<number>();
     const held = this.theKeysHeld();
-    this.nameTheChordHeld();
-    this.showTheCircle();
+    this.chordsBeside.nameTheChordHeld();
+    this.chordsBeside.showTheCircle();
     if (scene !== null && !this.el.sheetRoll.hidden) {
       for (const midi of [...held, ...(this.theDrumsAreWritten() ? this.drumsDown : [])]) {
         const row = scene.highest - midi;
@@ -18446,8 +17415,8 @@ export class AppView {
     this.sayWhereBackGoes(sounding);
     this.followTheKeyWhereTheHeadGoes();
     // The chord the music is on, round the circle with it, and on the chart.
-    this.showTheCircle();
-    this.showTheChart();
+    this.chordsBeside.showTheCircle();
+    this.chordsBeside.showTheChart();
 
     const drawn = this.el.rollBody.firstElementChild;
     if (!(drawn instanceof HTMLElement)) {

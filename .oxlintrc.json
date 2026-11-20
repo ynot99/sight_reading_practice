@@ -1,0 +1,112 @@
+// What a machine can check of the rules in CLAUDE.md. Run as `npm run lint`,
+// with the types (`--type-aware`). Errors stop a commit; warnings are debt
+// written down, paid off and never added to. A rule turned off says why.
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import", "vitest"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    // `== null` is the one way to ask for null and undefined at once, and is meant.
+    "eqeqeq": ["error", "always", { "null": "ignore" }],
+    // `elementAt(...)` instead: a non-null assertion hides a real bug.
+    "typescript/no-non-null-assertion": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/await-thenable": "error",
+    "typescript/no-explicit-any": "error",
+    // An object of getters reaches its maker through a name, since a getter has its own `this`.
+    "typescript/no-this-alias": ["error", { "allowedNames": ["session"] }],
+
+    // The god files, written down as debt: see "No god files" in CLAUDE.md.
+    "max-lines": ["warn", { "max": 1500, "skipBlankLines": true, "skipComments": true }],
+    "max-lines-per-function": ["warn", { "max": 120, "skipBlankLines": true, "skipComments": true }],
+    "complexity": ["warn", 25],
+    "max-depth": ["warn", 5],
+
+    // Vitest's `expect` takes a message as its second argument.
+    "vitest/valid-expect": ["error", { "maxArgs": 2 }],
+    // Style the tests here do not follow, and nothing is wrong for it.
+    "vitest/require-mock-type-parameters": "off",
+    "vitest/no-conditional-expect": "off",
+    "vitest/require-to-throw-message": "off",
+    // The strings spread here are note names, keys and labels: plain ASCII, spread on purpose.
+    "typescript/no-misused-spread": "off",
+    // Blind to types: spreading a typed array or a string into an array is a
+    // conversion, not a copy, and its fix broke both.
+    "unicorn/no-useless-spread": "off"
+  },
+  "overrides": [
+    {
+      "files": ["src/domain/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/application/**", "**/infrastructure/**", "**/ui/**", "**/composition/**"],
+                "message": "domain/ is pure: it depends on nothing outside itself."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/application/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/infrastructure/**", "**/ui/**", "**/composition/**"],
+                "message": "application/ talks to ports, never to an adapter or the view."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/infrastructure/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/ui/**", "**/composition/**"],
+                "message": "infrastructure/ implements ports; the view and the wiring depend on it, not the other way."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["tests/**"],
+      "rules": {
+        // A test file is as long as its area's cases, and a test as long as its story.
+        "max-lines": "off",
+        "max-lines-per-function": "off",
+        // A test asserts what it finds; a missing one fails it as plainly.
+        "typescript/no-non-null-assertion": "off",
+        // `expect(fake.method)` asks about the method, and calls nothing.
+        "typescript/unbound-method": "off",
+        // Tables of moments read `0 * beat`, `1 * beat`, ... on purpose.
+        "oxc/erasing-op": "off",
+        // Assertions live in the helpers a test calls, and in the fakes it builds.
+        "vitest/expect-expect": "off",
+        "vitest/no-standalone-expect": "off",
+        // Scripts are read as the browser would run them.
+        "typescript/no-implied-eval": "off",
+        // Both sides sorted alike is a comparison as sets, whatever the order is.
+        "typescript/require-array-sort-compare": "off"
+      }
+    }
+  ],
+  "ignorePatterns": ["dist/**", "node_modules/**", "public/**", "tools/**"]
+}

@@ -16,7 +16,11 @@ class FakeSocket implements SocketLike {
   onmessage: ((event: { data: unknown }) => void) | null = null;
   closed = false;
 
-  constructor(readonly url: string) {}
+  readonly url: string;
+
+  constructor(url: string) {
+    this.url = url;
+  }
 
   open(): void {
     this.onopen?.();
@@ -386,7 +390,7 @@ describe('when the bridge says a key was struck', () => {
   const ORIGIN = 1_700_000_000_000;
 
   function noteFrom(rig: Rig, payload: Record<string, unknown>): MidiEvent | undefined {
-    rig.source.connect();
+    void rig.source.connect();
     rig.sockets[0]?.open();
     rig.sockets[0]?.deliver({ v: 1, type: 'noteon', note: 60, velocity: 0.8, ...payload });
     return rig.events.at(-1);
@@ -437,7 +441,7 @@ describe('when the two computers disagree about the time', () => {
 
   /** Delivers `count` presses, each stamped `skewMs` behind the page's clock. */
   function play(rig: Rig, count: number, skewMs: number): MidiEvent | undefined {
-    rig.source.connect();
+    void rig.source.connect();
     rig.sockets[0]?.open();
     for (let press = 0; press < count; press += 1) {
       const now = rig.clock.now();
@@ -459,7 +463,7 @@ describe('when the two computers disagree about the time', () => {
     // be, and that is what a reader feels as their timing wobbling - so it
     // is the number worth putting where they can see it.
     const rig = createRig(undefined, ORIGIN);
-    rig.source.connect();
+    void rig.source.connect();
     rig.sockets[0]?.open();
     expect(rig.source.hopSpreadMs).toBeNull();
 
@@ -521,7 +525,7 @@ describe('when the two computers disagree about the time', () => {
     // A ping carries nothing but the time, and while nobody is playing is the
     // only moment at which comparing the two clocks cannot spoil anything.
     const rig = createRig(undefined, ORIGIN);
-    rig.source.connect();
+    void rig.source.connect();
     rig.sockets[0]?.open();
     rig.sockets[0]?.deliver({ v: 1, type: 'ping', at: ORIGIN + rig.clock.now() - 900 });
 
@@ -537,7 +541,7 @@ describe('when the two computers disagree about the time', () => {
     // Transport delay only ever adds, so the quietest press is the one that
     // shows the clocks alone.
     const rig = createRig(undefined, ORIGIN);
-    rig.source.connect();
+    void rig.source.connect();
     rig.sockets[0]?.open();
     for (const extra of [40, 12, 90, 0, 30, 55, 20, 70, 25, 60]) {
       const now = rig.clock.now();

@@ -155,7 +155,7 @@ describe('a clef that changes partway through a bar', () => {
 });
 
 /** One line swelling while another fades, under or over the treble. */
-function twoHairpins(upper: 'above' | 'below', words: string | undefined = undefined): Exercise {
+function twoHairpins(upper: 'above' | 'below', words?: string): Exercise {
   return {
     ...twoBarExercise(),
     hairpins: [

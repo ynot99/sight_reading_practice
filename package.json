@@ -15,6 +15,7 @@
     "host": "npm run build && vite preview --host",
     "bridge": "npm run build && node tools/midi-bridge/bridge.mjs",
     "typecheck": "tsc --noEmit",
+    "lint": "oxlint --type-aware src tests",
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage"
@@ -27,6 +28,8 @@
     "@vitest/coverage-v8": "^4.1.11",
     "@xmldom/xmldom": "^0.9.12",
     "jsdom": "^30.0.1",
+    "oxlint": "^1.94.0",
+    "oxlint-tsgolint": "^7.0.2007",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vitest": "^4.1.11"

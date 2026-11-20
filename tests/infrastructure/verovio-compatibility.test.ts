@@ -115,7 +115,7 @@ function agreementOf(exercise: Exercise, evenBars = false): Agreement {
   const named = new Set(steps.flatMap((step) => step.printed.map((here) => here.id)));
   const missing = [...named].filter((name) => !heads.has(name));
   const strays = [...heads.keys()].filter((name) => /^[nr]/.test(name) && !named.has(name));
-  const ornaments = [...named].filter((name) => /^g/.test(name));
+  const ornaments = [...named].filter((name) => name.startsWith('g'));
   const unplaced: number[] = [];
   const backwards: number[] = [];
   let before: readonly [number, number, number] | null = null;

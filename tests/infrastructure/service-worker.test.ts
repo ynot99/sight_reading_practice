@@ -72,7 +72,12 @@ function runTheWorker(options: {
     shelf,
     handle: (request: FakeRequest) => {
       let answer: Promise<Response> | null = null;
-      onFetch?.({ request, respondWith: (value) => (answer = value) });
+      onFetch?.({
+        request,
+        respondWith: (value) => {
+          answer = value;
+        },
+      });
       return answer ?? Promise.reject(new Error('the worker did not answer'));
     },
   };

@@ -18,11 +18,15 @@ class FakeInput implements MidiInputLike {
   onmidimessage: ((event: MidiMessageEventLike) => void) | null = null;
   readonly state = 'connected';
 
-  constructor(
-    readonly id: string,
-    readonly name: string | null,
-    readonly manufacturer: string | null = 'Test Instruments',
-  ) {}
+  readonly id: string;
+  readonly name: string | null;
+  readonly manufacturer: string | null;
+
+  constructor(id: string, name: string | null, manufacturer: string | null = 'Test Instruments') {
+    this.id = id;
+    this.name = name;
+    this.manufacturer = manufacturer;
+  }
 
   send(bytes: readonly number[], timeStamp = 0): void {
     this.onmidimessage?.({ data: new Uint8Array(bytes), timeStamp });

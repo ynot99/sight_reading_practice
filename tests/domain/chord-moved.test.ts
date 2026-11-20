@@ -15,7 +15,7 @@ const MINOR = kind('m');
 
 /** Where each key goes, lowest first. */
 const moves = (midis: readonly number[], to: { root: number; kind: ChordKind }): number[][] =>
-  [...theChordMovedTo(midis, to)].sort(([one = 0], [other = 0]) => one - other);
+  [...theChordMovedTo(midis, to)].sort(([one], [other]) => one - other);
 
 describe('moving a chord to another', () => {
   it('takes the lowest key to the new root and each other to the nearest of its tones', () => {
@@ -87,13 +87,13 @@ describe('moving a chord to another', () => {
     const sus = moves([60, 64, 67], { root: D, kind: kind('sus4') });
     expect(new Set(sus.map(([, onto]) => onto)).size).toBe(3);
     // C E G to F under an F that stays: E goes down to C instead.
-    expect([...theChordMovedTo([60, 64, 67], { root: F, kind: MAJOR }, [65])].sort(([a = 0], [b = 0]) => a - b)).toEqual([
+    expect([...theChordMovedTo([60, 64, 67], { root: F, kind: MAJOR }, [65])].sort(([a], [b]) => a - b)).toEqual([
       [60, 53],
       [64, 60],
       [67, 69],
     ]);
     // And under an A that stays: G goes on up to C, and E down to the A below.
-    expect([...theChordMovedTo([60, 64, 67], { root: F, kind: MAJOR }, [69])].sort(([a = 0], [b = 0]) => a - b)).toEqual([
+    expect([...theChordMovedTo([60, 64, 67], { root: F, kind: MAJOR }, [69])].sort(([a], [b]) => a - b)).toEqual([
       [60, 53],
       [64, 57],
       [67, 72],

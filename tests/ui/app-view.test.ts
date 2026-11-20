@@ -23403,7 +23403,9 @@ describe('AppView', () => {
       valuesSet = [];
       Object.defineProperty(input, 'value', {
         get: () => `C:\\fakepath\\${file.name}`,
-        set: (value: string) => valuesSet.push(value),
+        set: (value: string) => {
+          valuesSet.push(value);
+        },
         configurable: true,
       });
       input.dispatchEvent(new Event('change'));

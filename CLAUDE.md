@@ -43,8 +43,12 @@ This file is how the work is done here, and the rules that are easy to break.
   owner pushes. Before rewording anything, check `git status -sb` and
   `git log origin/main`; rewording a pushed commit needs a force push, which
   is the owner's call.
-- Before committing: `npm run typecheck`, `npx vitest run` and `npm run build`,
-  each exit 0.
+- Before committing: `npm run typecheck`, `npm run lint`, `npx vitest run` and
+  `npm run build`, each exit 0. A lint warning is a debt written down, not
+  a pass: a change leaves no new one behind.
+- Read your own diff before committing, as a reviewer would: the same thing
+  worked out twice, code nothing reaches, a comment or a test name that
+  describes what the code did before the change. Fix them in the commit.
 - The subject is a plain sentence saying what changed — no prefix. The body
   says why: the cause found, what was measured, the tests and the mutations
   they caught. Never "as X does"; describe the mechanism.
@@ -92,6 +96,35 @@ This file is how the work is done here, and the rules that are easy to break.
   disagree, and then nobody can say which was right.
 - Timers belong to `ui/`. The application layer is driven through the clock
   and metronome ports.
+- **No god files.** An area of the interface - a sheet, a family of gestures,
+  a lane, a recording - is a module of its own under `ui/`, reaching the view
+  through a narrow host type (`Pick<AppView, ...>`), as `sketchEditing.ts`
+  and `drumLoopEditing.ts` do. `AppView` finds the elements and wires the
+  areas together; it does not grow their logic. A change that would add a
+  screenful of methods to `AppView` moves its area out first. Moving code
+  out changes no behaviour: the view tests pass unchanged, which is the
+  proof. The same holds for test files: one per area.
+- **What is handed to something that outlives you is taken back.** A
+  callback, a listener or a subscription given to a long-lived object - the
+  keyboard, the clock, the document, a runtime adapter - is released when the
+  view or module that gave it goes. Left held, it holds the giver and
+  everything it drew: the view tests once ran out of memory at 4 GB from one
+  such callback.
+- **What travels with a note is copied in one place.** A note's own
+  properties - its hand, its written loudness, whether it is silenced - go
+  wherever it is moved, copied, pasted, broken or written in a lap. Each new
+  one added by hand to every place that rebuilds a note is a place forgotten.
+  Rebuild a note through the one helper that carries them, and add a new
+  property there.
+- **A judgement is a pure function; the view only measures and applies.**
+  Where to scroll, what changed, whether a line is on the screen: worked out
+  from numbers in a function of its own module and tested there, as
+  `keepTheHeadInView` and `theChangeInView` are. What sets `scrollLeft` or
+  paints is layout, which no test here can see.
+- **A comment is code.** A change of behaviour changes the comments, the
+  names and the test titles that describe it, in the same commit. A comment
+  saying what the code no longer does is a bug that misleads the next
+  reader.
 
 ## Layering
 
@@ -184,7 +217,16 @@ Dependencies point inwards: `ui`/`composition` → `application` → `domain`, w
   `verbatimModuleSyntax`. Use `import type` for types, and **`.js` extensions**
   on relative imports.
 - No `enum`; use string-literal unions. No parameter properties in
-  constructors; declare fields explicitly.
+  constructors; declare fields explicitly. `erasableSyntaxOnly` makes the
+  compiler refuse both.
+- What a machine can check, `npm run lint` checks: oxlint, with the types
+  (`.oxlintrc.json`). The layers' imports, no `!`, no promise left
+  unawaited, `===`, numbers sorted with a comparison. Its warnings - a file
+  over 1500 lines, a function over 120, a complexity over 25 - are the god
+  files written down as debt: paid off as an area moves out, never added to.
+  A rule turned off says why in the config, and an autofix is read before
+  it is kept: `no-useless-spread` "fixed" a typed array and a string into
+  things `.map` and `.reduce` work differently on.
 - Prefer `elementAt(...)` over `arr[i]!` — non-null assertions hide real bugs.
 - No `// TODO` placeholders. Land the whole implementation or leave the seam as
   an interface with a documented reason.
@@ -213,5 +255,8 @@ Dependencies point inwards: `ui`/`composition` → `application` → `domain`, w
 - **`npm test` does not typecheck.** Run `npm run typecheck` (or `npm run
   build`) before calling anything done — type errors in tests have slipped
   through a green suite before.
+- **A slow test is a finding, not a timeout to raise.** Measure which step is
+  slow before giving a test more time; raise its time only for a cost that is
+  its own, said in a comment with the numbers.
 - Never `git checkout -- <file>` to undo a temporary edit in a file with
   uncommitted work; copy the file first and copy it back.

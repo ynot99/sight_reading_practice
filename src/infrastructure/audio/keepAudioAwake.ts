@@ -2,7 +2,8 @@ import type { IAudioWaking } from '../../application/ports/IAudioWaking.js';
 
 /** The corner of an `AudioContext` this needs, named so a test can stand in. */
 export interface WakeableAudioContext {
-  readonly state: 'suspended' | 'running' | 'closed' | string;
+  /** 'suspended', 'running' or 'closed' - or another a browser adds, as Safari's 'interrupted'. */
+  readonly state: string;
   readonly sampleRate: number;
   resume(): Promise<void>;
   createBuffer(channels: number, length: number, sampleRate: number): unknown;

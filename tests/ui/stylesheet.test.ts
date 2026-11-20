@@ -224,7 +224,7 @@ describe('the stylesheet', () => {
     expect(grounds).toHaveLength(3);
     for (const ground of grounds) {
       const colours = [...Array(10).keys()].map((at) => {
-        const found = new RegExp(`--star-${at + 1}:\s*([^;]+);`).exec(ground.body);
+        const found = new RegExp(`--star-${at + 1}:\\s*([^;]+);`).exec(ground.body);
         return (found?.[1] ?? '').trim();
       });
 

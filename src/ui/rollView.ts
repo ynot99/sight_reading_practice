@@ -163,7 +163,7 @@ function bandOf(
   presses: readonly RolledPress[],
   ghosts: readonly RollGhost[],
   wholeKeyboard = false,
-  kit: readonly DrumOfTheKit[] | undefined = undefined,
+  kit?: readonly DrumOfTheKit[],
 ): { readonly low: number; readonly high: number } {
   // Every drum of the kit, where the drums are written, and nothing else.
   if (kit !== undefined && kit.length > 0) {

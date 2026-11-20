@@ -228,5 +228,5 @@ function aNextStep(rng: Rng, from: number, highest: number, minor: boolean, goes
 /** Whether a move between two steps is harmonic minor's augmented second: the sixth and the raised seventh. */
 function anAugmentedSecond(from: number, to: number, minor: boolean): boolean {
   const degree = (step: number): number => ((step % OCTAVE) + OCTAVE) % OCTAVE;
-  return minor && Math.abs(to - from) === 1 && [degree(from), degree(to)].sort().join() === '5,6';
+  return minor && Math.abs(to - from) === 1 && [degree(from), degree(to)].sort((one, other) => one - other).join() === '5,6';
 }

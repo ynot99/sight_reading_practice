@@ -17001,7 +17001,7 @@ export class AppView {
       sketch === undefined ||
       sketch.drums ||
       stored === null ||
-      keys.length === 0 ||
+      // None chosen, every one of them is in that hand already.
       keys.every((key) => (key.hand ?? null) === hand)
     ) {
       return;

@@ -49,10 +49,11 @@ function tempoAt(exercise: Exercise, ticks: number): number {
  * being an instruction to go back to the speed the piece was last told to
  * play at.
  */
-function anchorsOf(exercise: Exercise): readonly { ticks: number; bpm: number }[] {
-  const anchors = exercise.tempoChanges.map((change) => ({
+function anchorsOf(exercise: Exercise): readonly { ticks: number; bpm: number; aStep?: true }[] {
+  const anchors: { ticks: number; bpm: number; aStep?: true }[] = exercise.tempoChanges.map((change) => ({
     ticks: atTicks(exercise, change.measureIndex, change.offsetTicks),
     bpm: change.tempoBpm,
+    ...(change.unprinted === true ? { aStep: true as const } : {}),
   }));
   for (const word of exercise.tempoWords) {
     if (word.kind !== 'a-tempo') {
@@ -115,9 +116,10 @@ export function withTempoWordsPlayed(exercise: Exercise): Exercise {
   for (const word of gradual) {
     const from = atTicks(exercise, word.measureIndex, word.offsetTicks);
     const target = anchors.find((anchor) => anchor.ticks > from);
-    if (target === undefined) {
+    if (target === undefined || target.aStep === true) {
       // Nothing to move to, so nothing to do: the word is printed and the
-      // clock is left alone rather than guessed at.
+      // clock is left alone rather than guessed at. Or the file says every
+      // step of the way itself, and is played as it says.
       continue;
     }
     const startBpm = tempoAt(exercise, from);

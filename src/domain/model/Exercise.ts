@@ -1083,6 +1083,14 @@ export interface TempoChange {
    * numbers across the bar. What the reader sees is what the file said.
    */
   readonly implied?: boolean;
+  /**
+   * The writer's, and obeyed, but not printed: a step of a gradual change
+   * written as a run of marks, which the page says as `accel.` or `rit.`
+   * (see `withTempoStepsAsWords`). Unlike an implied change it cannot be
+   * worked out again from a word, so it is kept in the file this program
+   * writes - as a `<sound>` of the bar, which sounds and draws nothing.
+   */
+  readonly unprinted?: true;
 }
 
 export interface Exercise {

@@ -4,6 +4,7 @@ import { DIVISIONS_PER_QUARTER, Duration, NOTE_TYPES, type NoteTypeName } from '
 import type { Exercise, Measure, MusicalEntry, StaffPart } from '../model/Exercise.js';
 import { withFermatasHeld } from './fermatas.js';
 import { tempoWordKind, withTempoWordsPlayed } from './tempoWords.js';
+import { withTempoStepsAsWords } from './tempoSteps.js';
 import {
   BEAM_TYPES,
   DYNAMIC_LEVELS,
@@ -233,7 +234,10 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
   // acts on every reading of it, and before anything is validated: what the
   // words add are ordinary tempo changes, which the rest of the program
   // already understands.
-  const spoken = withTempoWordsPlayed(played);
+  // A run of marks stepping one way is a gradual change, and is printed as
+  // one, before the words are played: a word over such a run is already
+  // told every step.
+  const spoken = withTempoWordsPlayed(withTempoStepsAsWords(played));
   // After the words, so a fermata inside a slowing passage is half of what
   // that passage had reached rather than half of what the piece opened at.
   const breathing = withFermatasHeld(spoken);
@@ -1178,6 +1182,16 @@ function readMeasureNotes(
       cursor += node.name === 'backup' ? -ticks : ticks;
       // Somewhere else entirely: nothing is sounding immediately before here.
       lastNotes = [];
+      continue;
+    }
+    // A speed the bar is played at with nothing printed for it: how a step of
+    // a gradual change is kept (see `TempoChange.unprinted`), and how other
+    // programs say a speed that is only for playing.
+    if (node.name === 'sound') {
+      const tempoBpm = Number(attribute(node, 'tempo') ?? '');
+      if (Number.isFinite(tempoBpm) && tempoBpm > 0) {
+        tempoMarks.push({ measureIndex, offsetTicks: Math.max(0, cursor), tempoBpm: Math.round(tempoBpm), unprinted: true });
+      }
       continue;
     }
     if (node.name === 'direction') {

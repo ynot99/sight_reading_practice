@@ -632,7 +632,12 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         });
         at += step;
       }
-      this.writeTempo(writer, change.tempoBpm);
+      if (change.unprinted === true) {
+        // Sounded and not drawn: see `TempoChange.unprinted`.
+        writer.leaf('sound', undefined, { tempo: change.tempoBpm });
+      } else {
+        this.writeTempo(writer, change.tempoBpm);
+      }
     }
   }
 

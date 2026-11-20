@@ -110,6 +110,7 @@ import {
   theHandThatPlays,
   thePaceOfTheClick,
   thePlayingAtAnotherPace,
+  withoutTheMuted,
   writeMidiFile,
   type Hand,
   type HeardBeat,
@@ -2759,6 +2760,7 @@ export class AppView {
     rollVelocityTicks: HTMLElement;
     rollVelocitySaid: HTMLOutputElement;
     rollHands: HTMLElement;
+    rollMute: HTMLButtonElement;
     rollSketchStart: HTMLElement;
     rollAuthorGroup: HTMLElement;
     rollAuthor: HTMLInputElement;
@@ -3256,6 +3258,7 @@ export class AppView {
       rollVelocityTicks: requireElement(doc, 'roll-velocity-ticks'),
       rollVelocitySaid: requireElement(doc, 'roll-velocity-said'),
       rollHands: requireElement(doc, 'roll-hands'),
+      rollMute: requireElement(doc, 'roll-mute'),
       rollSketchStart: requireElement(doc, 'roll-sketch-start'),
       rollAuthorGroup: requireElement(doc, 'roll-author-group'),
       rollAuthor: requireElement(doc, 'roll-author'),
@@ -10467,6 +10470,9 @@ export class AppView {
         this.giveTheChosenToAHand(hand);
       });
     }
+    this.listen(this.el.rollMute, 'click', () => {
+      this.silenceTheChosen();
+    });
     this.listen(this.el.rollQuantize, 'click', () => {
       this.putTheChosenOnTheGrid();
     });
@@ -16253,6 +16259,7 @@ export class AppView {
     this.markTheLoudness(loudness);
     this.sayTheDynamicOfTheChosen(loudness);
     this.sayWhichHand();
+    this.sayWhetherTheChosenAreSilenced();
     const quantizes = 'Quantize: each chosen note begun on the nearest line of the grid, as long as it was';
     if (loudness.length === 0) {
       this.el.rollQuantize.dataset['idle'] = 'true';
@@ -16329,6 +16336,48 @@ export class AppView {
       button.setAttribute('aria-pressed', String(all(hand)));
       button.title = `${says}${first}`;
       button.setAttribute('aria-label', button.title);
+    }
+  }
+
+  /**
+   * The silencing button: pressed where any chosen note is silenced, which a
+   * press then lets be heard again; dimmed, with the reason, while none is
+   * chosen.
+   */
+  private sayWhetherTheChosenAreSilenced(): void {
+    const keys = this.theChosenKeys();
+    const silenced = keys.some((key) => key.muted === true);
+    this.el.rollMute.setAttribute('aria-pressed', String(silenced));
+    sayWhetherIdle(
+      this.el.rollMute,
+      keys.length === 0
+        ? 'Silence the chosen notes (0). Choose a note first.'
+        : silenced
+          ? 'Hear the chosen notes again (0)'
+          : 'Silence the chosen notes (0): kept here, and heard, written and read nowhere',
+      keys.length === 0,
+    );
+  }
+
+  /**
+   * Silences the chosen notes, or drums, or where any of them is silenced
+   * already lets them all be heard again: one change, put back as one, the
+   * same notes still chosen.
+   */
+  silenceTheChosen(): void {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.theSketchAsDrawn(sketch.id);
+    const keys = this.theChosenKeys();
+    if (sketch === undefined || stored === null || keys.length === 0) {
+      return;
+    }
+    const muted = !keys.some((key) => key.muted === true);
+    const events = takeWithTheKeysChanged(
+      stored.events,
+      keys.map((key) => ({ key, midi: key.midi, downAtMs: key.downAtMs, upAtMs: key.upAtMs, muted })),
+    );
+    if (events !== null) {
+      this.changeTheSketchShowing(events, [...sketch.before, asItWas(stored, sketch.chosen)], sketch.chosen);
     }
   }
 
@@ -18058,7 +18107,7 @@ export class AppView {
         ? rollAsEvents(roll)
         : [
             ...rollAsEvents(notesRoll).map((event) => ({ ...event, atMs: event.atMs + rollBeganAtMs(notesRoll) - origin })),
-            ...kept.events.flatMap((event) =>
+            ...withoutTheMuted(kept.events).flatMap((event) =>
               event.kind === 'drumOn' || event.kind === 'drumOff' ? [{ ...event, atMs: event.atMs - origin }] : [],
             ),
           ];
@@ -18931,7 +18980,7 @@ export class AppView {
       if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
         const at = this.headIsAtMs();
         for (const note of stretchesIn(scene.notes, at, at)) {
-          if (note.untilMs > at) {
+          if (note.untilMs > at && note.muted !== true) {
             rows.add(note.row);
           }
         }

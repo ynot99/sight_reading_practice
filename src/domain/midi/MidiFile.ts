@@ -76,6 +76,35 @@ export interface Struck {
    * was struck - a note played rather than written.
    */
   readonly loudness?: NoteLoudness;
+  /**
+   * Silenced in the editor: kept there, where it takes its place and is
+   * moved and changed as any other, and nowhere else - not heard, not
+   * written on the page or into a file, not read as part of a chord. See
+   * `withoutTheMuted`.
+   */
+  readonly muted?: true;
+}
+
+/**
+ * The events without the notes and drums silenced in the editor, nor their
+ * letting go: what is heard, written down and read as the music. Each is
+ * paired with its letting go as `theKeysOfTheTake` pairs them - the oldest
+ * of its pitch still down - so a key struck twice over keeps the right end.
+ */
+export function withoutTheMuted(events: readonly MidiFileEvent[]): readonly MidiFileEvent[] {
+  const open = new Map<string, boolean[]>();
+  return events.filter((event) => {
+    if (event.kind === 'noteOn' || event.kind === 'drumOn') {
+      const which = `${event.kind}:${String(event.midi)}`;
+      open.set(which, [...(open.get(which) ?? []), event.muted === true]);
+      return event.muted !== true;
+    }
+    if (event.kind === 'noteOff' || event.kind === 'drumOff') {
+      const which = `${event.kind === 'noteOff' ? 'noteOn' : 'drumOn'}:${String(event.midi)}`;
+      return open.get(which)?.shift() !== true;
+    }
+    return true;
+  });
 }
 
 /** The two hands, as the two staves of a piano score are theirs. */
@@ -1110,7 +1139,10 @@ export function writeMidiFile(
   // A sketch's drums are kept for the writer to feel the music by, and are no
   // part of what it is saved as: left out before anything is measured, so the
   // file is the one its notes alone make, to its length and its last bar.
-  const events = played.filter((event) => event.kind !== 'drumOn' && event.kind !== 'drumOff' && event.kind !== 'drumLoop');
+  // Nor is a note silenced in the editor.
+  const events = withoutTheMuted(played).filter(
+    (event) => event.kind !== 'drumOn' && event.kind !== 'drumOff' && event.kind !== 'drumLoop',
+  );
   const tempoBpm = options.tempoBpm ?? DEFAULT_TEMPO_BPM;
   if (tempoBpm <= 0) {
     throw new DomainError(`A tempo must be positive, got ${tempoBpm}.`);

@@ -2604,14 +2604,15 @@ describe('searching the settings', () => {
     expect(body('.roll-velocity__tick')).toMatch(/position\s*:\s*absolute/);
     expect(body(".roll-velocity[data-idle='true'] .roll-velocity__track")).toMatch(/opacity\s*:\s*0?\.\d+/);
     // The hand the chosen notes are in, pressed in the accent; all three
-    // dimmed with none chosen, and Quantize and Humanize with them.
+    // dimmed with none chosen, and silencing, Quantize and Humanize with them.
     expect(body(".roll-hands .button[aria-pressed='true']")).toMatch(/background\s*:\s*var\(--accent\)/);
+    expect(body(".roll-mute[aria-pressed='true']")).toMatch(/background\s*:\s*var\(--accent\)/);
     expect(
       body(
-        ".roll-hands[data-idle='true'], .roll-quantize[data-idle='true'], .roll-humanize[data-idle='true'], .roll-arpeggio .button[data-idle='true']",
+        ".roll-hands[data-idle='true'], .roll-mute[data-idle='true'], .roll-quantize[data-idle='true'], .roll-humanize[data-idle='true'], .roll-arpeggio .button[data-idle='true']",
       ),
     ).toMatch(/opacity\s*:\s*0?\.\d+/);
-    expect(body('.roll-quantize, .roll-humanize')).toMatch(/flex\s*:\s*none/);
+    expect(body('.roll-mute, .roll-quantize, .roll-humanize')).toMatch(/flex\s*:\s*none/);
     // The ways to break a chord with them, together, at their own size.
     expect(body('.roll-arpeggio')).toMatch(/display\s*:\s*flex/);
     expect(body('.roll-arpeggio')).toMatch(/flex\s*:\s*none/);

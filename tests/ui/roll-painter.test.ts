@@ -308,6 +308,32 @@ describe('painting the grid', () => {
     expect(sceneOf(roll({ presses })).notes.map((note) => note.shade)).toEqual(['unjudged', 'unjudged', 'unjudged']);
   });
 
+  it('draws a note silenced in the editor as its place only: dashed in the ink of its hand, nothing filled and no bar', () => {
+    const scene = theSceneOfTheRoll({
+      roll: roll({
+        presses: [
+          press({ midi: MIDI.C4, verdict: null, hand: 'right', velocity: 1, muted: true }),
+          press({ midi: MIDI.C4 - 12, verdict: null, hand: 'left', velocity: 1, downAtMs: 1600, upAtMs: 2000 }),
+        ],
+      }),
+      barLabel: () => null,
+      freely: true,
+      // Chosen, so a rim is drawn after it.
+      chosen: [{ midi: MIDI.C4 - 12, downAtMs: 1600 }],
+    });
+    const { surface: canvas, recorder } = surface();
+
+    paintTheGrid(canvas, scene, at(), INKS, 1);
+
+    const dashed = (mark: { readonly dashes?: readonly number[] }): boolean => (mark.dashes ?? []).length > 0;
+    expect(recorder.inked('right').map((mark) => [mark.how, dashed(mark)])).toEqual([['stroke', true]]);
+    expect(recorder.inked('left').map((mark) => [mark.how, dashed(mark)])).toEqual([['fill', false]]);
+    // One bar of loudness, the heard note's.
+    expect(recorder.inked('velocity')).toHaveLength(1);
+    // And the dashes put away after it, so what follows is drawn solid.
+    expect(recorder.inked('chosen').map((mark) => [mark.how, dashed(mark)])).toEqual([['stroke', false]]);
+  });
+
   it('bars the top of each note as long, of its length, as it was loud, inside its edges, and none on a note too small', () => {
     const scene = sceneOf(
       roll({

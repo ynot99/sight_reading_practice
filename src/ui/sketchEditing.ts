@@ -192,6 +192,7 @@ export type TheViewOfTheSketch = Pick<
   | 'changeCopiedHere'
   | 'changeTheSketchShowing'
   | 'showWhereTheSketchChanged'
+  | 'silenceTheChosen'
   | 'chooseTheMark'
   | 'chordsBeingForgotten'
   | 'copyTheMarkChosen'
@@ -903,7 +904,7 @@ export class SketchEditing {
       upAtMs: key.upAtMs ?? rollEndedAtMs(showing.roll),
     };
     this.soundTheHeldKeys(
-      oneKeyForEachPitch(this.theKeysDragged(this.rollDrag, stored.events)),
+      oneKeyForEachPitch(this.theKeysDragged(this.rollDrag, stored.events).filter((key) => key.muted !== true)),
       0,
     );
     return true;
@@ -1277,6 +1278,10 @@ export class SketchEditing {
     } else if (event.key === 'Delete' || event.key === 'Backspace') {
       event.preventDefault();
       this.deleteTheChosenKeys();
+    } else if (!command && !event.altKey && (event.code === 'Digit0' || event.code === 'Numpad0') && chosen.length > 0) {
+      // A key that plays no note, on the computer keyboard as on its pad.
+      event.preventDefault();
+      this.host.silenceTheChosen();
     } else if (command && !event.shiftKey && (event.code === 'KeyC' || event.code === 'KeyX') && chosen.length > 0) {
       // Written on the key rather than on the browser's copy, which a browser
       // with no text chosen on the page need not send.
@@ -1604,7 +1609,8 @@ export class SketchEditing {
     if (bySemitones !== 0) {
       // Heard where they went, a moment each, both ends handed over at once.
       const now = this.host.runtime.clock.now();
-      for (const { midi, velocity } of oneKeyForEachPitch(changes.map(({ midi, key }) => ({ midi, velocity: key.velocity })))) {
+      const heard = changes.filter(({ key }) => key.muted !== true);
+      for (const { midi, velocity } of oneKeyForEachPitch(heard.map(({ midi, key }) => ({ midi, velocity: key.velocity })))) {
         this.theEditingsInstrument.play(midi, velocity, now);
         this.host.runtime.pitchPlayer.stop(midi, now + HEARD_ON_A_STEP_MS);
       }

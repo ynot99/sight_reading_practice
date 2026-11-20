@@ -307,6 +307,8 @@ export interface SceneNote extends SceneRowed {
    * chord's before, which a change to it would change.
    */
   readonly heldIntoTheChordChosen?: boolean;
+  /** Silenced in the editor: drawn as its place only, and not heard. */
+  readonly muted?: boolean;
   /** How hard it was struck, `0..1`: a note drawn by its hand is as strong as it is loud. */
   readonly loudness: number;
   /**
@@ -514,7 +516,8 @@ function noteOf(
     open: press.upAtMs === null,
     says: `${midiToLabel(press.midi)} · ${press.verdict ?? 'not judged'}${off}${press.hand === undefined ? '' : ` · ${press.hand} hand`}${
       !freely || !amongWritten ? '' : press.written === undefined ? ' · as played' : press.written.own ? ` · ${press.written.level}, its own` : ` · ${press.written.level}, from the flag over it`
-    }`,
+    }${press.muted === true ? ' · silenced' : ''}`,
+    ...(press.muted === true ? { muted: true } : {}),
     ...(chosen?.some((each) => each.midi === press.midi && each.downAtMs === press.downAtMs) === true
       ? { chosen: true }
       : {}),
@@ -1154,8 +1157,11 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
       ? []
       : theChordsAlongTheBars(
           // As they ring, the pedal holding them.
+          // A note silenced in the editor is no part of the music read.
           theNotesThePedalHolds(
-            roll.presses.map((press) => ({ midi: press.midi, fromMs: press.downAtMs, untilMs: press.upAtMs ?? endMs })),
+            roll.presses
+              .filter((press) => press.muted !== true)
+              .map((press) => ({ midi: press.midi, fromMs: press.downAtMs, untilMs: press.upAtMs ?? endMs })),
             roll.pedal,
             barsOfTheRoll,
           ),

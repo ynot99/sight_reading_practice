@@ -513,6 +513,17 @@ export function paintTheGrid(
     const left = x(note.fromMs);
     // Still down when the run ended, so it runs to the edge rather than stopping.
     const corners = note.open ? [CORNER_PX, 0, 0, CORNER_PX] : CORNER_PX;
+    if (note.muted === true) {
+      // Silenced: its place only, in dashes in its hand's ink and filled
+      // with nothing, since nothing of it is heard.
+      paint.strokeStyle = note.shade === 'right' || note.shade === 'left' ? inkOfNote(inks, note.shade) : inks.note;
+      paint.lineWidth = 1;
+      paint.setLineDash(DASHES);
+      box(paint, left + 0.5, y(note.row) + 0.5, wide(note.fromMs, note.untilMs) - 1, rowPx - 1, corners);
+      paint.stroke();
+      paint.setLineDash([]);
+      continue;
+    }
     if (note.shade === 'unjudged') {
       // An outline, because a fill in any colour is a verdict and there was not one.
       paint.strokeStyle = inks.note;
@@ -545,7 +556,8 @@ export function paintTheGrid(
   paint.fillStyle = inks.velocity;
   for (const note of stretchesIn(scene.notes, fromMs - ms(NARROWEST_PX), untilMs)) {
     const room = wide(note.fromMs, note.untilMs) - 2 * VELOCITY_INSET_PX;
-    if (!shows(note.row) || room <= 0 || rowPx < 2 * VELOCITY_INSET_PX + VELOCITY_TALL_PX) {
+    // Nothing of a note silenced is heard, however hard it is struck.
+    if (note.muted === true || !shows(note.row) || room <= 0 || rowPx < 2 * VELOCITY_INSET_PX + VELOCITY_TALL_PX) {
       continue;
     }
     const left = x(note.fromMs) + VELOCITY_INSET_PX;

@@ -438,6 +438,27 @@ describe('drawing a run as a piano roll', () => {
     expect(inG.chords.map((chord) => chord.numeral)).toEqual(['IV', '♭VII', 'I']);
   });
 
+  it('names the chord without a note silenced in the editor, which is no part of the music', () => {
+    // C E G for a bar, and a B silenced over it that would make it Cmaj7.
+    const input = roll({
+      beats: barOfFour(0, 0),
+      presses: [
+        ...[60, 64, 67].map((midi) => press({ midi, downAtMs: 0, upAtMs: 4000 })),
+        press({ midi: 71, downAtMs: 0, upAtMs: 4000, muted: true }),
+      ],
+    });
+    const scene = theSceneOfTheRoll({ roll: input, barLabel: () => null, chordsIn: [] });
+
+    expect(scene.chords.map((chord) => chord.name)).toEqual(['C']);
+    // Drawn all the same, said to be silenced.
+    expect(scene.notes.map((note) => [note.muted === true, (note.says ?? '').endsWith(' · silenced')])).toEqual([
+      [false, false],
+      [false, false],
+      [false, false],
+      [true, true],
+    ]);
+  });
+
   it('reads a bar of beats as one, so a chord broken across it a beat at a time is that chord', () => {
     const input = roll({
       beats: barOfFour(0, 0),

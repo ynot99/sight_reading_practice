@@ -73,6 +73,8 @@ export interface RolledPress {
    * dynamic marked over it - rather than as loud as it was struck.
    */
   readonly written?: { readonly level: DynamicLevel; readonly own: boolean };
+  /** Silenced in the editor: drawn there, and not heard. See `withoutTheMuted`. */
+  readonly muted?: true;
 }
 
 /** One click of the pulse, at the moment it was heard. */
@@ -1004,6 +1006,7 @@ export function rollOfTheTake(
     ...(key.loudness === undefined
       ? {}
       : { written: { level: theLevelOfTheNote(take.events, key.downAtMs, key.loudness), own: key.loudness.level !== null } }),
+    ...(key.muted === true ? { muted: true as const } : {}),
   }));
   const pedal: RolledPedal[] = [];
   let pedalDownAt: number | null = null;
@@ -1040,6 +1043,7 @@ export interface KeyOfTheTake {
   readonly velocity: number;
   readonly hand?: Hand;
   readonly loudness?: NoteLoudness;
+  readonly muted?: true;
   readonly downAtMs: number;
   readonly upAtMs: number | null;
   readonly on: number;
@@ -1069,6 +1073,7 @@ export function theKeysOfTheTake(events: readonly MidiFileEvent[], of: 'keys' | 
         velocity: event.velocity,
         ...(event.hand === undefined ? {} : { hand: event.hand }),
         ...(event.loudness === undefined ? {} : { loudness: event.loudness }),
+        ...(event.muted === true ? { muted: true as const } : {}),
         downAtMs: event.atMs,
         upAtMs: null,
         on: at,
@@ -1107,6 +1112,8 @@ export interface KeyChange {
   readonly hand?: Hand | null;
   /** How loud it is written, `null` for as loud as it is struck; left as it was where not said. */
   readonly loudness?: NoteLoudness | null;
+  /** Silenced in the editor, or heard again; left as it was where not said. */
+  readonly muted?: boolean;
 }
 
 /** Each named key's place in the take's pairing, or `null` where any is not there. */
@@ -1251,9 +1258,10 @@ export function takeWithTheKeysChanged(
     if (key === undefined || struck?.kind !== 'noteOn') {
       return;
     }
-    const { hand: was, loudness: written, ...rest } = struck;
+    const { hand: was, loudness: written, muted: silenced, ...rest } = struck;
     const hand = change.hand === undefined ? was : (change.hand ?? undefined);
     const loudness = change.loudness === undefined ? written : (change.loudness ?? undefined);
+    const muted = change.muted ?? silenced === true;
     changed.set(key.on, {
       ...rest,
       atMs: change.downAtMs,
@@ -1261,6 +1269,7 @@ export function takeWithTheKeysChanged(
       velocity: change.velocity ?? struck.velocity,
       ...(hand === undefined ? {} : { hand }),
       ...(loudness === undefined ? {} : { loudness }),
+      ...(muted ? { muted: true as const } : {}),
     });
     if (change.upAtMs === null) {
       return;
@@ -1536,6 +1545,8 @@ export interface NoteCopied {
   readonly velocity: number;
   readonly hand?: Hand;
   readonly loudness?: NoteLoudness;
+  /** Silenced in the editor, and so silenced where it is pasted. */
+  readonly muted?: true;
 }
 
 /**
@@ -1562,6 +1573,7 @@ export function theNotesCopied(events: readonly MidiFileEvent[], named: readonly
       velocity: key.velocity,
       ...(key.hand === undefined ? {} : { hand: key.hand }),
       ...(key.loudness === undefined ? {} : { loudness: key.loudness }),
+      ...(key.muted === true ? { muted: true as const } : {}),
     }));
 }
 
@@ -1605,7 +1617,8 @@ export function theNotesOnTheClipboard(text: string): readonly NoteCopied[] | nu
       !isANumber(note.velocity) ||
       !(note.velocity > 0 && note.velocity <= 1) ||
       !(note.hand === undefined || note.hand === 'left' || note.hand === 'right') ||
-      !(note.loudness === undefined || isALoudness(note.loudness))
+      !(note.loudness === undefined || isALoudness(note.loudness)) ||
+      !(note.muted === undefined || note.muted === true)
     ) {
       return null;
     }
@@ -1616,6 +1629,7 @@ export function theNotesOnTheClipboard(text: string): readonly NoteCopied[] | nu
       velocity: note.velocity,
       ...(note.hand === undefined ? {} : { hand: note.hand }),
       ...(note.loudness === undefined ? {} : { loudness: note.loudness }),
+      ...(note.muted === true ? { muted: true as const } : {}),
     });
   }
   return notes.length === 0 ? null : notes;
@@ -1746,6 +1760,7 @@ export function takeWithTheNotesPasted(
       velocity: note.velocity,
       ...(note.hand === undefined ? {} : { hand: note.hand }),
       ...(note.loudness === undefined ? {} : { loudness: note.loudness }),
+      ...(note.muted === true ? { muted: true as const } : {}),
     };
     const released: MidiFileEvent = { kind: 'noteOff', atMs: Math.round(atMs + note.afterMs + note.lengthMs), midi: note.midi };
     const withIt = inTheOrderPlayed([...taken, struck, released]);
@@ -1878,6 +1893,7 @@ export function takeWithTheChordsBroken(
               velocity: struck.velocity,
               ...(struck.hand === undefined ? {} : { hand: struck.hand }),
               ...(struck.loudness === undefined ? {} : { loudness: struck.loudness }),
+              ...(struck.muted === true ? { muted: true as const } : {}),
             },
           ];
     });
@@ -2160,7 +2176,8 @@ export function rollAsEvents(roll: RunRoll): readonly MidiFileEvent[] {
   const origin = rollBeganAtMs(roll);
   const ends = rollEndedAtMs(roll);
   const events: MidiFileEvent[] = [];
-  for (const press of roll.presses) {
+  // A note silenced in the editor is drawn there and not heard.
+  for (const press of roll.presses.filter((each) => each.muted !== true)) {
     events.push({
       kind: 'noteOn',
       atMs: press.downAtMs - origin,

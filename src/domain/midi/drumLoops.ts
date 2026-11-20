@@ -153,6 +153,7 @@ interface Hit {
   readonly velocity: number;
   readonly hand?: Hand;
   readonly loudness?: NoteLoudness;
+  readonly muted?: true;
   readonly on: number;
   readonly off: number | null;
 }
@@ -171,6 +172,7 @@ function theHitsOf(events: readonly MidiFileEvent[]): readonly Hit[] {
         velocity: event.velocity,
         ...(event.hand === undefined ? {} : { hand: event.hand }),
         ...(event.loudness === undefined ? {} : { loudness: event.loudness }),
+        ...(event.muted === true ? { muted: true as const } : {}),
         on: at,
         off: null,
       });
@@ -208,6 +210,7 @@ interface InALap {
   readonly velocity: number;
   readonly hand?: Hand;
   readonly loudness?: NoteLoudness;
+  readonly muted?: true;
 }
 
 function theContentOf(hits: readonly Hit[], lap: Lap): readonly InALap[] {
@@ -220,6 +223,7 @@ function theContentOf(hits: readonly Hit[], lap: Lap): readonly InALap[] {
       velocity: hit.velocity,
       ...(hit.hand === undefined ? {} : { hand: hit.hand }),
       ...(hit.loudness === undefined ? {} : { loudness: hit.loudness }),
+      ...(hit.muted === true ? { muted: true as const } : {}),
     }));
 }
 
@@ -240,6 +244,8 @@ function said(content: readonly InALap[]): string {
         Math.round(hit.lengthMs),
         Math.round(hit.velocity * 127),
         hit.loudness === undefined ? '' : `${hit.loudness.level ?? ''}${String(hit.loudness.shade)}`,
+        // A hit silenced in one lap is a change, every lap's.
+        hit.muted === true ? 'muted' : '',
       ].join(':'),
     )
     .sort()
@@ -277,6 +283,7 @@ function theLapsWritten(
           velocity: hit.velocity,
           ...(hit.hand === undefined ? {} : { hand: hit.hand }),
           ...(hit.loudness === undefined ? {} : { loudness: hit.loudness }),
+          ...(hit.muted === true ? { muted: true as const } : {}),
         },
         { kind: 'drumOff', atMs: atMs + hit.lengthMs, midi: hit.midi },
       ];

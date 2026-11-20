@@ -2723,15 +2723,22 @@ textarea {
 }
 
 .roll-hands[data-idle='true'],
+.roll-mute[data-idle='true'],
 .roll-quantize[data-idle='true'],
 .roll-humanize[data-idle='true'],
 .roll-arpeggio .button[data-idle='true'] {
   opacity: 0.45;
 }
 
+.roll-mute,
 .roll-quantize,
 .roll-humanize {
   flex: none;
+}
+
+.roll-mute[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--surface);
 }
 
 .roll-arpeggio {

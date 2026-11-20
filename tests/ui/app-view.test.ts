@@ -7542,6 +7542,96 @@ describe('AppView', () => {
       expect(drumKit.played).toEqual([]);
     });
 
+    it('silences the chosen notes and drums by the button or by nought, heard nowhere and kept in their place, and lets them be heard again', async () => {
+      vi.useFakeTimers();
+      try {
+        const { view, sketches, drumKit, instrument, clock } = createRig();
+        await view.initialize();
+        const sketch = sketches.begin(
+          {
+            events: [
+              { kind: 'noteOn' as const, atMs: 0, midi: 60, velocity: 0.5 },
+              { kind: 'noteOff' as const, atMs: 400, midi: 60 },
+              { kind: 'noteOn' as const, atMs: 500, midi: 64, velocity: 0.5 },
+              { kind: 'noteOff' as const, atMs: 900, midi: 64 },
+              { kind: 'drumOn' as const, atMs: 0, midi: 36, velocity: 0.8 },
+              { kind: 'drumOff' as const, atMs: 100, midi: 36 },
+              { kind: 'drumOn' as const, atMs: 500, midi: 37, velocity: 0.8 },
+              { kind: 'drumOff' as const, atMs: 600, midi: 37 },
+            ],
+            beats: [0, 500, 1_000, 1_500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+          },
+          'Silenced',
+          1,
+        );
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-sketches').click();
+        await editTheSketch();
+        const mute = element<HTMLButtonElement>('roll-mute');
+        const key = (init: KeyboardEventInit): KeyboardEvent => {
+          const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+          document.body.dispatchEvent(event);
+          return event;
+        };
+        const silenced = (): string[] =>
+          (sketches.find(sketch.id)?.events ?? []).flatMap((event) =>
+            (event.kind === 'noteOn' || event.kind === 'drumOn') && event.muted === true ? [`${event.kind} ${String(event.midi)}`] : [],
+          );
+        const heard = (): { readonly kit: number[]; readonly keys: number[] } => {
+          const struck = { kit: drumKit.played.map((hit) => hit.midi), keys: instrument.played.map((note) => note.midi) };
+          drumKit.played.length = 0;
+          instrument.played.length = 0;
+          return struck;
+        };
+        const play = (): void => {
+          heard();
+          element<HTMLButtonElement>('roll-play').click();
+          clock.advance(1_000);
+          vi.advanceTimersByTime(1_000);
+        };
+
+        // Nothing chosen: nought is left to the page, and the button waits.
+        expect(key({ key: '0', code: 'Digit0' }).defaultPrevented).toBe(false);
+        expect([mute.dataset['idle'], mute.title]).toEqual(['true', 'Silence the chosen notes (0). Choose a note first.']);
+
+        // Every note chosen and silenced by nought: kept, drawn in its place, said so on the button.
+        key({ key: 'a', code: 'KeyA', ctrlKey: true });
+        expect(key({ key: '0', code: 'Digit0' }).defaultPrevented).toBe(true);
+        expect(silenced()).toEqual(['noteOn 60', 'noteOn 64']);
+        expect(view.rollScene?.notes.map((note) => note.muted === true)).toEqual([true, true]);
+        expect([mute.dataset['idle'], mute.getAttribute('aria-pressed'), mute.title]).toEqual([
+          undefined,
+          'true',
+          'Hear the chosen notes again (0)',
+        ]);
+        // Not heard when the sketch is played; the drums still are.
+        play();
+        expect(heard()).toEqual({ kit: [36, 37], keys: [] });
+        // Put back as one change.
+        element<HTMLButtonElement>('roll-undo').click();
+        expect(silenced()).toEqual([]);
+        // Nought with a modifier is not this.
+        key({ key: '0', code: 'Digit0', ctrlKey: true });
+        expect(silenced()).toEqual([]);
+        // The pad's nought, and then the button heard again.
+        key({ key: '0', code: 'Numpad0' });
+        expect(silenced()).toEqual(['noteOn 60', 'noteOn 64']);
+        mute.click();
+        expect([silenced(), mute.getAttribute('aria-pressed')]).toEqual([[], 'false']);
+        expect(mute.title).toBe('Silence the chosen notes (0): kept here, and heard, written and read nowhere');
+
+        // The drums the same: silenced, not heard, the notes heard again.
+        element<HTMLButtonElement>('roll-drums').click();
+        key({ key: 'a', code: 'KeyA', ctrlKey: true });
+        mute.click();
+        expect(silenced()).toEqual(['drumOn 36', 'drumOn 37']);
+        play();
+        expect(heard()).toEqual({ kit: [], keys: [60, 64] });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('plays a sketch with its drums on the kit and its notes on the instrument, and silences the drums when asked', async () => {
       vi.useFakeTimers();
       try {

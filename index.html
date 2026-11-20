@@ -1196,6 +1196,17 @@
               <button id="roll-hand-right" type="button" class="button" aria-pressed="false">R</button>
             </div>
             <!--
+              The chosen notes silenced, or heard again: kept in the sketch,
+              where they take their place and are moved like any other, and
+              nowhere else. Zero on the keyboard too, a key that plays no note.
+            -->
+            <button id="roll-mute" type="button" class="button roll-mute" aria-pressed="false"
+              title="Silence the chosen notes (0)" aria-label="Silence the chosen notes (0)">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="take-transport__icon">
+                <path d="M4 9v6h4l5 4V5L8 9H4zm12.6 3l2.7-2.7-1.3-1.3-2.7 2.7-2.7-2.7-1.3 1.3 2.7 2.7-2.7 2.7 1.3 1.3 2.7-2.7 2.7 2.7 1.3-1.3-2.7-2.7z" />
+              </svg>
+            </button>
+            <!--
               The chosen notes put on the grid: each begun on the line nearest
               it, as long as it was. A button rather than a key, which on a
               computer keyboard would be a note. Its letter only, as the hands'
